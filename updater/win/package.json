@@ -1,0 +1,32 @@
+{
+  "name": "deskmate-updater-stub",
+  "version": "1.0.0",
+  "description": "Lightweight Windows updater with native PowerShell + WinForms UI",
+  "main": "dist/stub.js",
+  "bin": {
+    "deskmate-updater": "./dist/stub.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:win-x64": "npm run build && pkg dist/stub.js --targets node22-win-x64 --output release/updater-win-x64.exe",
+    "build:win-arm64": "npm run build && pkg dist/stub.js --targets node22-win-arm64 --output release/updater-win-arm64.exe",
+    "build:all": "npm run build:win-x64 && npm run build:win-arm64",
+    "clean": "rimraf dist release"
+  },
+  "keywords": [
+    "updater",
+    "windows",
+    "native-ui"
+  ],
+  "author": "Deskmate Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@yao-pkg/pkg": "^6.20.0",
+    "rimraf": "^6.1.3",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

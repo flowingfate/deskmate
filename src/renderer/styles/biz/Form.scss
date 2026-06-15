@@ -1,0 +1,14 @@
+@use '../tokens/_mixins' as *;
+
+.form-group {
+  @include flex-col;
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-heading);
+  margin-bottom: 0.5rem;
+}

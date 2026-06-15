@@ -1,0 +1,19 @@
+{
+  "_comment": "Deskmate Brand Configuration - See electron-builder.config.js for full documentation",
+  "_paths_windows": {
+    "_install_dir": "C:\\Users\\<user>\\AppData\\Local\\Programs\\deskmate",
+    "_user_data": "C:\\Users\\<user>\\.deskmate",
+    "_executable": "Deskmate.exe"
+  },
+  "_paths_macos": {
+    "_install_dir": "/Applications/Deskmate.app",
+    "_user_data": "/Users/<user>/.deskmate"
+  },
+
+  "appId": "top.deskmate.app",
+  "productName": "Deskmate",
+  "homepage": "https://www.deskmate.top",
+  "filenamePrefix": "Deskmate",
+  "shortcutName": "Deskmate",
+  "windowTitle": "Deskmate"
+}

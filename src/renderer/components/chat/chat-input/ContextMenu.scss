@@ -1,0 +1,17 @@
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  gap: 8px;
+  transition: background-color 0.1s ease;
+
+  &:hover {
+    background-color: rgba(127, 127, 127, 0.08);
+  }
+
+  &.selected {
+    background-color: rgba(0, 122, 255, 0.18);
+    color: currentColor;
+  }
+}

@@ -1,0 +1,1199 @@
+import type {
+  Api as PiApi,
+  AssistantMessage as PiAssistantMessage,
+  Context as PiContext,
+  Model as PiModel,
+  SimpleStreamOptions,
+  Usage as PiUsage,
+  ToolCall as PiToolCall,
+} from '@earendil-works/pi-ai';
+
+import type {
+  AssistantMessage,
+  AssistantOutcome,
+  Message,
+  ToolResult,
+  UserMessage,
+} from '@shared/types/message';
+import type { ContextState } from '@shared/types/agentChatTypes';
+import type { StreamingChunk } from '@shared/types/streamingTypes';
+import { ChatStatus } from '@shared/types/agentChatTypes';
+import Stream from '@shared/stream-iterator';
+import type { ThinkingLevel } from '@shared/types/thinkingLevel';
+import type { SubAgentConfig } from '@shared/types/profileTypes';
+
+import { CancellationError } from '@main/lib/utilities/errors';
+
+import { Profiles } from '@main/persist';
+import { readAgentRuntimeConfig } from './utils/config';
+import { resolveCredentials, getModelInfo } from './model';
+import { buildSystemPrompt } from './prompt';
+import { toPiContext, fromPiAssistantMessage } from './utils/messageBridge';
+import { deriveToolTracer, executeToolCall } from './tool';
+import { buildToolCatalogForAgent, type ToolCatalog } from './toolCatalog';
+import type { ToolContext } from './tools/types';
+import { checkAndCompress } from './compression';
+import { classifyError, type PiErrorKind } from './errors';
+import { planResume, type ResumeAction } from './resume';
+import { log } from '@main/log';
+import { Tracer } from '@shared/log/trace';
+
+/**
+ * pi-ai 0.77 的 `SimpleStreamOptions` 没暴露 `toolChoice`，但所有 provider 实现
+ * 都从 `options?.toolChoice` 读这个字段并透传到原生 API（属于类型遗漏）。本地
+ * 扩展类型显式表达这层依赖，值集合与 OpenAI `tool_choice` 一致；我们仅用 `'auto'`。
+ */
+type SimpleStreamOptionsWithToolChoice = SimpleStreamOptions & {
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
+};
+
+const MAX_TURN_ITERATIONS = 30;
+
+/**
+ * BaseSession 对持久化的最小依赖面。pi 拥有的契约（非 persist 暴露的细节），
+ * 默认实现是 `@main/persist` 的 Session 类；eval / 测试可注入内存实现。
+ * 不要扩它，更不要让 pi.Session 直接 mutate `config`——多余的字段应转成显式 setter。
+ */
+export interface PersistSessionLike {
+  readonly config: {
+    title: string;
+    updatedAt: string;
+    contextState?: ContextState;
+    turn?: { status: 'idle' | 'running'; startedAt?: number };
+  };
+  /** 折回 Domain Message;orphan tool_res 由调用方决定记录。 */
+  loadDomainMessages(): Promise<{
+    messages: Message[];
+    orphanResponses: readonly { id: string; time: number; status: 'success' | 'fail'; result: string }[];
+  }>;
+  /** 追加一条 Domain user / assistant 消息。dehydrate 在 persist 内部完成。 */
+  appendDomainMessage(m: Message): void;
+  /** 追加一条 tool 结果。`toolCallId` 必须与上一条 assistant 中某 tool_call.id 对齐。 */
+  appendToolResponse(toolCallId: string, result: ToolResult): void;
+  /** 全量重写 messages.jsonl。edit / retry 路径用。 */
+  rewriteMessages(messages: readonly Message[]): Promise<void>;
+  flushMessages(): Promise<void>;
+  persist(): Promise<void>;
+}
+
+/** Base 子类执行一轮 LLM 调用时的入参。streaming / 静默形态共用。 */
+interface StreamOneRoundArgs {
+  model: PiModel<PiApi>;
+  apiKey: string;
+  piContext: PiContext;
+  signal: AbortSignal;
+  parent: Tracer;
+  /**
+   * pi-ai `ThinkingLevel` 标准枚举。`undefined` ⇒ 不传 `reasoning`，pi-ai 走
+   * provider 默认。透传给 `pi.streamSimple({ reasoning })`，跨 provider 翻译
+   * （`reasoning_effort` / `thinking.enabled+budget` / `enable_thinking` 等）由
+   * pi-ai 完成，deskmate 不在内部做翻译。
+   */
+  thinkingLevel?: ThinkingLevel;
+}
+
+/**
+ * 共用 turn loop / 持久化 / 上下文导出能力的抽象基类。形态差异落在子类钩子
+ * （streamOneRound / handleToolCalls / onTurnComplete / onTurnCancelled /
+ * onTurnFinally / onCompressionApplied / onWillCompress / failTurn / onRestored）。
+ */
+abstract class BaseSession {
+  public messages: Message[] = [];
+  public contextState: ContextState = { compressions: [] };
+  // pi 上一轮返回的 usage：作为下一轮压缩决策的 input token 来源。
+  // 重启后没有这个值（不持久化），首请求走 roughEstimate 兜底。
+  protected lastUsage: PiUsage | null = null;
+
+  protected readonly restoreTask: Promise<void>;
+  protected abortor: AbortController | null = null;
+
+  /**
+   * 主链路 tracer。入口（`startStream / retryStream / editUserMessage / JobRun.run`）必
+   * 调 `prepareSessionTracer` 注入：parent 给则复用（chat.ipc → chat.turn psid 自动成链），
+   * 缺则本地 `Tracer.start()` 兜底（eval / scheduler 路径，chat.turn 为顶层 span）。
+   * **不入 persist** —— 仅运行时分析。
+   */
+  protected sessionTracer: Tracer = Tracer.noop;
+
+  constructor(
+    public readonly id: string,
+    public readonly profileId: string,
+    public readonly agentId: string,
+    protected readonly persistSession: PersistSessionLike,
+  ) {
+    this.restoreTask = this.restore();
+  }
+
+  // ─── readonly accessors for sub-agent / external bridges ────────────────
+
+  /** 当前 agent 配置的 model id。读不到走 default model。供 SubAgentManager
+   *  解析 sub-agent "inherit" 时使用。 */
+  async getCurrentModelId(): Promise<string> {
+    const cfg = await readAgentRuntimeConfig(this.profileId, this.agentId);
+    if (cfg.ok) return cfg.agent.model;
+    // 配置缺失时由调用方决定 fallback；这里返回空字符串而非默认值，
+    // 避免 SubAgentManager 把"配置错误"误解为合法模型。
+    return '';
+  }
+
+  /** 返回经过 compression snapshot 折叠后的对话历史，等价于老
+   *  AgentChat.getContextHistory()。用于 SubAgent 的 full_history 模式。 */
+  async getContextHistory(): Promise<Message[]> {
+    await this.restoreTask;
+    const top =
+      this.contextState.compressions.length > 0
+        ? this.contextState.compressions[this.contextState.compressions.length - 1]
+        : null;
+    if (top) {
+      const { earlyPreservedCount, summary, compressedBeforeIndex } = top;
+      return [
+        ...this.messages.slice(0, earlyPreservedCount),
+        summary,
+        ...this.messages.slice(compressedBeforeIndex),
+      ];
+    }
+    return [...this.messages];
+  }
+
+  /** 取最近 20 条 user/assistant 文本拼成摘要。供 SubAgent 的 parent_summary 模式。 */
+  async getContextSummary(): Promise<string> {
+    const history = await this.getContextHistory();
+    if (history.length === 0) return '';
+    const recent = history.slice(-20);
+    const parts: string[] = [];
+    for (const msg of recent) {
+      // Domain 形态:user / assistant 的可见文本就是 content 串。
+      // assistant 的 think 是模型推理过程,不进 parent_summary。
+      const text = msg.content.trim();
+      if (text) parts.push(`[${msg.role}]: ${text.substring(0, 500)}`);
+    }
+    return parts.join('\n');
+  }
+
+  // ─── tool context helpers ───────────────────────────────────────────────
+
+  /**
+   * 给 spawn 类工具(以及未来其它需要 sub-agent 元数据 / 父上下文摘要的本地
+   * 工具)准备的 ctx 子字段。
+   *
+   * 之所以以 method 形态暴露而非简单 closure:
+   *   - `getSubAgentConfig` 要走 active profile,捕获时点决定快照(spawn 中
+   *     若用户改了 sub-agent 配置,本 turn 仍用 turn 开始时的配置版本)。
+   *   - `getParentContextSummary` 复用 `getContextSummary()` 的实现,避免
+   *     两条独立"摘要构造"逻辑漂移。
+   */
+  protected async getSubAgentConfigByName(name: string): Promise<SubAgentConfig | undefined> {
+    // profileId 必须与 active 一致(pi/utils/config 已校验);这里直接 lookup。
+    const profile = await Profiles.get().active();
+    const cfg = await profile.subAgents.getConfig(name);
+    return cfg ?? undefined;
+  }
+
+  // ─── core turn loop ─────────────────────────────────────────────────────
+
+  /**
+   * 通用 turn loop：配置 -> 压缩决策 -> streamOneRound -> tool -> 重复。
+   *
+   * 入口约定：子类负责在调本方法之前绑好本轮 turn 需要的运行时引用
+   * （RegularSession 绑 activeStream / activeEventSender；JobRun 绑 running）。
+   * base 只管 abortor，清理统一在 `onTurnFinally`。
+   */
+  protected async runTurnLoop(): Promise<void> {
+    this.abortor = new AbortController();
+    const signal = this.abortor.signal;
+
+    // 防御兜底：正常路径下子类入口已通过 prepareSessionTracer 注入。直接调
+    // runTurnLoop 时新起一个 trace，避免 chat.turn 起点彻底无 trace 字段。
+    if (this.sessionTracer === Tracer.noop) {
+      this.sessionTracer = Tracer.start().bind({
+        chatSessionId: this.id,
+        agentId: this.agentId,
+        profileId: this.profileId,
+      });
+    }
+    const turnTracer = this.sessionTracer.derive().bind({ mod: 'chat.turn' });
+    log.info(turnTracer.fields({ msg: 'turn start' }));
+
+    let iters = 0;
+    let lastStopReason: string | undefined;
+    let turnOutcome: 'done' | 'cancelled' | 'failed' = 'done';
+    let turnError: Error | null = null;
+
+    try {
+      const cfg = await readAgentRuntimeConfig(this.profileId, this.agentId);
+      if (!cfg.ok) throw new Error(cfg.error);
+      const { agent: agentCfg, parsedModel } = cfg;
+
+      // 一次解析 pi.Model + capability —— supportsTools 决定要不要拉 MCP 工具。
+      const resolved = await getModelInfo(parsedModel);
+      if (!resolved) {
+        throw new Error(`[pi/session] Model "${agentCfg.model}" not found; please reselect`);
+      }
+      const baseModel = resolved.model;
+
+      const systemPrompt = await buildSystemPrompt({
+        agentCfg,
+        profileId: this.profileId,
+        agentId: this.agentId,
+        sessionId: this.id,
+      });
+      // Catalog 在第一次循环里构建一次,后续 iteration 复用 —— turn 内 MCP
+      // server 增删的可见性留给下一次 turn。compressed 估算和 stream 调用
+      // 共用同一份 specs,保证"LLM 看到的"与"我们估算的"一致。
+      const catalog: ToolCatalog = resolved.capabilities.tools
+        ? await buildToolCatalogForAgent(agentCfg)
+        : { specs: [], routes: new Map() };
+      const piTools = catalog.specs;
+      const contextWindow = baseModel.contextWindow || 128_000;
+
+      // 仅当 applied=true 时写 INFO `chat.compress applied`；跳过路径绝不 log。
+      const doCompress = async (force?: boolean) => {
+        const beforeTokens = this.lastUsage?.input ?? null;
+        // 每次 doCompress 自起一个 chat.compress span；summarizer 把 child span 挂这下面。
+        const compressTracer = turnTracer.derive().bind({ mod: 'chat.compress' });
+        const result = await checkAndCompress({
+          messages: this.messages,
+          contextState: this.contextState,
+          systemPrompt,
+          toolsForEstimate: piTools,
+          contextWindow,
+          agentName: agentCfg.name,
+          profileId: this.profileId,
+          lastUsage: this.lastUsage,
+          onWillCompress: () => this.onWillCompress(),
+          force,
+          tracer: compressTracer,
+        });
+        if (result.applied) {
+          log.info(compressTracer.fields({
+            msg: force ? 'compress applied (force)' : 'compress applied',
+            originalTokens: beforeTokens ?? undefined,
+            compressedTokens: result.usage.tokenCount,
+          }, 'self'));
+        }
+        return result;
+      };
+
+      for (let iter = 0; iter < MAX_TURN_ITERATIONS; iter++) {
+        iters = iter + 1;
+        if (signal.aborted) throw new CancellationError('Turn cancelled');
+
+        const compressionResult = await doCompress();
+        this.contextState = {
+          ...compressionResult.nextContextState,
+          lastTokenUsage: compressionResult.usage,
+        };
+        if (compressionResult.applied) {
+          await this.onCompressionApplied();
+          this.lastUsage = null;
+        }
+
+        // resolveCredentials 留在循环内：returned token + baseUrl 是快照，长 turn
+        // 跨越 OAuth 过期点时下一次循环会重新拿 fresh credentials 派生（GHC
+        // 企业账户的 proxy-ep 字段决定 baseUrl，跨过期点必须重新派生）。
+        const { apiKey, model } = await resolveCredentials(baseModel, this.profileId);
+
+        let llmMessages = compressionResult.llmContext;
+        let piContext = toPiContext(llmMessages, systemPrompt, piTools);
+        const final = await this.streamOneRound({ model, apiKey, piContext, signal, parent: turnTracer, thinkingLevel: agentCfg.thinkingLevel }).catch(async (err) => {
+          // 服务端 context overflow：本地估算偏低导致首请求被拒。强制压一次再
+          // 重试本轮一次；force 压缩仍不能 applied 时只能抛原始错误。
+          // pi 在收到 first chunk 前抛错时 stream 还没污染，retry 安全。
+          const kind: PiErrorKind = classifyError(err);
+          if (kind !== 'overflow') throw err;
+          log.warn(turnTracer.fields({ msg: 'overflow retry', iter, errClass: kind }));
+          if (signal.aborted) throw new CancellationError('Cancelled during overflow recovery');
+          const forced = await doCompress(true);
+          if (!forced.applied) throw err;
+
+          this.contextState = {
+            ...forced.nextContextState,
+            lastTokenUsage: forced.usage,
+          };
+          await this.onCompressionApplied();
+          this.lastUsage = null;
+
+          if (signal.aborted) throw new CancellationError('Cancelled after overflow recovery compaction');
+
+          llmMessages = forced.llmContext;
+          piContext = toPiContext(llmMessages, systemPrompt, piTools);
+          return this.streamOneRound({ model, apiKey, piContext, signal, parent: turnTracer, thinkingLevel: agentCfg.thinkingLevel });
+        });
+
+        lastStopReason = final.stopReason;
+
+        // aborted：把 partial 内容 push 进消息历史保留可见，然后跳出。
+        // 不重新抛 CancellationError —— pi 已经把 error 事件正常发出，
+        // 我们已在 stream 上推过 status / complete chunk，直接走清理流程即可。
+        if (final.stopReason === 'aborted') {
+          const partial = fromPiAssistantMessage(final);
+          // fromPiAssistantMessage 已经把 aborted 翻译成 outcome.kind='aborted'
+          const hasContent = partial.content.length + partial.think.length > 0 || partial.tool_calls.length > 0;
+          if (hasContent) await this.appendAssistantMessage(partial);
+          break;
+        }
+
+        const assistantMsg = fromPiAssistantMessage(final);
+        await this.appendAssistantMessage(assistantMsg);
+
+        // 用 pi 这一轮的 usage 作为下一轮压缩决策依据，并同步进 lastTokenUsage
+        // 让 ContextBadge 显示真实数（而不是 roughEstimate）。
+        this.lastUsage = final.usage;
+        this.contextState = {
+          ...this.contextState,
+          lastTokenUsage: {
+            tokenCount: final.usage.input,
+            totalMessages: this.messages.length,
+            contextMessages: llmMessages.length + 1,
+            compressionRatio: 1.0,
+          },
+        };
+
+        // 仅当 pi 明确告知 toolUse 时继续；模型只输出 toolCall 但 stopReason
+        // 非 'toolUse' 视作终止。
+        if (final.stopReason !== 'toolUse') break;
+
+        const toolCalls = final.content.filter((c): c is Extract<typeof c, { type: 'toolCall' }> => c.type === 'toolCall');
+        if (toolCalls.length === 0) break;
+        if (signal.aborted) throw new CancellationError('Cancelled before tool execution');
+        await this.handleToolCalls(toolCalls, signal, turnTracer, catalog);
+      }
+
+      await this.onTurnComplete();
+    } catch (err) {
+      if (err instanceof CancellationError) {
+        turnOutcome = 'cancelled';
+        await this.onTurnCancelled();
+        return;
+      }
+      turnOutcome = 'failed';
+      turnError = err instanceof Error ? err : new Error(String(err));
+      await this.failTurn(turnError);
+    } finally {
+      const tail = { iters, stopReason: lastStopReason };
+      if (turnOutcome === 'cancelled') {
+        log.info(turnTracer.fields({ msg: 'turn cancelled', ...tail }, 'self'));
+      } else if (turnOutcome === 'failed' && turnError) {
+        log.error(turnTracer.fields({
+          msg: 'turn failed',
+          ...tail,
+          errClass: classifyError(turnError),
+          err: turnError,
+        }, 'self'));
+      } else {
+        log.info(turnTracer.fields({ msg: 'turn done', ...tail }, 'self'));
+      }
+      this.onTurnFinally();
+    }
+  }
+
+  protected abstract streamOneRound(args: StreamOneRoundArgs): Promise<PiAssistantMessage>;
+  protected abstract handleToolCalls(
+    toolCalls: PiToolCall[],
+    signal: AbortSignal,
+    parent: Tracer,
+    catalog: ToolCatalog,
+  ): Promise<void>;
+
+  /** turn 正常跑完（所有迭代 break / aborted partial 落盘后）。 */
+  protected abstract onTurnComplete(): Promise<void>;
+  /**
+   * turn 抛 CancellationError 后的收尾。**默认收敛掉错误**——base 调完即 `return`，
+   * runTurnLoop 整体 resolve。需要把 cancel 抛回上层（如 scheduler）的子类，在
+   * 钩子内重新 `throw new CancellationError(...)` 即可，finally 仍会执行。
+   */
+  protected abstract onTurnCancelled(): Promise<void>;
+  /**
+   * turn 抛非取消错误。子类负责落盘 outcome / 标 idle 后再 throw 出去;
+   * runTurnLoop `await this.failTurn(...)`,所以子类的 throw 会在写盘真正完成后
+   * 才传播到 finally,避免 fire-and-forget 把 EIO/ENOSPC 静默吞掉。
+   */
+  protected abstract failTurn(err: Error): Promise<never>;
+  /** turn 收尾固定的清理（finally 块），异常路径也会走。 */
+  protected abstract onTurnFinally(): void;
+  /** 一次成功的 compression 跑完，子类负责持久化 / 推 status。 */
+  protected abstract onCompressionApplied(): Promise<void>;
+  /** compression 即将启动（用于推 COMPRESSING_CONTEXT status）。默认 no-op。 */
+  protected onWillCompress(): void {}
+
+  // ─── helpers / persistence ──────────────────────────────────────────────
+  /**
+   * 入口注入 sessionTracer（`startStream / retryStream / editUserMessage / JobRun.run`
+   * 必调一次）。parent 给则复用（chat.ipc → chat.turn psid 自动成链）；缺则本地
+   * `Tracer.start()` 兜底，chat.turn 自成顶层 span，与 "无外部上游" 语义对齐。
+   */
+  protected prepareSessionTracer(parent?: Tracer): void {
+    if (parent) {
+      // parent 通常已经 bind 过 chatSessionId/agentId/profileId（chat.ipc 入口），不重复 bind。
+      this.sessionTracer = parent;
+    } else {
+      this.sessionTracer = Tracer.start().bind({
+        chatSessionId: this.id,
+        agentId: this.agentId,
+        profileId: this.profileId,
+      });
+    }
+  }
+
+  async abort(): Promise<void> {
+    await this.restoreTask;
+    this.abortor?.abort();
+  }
+
+  /**
+   * 截断到最后一条 user message 之后(含)。retry 路径用 —— 把上次失败/取消产生
+   * 的 assistant + tool_res 行全部抹掉,LLM 重新尝试同一条 user。
+   * 全量重写而非裁行数:tool_res 行不在内存 messages 里(它们已折回 ToolCall.response),
+   * 内存截断后直接 `rewriteMessages` 让磁盘与内存保持事实一致。
+   */
+  protected async truncateToLastUserMessage(): Promise<void> {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === 'user') {
+        const keepCount = i + 1;
+        if (keepCount < this.messages.length) {
+          this.messages = this.messages.slice(0, keepCount);
+          await this.persistSession.rewriteMessages(this.messages);
+          await this.persistSession.persist();
+        }
+        return;
+      }
+    }
+    throw new Error('No user message to retry from');
+  }
+
+  /** 追加 user message:内存 push + persist append + flush。 */
+  protected async appendUserMessage(m: UserMessage): Promise<void> {
+    this.messages.push(m);
+    this.persistSession.appendDomainMessage(m);
+    await this.persistSession.flushMessages();
+  }
+
+  /** 追加 assistant message:内存 push + persist append + flush。tool_calls 内部 response
+   *  由 `applyToolResponse` 通道单独落盘(persist 不会从 assistant 行展开 tool_res)。 */
+  protected async appendAssistantMessage(m: AssistantMessage): Promise<void> {
+    this.messages.push(m);
+    this.persistSession.appendDomainMessage(m);
+    await this.persistSession.flushMessages();
+  }
+
+  /**
+   * tool 跑完后,把结果折回 *最近一条 assistant.tool_calls* 中匹配 id 的
+   * ToolCall.response,同时让 persist 追加一条 `tool_res` 行 (只 push pending,
+   * 不 flush)。N 个并行工具的写盘合并到 caller 的批 flush(`handleToolCalls`
+   * 收尾一次性 `flushMessages`),避免 N 次串行 appendText IO。
+   *
+   * 找不到匹配的 id 视作 invariant 破坏,抛错。
+   */
+  protected applyToolResponse(toolCallId: string, result: ToolResult): void {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const m = this.messages[i];
+      if (m.role !== 'assistant') continue;
+      const tc = m.tool_calls.find((c) => c.id === toolCallId);
+      if (!tc) continue;
+      tc.response = { ...result };
+      this.persistSession.appendToolResponse(toolCallId, result);
+      return;
+    }
+    throw new Error(`applyToolResponse: no assistant.tool_calls matches id "${toolCallId}"`);
+  }
+
+  /**
+   * 给最后一条 assistant message **就地** mutate outcome。**只动内存,不写盘** ——
+   * outcome 在新设计里仅作 turn 内决策辅助,Resume 终态把所有异常分支收敛到
+   * `turn=idle + ErrorBar`(`loadChatSessionSnapshot.errorMessage`),不依赖磁盘上
+   * 的 outcome 字段;UI 渲染也不消费它。把整个 messages.jsonl 重写只为改一个
+   * 字段属于过早承诺,长会话(MB 级 jsonl)上 cancel/fail 一次就要全量覆盖。
+   *
+   * 尾部不是 assistant message 时(user 之后还没下笔)不做事 —— 调用方负责判断。
+   */
+  protected setLastAssistantOutcome(outcome: AssistantOutcome): void {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === 'assistant') {
+        (this.messages[i] as AssistantMessage).outcome = outcome;
+        return;
+      }
+    }
+  }
+
+  /** 标记 session 进入一次 turn。turn.status 落盘后崩溃可被 planResume 识别。 */
+  protected async markTurnRunning(): Promise<void> {
+    this.persistSession.config.turn = { status: 'running', startedAt: Date.now() };
+    await this.persistSession.persist();
+  }
+
+  /** 标记 session 结束 turn。complete / cancelled / failed 均调用。 */
+  protected async markTurnIdle(): Promise<void> {
+    this.persistSession.config.turn = { status: 'idle' };
+    await this.persistSession.persist();
+  }
+
+  /** failTurn 把 err 翻成尾部 assistant 的 `outcome.kind='error'`。 */
+  protected stampFailureOutcome(err: Error, fallbackMessage = 'turn failed'): void {
+    const category = classifyError(err);
+    this.setLastAssistantOutcome({
+      kind: 'error',
+      message: err.message || fallbackMessage,
+      ...(category !== 'other' ? { category } : {}),
+    });
+  }
+
+  /** failTurn 路径专用:写盘失败只 log,保原始 err 传播。 */
+  protected async markTurnIdleSafe(label: string): Promise<void> {
+    try {
+      await this.markTurnIdle();
+    } catch (writeErr) {
+      log.error({
+        msg: `[pi/session] ${label}: markTurnIdle failed`,
+        sessionId: this.id,
+        err: writeErr instanceof Error ? writeErr : new Error(String(writeErr)),
+      });
+    }
+  }
+
+  /**
+   * 启动期 resume 提示:`restore` 看到 `turn.status === 'running'` 时,根据
+   * messages 尾部状态计算续跑动作。子类在下一次入口(startStream / retryStream)
+   * 前消化它 —— 详见 RegularSession.consumePendingResume。
+   */
+  public pendingResume: ResumeAction = { kind: 'markIdle' };
+
+  /** 把已落盘的 messages / 元数据灌进内存。 */
+  private async restore(): Promise<void> {
+    const { messages, orphanResponses } = await this.persistSession.loadDomainMessages();
+    this.messages = messages;
+    if (orphanResponses.length > 0) {
+      log.warn({
+        msg: '[pi/session] orphan tool_res rows found during restore',
+        sessionId: this.id,
+        agentId: this.agentId,
+        count: orphanResponses.length,
+      });
+    }
+    this.contextState = this.persistSession.config.contextState ?? { compressions: [] };
+    this.pendingResume =
+      this.persistSession.config.turn?.status === 'running'
+        ? planResume(this.messages)
+        : { kind: 'markIdle' };
+    this.onRestored();
+  }
+
+  /** restore 完成后子类钩子（同步）。RegularSession 用于回填 title / update_at。 */
+  protected onRestored(): void {}
+
+  /**
+   * 把 title / contextState / updatedAt 刷到 data.json；messages 不在这里碰
+   * （appendXxx / rewriteMessages 已各自同步过磁盘）。`desiredTitle` 与
+   * `updatedAt` 由子类决定语义。
+   */
+  protected async persist(desiredTitle: string, updatedAt: string): Promise<void> {
+    this.persistSession.config.title = desiredTitle;
+    this.persistSession.config.contextState = this.contextState;
+    this.persistSession.config.updatedAt = updatedAt;
+    await this.persistSession.persist();
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// RegularSession —— streaming + status + Electron WebContents 推流
+// ───────────────────────────────────────────────────────────────────────────
+
+export class RegularSession extends BaseSession {
+  public title = '';
+  public update_at = 0;
+  public status: ChatStatus = ChatStatus.IDLE;
+
+  private activeStream: Stream<StreamingChunk> | null = null;
+  private activeEventSender: Electron.WebContents | null = null;
+
+  // ─── public entry points ────────────────────────────────────────────────
+  async startStream(
+    userMessage: UserMessage,
+    stream: Stream<StreamingChunk>,
+    eventSender: Electron.WebContents,
+    parentTracer?: Tracer,
+  ): Promise<void> {
+    await this.restoreTask;
+    this.guardIdle();
+    this.prepareSessionTracer(parentTracer);
+    await this.consumePendingResume();
+    await this.markTurnRunning();
+    await this.appendUserMessage(userMessage);
+    await this.runStreamingTurnLoop(stream, eventSender);
+  }
+
+  async retryStream(
+    stream: Stream<StreamingChunk>,
+    eventSender: Electron.WebContents,
+    parentTracer?: Tracer,
+  ): Promise<void> {
+    await this.restoreTask;
+    this.guardIdle();
+    this.prepareSessionTracer(parentTracer);
+    await this.consumePendingResume();
+    await this.truncateToLastUserMessage();
+    await this.markTurnRunning();
+    await this.runStreamingTurnLoop(stream, eventSender);
+  }
+
+  async editUserMessage(
+    messageId: string,
+    updatedMessage: UserMessage,
+    stream: Stream<StreamingChunk>,
+    eventSender: Electron.WebContents,
+    parentTracer?: Tracer,
+  ): Promise<void> {
+    await this.restoreTask;
+    this.guardIdle();
+    this.prepareSessionTracer(parentTracer);
+    await this.consumePendingResume();
+    const idx = this.messages.findIndex((m) => m.id === messageId && m.role === 'user');
+    if (idx < 0) throw new Error(`User message not found: ${messageId}`);
+    // 中段截断 + 立刻接上新 user message:全量重写 jsonl 保证磁盘事实=内存。
+    this.messages = [...this.messages.slice(0, idx), updatedMessage];
+    await this.persistSession.rewriteMessages(this.messages);
+    this.update_at = Date.now();
+    await this.markTurnRunning();
+    await this.runStreamingTurnLoop(stream, eventSender);
+  }
+
+  async canEditUserMessage(messageId: string): Promise<{ canEdit: boolean; reason?: string }> {
+    await this.restoreTask;
+    if (this.status !== ChatStatus.IDLE) {
+      return { canEdit: false, reason: `Session is ${this.status}` };
+    }
+    const msg = this.messages.find((m) => m.id === messageId);
+    if (!msg) return { canEdit: false, reason: 'Message not found' };
+    if (msg.role !== 'user') return { canEdit: false, reason: 'Only user messages can be edited' };
+    return { canEdit: true };
+  }
+
+  async stopStream(): Promise<void> {
+    // 只 abort。turn loop 自然走到 stopReason='aborted' 分支 → setStatus(IDLE)
+    // → 推 status_changed → 自行 close stream。在这里 close stream 会让 status
+    // chunk 发不出去，UI 按钮卡在"取消"形态。
+    await this.abort();
+  }
+
+  // ─── turn loop wiring ───────────────────────────────────────────────────
+
+  /** 把 stream / eventSender 绑到实例字段后进入 base turn loop。 */
+  private async runStreamingTurnLoop(
+    stream: Stream<StreamingChunk>,
+    eventSender: Electron.WebContents,
+  ): Promise<void> {
+    this.activeStream = stream;
+    this.activeEventSender = eventSender;
+    await this.runTurnLoop();
+  }
+
+  protected async streamOneRound(args: StreamOneRoundArgs): Promise<PiAssistantMessage> {
+    this.setStatus(ChatStatus.SENDING_RESPONSE);
+    const { model, apiKey, piContext, signal, parent, thinkingLevel } = args;
+    const stream = this.requireActiveStream();
+
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    let chunkSeq = 0;
+    let receivedFirstToken = false;
+    let ttft: number | undefined;
+
+    const tracer = parent.derive().bind({ mod: 'chat.llm' });
+    log.info(tracer.fields({
+      msg: 'stream start',
+      modelId: model.id,
+      toolsCount: piContext.tools?.length ?? 0,
+    }));
+
+    try {
+      // 动态 import：pi-ai 是 ESM-only 包，main 进程是 CJS bundle，
+      // 用 `import()` 让 Node 走 ESM loader。
+      const pi = await import('@earendil-works/pi-ai');
+      // streamSimple 而非 pi.stream：simple 入口接受 ThinkingLevel 标准字段
+      // 并跨 provider 翻译（见 StreamOneRoundArgs.thinkingLevel 说明）。
+      //
+      // toolChoice:'auto' 显式声明 —— 多数 provider 默认就是 auto，但 Codex / 部分
+      // responses 接口默认行为不一致；显式传一次保持跨 provider 一致。仅在确实
+      // 带 tools 时附加，避免 provider 把 'auto' 当成"必须有工具"造成 schema 报错。
+      const options: SimpleStreamOptionsWithToolChoice = {
+        signal,
+        apiKey,
+        reasoning: thinkingLevel,
+        toolChoice: piContext.tools?.length ? 'auto' : undefined,
+      };
+      const events = pi.streamSimple(model, piContext, options);
+
+      for await (const evt of events) {
+        if (
+          !receivedFirstToken &&
+          (evt.type === 'text_delta' ||
+            evt.type === 'toolcall_delta' ||
+            evt.type === 'thinking_delta')
+        ) {
+          receivedFirstToken = true;
+          // tracer 自带 startAt，直接量 TTFT。
+          ttft = tracer.dur;
+          this.setStatus(ChatStatus.RECEIVED_RESPONSE);
+        }
+
+        if (evt.type === 'text_delta') {
+          stream.send({
+            chunkId: `${messageId}_${chunkSeq++}`,
+            messageId,
+            agentId: this.agentId,
+            chatSessionId: this.id,
+            timestamp: Date.now(),
+            type: 'content',
+            text: evt.delta,
+          });
+        } else if (evt.type === 'toolcall_end') {
+          // toolcall_delta 阶段(args 文本片段流入)不再发 chunk —— Domain
+          // ToolCall.args 是结构化对象;UI 直到 args 解完才能展示。pi-ai 在
+          // toolcall_end 把已解析好的完整 args 一次性回灌,这里就一次发完。
+          const tc = evt.toolCall;
+          stream.send({
+            chunkId: `${messageId}_${chunkSeq++}`,
+            messageId,
+            agentId: this.agentId,
+            chatSessionId: this.id,
+            timestamp: Date.now(),
+            type: 'tool_call',
+            index: evt.contentIndex,
+            id: tc.id,
+            name: tc.name,
+            args: tc.arguments ?? {},
+            time: Date.now(),
+          });
+        } else if (evt.type === 'thinking_delta') {
+          // pi-ai 把推理内容以独立流分段;UI 把这条线拼到 AssistantMessage.think。
+          // content / tool_call 三条流并行,renderer 各自累积到对应字段。
+          stream.send({
+            chunkId: `${messageId}_${chunkSeq++}`,
+            messageId,
+            agentId: this.agentId,
+            chatSessionId: this.id,
+            timestamp: Date.now(),
+            type: 'thinking',
+            text: evt.delta,
+          });
+        }
+      }
+
+      const final = await events.result();
+
+      // pi 把错误以 event 形式发出而不是 throw —— result() 返回 stopReason='error'
+      // 的 AssistantMessage 而非抛错。这里手动 throw 让外层 overflow 兜底 /
+      // failTurn 能像处理 SDK 异常一样接住。
+      if (final.stopReason === 'error') {
+        const err = new Error(final.errorMessage ?? 'pi stream error');
+        log.warn(tracer.fields({
+          msg: 'stream failed',
+          stopReason: final.stopReason,
+          errClass: classifyError(err),
+          err,
+        }, 'self'));
+        // sentinel：让外层 catch 知道这条 err 已经写过 WARN 了，不再补写 ERROR。
+        (err as Error & { __chatLlmLogged?: boolean }).__chatLlmLogged = true;
+        throw err;
+      }
+
+      stream.send({
+        chunkId: `${messageId}_complete`,
+        messageId,
+        agentId: this.agentId,
+        chatSessionId: this.id,
+        timestamp: Date.now(),
+        type: 'complete',
+        hasToolCalls: final.content.some((c) => c.type === 'toolCall'),
+      });
+
+      log.info(tracer.fields({
+        msg: 'stream ok',
+        ttft,
+        inputTokens: final.usage.input,
+        outputTokens: final.usage.output,
+        stopReason: final.stopReason,
+      }, 'self'));
+
+      return final;
+    } catch (err) {
+      // SDK throw 路径（abort / 网络 / 服务端 4xx）：上面 stopReason='error' 已
+      // 经写过 WARN 并打了 sentinel；这里只为"没有上半场就硬抛"补 ERROR。
+      const e = err instanceof Error ? err : new Error(String(err));
+      const alreadyLogged = (e as Error & { __chatLlmLogged?: boolean }).__chatLlmLogged === true;
+      if (!alreadyLogged) {
+        log.error(tracer.fields({
+          msg: 'stream failed',
+          errClass: classifyError(e),
+          err: e,
+        }, 'self'));
+        (e as Error & { __chatLlmLogged?: boolean }).__chatLlmLogged = true;
+      }
+      throw e;
+    }
+  }
+
+  protected async handleToolCalls(
+    toolCalls: PiToolCall[],
+    signal: AbortSignal,
+    parent: Tracer,
+    catalog: ToolCatalog,
+  ): Promise<void> {
+    const stream = this.requireActiveStream();
+    const eventSender = this.requireActiveEventSender();
+
+    // 并行发起所有 toolCall;回填用下标顺序的 for-of 消费,确保
+    // assistant/tool 配对的回放顺序稳定。每个 tool 各自一个 chat.tool span。
+    const settled = await Promise.all(
+      toolCalls.map((tc) => {
+        const call = { id: tc.id, name: tc.name, arguments: tc.arguments ?? {} };
+        const ctx: ToolContext = {
+          profileId: this.profileId,
+          agentId: this.agentId,
+          sessionId: this.id,
+          signal,
+          eventSender,
+          tracer: deriveToolTracer(parent, call, { profileId: this.profileId, agentId: this.agentId, sessionId: this.id }),
+          isSubAgent: false,
+          callId: call.id,
+          chunkStream: stream,
+          catalog,
+          getSubAgentConfig: (name) => this.getSubAgentConfigByName(name),
+          getParentContextSummary: () => this.getContextSummary(),
+        };
+        return executeToolCall(call, catalog, ctx);
+      }),
+    );
+
+    for (const result of settled) {
+      const toolResult: ToolResult = {
+        time: Date.now(),
+        status: result.isError ? 'fail' : 'success',
+        result: result.content,
+      };
+      this.applyToolResponse(result.toolCallId, toolResult);
+      stream.send({
+        chunkId: `${result.toolCallId}_result`,
+        messageId: result.toolCallId,
+        agentId: this.agentId,
+        chatSessionId: this.id,
+        timestamp: toolResult.time,
+        type: 'tool_result',
+        toolCallId: result.toolCallId,
+        toolName: result.toolName,
+        result: result.content,
+        status: toolResult.status,
+        time: toolResult.time,
+      });
+    }
+    // 批 flush:N 个 tool_res 行合并成一次 appendText IO,避免每 tool 串行写盘。
+    if (settled.length > 0) await this.persistSession.flushMessages();
+  }
+
+  protected async appendUserMessage(m: UserMessage): Promise<void> {
+    this.update_at = Date.now();
+    await super.appendUserMessage(m);
+  }
+
+  protected async appendAssistantMessage(m: AssistantMessage): Promise<void> {
+    this.update_at = Date.now();
+    await super.appendAssistantMessage(m);
+  }
+
+  protected applyToolResponse(toolCallId: string, result: ToolResult): void {
+    this.update_at = Date.now();
+    super.applyToolResponse(toolCallId, result);
+  }
+
+  protected async onCompressionApplied(): Promise<void> {
+    this.setStatus(ChatStatus.COMPRESSED_CONTEXT);
+    await this.persistMetadata();
+  }
+
+  protected onWillCompress(): void {
+    this.setStatus(ChatStatus.COMPRESSING_CONTEXT);
+  }
+
+  protected async onTurnComplete(): Promise<void> {
+    this.setStatus(ChatStatus.IDLE);
+    this.activeStream?.close();
+    await this.markTurnIdle();
+    await this.persistMetadata();
+  }
+
+  protected async onTurnCancelled(): Promise<void> {
+    this.setStatus(ChatStatus.IDLE);
+    // cancel 时若 turn 顶部是 assistant 且 outcome 未明,标 aborted/partial。
+    this.setLastAssistantOutcome({ kind: 'aborted', partial: true });
+    await this.markTurnIdle();
+    await this.persistMetadata();
+    this.activeStream?.close();
+  }
+
+  protected async failTurn(err: Error): Promise<never> {
+    this.setStatus(ChatStatus.IDLE);
+    this.activeStream?.close();
+    this.stampFailureOutcome(err);
+    await this.markTurnIdleSafe('failTurn');
+    throw err;
+  }
+
+  protected onTurnFinally(): void {
+    this.activeStream = null;
+    this.activeEventSender = null;
+  }
+
+  protected onRestored(): void {
+    this.title = this.persistSession.config.title ?? '';
+    const updatedAt = this.persistSession.config.updatedAt;
+    this.update_at = updatedAt ? new Date(updatedAt).getTime() || 0 : 0;
+  }
+
+  private async persistMetadata(): Promise<void> {
+    const lastUpdated = new Date(this.update_at || Date.now()).toISOString();
+    const desiredTitle = this.title || deriveFallbackTitle(this.messages, 'New ChatSession');
+    await this.persist(desiredTitle, lastUpdated);
+  }
+
+  /**
+   * 启动期把 pendingResume 消费完。常规入口 (startStream / retryStream /
+   * editUserMessage) 在自身工作前调用一次。
+   *
+   * - markIdle: 上次 turn 正常收尾或本来就是 idle,直接返回。
+   * - markTerminal: 把 outcome 落到内存(已在 restore 里看见),并标 turn=idle。
+   * - runMissingTools / continueLoop: 尾部一定是 in-flight assistant —— 把它标
+   *   `aborted + partial`,turn 拉回 idle。**不**主动续跑 tool —— 这是终态设计。
+   * - startTurn: 尾部是 user(上次崩在 LLM 响应前)。**不**调
+   *   `setLastAssistantOutcome` —— 它倒序扫到的是上一轮已正常收尾的 assistant,
+   *   把那条标 aborted 既不准确,后续 editUserMessage→rewriteMessages 还会持久化
+   *   错误 outcome。只 markTurnIdle,等用户重发触发新 turn。
+   *
+   * 异常状态由 `loadChatSessionSnapshot` 在 `turn=running` 时通过 `interrupted`
+   * 字段透到 UI,渲染端的 ErrorBar + Retry 按钮负责让用户手动 retry。
+   */
+  private async consumePendingResume(): Promise<void> {
+    const action = this.pendingResume;
+    if (action.kind === 'markIdle') return;
+    this.pendingResume = { kind: 'markIdle' };
+    if (action.kind === 'markTerminal') {
+      this.setLastAssistantOutcome(action.outcome);
+    } else if (action.kind === 'runMissingTools' || action.kind === 'continueLoop') {
+      this.setLastAssistantOutcome({ kind: 'aborted', partial: true });
+    }
+    // startTurn:不动 outcome,直接 markIdle
+    await this.markTurnIdle();
+  }
+
+  private guardIdle(): void {
+    if (this.status !== ChatStatus.IDLE) {
+      throw new Error(`Cannot start turn while session status is ${this.status}`);
+    }
+  }
+
+  private setStatus(s: ChatStatus): void {
+    if (this.status === s) return;
+    this.status = s;
+    this.activeStream?.send({
+      type: 'status_changed',
+      agentId: this.agentId,
+      chatSessionId: this.id,
+      timestamp: Date.now(),
+      chatStatus: s,
+      contextStats: this.contextState.lastTokenUsage,
+    });
+  }
+
+  private requireActiveStream(): Stream<StreamingChunk> {
+    if (!this.activeStream) {
+      throw new Error('RegularSession streaming hooks called without an active stream');
+    }
+    return this.activeStream;
+  }
+
+  private requireActiveEventSender(): Electron.WebContents {
+    if (!this.activeEventSender) {
+      throw new Error('RegularSession streaming hooks called without an active eventSender');
+    }
+    return this.activeEventSender;
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// JobRun —— scheduler 用的静默 turn loop
+//
+// 与 RegularSession 行为等价但裁掉一切对外推流 / WebContents 依赖；
+// human-loop 类工具调用 (choice/form) 在 eventSender=null 时由 pi/tool.ts 的
+// sendHumanLoopRequest 自动返回 cancel 默认应答 —— 等价于"用户拒绝"，turn 自然收敛。
+// ───────────────────────────────────────────────────────────────────────────
+
+export class JobRun extends BaseSession {
+  private running = false;
+
+  async run(userMessage: UserMessage, parentTracer?: Tracer): Promise<{ messageCount: number }> {
+    await this.restoreTask;
+    if (this.running) throw new Error('JobRun already running');
+    // JobRun 一次性:scheduler 每次 run 创建新 session,这条入口在每个 session
+    // 上至多调一次。`BaseSession.restore` 仍会按尾部状态算 `pendingResume` ——
+    // 正常路径下应该是 markIdle(从未跑过)。如果调用方喂进来一个崩溃过的旧
+    // session,fail-fast 把这个不变量破坏暴露出来,而不是默默把 in-flight
+    // 状态当 idle 续接。
+    if (this.pendingResume.kind !== 'markIdle') {
+      throw new Error(
+        `[pi/session] JobRun.run invoked on a session with pending resume action ` +
+        `kind=${this.pendingResume.kind} —— scheduler must create a fresh session per run`,
+      );
+    }
+    this.running = true;
+    this.prepareSessionTracer(parentTracer);
+    try {
+      const before = this.messages.length;
+      await this.markTurnRunning();
+      await this.appendUserMessage(userMessage);
+      await this.runTurnLoop();
+      return { messageCount: this.messages.length - before };
+    } finally {
+      this.running = false;
+      this.abortor = null;
+    }
+  }
+
+  protected async streamOneRound(args: StreamOneRoundArgs): Promise<PiAssistantMessage> {
+    const { model, apiKey, piContext, signal, parent, thinkingLevel } = args;
+    const tracer = parent.derive().bind({ mod: 'chat.llm' });
+    log.info(tracer.fields({
+      msg: 'stream start',
+      modelId: model.id,
+      toolsCount: piContext.tools?.length ?? 0,
+    }));
+
+    try {
+      const pi = await import('@earendil-works/pi-ai');
+      // 同 RegularSession.streamOneRound：streamSimple + reasoning + toolChoice。
+      // 语义必须与 streaming 形态一致 —— 否则同一 agent 在交互聊天 vs schedule
+      // run 下 reasoning 强度不一致，回复风格会偏。
+      const options: SimpleStreamOptionsWithToolChoice = {
+        signal,
+        apiKey,
+        reasoning: thinkingLevel,
+        toolChoice: piContext.tools?.length ? 'auto' : undefined,
+      };
+      const events = pi.streamSimple(model, piContext, options);
+
+      // 必须 drain：pi 的 events 是 async iterator，drain 完 result() 才 resolve。
+      for await (const _ of events) {
+        // no-op
+      }
+
+      const final = await events.result();
+      if (final.stopReason === 'error') {
+        const err = new Error(final.errorMessage ?? 'pi stream error');
+        log.warn(tracer.fields({
+          msg: 'stream failed',
+          stopReason: final.stopReason,
+          errClass: classifyError(err),
+          err,
+        }, 'self'));
+        (err as Error & { __chatLlmLogged?: boolean }).__chatLlmLogged = true;
+        throw err;
+      }
+
+      log.info(tracer.fields({
+        msg: 'stream ok',
+        inputTokens: final.usage.input,
+        outputTokens: final.usage.output,
+        stopReason: final.stopReason,
+      }, 'self'));
+
+      return final;
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      const alreadyLogged = (e as Error & { __chatLlmLogged?: boolean }).__chatLlmLogged === true;
+      if (!alreadyLogged) {
+        log.error(tracer.fields({
+          msg: 'stream failed',
+          errClass: classifyError(e),
+          err: e,
+        }, 'self'));
+        (e as Error & { __chatLlmLogged?: boolean }).__chatLlmLogged = true;
+      }
+      throw e;
+    }
+  }
+
+  protected async handleToolCalls(
+    toolCalls: PiToolCall[],
+    signal: AbortSignal,
+    parent: Tracer,
+    catalog: ToolCatalog,
+  ): Promise<void> {
+    const settled = await Promise.all(
+      toolCalls.map((tc) => {
+        const call = { id: tc.id, name: tc.name, arguments: tc.arguments ?? {} };
+        const ctx: ToolContext = {
+          profileId: this.profileId,
+          agentId: this.agentId,
+          sessionId: this.id,
+          signal,
+          eventSender: null,
+          tracer: deriveToolTracer(parent, call, { profileId: this.profileId, agentId: this.agentId, sessionId: this.id }),
+          isSubAgent: false,
+          callId: call.id,
+          chunkStream: null,
+          catalog,
+          getSubAgentConfig: (name) => this.getSubAgentConfigByName(name),
+          getParentContextSummary: () => this.getContextSummary(),
+        };
+        return executeToolCall(call, catalog, ctx);
+      }),
+    );
+
+    for (const result of settled) {
+      this.applyToolResponse(result.toolCallId, {
+        time: Date.now(),
+        status: result.isError ? 'fail' : 'success',
+        result: result.content,
+      });
+    }
+    if (settled.length > 0) await this.persistSession.flushMessages();
+  }
+
+  protected async onCompressionApplied(): Promise<void> {
+    await this.persistMetadata();
+  }
+
+  protected async onTurnComplete(): Promise<void> {
+    await this.markTurnIdle();
+    await this.persistMetadata();
+  }
+
+  protected async onTurnCancelled(): Promise<void> {
+    // cancel 后先把已 append 的消息元数据落盘（contextState 不能丢），再抛回
+    // SchedulerManager，由它 finishRun({ status: 'failed' })。
+    this.setLastAssistantOutcome({ kind: 'aborted', partial: true });
+    await this.markTurnIdle();
+    await this.persistMetadata();
+    throw new CancellationError('Job cancelled');
+  }
+
+  protected async failTurn(err: Error): Promise<never> {
+    this.stampFailureOutcome(err, 'job failed');
+    await this.markTurnIdleSafe('JobRun.failTurn');
+    throw err;
+  }
+
+  protected onTurnFinally(): void {
+    // running flag 由 run() finally 处理；base 路径无额外清理。
+  }
+
+  private async persistMetadata(): Promise<void> {
+    const desiredTitle =
+      this.persistSession.config.title ||
+      deriveFallbackTitle(this.messages, 'Scheduled Run');
+    await this.persist(desiredTitle, new Date().toISOString());
+  }
+}
+
+
+function deriveFallbackTitle(messages: Message[], fallback: string): string {
+  const firstUser = messages.find((m) => m.role === 'user');
+  if (!firstUser) return fallback;
+  return firstUser.content.slice(0, 40) || fallback;
+}

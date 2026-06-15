@@ -1,0 +1,244 @@
+'use client'
+
+import React, { useState, useCallback, useEffect, useRef } from 'react'
+import { useOutletContext, useNavigate } from 'react-router-dom'
+import { Users, RefreshCw, Plus } from 'lucide-react'
+import { Badge } from '@/shadcn/badge'
+import { Button } from '@/shadcn/button'
+import { useSubAgents, useSkills } from '../userData/userDataProvider'
+import { useMcpRuntimeServers } from '@/states/mcpRuntime.atom'
+import { useToast } from '../ui/ToastProvider'
+import SettingsLayout from '../settings/SettingsLayout'
+import SubAgentListItem from './SubAgentListItem'
+import { AgentContextType } from '../../types/agentContextTypes'
+import type { SubAgentConfig } from '../../lib/userData/types'
+import { subAgentApi } from '@/ipc/subAgent'
+import './SubAgentsView.scss'
+import { log } from '@/log';
+const logger = log.child({ mod: 'SubAgentsView' });
+
+/**
+ * SubAgentsView - Sub-agent management view in the Settings page
+ *
+ * Design reference: SkillsView.tsx
+ * - Uses unified-header + sub-agents-content-view layout
+ * - useOutletContext<AgentContextType>() to get SettingsPage handlers
+ * - useSubAgents() to get global sub-agent data
+ */
+const SubAgentsView: React.FC = () => {
+  const {
+    onSubAgentsAddMenuToggle,
+  } = useOutletContext<AgentContextType>()
+
+  const navigate = useNavigate()
+
+  // Data fetching (via useSubAgents hook, not direct IPC)
+  const { subAgents, stats, isLoading } = useSubAgents()
+  const mcpServers = useMcpRuntimeServers()
+  const { skills } = useSkills()
+  const { showSuccess, showError } = useToast()
+
+  // Global MCP/skills counts — used as inherited counts for sub-agents
+  const globalMcpCount = mcpServers?.length || 0
+  const globalSkillsCount = skills?.length || 0
+
+  // Local UI state
+  const [selectedSubAgent, setSelectedSubAgent] = useState<string | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
+  // Hidden file input for "Import from Claude Code"
+  const importFileInputRef = useRef<HTMLInputElement>(null)
+
+  // Auto-select the first item when subAgents changes
+  useEffect(() => {
+    if (subAgents.length > 0 && !selectedSubAgent) {
+      setSelectedSubAgent(subAgents[0].name)
+    } else if (subAgents.length === 0) {
+      setSelectedSubAgent(null)
+    }
+  }, [subAgents, selectedSubAgent])
+
+  // Listen for refresh events (来源：内部 dispatch，仅传 subAgentName 用于自动选中；
+  // 数据刷新由 subAgents.atom 通过 persist 通道自动完成，无需手动 refresh)
+  useEffect(() => {
+    const handleRefresh = (event: CustomEvent<{ subAgentName?: string } | null>) => {
+      if (event.detail?.subAgentName) {
+        setSelectedSubAgent(event.detail.subAgentName)
+      }
+    }
+
+    window.addEventListener('subAgents:refreshList', handleRefresh as EventListener)
+    return () => {
+      window.removeEventListener('subAgents:refreshList', handleRefresh as EventListener)
+    }
+  }, [])
+
+  // Listen for "Import from Claude Code" event (from SubAgentsAddMenuDropdown)
+  useEffect(() => {
+    const handleImport = () => {
+      importFileInputRef.current?.click()
+    }
+    window.addEventListener('subAgents:importFromClaudeCode', handleImport)
+    return () => {
+      window.removeEventListener('subAgents:importFromClaudeCode', handleImport)
+    }
+  }, [])
+
+  // Handle import after file selection
+  const handleImportFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset the input so the same file can be re-selected if needed
+    e.target.value = ''
+
+    // Use Electron webUtils.getPathForFile() API to get file path (sandboxed renderer)
+    let filePath: string | undefined
+    if (window.electronAPI?.fs?.getPathForFile) {
+      try {
+        filePath = window.electronAPI.fs.getPathForFile(file)
+      } catch (err) {
+        logger.warn({ msg: "webUtils.getPathForFile failed:", err: err })
+      }
+    }
+    // Fallback: try legacy file.path (non-sandboxed Electron)
+    if (!filePath) {
+      filePath = (file as File & { path?: string }).path
+    }
+    if (!filePath) {
+      showError('Unable to get file path. Please try again.')
+      return
+    }
+
+    try {
+      const result = await subAgentApi.importFromFile(filePath)
+      if (result.success && result.data) {
+        showSuccess(`Sub-agent "${result.data.display_name || result.data.name}" imported successfully`)
+        setTimeout(() => {
+          if (result.data?.name) {
+            setSelectedSubAgent(result.data.name)
+          }
+        }, 300)
+      } else {
+        showError(result.error || 'Import failed')
+      }
+    } catch (error) {
+      showError(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }, [showSuccess, showError])
+
+  // Manually trigger Sync from Disk (filesystem scan → profile index sync)
+  const handleSyncFromDisk = useCallback(async () => {
+    if (isSyncing) return
+    setIsSyncing(true)
+    try {
+      const result = await subAgentApi.syncFromDisk()
+      if (result.success) {
+        showSuccess('Sub-agents synced from disk successfully')
+      } else {
+        showError(result.error || 'Sync failed')
+      }
+    } catch (error) {
+      showError(`Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [isSyncing, showSuccess, showError])
+
+  // Handle add button click
+  const handleAddClick = useCallback(
+    (buttonElement: HTMLElement) => {
+      if (onSubAgentsAddMenuToggle) {
+        onSubAgentsAddMenuToggle(buttonElement)
+      }
+    },
+    [onSubAgentsAddMenuToggle],
+  )
+
+  return (
+    <SettingsLayout
+      icon={<Users size={18} />}
+      title="Sub-Agents"
+      badges={
+        <Badge variant="secondary" className="text-xs">
+          available sub-agents: {stats.total}
+        </Badge>
+      }
+      actions={
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleSyncFromDisk}
+            disabled={isSyncing}
+            title="Sync from Disk"
+          >
+            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => handleAddClick(e.currentTarget)}
+            title="Add Sub-Agent"
+          >
+            <Plus size={16} />
+          </Button>
+        </>
+      }
+    >
+      {/* Hidden file input for Import from Claude Code */}
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept=".md"
+        style={{ display: 'none' }}
+        onChange={handleImportFileChange}
+      />
+
+      {/* Content - based on SkillsContentView */}
+      <div className="sub-agents-content-view">
+        {isLoading ? (
+          <div className="sub-agent-list-loading">
+            <div className="loading-spinner" />
+          </div>
+        ) : subAgents.length === 0 ? (
+          <div className="sub-agents-empty-state">
+            <div className="sub-agents-empty-content">
+              <p className="sub-agents-empty-text">No sub-agents configured yet.</p>
+              <p className="sub-agents-empty-hint">
+                Sub-agents allow your agents to delegate specialized tasks to other configured agents.
+              </p>
+              <div className="sub-agents-empty-actions">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate('/settings/sub-agents/new')}
+                >
+                  Create Custom
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => importFileInputRef.current?.click()}
+                >
+                  Import from AGENT.md (Claude Code)
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="sub-agent-cards">
+            {subAgents.map(sa => (
+              <SubAgentListItem
+                key={sa.name}
+                config={sa}
+                isSelected={selectedSubAgent === sa.name}
+                onClick={() => setSelectedSubAgent(sa.name)}
+                parentMcpCount={globalMcpCount}
+                parentSkillsCount={globalSkillsCount}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </SettingsLayout>
+  )
+}
+
+export default SubAgentsView

@@ -1,0 +1,491 @@
+/**
+ * Unified Terminal Instance Manager.
+ * Responsible for creating, managing, and coordinating all terminal instances.
+ * Supports cross-platform operation on Windows and macOS.
+ */
+
+import {
+  ITerminalManager,
+  ITerminalInstance,
+  TerminalConfig,
+  TerminalResult,
+  TerminalInstanceInfo,
+  TerminalInstanceType
+} from './types';
+import { TerminalInstance } from './TerminalInstance';
+import { PlatformConfigManager } from './PlatformConfigManager';
+import { log } from '@main/log';
+
+/**
+ * Terminal instance pool configuration.
+ */
+interface PoolConfig {
+  maxInstances: number;
+  idleTimeoutMs: number;
+  cleanupIntervalMs: number;
+}
+
+/**
+ * Default pool configuration.
+ */
+const DEFAULT_POOL_CONFIG: PoolConfig = {
+  maxInstances: 50,
+  idleTimeoutMs: 300_000, // 5 minutes
+  cleanupIntervalMs: 300_000 // 5 minutes (matches idleTimeoutMs)
+};
+
+/**
+ * Unified terminal manager implementation.
+ */
+export class TerminalManager implements ITerminalManager {
+  private static instance: TerminalManager;
+
+  private instances = new Map<string, ITerminalInstance>();
+  private platformConfig: PlatformConfigManager;
+  private poolConfig: PoolConfig;
+  private cleanupTimer?: NodeJS.Timeout;
+  private disposed = false;
+  private logger = log;
+  private managerId: string;
+
+  private constructor(poolConfig: Partial<PoolConfig> = {}) {
+    this.managerId = this.generateManagerId();
+    this.platformConfig = PlatformConfigManager.getInstance();
+    this.poolConfig = { ...DEFAULT_POOL_CONFIG, ...poolConfig };
+
+    this.logger.info({ msg: `TerminalManager initialized`, mod: 'TerminalManager', managerId: this.managerId, poolConfig: this.poolConfig, platform: process.platform });
+
+    this.startCleanupTimer();
+  }
+
+  /**
+   * Generate a manager ID for log tracing.
+   */
+  private generateManagerId(): string {
+    return `mgr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  }
+
+  /**
+   * Get the singleton instance.
+   */
+  public static getInstance(poolConfig?: Partial<PoolConfig>): TerminalManager {
+    if (!TerminalManager.instance) {
+      TerminalManager.instance = new TerminalManager(poolConfig);
+    }
+    return TerminalManager.instance;
+  }
+
+  /**
+   * Create a new terminal instance.
+   */
+  public async createInstance(config: TerminalConfig): Promise<ITerminalInstance> {
+    const startTime = Date.now();
+
+    this.logger.info({ msg: `Creating new terminal instance`, mod: 'TerminalManager', managerId: this.managerId, instanceType: config.type, command: config.command, cwd: config.cwd, persistent: config.persistent, currentInstanceCount: this.instances.size, maxInstances: this.poolConfig.maxInstances });
+
+    if (this.disposed) {
+      this.logger.error({ msg: `Cannot create instance: TerminalManager has been disposed`, mod: 'TerminalManager', managerId: this.managerId });
+      throw new Error('TerminalManager has been disposed');
+    }
+
+    // Check the instance count limit
+    if (this.instances.size >= this.poolConfig.maxInstances) {
+      this.logger.warn({ msg: `Maximum instance limit reached, attempting cleanup`, mod: 'TerminalManager', managerId: this.managerId, currentCount: this.instances.size, maxInstances: this.poolConfig.maxInstances });
+
+      await this.cleanupIdleInstances(true);
+
+      if (this.instances.size >= this.poolConfig.maxInstances) {
+        this.logger.error({ msg: `Cannot create instance: maximum limit reached after cleanup`, mod: 'TerminalManager', managerId: this.managerId, currentCount: this.instances.size, maxInstances: this.poolConfig.maxInstances });
+        throw new Error(`Maximum number of terminal instances reached (${this.poolConfig.maxInstances})`);
+      }
+    }
+
+    // Validate configuration
+    this.logger.debug({ msg: `Validating terminal configuration`, mod: 'TerminalManager', managerId: this.managerId });
+    this.validateConfig(config);
+
+    // Create the instance
+    this.logger.debug({ msg: `Creating TerminalInstance`, mod: 'TerminalManager', managerId: this.managerId });
+    const instance = new TerminalInstance(config);
+
+    // Register event listeners
+    this.setupInstanceEventHandlers(instance);
+
+    // Add to pool
+    this.instances.set(instance.id, instance);
+    this.logger.debug({ msg: `Terminal instance added to pool`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id, totalInstances: this.instances.size });
+
+    // Start the instance (if needed)
+    if (config.type === 'mcp_transport' || config.persistent) {
+      this.logger.debug({ msg: `Starting terminal instance (persistent or MCP transport)`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id, type: config.type });
+      await instance.start();
+    }
+
+    const creationTime = Date.now() - startTime;
+    this.logger.info({ msg: `Terminal instance created successfully`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id, instanceType: config.type, creationTimeMs: creationTime, totalInstances: this.instances.size });
+
+    return instance;
+  }
+
+  /**
+   * Get an existing instance.
+   */
+  public getInstance(id: string): ITerminalInstance | null {
+    return this.instances.get(id) || null;
+  }
+
+  /**
+   * Execute a one-shot command.
+   */
+  public async executeCommand(config: TerminalConfig): Promise<TerminalResult> {
+    const execution = await this.executeCommandCancellable(config);
+    return execution.result;
+  }
+
+  /**
+   * Execute a one-shot command and return a cancellation handle.
+   */
+  public async executeCommandCancellable(config: TerminalConfig): Promise<{
+    result: Promise<TerminalResult>;
+    cancel: () => Promise<void>;
+    instanceId: string;
+  }> {
+    const executionId = this.generateExecutionId();
+    const startTime = Date.now();
+
+    this.logger.info({ msg: `Executing one-time command`, mod: 'TerminalManager', managerId: this.managerId, executionId, command: config.command, cwd: config.cwd, timeoutMs: config.timeoutMs });
+
+    // Create a temporary config for one-shot execution
+    const commandConfig: TerminalConfig = {
+      ...config,
+      type: 'command',
+      persistent: false,
+      instanceId: `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
+    };
+
+    this.logger.debug({ msg: `Creating temporary instance for command execution`, mod: 'TerminalManager', managerId: this.managerId, executionId, tempInstanceId: commandConfig.instanceId });
+
+    const instance = await this.createInstance(commandConfig);
+
+    const result = (async (): Promise<TerminalResult> => {
+      try {
+        // Start and execute the command
+        this.logger.debug({ msg: `Starting and executing command`, mod: 'TerminalManager', managerId: this.managerId, executionId, instanceId: instance.id });
+
+        await instance.start();
+        const commandResult = await instance.execute();
+
+        const executionTime = Date.now() - startTime;
+        this.logger.info({ msg: `Command execution completed`, mod: 'TerminalManager', managerId: this.managerId, executionId, instanceId: instance.id, exitCode: commandResult.exitCode, executionTimeMs: executionTime, stdoutLength: commandResult.stdout.length, stderrLength: commandResult.stderr.length, timedOut: commandResult.timedOut });
+
+        return commandResult;
+      } catch (error) {
+        const executionTime = Date.now() - startTime;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        this.logger.error({ msg: `Command execution failed`, mod: 'TerminalManager', managerId: this.managerId, executionId, instanceId: instance.id, err: error, executionTimeMs: executionTime });
+        throw error;
+      } finally {
+        // Clean up the temporary instance
+        this.logger.debug({ msg: `Cleaning up temporary instance`, mod: 'TerminalManager', managerId: this.managerId, executionId, instanceId: instance.id });
+        await this.stopInstance(instance.id, true);
+      }
+    })();
+
+    return {
+      result,
+      instanceId: instance.id,
+      cancel: async () => {
+        this.logger.info({ msg: `Cancelling command execution`, mod: 'TerminalManager', managerId: this.managerId, executionId, instanceId: instance.id });
+        await this.stopInstance(instance.id, true);
+      }
+    };
+  }
+
+  /**
+   * Create a persistent MCP transport instance.
+   */
+  public async createMcpTransport(config: TerminalConfig): Promise<ITerminalInstance> {
+    this.logger.info({ msg: `Creating MCP transport instance`, mod: 'TerminalManager', managerId: this.managerId, command: config.command, cwd: config.cwd, persistent: true });
+
+    const mcpConfig: TerminalConfig = {
+      ...config,
+      type: 'mcp_transport',
+      persistent: true
+    };
+
+    const instance = await this.createInstance(mcpConfig);
+
+    this.logger.info({ msg: `MCP transport instance created`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id });
+
+    return instance;
+  }
+
+  /**
+   * Generate an execution ID for log tracing.
+   */
+  private generateExecutionId(): string {
+    return `exec_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  }
+
+  /**
+   * Get information for all instances.
+   */
+  public getAllInstances(): TerminalInstanceInfo[] {
+    return Array.from(this.instances.values()).map(instance => instance.getInfo());
+  }
+
+  /**
+   * Stop a specific instance.
+   */
+  public async stopInstance(id: string, force: boolean = false): Promise<void> {
+    this.logger.debug({ msg: `Stopping terminal instance`, mod: 'TerminalManager', managerId: this.managerId, instanceId: id, force });
+
+    const instance = this.instances.get(id);
+    if (!instance) {
+      this.logger.debug({ msg: `Instance not found, skipping stop operation`, mod: 'TerminalManager', managerId: this.managerId, instanceId: id });
+      return; // Instance not found — nothing to do
+    }
+
+    const startTime = Date.now();
+    try {
+      await instance.stop(force);
+      const stopTime = Date.now() - startTime;
+      this.logger.info({ msg: `Terminal instance stopped successfully`, mod: 'TerminalManager', managerId: this.managerId, instanceId: id, force, stopTimeMs: stopTime });
+    } catch (error) {
+      const stopTime = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error({ msg: `Failed to stop terminal instance`, mod: 'TerminalManager', managerId: this.managerId, instanceId: id, err: error, stopTimeMs: stopTime });
+      throw error;
+    } finally {
+      // Remove from pool
+      this.instances.delete(id);
+      instance.dispose();
+      this.logger.debug({ msg: `Terminal instance removed from pool`, mod: 'TerminalManager', managerId: this.managerId, instanceId: id, remainingInstances: this.instances.size });
+    }
+  }
+
+  /**
+   * Stop all instances.
+   */
+  public async stopAllInstances(force: boolean = false): Promise<void> {
+    const instanceCount = this.instances.size;
+
+    this.logger.info({ msg: `Stopping all terminal instances`, mod: 'TerminalManager', managerId: this.managerId, instanceCount, force });
+
+    if (instanceCount === 0) {
+      this.logger.debug({ msg: `No instances to stop`, mod: 'TerminalManager', managerId: this.managerId });
+      return;
+    }
+
+    const startTime = Date.now();
+    const stopPromises = Array.from(this.instances.keys()).map(id =>
+      this.stopInstance(id, force)
+    );
+
+    const results = await Promise.allSettled(stopPromises);
+    const stopTime = Date.now() - startTime;
+
+    const successful = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
+
+    this.logger.info({ msg: `All terminal instances stop operation completed`, mod: 'TerminalManager', managerId: this.managerId, totalInstances: instanceCount, successful, failed, stopTimeMs: stopTime, force });
+  }
+
+  /**
+   * Clean up resources.
+   */
+  public async dispose(): Promise<void> {
+    this.logger.info({ msg: `Disposing TerminalManager`, mod: 'TerminalManager', managerId: this.managerId, currentInstances: this.instances.size, disposed: this.disposed });
+
+    if (this.disposed) {
+      this.logger.debug({ msg: `TerminalManager already disposed`, mod: 'TerminalManager', managerId: this.managerId });
+      return;
+    }
+
+    const startTime = Date.now();
+    this.disposed = true;
+
+    // Stop the cleanup timer
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+      this.logger.debug({ msg: `Cleanup timer stopped`, mod: 'TerminalManager', managerId: this.managerId });
+    }
+
+    // Stop all instances
+    await this.stopAllInstances(true);
+
+    // Clear the singleton reference
+    TerminalManager.instance = null as any;
+
+    const disposeTime = Date.now() - startTime;
+    this.logger.info({ msg: `TerminalManager disposed successfully`, mod: 'TerminalManager', managerId: this.managerId, disposeTimeMs: disposeTime });
+  }
+
+  /**
+   * Get manager statistics.
+   */
+  public getStats(): {
+    totalInstances: number;
+    runningInstances: number;
+    idleInstances: number;
+    errorInstances: number;
+    instancesByType: Record<TerminalInstanceType, number>;
+  } {
+    const instances = this.getAllInstances();
+
+    const stats = {
+      totalInstances: instances.length,
+      runningInstances: 0,
+      idleInstances: 0,
+      errorInstances: 0,
+      instancesByType: {
+        command: 0,
+        mcp_transport: 0
+      } as Record<TerminalInstanceType, number>
+    };
+
+    for (const instance of instances) {
+      // Classify by state
+      switch (instance.state) {
+        case 'running':
+          stats.runningInstances++;
+          break;
+        case 'idle':
+          stats.idleInstances++;
+          break;
+        case 'error':
+          stats.errorInstances++;
+          break;
+      }
+
+      // Classify by type
+      stats.instancesByType[instance.type]++;
+    }
+
+    return stats;
+  }
+
+  private validateConfig(config: TerminalConfig): void {
+    if (!config.command || !config.command.trim()) {
+      throw new Error('Command is required and cannot be empty');
+    }
+
+    if (!config.cwd || !config.cwd.trim()) {
+      throw new Error('Working directory (cwd) is required and cannot be empty');
+    }
+
+    if (!Array.isArray(config.args)) {
+      throw new Error('Args must be an array');
+    }
+
+    if (config.timeoutMs !== undefined && (!Number.isFinite(config.timeoutMs) || config.timeoutMs <= 0)) {
+      throw new Error('TimeoutMs must be a positive finite number');
+    }
+
+    if (config.maxOutputLength !== undefined && (!Number.isFinite(config.maxOutputLength) || config.maxOutputLength <= 0)) {
+      throw new Error('MaxOutputLength must be a positive finite number');
+    }
+  }
+
+  private setupInstanceEventHandlers(instance: ITerminalInstance): void {
+    this.logger.debug({ msg: `Setting up event handlers for terminal instance`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id });
+
+    instance.on('error', (error: Error) => {
+      this.logger.error({ msg: `Terminal instance error occurred`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id, err: error });
+    });
+
+    instance.on('exit', (code: number | null, signal: string | null) => {
+      // Remove non-persistent or abnormally exited instances from the pool
+      const info = instance.getInfo();
+      const isUnexpectedExit = !info.config.persistent || (code !== 0 && code !== null);
+
+      this.logger.info({ msg: `Terminal instance process exited`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id, exitCode: code, signal, persistent: info.config.persistent, willAutoCleanup: isUnexpectedExit });
+
+      if (isUnexpectedExit) {
+        this.logger.debug({ msg: `Scheduling auto-cleanup for non-persistent or failed instance`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id });
+
+        setTimeout(() => {
+          if (this.instances.has(instance.id)) {
+            this.logger.debug({ msg: `Auto-cleaning up terminal instance`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id });
+            this.instances.delete(instance.id);
+            instance.dispose();
+          }
+        }, 1000); // Delay 1 second to ensure all callbacks have completed
+      }
+    });
+
+    instance.on('stateChange', (state) => {
+      this.logger.debug({ msg: `Terminal instance state changed`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id, newState: state });
+    });
+
+    this.logger.debug({ msg: `Event handlers setup completed for terminal instance`, mod: 'TerminalManager', managerId: this.managerId, instanceId: instance.id });
+  }
+
+  private startCleanupTimer(): void {
+    this.logger.debug({ msg: `Starting cleanup timer`, mod: 'TerminalManager', managerId: this.managerId, intervalMs: this.poolConfig.cleanupIntervalMs });
+
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupIdleInstances(false).catch(error => {
+        this.logger.error({ msg: `Cleanup timer error`, mod: 'TerminalManager', managerId: this.managerId, err: error });
+      });
+    }, this.poolConfig.cleanupIntervalMs);
+
+    // Ensure the timer does not prevent the process from exiting
+    this.cleanupTimer.unref();
+
+    this.logger.debug({ msg: `Cleanup timer started successfully`, mod: 'TerminalManager', managerId: this.managerId });
+  }
+
+  private async cleanupIdleInstances(force: boolean): Promise<void> {
+    const now = Date.now();
+    const instancesToCleanup: string[] = [];
+
+    for (const [id, instance] of Array.from(this.instances.entries())) {
+      const info = instance.getInfo();
+
+      // Skip persistent instances (unless force cleanup)
+      if (info.config.persistent && !force) {
+        continue;
+      }
+
+      // Check whether idle timeout has been reached
+      const idleTime = now - info.lastActivity;
+      const shouldCleanup = force ||
+        (info.state === 'idle' && idleTime > this.poolConfig.idleTimeoutMs) ||
+        (info.state === 'error') ||
+        (info.state === 'stopped');
+
+      if (shouldCleanup) {
+        instancesToCleanup.push(id);
+        this.logger.debug({ msg: `Instance marked for cleanup`, mod: 'TerminalManager', managerId: this.managerId, instanceId: id, state: info.state, idleTime, persistent: info.config.persistent, reason: force ? 'force' : info.state });
+      }
+    }
+
+    if (instancesToCleanup.length === 0) {
+      return;
+    }
+
+    this.logger.info({ msg: `Cleaning up idle instances`, mod: 'TerminalManager', managerId: this.managerId, instancesToCleanup: instancesToCleanup.length, force });
+
+    // Clean up in parallel
+    const cleanupPromises = instancesToCleanup.map(id =>
+      this.stopInstance(id, true).catch(error => {
+        this.logger.error({ msg: `Failed to cleanup instance`, mod: 'TerminalManager', managerId: this.managerId, instanceId: id, err: error });
+      })
+    );
+
+    await Promise.allSettled(cleanupPromises);
+
+    const cleanupTime = Date.now() - now;
+    this.logger.info({ msg: `Idle instances cleanup completed`, mod: 'TerminalManager', managerId: this.managerId, cleanedInstances: instancesToCleanup.length, remainingInstances: this.instances.size, cleanupTimeMs: cleanupTime });
+  }
+}
+
+/**
+ * Get the global terminal manager instance.
+ */
+export function getTerminalManager(config?: Partial<PoolConfig>): TerminalManager {
+  return TerminalManager.getInstance(config);
+}

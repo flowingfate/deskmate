@@ -1,0 +1,19 @@
+{
+  "name": "deskmate-updater-mac",
+  "version": "1.0.0",
+  "description": "DESKMATE silent updater for macOS using Node.js",
+  "main": "updater.js",
+  "scripts": {
+    "build:mac-x64": "pkg updater.js --targets node22-macos-x64 --output release/updater-mac-x64",
+    "build:mac-arm64": "pkg updater.js --targets node22-macos-arm64 --output release/updater-mac-arm64",
+    "build:all": "npm run build:mac-x64 && npm run build:mac-arm64",
+    "clean": "rm -rf release"
+  },
+  "bin": "updater.js",
+  "dependencies": {
+    "extract-zip": "^2.0.1"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.20.0"
+  }
+}

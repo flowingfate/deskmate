@@ -1,0 +1,25 @@
+@use '../../../styles/tokens/_mixins' as *;
+
+.right-global-sidepane {
+  flex-shrink: 0;
+  @include flex-col;
+  overflow: hidden;
+  height: 100%;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.075);
+  box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.05);
+  transition: width 0.25s ease;
+
+  .chat-area {
+    flex: 1;
+    @include flex-col;
+    overflow: hidden;
+    min-width: 0;
+
+    .chat-content {
+      flex: 1;
+      @include flex-col;
+      overflow: hidden;
+    }
+  }
+}

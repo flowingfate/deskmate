@@ -1,0 +1,22 @@
+export interface AgentContextType {
+  // MCP Server operation handlers
+  onMcpServerConnect?: (serverName: string) => void;
+  onMcpServerDisconnect?: (serverName: string) => void;
+  onMcpServerReconnect?: (serverName: string) => void;
+  onMcpServerDelete?: (serverName: string) => void;
+  onMcpServerEdit?: (serverName: string) => void;
+
+  // Menu Handlers
+  onMcpServerMenuToggle?: (serverName: string, buttonElement: HTMLElement) => void;
+  mcpServerMenuState?: {
+    isOpen: boolean;
+    serverName: string | null;
+    anchorElement: HTMLElement | null;
+  };
+  onMcpAddMenuToggle?: (buttonElement: HTMLElement) => void;
+  onSkillsAddMenuToggle?: (buttonElement: HTMLElement) => void;
+  onSkillMenuToggle?: (skillName: string, buttonElement: HTMLElement) => void;
+
+  // Sub-Agent Menu Handlers
+  onSubAgentsAddMenuToggle?: (buttonElement: HTMLElement) => void;
+}

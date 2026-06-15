@@ -1,0 +1,16 @@
+.streaming-v2-message {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+
+  .message-content {
+    min-width: 0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+}
+
+.message-content.streaming {
+  contain: layout style paint;
+  will-change: contents;
+}

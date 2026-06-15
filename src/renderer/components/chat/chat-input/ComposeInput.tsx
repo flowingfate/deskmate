@@ -1,0 +1,270 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { promptHistory } from '@/lib/chat/promptHistory';
+import { agentSessionCacheManager, ChatStatus, CurrentSessionError } from '@/lib/chat/agentSessionCacheManager';
+import type { UserMessage } from '@shared/types/message';
+import ErrorBar from '../ErrorBar';
+import { getChatInputShortcutHint } from '@/lib/chat/chatInputKeyboard';
+import '../ChatInput.scss';
+import { log } from '@/log';
+import { AttachmentList, AttachmentsStatus } from './Attachments';
+import { TextArea } from './Textarea';
+import { ModelSelector } from './ModelSelector';
+import { ThinkingLevelSelector } from './ThinkingLevelSelector';
+import { Plus, SlidersHorizontal, ArrowUp, X, Loader2 } from 'lucide-react';
+import { useToast } from '../../ui/ToastProvider';
+import { traceContext } from '@renderer/lib/chat/traceContext';
+import { agentIpc } from '@renderer/lib/chat/agentIpc';
+import { EditAgentMenuAtom } from '../../menu/EditAgentMenuDropdown';
+import { AttachMenuAtom } from '../../menu/AttachMenuDropdown';
+import { Button } from '@/shadcn/button';
+import { useChatInputState } from './shared/useChatInputState';
+import { useFileHandling } from './shared/useFileHandling';
+import { transformMentions } from './shared/transformMentions';
+
+const logger = log.child({ mod: 'ComposeInput' });
+
+interface ComposeInputProps {
+  onSendMessage: (message: UserMessage) => void;
+  chatStatus?: ChatStatus;
+  enableContextMenu?: boolean;
+  chatSessionId?: string | null;
+  isReadOnly?: boolean;
+  isInputLocked?: boolean;
+}
+
+export const ComposeInput: React.FC<ComposeInputProps> = ({
+  onSendMessage,
+  chatStatus,
+  enableContextMenu,
+  chatSessionId,
+  isReadOnly,
+  isInputLocked = false,
+}) => {
+  const errorMessage = CurrentSessionError.use();
+  const editAgentMenuActions = EditAgentMenuAtom.useChange();
+  const attachMenuActions = AttachMenuAtom.useChange();
+  const { textareaStateAtom, attachmentsStateAtom, textareaManager, attachmentManager, hasValidInput } = useChatInputState();
+  const [supportsImages, setSupportsImages] = useState(false);
+  const { showToast } = useToast();
+
+  const chatInputShortcutHint = getChatInputShortcutHint(
+    typeof navigator === 'undefined' ? undefined : navigator.platform,
+  );
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const [currentAgentId, setCurrentAgentId] = useState<string | null>(
+    agentSessionCacheManager.getCurrentAgentId()
+  );
+
+  const {
+    isProcessing,
+    isDragOver,
+    fileInputRef,
+    dragHandlers,
+    handleElectronFileSelect,
+    handleUnifiedFileInputChange,
+    handleImageSelect,
+    handleScreenshotCapture,
+  } = useFileHandling({
+    attachmentManager,
+    supportsImages,
+    disabled: isInputLocked,
+    getAttachContext: () => {
+      const agentId = agentSessionCacheManager.getCurrentAgentId();
+      const sessionId = agentSessionCacheManager.getCurrentChatSessionId();
+      return agentId && sessionId ? { agentId, sessionId } : null;
+    },
+  });
+
+  useEffect(() => {
+    const unsubscribe = agentSessionCacheManager.subscribeToCurrentChatSessionId(() => {
+      setCurrentAgentId(agentSessionCacheManager.getCurrentAgentId());
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const handleSelectFiles = () => handleElectronFileSelect();
+    const handleScreenshot = () => handleScreenshotCapture();
+    window.addEventListener('chatInput:selectFiles', handleSelectFiles);
+    window.addEventListener('chatInput:screenshot', handleScreenshot);
+    return () => {
+      window.removeEventListener('chatInput:selectFiles', handleSelectFiles);
+      window.removeEventListener('chatInput:screenshot', handleScreenshot);
+    };
+  }, [handleElectronFileSelect, handleScreenshotCapture]);
+
+  async function onCancelChat() {
+    try {
+      logger.debug({ msg: "Cancelling chat..." });
+      if (!chatSessionId || !currentAgentId) {
+        logger.warn({ msg: "No chat session id / chat id to cancel" });
+        showToast('No active chat to cancel', 'warning');
+        return;
+      }
+      // 接力 in-flight chat.send tracer：把 cancel 事件挂到同一 trace 上，
+      // 让 doctor / log viewer 拿一个 tid 能同时看到 send / cancel 两端。
+      // 没有 in-flight tracer（如冷启动或异常路径）时传 undefined，main 端兜底新起。
+      const inflight = traceContext.peek(chatSessionId);
+      const trace = inflight?.sid ? inflight.serialize() : undefined;
+      await agentIpc.cancelChatSession(currentAgentId, chatSessionId, trace);
+    } catch (error) {
+      logger.error({ msg: "Error cancelling chat:", err: error });
+    }
+  }
+
+  const isIdle = !chatStatus || chatStatus === 'idle';
+
+  const handleSend = async () => {
+    if (isInputLocked) return;
+    if (isIdle && hasValidInput && !isProcessing) {
+      const messageToSend = attachmentManager.createMessage(textareaManager.get());
+      messageToSend.content = transformMentions(messageToSend.content);
+
+      const message = textareaManager.get().trim();
+      if (message) {
+        promptHistory.add(message);
+      }
+
+      onSendMessage(messageToSend);
+      textareaManager.set('');
+      attachmentManager.clear();
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  };
+
+  if (isReadOnly) {
+    return (
+      <div className="flex items-center justify-center px-4 py-3 border-t border-white/10 bg-black/20">
+        <span className="text-sm text-gray-400">
+          This conversation is read-only.
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`chat-input-container p-0! h-auto ${isDragOver ? 'drag-over' : ''}`}
+      onDragOver={dragHandlers.handleDragOver}
+      onDragEnter={dragHandlers.handleDragEnter}
+      onDragLeave={dragHandlers.handleDragLeave}
+      onDrop={dragHandlers.handleDrop}
+    >
+      {errorMessage && chatSessionId && (
+        <ErrorBar errorMessage={errorMessage} chatSessionId={chatSessionId} />
+      )}
+
+      {isInputLocked && (
+        <div
+          style={{
+            margin: '0 4px 10px',
+            padding: '10px 12px',
+            borderRadius: '12px',
+            border: '1px solid rgba(14, 165, 233, 0.28)',
+            background: 'rgba(14, 165, 233, 0.08)',
+            color: 'rgba(30, 41, 59, 0.92)',
+            fontSize: '12px',
+            lineHeight: 1.4,
+          }}
+        >
+          Inline message editing is active above. Save or cancel that edit to continue composing here.
+        </div>
+      )}
+
+      <div
+        className="border-t border-black/7 focus-within:bg-black/2"
+        style={isInputLocked ? { opacity: 0.7, pointerEvents: 'none' } : undefined}
+      >
+        <AttachmentList attachmentsStateAtom={attachmentsStateAtom} />
+        <TextArea
+          handleImageSelect={handleImageSelect}
+          handleSend={handleSend}
+          textareaRef={textareaRef}
+          readOnly={isInputLocked}
+          title={chatInputShortcutHint}
+          supportsImages={supportsImages}
+          enableContextMenu={enableContextMenu}
+          textareaStateAtom={textareaStateAtom}
+        />
+
+        <div className="button-area">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={(e) => attachMenuActions.toggle(e.currentTarget)}
+            disabled={isProcessing || isInputLocked}
+            title="Attach"
+          >
+            <Plus size={18} />
+          </Button>
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={(e) => {
+              if (isInputLocked) return;
+              editAgentMenuActions.toggle(e.currentTarget);
+            }}
+            disabled={isInputLocked}
+            title="Edit Agent (MCP Tools, System Prompt & Context Enhancement)"
+          >
+            <SlidersHorizontal size={18} />
+          </Button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="*"
+            onChange={handleUnifiedFileInputChange}
+            style={{ display: 'none' }}
+            multiple
+          />
+
+          <div className="right-buttons-group">
+            <ModelSelector
+              currentAgentId={currentAgentId}
+              shouldLockComposeUi={isInputLocked}
+              setSupportsImages={setSupportsImages}
+            />
+
+            <ThinkingLevelSelector
+              currentAgentId={currentAgentId}
+              shouldLockComposeUi={isInputLocked}
+            />
+
+            {isIdle ? (
+              <Button
+                size="icon"
+                onClick={handleSend}
+                disabled={!hasValidInput || isProcessing || isInputLocked}
+                title={chatInputShortcutHint}
+              >
+                {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <ArrowUp size={18} />}
+              </Button>
+            ) : chatStatus ? (
+              <Button
+                variant="destructive"
+                size="icon"
+                onClick={onCancelChat}
+                disabled={isInputLocked}
+                title="Cancel Chat"
+              >
+                <X size={18} />
+              </Button>
+            ) : (
+              <Button size="icon" disabled title="Waiting for chat status" type="button">
+                <ArrowUp size={18} />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {process.env.NODE_ENV === 'development' && <AttachmentsStatus attachmentsStateAtom={attachmentsStateAtom} />}
+    </div>
+  );
+};

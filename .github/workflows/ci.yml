@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 同一 branch / PR 上有新 push 时取消上一次仍在跑的 CI，省 runner 时间。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: 'npm'
+
+      # postinstall 会跑 rebuild-native.js + setup-ai-docs.js
+      # 第二步在 Linux/macOS 创建 symlink，在 Windows 缺 Developer Mode 时 fallback 到文件 copy
+      - name: Install dependencies
+        run: npm install
+
+      # 主进程 / preload / renderer 三段编译 + mixed-import 守卫
+      - name: Typecheck
+        run: npm run typecheck
+
+      # vitest 通过 Electron Node 运行（ELECTRON_RUN_AS_NODE=1），匹配 better-sqlite3 ABI
+      - name: Unit tests
+        run: npm test
+
+      # electron-vite build → out/  (不打包，仅 smoke 编译)
+      - name: Build smoke
+        run: npm run build

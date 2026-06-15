@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "ES2024"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "types": ["vitest/globals", "@testing-library/jest-dom/vitest"],
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@renderer/*": ["./src/renderer/*"],
+      "@/*": ["./src/renderer/*"]
+    }
+  },
+  "include": [
+    "src/renderer/**/*",
+    "src/shared/**/*",
+    "tests/vitest-globals.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "out",
+    "src/main"
+  ]
+}

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞 / Security Issue
+    url: https://github.com/flowingfate/deskmate/security/advisories/new
+    about: 请勿用 public issue 报告安全漏洞 —— 走 GitHub Security Advisory 私有渠道。
+  - name: 提问 / 求助
+    url: https://github.com/flowingfate/deskmate/discussions
+    about: 使用相关问题、讨论 / 想法，请去 Discussions（如果尚未启用，可暂时开普通 issue）。

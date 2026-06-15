@@ -1,0 +1,58 @@
+@use 'tokens/_mixins' as *;
+
+.content-view-container {
+  @include flex-col;
+  padding: 24px;
+  background: var(--bg-primary);
+  height: 100%;
+  overflow: auto;
+}
+
+.chat-content {
+  background: var(--bg-primary);
+  min-width: 0;
+
+  .chat-container-reverse,
+  .chat-session-transition-state,
+  .chat-input-container {
+    max-width: 1328px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .chat-session-transition-state {
+    flex: 1;
+    @include flex-center;
+    min-height: 0;
+  }
+
+  .chat-session-transition-copy {
+    padding: 18px 24px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.96) 0%, rgba(241, 245, 249, 0.98) 100%);
+    color: #475569;
+    font-size: var(--text-base);
+    line-height: 1.5;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  }
+}
+
+.mcp-content-view {
+  padding: 24px;
+  background: var(--bg-primary);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.sidepane-content {
+  padding: 24px;
+  background: var(--bg-primary);
+  height: 100%;
+  overflow-y: auto;
+}

@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": ["src/main/**/*", "src/shared/**/*", "tests/vitest-globals.d.ts"],
+  "exclude": [
+    "node_modules",
+    "out",
+    "src/renderer",
+    "src/main/**/__tests__"
+  ],
+  "compilerOptions": {
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@main/*": ["./src/main/*"]
+    }
+  }
+}
