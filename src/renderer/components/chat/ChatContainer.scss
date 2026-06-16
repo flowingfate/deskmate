@@ -8,37 +8,23 @@
 }
 
 .chat-container-reverse {
+  --chat-pad-x: 36px;
   flex: 1;
   overflow-y: auto;
-  padding: 24px 36px 0;
+  overflow-anchor: none;
+  padding: 24px 0 0;
+
+  // 用 native scrollbar(macOS 下是 overlay 不占位,Win/Linux 是 thin gutter)。
+  // 旧的 `::-webkit-scrollbar { width: 6px }` 自定义会**强制所有平台占位**
+  // 6px gutter,导致 ToolCallsSection view-all 模式 bg 无法撑到 chat 物理右
+  // 边沿(永远空出 6px)。换成 native overlay 后 macOS 下铺满,Win/Linux 也
+  // 视觉更"标准"。`scrollbar-color` hover 渐变效果通过 CSS transition 模拟。
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 0.3s ease;
 
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 3px;
-    transition: background 0.3s ease;
-  }
-
   &:hover {
     scrollbar-color: rgba(203, 213, 225, 0.8) transparent;
-
-    &::-webkit-scrollbar-thumb {
-      background: rgba(203, 213, 225, 0.8);
-
-      &:hover {
-        background: rgba(148, 163, 184, 0.9);
-      }
-    }
   }
 }
 
@@ -48,9 +34,63 @@
   justify-content: flex-start;
   min-height: 100%;
 
+  // 每个直接子项各自承担水平 inset(替代旧的 chat-container 水平 padding)。
+  // 这样 ToolCallsSection 在 view-all 模式下豁免 inset 后,bg 能直接铺满
+  // chat-container 全宽 —— 不再需要负 margin breakout。
   > * {
+    padding-left: var(--chat-pad-x);
+    padding-right: var(--chat-pad-x);
     content-visibility: auto;
     contain-intrinsic-size: auto 200px;
+  }
+
+  // ToolCallsSection 自己控制水平 inset(collapsed: margin 推内容对齐;
+  // expanded: bg 撑满 wrapper,内 padding 拉回内容对齐)。
+  > .tool-section-wrapper {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+// ToolCallsSection 外壳几何:collapsed 紧凑白卡片 ↔ expanded 贴边浅灰条。
+// data-mode 切换触发 CSS transition;height 由 AnimatedHeight RO 驱动。
+// 所有可动画属性(含 height)集中声明,不在 JS inline style 中设 transition。
+.tool-calls-section {
+  $dur: 220ms;
+  $ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  transition:
+    max-width $dur $ease,
+    margin $dur $ease,
+    padding $dur $ease,
+    background-color $dur $ease,
+    border-radius $dur $ease,
+    box-shadow $dur $ease,
+    height $dur $ease;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+
+  // collapsed: 紧凑白卡片,margin 推内容对齐其他消息,max-width 限宽
+  &[data-mode="collapsed"] {
+    max-width: 600px;
+    margin-left: var(--chat-pad-x, 36px);
+    margin-right: var(--chat-pad-x, 36px);
+    padding: 8px;
+    background-color: #ffffff;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px rgba(229, 231, 235, 0.7);
+  }
+
+  // expanded (view all): bg 撑满 wrapper 全宽,内 padding 拉回对齐
+  &[data-mode="expanded"] {
+    max-width: 100%;
+    margin: 0;
+    padding: 12px var(--chat-pad-x, 36px);
+    background-color: rgba(243, 244, 246, 0.7);
+    border-radius: 0;
+    box-shadow: none;
   }
 }
 
@@ -107,6 +147,7 @@
   overflow: hidden;
   position: relative;
   contain: layout style;
+  margin-top: 10px;
   margin-bottom: 0;
   opacity: 0;
   pointer-events: none;

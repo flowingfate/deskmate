@@ -1,5 +1,5 @@
 /**
- * `download_file` 工具:URI 形态 saveDirectory 落点 + result.fileUri 形态。
+ * `download` 工具(spec 名;实现 export 仍叫 `downloadFile`):URI 形态 saveDirectory 落点 + result.fileUri 形态。
  *
  * 用真盘 + 真 SQLite + 真 LocalProtocolHandler / KnowledgeProtocolHandler;
  * 仅 mock `globalThis.fetch` 让下载主流程不真实联网。验证:
@@ -15,7 +15,7 @@ import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { downloadFileInternal } from '../downloadFile';
+import { downloadFileInternal } from '../download';
 import type { ToolContext } from '../types';
 
 import { Profile } from '@main/persist/profile';

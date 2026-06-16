@@ -1,13 +1,15 @@
 /**
  * @vitest-environment jsdom
  *
- * render-items-manager 回归测 —— 聚焦 `reuseUnchangedItems` 在新一轮 messages
- * 注入后,**对 `hasSubsequentConversation` 翻位不会复用旧 section**。
+ * render-items-manager 回归测 —— 模块只产**纯数据**;dim/live 这类位置派生量
+ * 已下放给 `ChatContainer` 的 iterator,本文件不再覆盖。
  *
- * 历史 bug:`isSameRenderItem` 之前只比 sectionKey / sourceMessageIndex /
- * tool_calls 引用,忽略 hasSubsequentConversation。一次 turn 跑完再追一条 user
- * 消息时,旧 assistant 的 tool_calls 数组引用没动 → 老 section 被 `reuseUnchangedItems`
- * 整体返回,新算出的 hasSubsequentConversation=true 被丢,UI 卡在"等待中"形态。
+ * 覆盖三件事:
+ *   1. 相邻"空文本 + 仅 tool_calls"的 assistant 合并成单个 section,
+ *      sectionKey = `tool-section-${firstId}__${lastId}`;text assistant / user 截断 merge 链。
+ *   2. `item.index` 在所有 item 类型里统一为 items 数组下标(render-items 坐标)。
+ *      —— 修复了 user/assistant 上是 messages 坐标、tool-section 上是 items 坐标的同名异义。
+ *   3. `reuseUnchangedItems` 在 messages 不变时复用旧 section;sectionKey 或 toolCalls 任一变化都不复用。
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -25,13 +27,14 @@ function assistantWithTool(
   id: string,
   toolCallId: string,
   withResponse: boolean,
+  content = '',
 ): RenderAssistantMessage {
   return {
     role: 'assistant',
     id,
     time: 2,
     think: '',
-    content: '',
+    content,
     tool_calls: [
       {
         id: toolCallId,
@@ -47,40 +50,96 @@ function assistantWithTool(
   };
 }
 
-function getSection(items: ChatRenderItem[]): Extract<ChatRenderItem, { type: 'tool-calls-section' }> {
-  const it = items.find((i) => i.type === 'tool-calls-section');
-  if (!it || it.type !== 'tool-calls-section') throw new Error('no tool-calls-section');
-  return it;
+function getSections(items: ChatRenderItem[]): Extract<ChatRenderItem, { type: 'tool-calls-section' }>[] {
+  return items.filter(
+    (i): i is Extract<ChatRenderItem, { type: 'tool-calls-section' }> =>
+      i.type === 'tool-calls-section',
+  );
 }
 
-describe('render-items-manager.computeRenderItems', () => {
-  it('section 单独存在(后无对话) → hasSubsequentConversation=false', () => {
-    const items = computeRenderItems([user('u1', 'go'), assistantWithTool('a1', 'tc1', true)]);
-    expect(getSection(items).hasSubsequentConversation).toBe(false);
+describe('render-items-manager.computeRenderItems — merging', () => {
+  it('两条相邻 empty-only-tools assistant → 合并成 1 个 section', () => {
+    const items = computeRenderItems([
+      user('u1', 'go'),
+      assistantWithTool('a1', 'tc1', true),
+      assistantWithTool('a2', 'tc2', false),
+    ]);
+    const sections = getSections(items);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].sectionKey).toBe('tool-section-a1__a2');
+    expect(sections[0].toolCalls.map((tc) => tc.id)).toEqual(['tc1', 'tc2']);
   });
 
-  it('section 后跟 user message → hasSubsequentConversation=true', () => {
+  it('text+tools assistant 不参与 merge — 自己单独成块,后续 empty-only chain 重新起头', () => {
+    const items = computeRenderItems([
+      user('u1', 'go'),
+      assistantWithTool('a1', 'tc1', true), // empty + tools
+      assistantWithTool('a2', 'tc2', true, 'reply text'), // text + tools — 截断
+      assistantWithTool('a3', 'tc3', false), // empty + tools
+      assistantWithTool('a4', 'tc4', false), // empty + tools (与 a3 合并)
+    ]);
+    const sections = getSections(items);
+    expect(sections.map((s) => s.sectionKey)).toEqual([
+      'tool-section-a1__a1',
+      'tool-section-a2__a2',
+      'tool-section-a3__a4',
+    ]);
+    expect(sections[2].toolCalls.map((tc) => tc.id)).toEqual(['tc3', 'tc4']);
+  });
+
+  it('text-only assistant (无 tool_calls) 截断 merge 链 → 前后各 1 个 section', () => {
+    const items = computeRenderItems([
+      user('u1', 'go'),
+      assistantWithTool('a1', 'tc1', true), // empty + tools
+      {
+        role: 'assistant',
+        id: 'a2',
+        time: 4,
+        think: '',
+        content: 'pure reply',
+        tool_calls: [],
+        streamingComplete: true,
+      },
+      assistantWithTool('a3', 'tc3', false), // empty + tools
+    ]);
+    const sections = getSections(items);
+    expect(sections.map((s) => s.sectionKey)).toEqual([
+      'tool-section-a1__a1',
+      'tool-section-a3__a3',
+    ]);
+  });
+
+  it('user message 截断 merge 链', () => {
     const items = computeRenderItems([
       user('u1', 'go'),
       assistantWithTool('a1', 'tc1', true),
       user('u2', 'next'),
+      assistantWithTool('a2', 'tc2', false),
     ]);
-    expect(getSection(items).hasSubsequentConversation).toBe(true);
+    const sections = getSections(items);
+    expect(sections.map((s) => s.sectionKey)).toEqual([
+      'tool-section-a1__a1',
+      'tool-section-a2__a2',
+    ]);
   });
+});
 
-  it('section 后跟有文本的 assistant → hasSubsequentConversation=true', () => {
-    const a1 = assistantWithTool('a1', 'tc1', true);
-    const a2: RenderAssistantMessage = {
-      role: 'assistant',
-      id: 'a2',
-      time: 4,
-      think: '',
-      content: 'reply text',
-      tool_calls: [],
-      streamingComplete: true,
-    };
-    const items = computeRenderItems([user('u1', 'go'), a1, a2]);
-    expect(getSection(items).hasSubsequentConversation).toBe(true);
+describe('render-items-manager.computeRenderItems — item.index 一致性', () => {
+  it('所有 item 类型的 index 都是 items 数组下标', () => {
+    const items = computeRenderItems([
+      user('u1', 'go'),
+      assistantWithTool('a1', 'tc1', true),                // empty + tools → 单 section
+      user('u2', 'next'),
+      assistantWithTool('a2', 'tc2', true, 'reply text'),  // text + tools → assistant + section
+    ]);
+    // 期望: [user(0), section(1), user(2), assistant(3), section(4)]
+    expect(items.map((it) => [it.type, it.index])).toEqual([
+      ['user', 0],
+      ['tool-calls-section', 1],
+      ['user', 2],
+      ['assistant', 3],
+      ['tool-calls-section', 4],
+    ]);
   });
 });
 
@@ -91,22 +150,36 @@ describe('render-items-manager.reuseUnchangedItems', () => {
     const prev = computeRenderItems([u1, a1]);
     const next = computeRenderItems([u1, a1]);
     const reused = reuseUnchangedItems(prev, next);
-    expect(getSection(reused)).toBe(getSection(prev));
+    expect(getSections(reused)[0]).toBe(getSections(prev)[0]);
   });
 
-  it('追加 user message 后 hasSubsequentConversation 翻 true → 不应复用旧 section', () => {
+  it('追加 empty-only-tools assistant 触发 merge → sectionKey 变 → 不应复用旧 section', () => {
     const a1 = assistantWithTool('a1', 'tc1', true);
     const u1 = user('u1', 'go');
     const prev = computeRenderItems([u1, a1]);
-    expect(getSection(prev).hasSubsequentConversation).toBe(false);
+    expect(getSections(prev)[0].sectionKey).toBe('tool-section-a1__a1');
 
-    // a1 引用未变(immer 不动 → tool_calls 引用也不变),但新一条 user 加进来
-    const next = computeRenderItems([u1, a1, user('u2', 'follow up')]);
-    expect(getSection(next).hasSubsequentConversation).toBe(true);
+    const a2 = assistantWithTool('a2', 'tc2', false);
+    const next = computeRenderItems([u1, a1, a2]);
+    expect(getSections(next)[0].sectionKey).toBe('tool-section-a1__a2');
 
     const reused = reuseUnchangedItems(prev, next);
-    expect(getSection(reused).hasSubsequentConversation).toBe(true);
-    // section item 必须是 next 版本,否则就是命中老 bug
-    expect(getSection(reused)).toBe(getSection(next));
+    // 不同 stable key → 完全是 next 的引用
+    expect(getSections(reused)[0]).toBe(getSections(next)[0]);
+  });
+
+  it('追加 user message → section index 变 → 不应复用旧 section (memo 通过 index 失效)', () => {
+    const u1 = user('u1', 'go');
+    const a1 = assistantWithTool('a1', 'tc1', true);
+    const prev = computeRenderItems([u1, a1]);
+    expect(getSections(prev)[0].index).toBe(1);
+
+    // user 加在前面 → a1 的 section 从 index=1 变成 index=2
+    const u0 = user('u0', 'pre');
+    const next = computeRenderItems([u0, u1, a1]);
+    expect(getSections(next)[0].index).toBe(2);
+
+    const reused = reuseUnchangedItems(prev, next);
+    expect(getSections(reused)[0]).toBe(getSections(next)[0]);
   });
 });

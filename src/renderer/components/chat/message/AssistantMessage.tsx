@@ -13,8 +13,6 @@ import { MarkdownView } from './MarkdownView';
 import { CopyButton } from './CopyButton';
 import GeneratedFileCards, {
   GeneratedFileCardItem,
-  normalizePresentedFilesToGeneratedFileItems,
-  PresentedFile,
 } from './GeneratedFileCards';
 import GeneratedScheduleCards from './GeneratedScheduleCards';
 import { hasNewImageFormat, parseNewFormatMessage, ImageGalleryNew, MessageSegment } from './ImageGallery';
@@ -27,9 +25,12 @@ interface AssistantMessageProps {
   /** 出现在 cleanedText 中的 schedule job id,去重保持顺序。 */
   scheduleIds: string[];
   isStreaming?: boolean;
-  /** 文件路径来自工具调用解析 — 与 presentedFiles 互斥使用。 */
+  /**
+   * 出现在 cleanedText 里的 URI / 绝对路径(由 `extractFilePathsFromText` 抽取,
+   * `ChatRenderItem` 组装)。每条挂存在性 flag,渲染成产出文件卡片;LLM 在收尾
+   * 消息提到的文件就以这种方式浮现,无需额外协议。
+   */
   cachedFilePaths?: Array<{ path: string; exists: boolean }>;
-  presentedFiles?: PresentedFile[];
   chatStatus?: ChatStatus;
 }
 
@@ -39,11 +40,9 @@ const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
   scheduleIds,
   isStreaming = false,
   cachedFilePaths,
-  presentedFiles,
   chatStatus,
 }) => {
   const hasToolCalls = message.tool_calls.length > 0;
-  const hasPresentedFiles = (presentedFiles?.length ?? 0) > 0;
   const hasCachedFiles = (cachedFilePaths?.length ?? 0) > 0;
   const hasScheduleCards = scheduleIds.length > 0;
   const messageClass = hasToolCalls
@@ -51,19 +50,13 @@ const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
     : 'message assistant-message';
 
   // 工具调用阶段的 metadata 与下方 ToolCallsSection 重复 — 只在收尾或仍有产物时显示。
-  const shouldShowMeta = !isStreaming && (!hasToolCalls || hasPresentedFiles);
-  const shouldShowArtifacts = hasPresentedFiles || hasCachedFiles || hasScheduleCards;
+  const shouldShowMeta = !isStreaming && (!hasToolCalls || hasCachedFiles);
+  const shouldShowArtifacts = hasCachedFiles || hasScheduleCards;
 
   const generatedFileItems = useMemo<GeneratedFileCardItem[]>(() => {
-    if (hasPresentedFiles) {
-      return normalizePresentedFilesToGeneratedFileItems(presentedFiles!);
-    }
-    if (hasCachedFiles) {
-      return cachedFilePaths!.map((info) => ({ fileUri: info.path, exists: info.exists }));
-    }
-    return [];
-  }, [hasPresentedFiles, hasCachedFiles, presentedFiles, cachedFilePaths]);
-
+    if (!hasCachedFiles) return [];
+    return cachedFilePaths!.map((info) => ({ fileUri: info.path, exists: info.exists }));
+  }, [hasCachedFiles, cachedFilePaths]);
   // 仅当出现 <IMAGE_REGISTRY> 标记时才走分段渲染路径 — 多数普通消息直接命中下方 fast path。
   const segments = useMemo<MessageSegment[] | null>(() => {
     if (!hasNewImageFormat(cleanedText)) return null;

@@ -47,33 +47,29 @@ const ToolDetailView: React.FC<ToolDetailViewProps> = ({ tool }) => {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-hidden">
-      <div className="flex items-center gap-2">
-        <Wrench className="size-5 shrink-0 text-sc-muted-foreground" />
-        <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-sc-foreground">
-          {tool.name}
-        </h2>
-      </div>
+      <h2 className="min-w-0 truncate text-base font-semibold text-sc-foreground">
+        Description
+      </h2>
 
       {tool.description && (
-        <p className="text-sm leading-relaxed text-sc-muted-foreground">
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border border-sc-border bg-sc-muted/30 p-3 font-sans text-sm leading-relaxed text-sc-muted-foreground">
           {tool.description}
-        </p>
+        </pre>
       )}
-
-      <Separator />
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-sc-muted-foreground">
+          <h3 className="text-xs font-semibold tracking-wide text-sc-muted-foreground">
             Input Schema
           </h3>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
+            className="gap-1"
             onClick={copySchema}
             title="Copy schema as JSON"
           >
-            <Copy data-icon="inline-start" />
+            <Copy size={14} data-icon="inline-start" />
             Copy
           </Button>
         </div>

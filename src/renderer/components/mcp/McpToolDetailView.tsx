@@ -36,7 +36,7 @@ const McpToolDetailView: React.FC<McpToolDetailViewProps> = ({
   if (!tool) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-sc-muted-foreground">
-        <Wrench className="size-10 opacity-40" />
+        <Wrench size={14} className="opacity-40" />
         <p className="text-sm font-medium">Select a Tool</p>
         <p className="text-xs">Choose a tool from the list to view detailed information.</p>
       </div>
@@ -75,15 +75,14 @@ const McpToolDetailView: React.FC<McpToolDetailViewProps> = ({
             title="Back to tool list"
             aria-label="Back to tool list"
           >
-            <ArrowLeft className="size-4" />
+            <ArrowLeft size={14} />
           </Button>
         )}
-        <Wrench className="size-5 shrink-0 text-sc-muted-foreground" />
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-sc-foreground">
           {tool.name}
         </h2>
-        <Button variant="ghost" size="sm" onClick={copyToolInfo} title="Copy full tool info">
-          <Copy data-icon="inline-start" />
+        <Button variant="outline" size="sm" onClick={copyToolInfo} title="Copy full tool info" className="gap-1">
+          <Copy data-icon="inline-start" size={14} />
           Copy
         </Button>
       </div>
@@ -108,9 +107,9 @@ const McpToolDetailView: React.FC<McpToolDetailViewProps> = ({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-sc-muted-foreground">
             Input Schema
           </h3>
-          <Button variant="ghost" size="sm" onClick={copySchema} title="Copy schema as JSON">
-            <Copy data-icon="inline-start" />
-            Copy schema
+          <Button variant="outline" size="sm" onClick={copySchema} title="Copy schema as JSON" className="gap-1">
+            <Copy data-icon="inline-start" size={14} />
+            Copy
           </Button>
         </div>
         <pre className="min-h-0 flex-1 overflow-auto rounded-md border border-sc-border bg-sc-muted/40 p-3 font-mono text-xs leading-relaxed text-sc-foreground">

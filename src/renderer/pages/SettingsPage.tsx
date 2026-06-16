@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import SettingsSidepanel from '@renderer/components/settings/sidepanel';
 import { AgentContextType } from '@/types/agentContextTypes';
 import ResizableDivider from '@/components/ui/ResizableDivider';
@@ -9,35 +9,30 @@ import {
   SettingsFloatingMenus,
   SettingsDialogs,
 } from './layout/settings';
+import {
+  consumeSettingsCameFromApp,
+  resolveSettingsBackFallbackPath,
+} from '@/lib/navigation/settingsBackSentinel';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const menus = useSettingsMenus();
   const actions = useSettingsActions();
 
-  // Record path before entering settings page
+  // Drop legacy keys written by older revisions; the sentinel above is the
+  // single source of truth now.
   useEffect(() => {
-    const currentPath = location.pathname;
-    if (currentPath.startsWith('/settings')) {
-      const storedPreviousPath = sessionStorage.getItem('previousPath');
-      if (!storedPreviousPath) {
-        sessionStorage.setItem('settingsReturnPath', '/agent');
-      } else {
-        sessionStorage.setItem('settingsReturnPath', storedPreviousPath);
-      }
-    }
-  }, [location.pathname]);
+    sessionStorage.removeItem('previousPath');
+    sessionStorage.removeItem('settingsReturnPath');
+  }, []);
 
   const handleBack = () => {
-    const returnPath = location.state?.returnPath || sessionStorage.getItem('settingsReturnPath');
-    if (returnPath && returnPath !== '/settings') {
-      sessionStorage.removeItem('settingsReturnPath');
-      navigate(returnPath);
-    } else {
-      navigate('/agent');
+    if (consumeSettingsCameFromApp()) {
+      navigate(-1);
+      return;
     }
+    navigate(resolveSettingsBackFallbackPath());
   };
 
   const settingsContext: AgentContextType = {

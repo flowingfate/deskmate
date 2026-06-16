@@ -4,19 +4,29 @@
  * Domain 重构后:
  *   - 顶层只有 user / assistant;tool 结果折在 assistant.tool_calls[i].response。
  *   - assistant.content / assistant.think 是单串(不再是 ContentPart[])。
- *   - `<FINAL_SUMMARY>` 标记**已被淘汰** —— think / content 物理分离,
- *     prompt 端不再注入,本文件不再剥离。
  *
- * 输出形态:
+ * 输出形态(纯数据,**不带任何 list 中位置派生量**:dim / live 判定都是
+ * iterator(`ChatContainer`) 的工作,不是 item 自带属性):
  *   - `assistant`           : 一条 assistant 文本展示(纯文本部分,有则出)。
- *   - `tool-calls-section`  : 紧跟其后的 tool 调用集合(有则出);若 assistant
- *                              无文本只有 tool 调用,就只出 section,不出 assistant 项。
+ *   - `tool-calls-section`  : tool 调用集合。**连续 assistant 消息的 tool_calls
+ *                              会合并到同一个 section,即便中间夹着带文本的
+ *                              assistant**;带文本的 assistant 会先把当前积累
+ *                              的 tool 段冲出来,然后它自己的 tools 进入下一个
+ *                              merge 链 —— 这样文本前后的工具分别落在各自的时
+ *                              间段里,不会被回写到错误的视觉位置。只有 user
+ *                              消息真正切断所有上下文。
  *   - `user`                : 用户消息。
  *   - `activity-loading` / `activity-placeholder` : UI 占位。
+ *
+ * 坐标系契约:
+ *   - **`item.index` = items 数组下标,所有类型一致**(render-items 坐标系)。
+ *     从前 user/assistant 的 `index` 是 messages 坐标、tool-section 是 items
+ *     坐标 —— 同名异义,已纠正。
+ *   - messages 坐标系仅在 domain 操作里用(如 `editMessageAtom.save` 做
+ *     `messages.slice(0, index)` 截断),不再走私进 render items。
  */
 
 import type { ToolCall } from '@shared/types/message';
-import type { PresentedFile } from '@renderer/components/chat/message/GeneratedFileCards';
 import { extractFilePathsFromText } from './extractFilePaths';
 import type { SessionManager } from './session-manager';
 import type {
@@ -33,20 +43,18 @@ export type ChatRenderItem =
       type: 'assistant';
       message: RenderAssistantMessage;
       index: number;
-      presentedFiles?: PresentedFile[];
       extractedFilePaths: string[];
       scheduleIds: string[];
     }
   | {
       type: 'tool-calls-section';
+      /** 合并后的扁平 tool_calls 数组,按 owners 顺序拼接。 */
       toolCalls: ToolCall[];
-      sectionKey: string;
-      sourceMessageIndex: number;
       /**
-       * 后续是否已经有 user / assistant 文本消息;true 时即使有 tool_call 没收完
-       * response,也视作"被打断"。由 computeRenderItems 一次性扫描得出。
+       * `tool-section-${firstOwnerId}__${lastOwnerId}`。owner 链端点变 → key 变 →
+       * `reuseUnchangedItems` 自动失效复用。stableKey 也走它。
        */
-      hasSubsequentConversation: boolean;
+      sectionKey: string;
       index: number;
     }
   | { type: 'activity-loading'; sectionKey: string; index: number }
@@ -116,51 +124,35 @@ function getAssistantDerived(message: RenderAssistantMessage): AssistantDerived 
   return derived;
 }
 
-// ── Internal helpers ──
-
-const extractPresentedFiles = (toolCalls: ToolCall[]): PresentedFile[] => {
-  const files: PresentedFile[] = [];
-  for (const tc of toolCalls) {
-    if (tc.name !== 'present_deliverables') continue;
-    const fileUris = (tc.args as { fileUris?: unknown }).fileUris;
-    if (!Array.isArray(fileUris)) continue;
-    const description =
-      typeof (tc.args as { description?: unknown }).description === 'string'
-        ? ((tc.args as { description: string }).description)
-        : 'Final deliverables';
-    files.push({
-      // 与历史行为兼容:`fileUri` 字段塞 JSON 序列化的 uri 数组(下游展开)。
-      fileUri: JSON.stringify(fileUris),
-      description,
-    });
-  }
-  return files;
-};
-
 // ── Core: compute render items from messages ──
+
+interface PendingMergeSection {
+  toolCalls: ToolCall[];
+  /** 仅 build 期暂存,flush 后只编码进 sectionKey 字符串就丢弃。 */
+  firstOwnerId: string;
+  lastOwnerId: string;
+}
 
 export function computeRenderItems(messages: RenderMessage[]): ChatRenderItem[] {
   const items: ChatRenderItem[] = [];
-  let toolCallsSectionCounter = 0;
+  let pending: PendingMergeSection | null = null;
 
-  // 预扫描:每条 assistant message 后是否还有 user 或 (有文本的) assistant。
-  // 用倒序累计:从尾向头标记"自此向后存在对话延续"。
-  const hasFollowingTextAfter: boolean[] = new Array(messages.length).fill(false);
-  let followingFlag = false;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    hasFollowingTextAfter[i] = followingFlag;
-    const m = messages[i];
-    if (m.role === 'user') {
-      followingFlag = true;
-    } else if (m.content.trim().length > 0) {
-      followingFlag = true;
-    }
-  }
+  const flushPending = () => {
+    if (!pending) return;
+    items.push({
+      type: 'tool-calls-section',
+      toolCalls: pending.toolCalls,
+      sectionKey: `tool-section-${pending.firstOwnerId}__${pending.lastOwnerId}`,
+      index: items.length,
+    });
+    pending = null;
+  };
 
-  messages.forEach((message, index) => {
+  for (const message of messages) {
     if (message.role === 'user') {
-      items.push({ type: 'user', message, index });
-      return;
+      flushPending();
+      items.push({ type: 'user', message, index: items.length });
+      continue;
     }
 
     // assistant
@@ -168,64 +160,35 @@ export function computeRenderItems(messages: RenderMessage[]): ChatRenderItem[] 
     const hasTools = message.tool_calls.length > 0;
 
     if (hasText) {
+      // 把已积累的 tool 段先冲出来 —— 文本是时间线分隔点;它本条的 tools 会
+      // 起一个新的 merge 链,继续吸收后续 empty-text+tools 的 assistant。
+      flushPending();
       const derived = getAssistantDerived(message);
       items.push({
         type: 'assistant',
         message,
-        index,
+        index: items.length,
         extractedFilePaths: derived.extractedFilePaths,
         scheduleIds: derived.scheduleIds,
-        presentedFiles: hasTools ? extractPresentedFiles(message.tool_calls) : undefined,
       });
     }
 
-    if (hasTools) {
-      items.push({
-        type: 'tool-calls-section',
-        toolCalls: message.tool_calls,
-        sectionKey: `tool-section-${index}-${toolCallsSectionCounter++}`,
-        sourceMessageIndex: index,
-        hasSubsequentConversation: hasFollowingTextAfter[index] ?? false,
-        index: items.length,
-      });
-    }
-  });
+    if (!hasTools) continue;
 
-  attachPresentedFilesToFollowingAssistant(items);
-  return items;
-}
-
-/**
- * 处理"纯 tool 调用消息(无文本) → present_deliverables 产物如何展示"的边界:
- * 把 section 的 presentedFiles 转挂给紧随其后的 assistant 文本项。
- *
- * 现实场景:agent 先发一条带 tool 调用(无文本)的 assistant,再发一条带文本的
- * assistant 收尾。前者的 present_deliverables 应该展示在后者下面。
- */
-function attachPresentedFilesToFollowingAssistant(items: ChatRenderItem[]): void {
-  let pending: PresentedFile[] = [];
-  for (let i = 0; i < items.length; i++) {
-    const it = items[i];
-    if (it.type === 'tool-calls-section') {
-      const files = extractPresentedFiles(it.toolCalls);
-      if (files.length > 0) pending.push(...files);
-      continue;
-    }
-    if (it.type === 'assistant') {
-      // assistant 项自身已 inline 了 presentedFiles(同消息的 tool 调用产物);
-      // pending 是来自 *前面* section 的产物,这里追加。
-      if (pending.length > 0) {
-        const merged = [...(it.presentedFiles ?? []), ...pending];
-        items[i] = { ...it, presentedFiles: merged };
-        pending = [];
-      }
-      continue;
-    }
-    if (it.type === 'user') {
-      // 用户消息把 pending 重置 —— 跨 turn 的产物不再继承。
-      pending = [];
+    if (!pending) {
+      pending = {
+        toolCalls: [...message.tool_calls],
+        firstOwnerId: message.id,
+        lastOwnerId: message.id,
+      };
+    } else {
+      pending.toolCalls.push(...message.tool_calls);
+      pending.lastOwnerId = message.id;
     }
   }
+
+  flushPending();
+  return items;
 }
 
 /**
@@ -251,25 +214,7 @@ export function reuseUnchangedItems(prev: ChatRenderItem[], next: ChatRenderItem
   return reusedAny ? result : next;
 }
 
-function arePresentedFilesEqual(
-  a: PresentedFile[] | undefined,
-  b: PresentedFile[] | undefined,
-): boolean {
-  if (a === b) return true;
-  const lenA = a?.length ?? 0;
-  const lenB = b?.length ?? 0;
-  if (lenA !== lenB) return false;
-  if (lenA === 0) return true;
-  for (let i = 0; i < lenA; i++) {
-    const pa = a![i];
-    const pb = b![i];
-    if (pa.fileUri !== pb.fileUri) return false;
-    if (pa.description !== pb.description) return false;
-  }
-  return true;
-}
-
-/** 内容相等比较 —— 比 React.memo 的浅比较更宽(toolCalls 数组逐项比内容)。 */
+/** 内容相等比较 —— 比 React.memo 的浅比较更宽(toolCalls 数组逐项比引用)。 */
 function isSameRenderItem(a: ChatRenderItem, b: ChatRenderItem): boolean {
   if (a.type !== b.type) return false;
   if (a.index !== b.index) return false;
@@ -281,9 +226,10 @@ function isSameRenderItem(a: ChatRenderItem, b: ChatRenderItem): boolean {
       return a.type === 'user' && a.message === b.message;
     case 'tool-calls-section':
       if (a.type !== 'tool-calls-section') return false;
+      // sectionKey 编码了 (firstOwnerId, lastOwnerId);它一致 = owner 链端点没变。
       if (a.sectionKey !== b.sectionKey) return false;
-      if (a.sourceMessageIndex !== b.sourceMessageIndex) return false;
-      if (a.hasSubsequentConversation !== b.hasSubsequentConversation) return false;
+      // toolCalls 逐项比引用:catches 中段 owner 改动 (immer 让那条 tool_calls 换引用) +
+      // 流式 chunk 追加新项 + section 收到 response 翻新 ToolCall 引用。
       if (a.toolCalls.length !== b.toolCalls.length) return false;
       for (let i = 0; i < b.toolCalls.length; i++) {
         if (a.toolCalls[i] !== b.toolCalls[i]) return false;
@@ -292,7 +238,6 @@ function isSameRenderItem(a: ChatRenderItem, b: ChatRenderItem): boolean {
     case 'assistant':
       if (a.type !== 'assistant') return false;
       if (a.message !== b.message) return false;
-      if (!arePresentedFilesEqual(a.presentedFiles, b.presentedFiles)) return false;
       return true;
     default:
       assertNever(b);

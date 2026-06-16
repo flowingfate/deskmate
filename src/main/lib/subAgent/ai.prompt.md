@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-10 -->
+<!-- Last verified: 2026-06-16 -->
 # Sub-Agent System
 
 > 在父 agent 对话中按需 spawn / 控制生命周期 / 报告结果的轻量 sub-agent。
@@ -17,7 +17,7 @@
   - 跑 **Phase 0 消息计数压缩**：context 超过 20 条 → 头 15 条蒸馏为单条 user summary（走 `runUtilityCompletion` + claude-haiku-4.5）
   - 注入动态 **turn-progress hint**（"Turn N/M, 还剩 K 轮"）
   - 决策 **follow-up**：纯文本响应若像 intent（"Let me…"），追加 "Please execute…" 再跑一轮
-  - **追踪 deliverables**：`write` / `download_file` / `present_deliverables` 自动入册，最终结果末尾汇报
+  - **追踪 deliverables**：`write` / `download` 自动入册（按 fileUri / saveDirectory+filename 解析），最终结果末尾汇报。`present_deliverables` 工具已下线，UI 端改为扫描 assistant 收尾文字里的 URI 渲染卡片；后台 audit 仍由这两条自动追踪兜底。
 - **SubAgentSession** 自己维护内存 messages 数组（不落盘）。不继承 `BaseSession` —— sub-agent 是 wrapper 控 turn 节奏，借不到 30-轮 for loop 抽象，自己写 ~200 行 turn loop 复用 pi 原子能力：
   - `pi.stream`（动态 import）做 SSE 解析与 tool call args parse
   - `pi/compression.checkAndCompress` —— 阈值通过构造参数注入 0.60（vs 主 chat 0.85）

@@ -87,7 +87,7 @@ const INTENT_PATTERNS: ReadonlyArray<RegExp> = [
  */
 const FILE_OUTPUT_TOOLS: Record<string, true> = {
   write: true,
-  download_file: true,
+  download: true,
 };
 
 /** summarizeToolArgs 优先匹配的参数名。 */
@@ -709,38 +709,35 @@ export class SubAgentChat {
 
   private trackDeliverables(toolName: string, toolArgs: Record<string, unknown>): void {
     try {
-      if (FILE_OUTPUT_TOOLS[toolName]) {
-        const fp = readStringArg(toolArgs, 'fileUri') ?? readStringArg(toolArgs, 'file_uri');
-        if (fp && !this.deliverables.includes(fp)) this.deliverables.push(fp);
+      if (!FILE_OUTPUT_TOOLS[toolName]) return;
 
-        if (toolName === 'download_file') {
-          // saveDirectory 同时接受 URI(`local://`/`knowledge://...`)与绝对路径。
-          // URI 形态:scheme:// 后的 path 才能 strip 尾 slash,scheme 自身不能动。
-          // abs 形态:Windows 下 `\\` 兼容。
-          const dir = readStringArg(toolArgs, 'saveDirectory') ?? readStringArg(toolArgs, 'save_directory') ?? 'local://';
-          const filename = readStringArg(toolArgs, 'filename');
-          if (filename) {
-            const uriMatch = dir.match(/^([a-z][a-z0-9+.-]*:\/\/)(.*)$/i);
-            let fullPath: string;
-            if (uriMatch) {
-              const cleanPath = uriMatch[2].replace(/\/+$/, '');
-              fullPath = cleanPath ? `${uriMatch[1]}${cleanPath}/${filename}` : `${uriMatch[1]}${filename}`;
-            } else {
-              const sep = dir.includes('\\') ? '\\' : '/';
-              const trimmedDir = dir.replace(/[\\/]+$/, '');
-              fullPath = `${trimmedDir}${sep}${filename}`;
-            }
-            if (!this.deliverables.includes(fullPath)) this.deliverables.push(fullPath);
+      const fp = readStringArg(toolArgs, 'fileUri') ?? readStringArg(toolArgs, 'file_uri');
+      if (fp && !this.deliverables.includes(fp)) this.deliverables.push(fp);
+
+      if (toolName === 'download') {
+        // saveDirectory 同时接受 URI(`local://`/`knowledge://...`)与绝对路径。
+        // URI 形态:scheme:// 后的 path 才能 strip 尾 slash,scheme 自身不能动。
+        // abs 形态:Windows 下 `\\` 兼容。
+        const dir = readStringArg(toolArgs, 'saveDirectory') ?? readStringArg(toolArgs, 'save_directory') ?? 'local://';
+        const filename = readStringArg(toolArgs, 'filename');
+        if (filename) {
+          const uriMatch = dir.match(/^([a-z][a-z0-9+.-]*:\/\/)(.*)$/i);
+          let fullPath: string;
+          if (uriMatch) {
+            const cleanPath = uriMatch[2].replace(/\/+$/, '');
+            fullPath = cleanPath ? `${uriMatch[1]}${cleanPath}/${filename}` : `${uriMatch[1]}${filename}`;
+          } else {
+            const sep = dir.includes('\\') ? '\\' : '/';
+            const trimmedDir = dir.replace(/[\\/]+$/, '');
+            fullPath = `${trimmedDir}${sep}${filename}`;
           }
-        }
-      } else if (toolName === 'present_deliverables') {
-        const fileUris = toolArgs.fileUris;
-        if (Array.isArray(fileUris)) {
-          for (const fp of fileUris) {
-            if (typeof fp === 'string' && fp && !this.deliverables.includes(fp)) this.deliverables.push(fp);
-          }
+          if (!this.deliverables.includes(fullPath)) this.deliverables.push(fullPath);
         }
       }
+      // `present_deliverables` 工具已下线 —— 现在的兜底是 LLM 在最终回复文字里
+      // 直接提到产出的 URI,renderer 端通过 `extractFilePathsFromText` 抽取。
+      // 后台审计仍依赖上面的 `write` / `download` 自动跟踪,父 agent 拿到的
+      // `Deliverables` 段不变。
     } catch {
       // 非致命:跟踪失败不影响主流程
     }

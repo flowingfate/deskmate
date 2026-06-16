@@ -322,7 +322,7 @@ async function loadImpl() {
 - **`splitPathAndSel` 的白名单是唯一边界** —— 改 `SELECTOR_CHUNK_RE` 时必须配套改 `parseSelector` 的 chunk 分类逻辑,**两者必须同步**;不一致会导致"切下来但 parser 不认"的死路
 - **`:` 后缀 ≠ `?query=`,两者各管各的语义类型** —— `:` 后缀承载"已确定的单一资源内,再向下定位一个子结构"(行 / 页 / raw / archive entry / SQLite table:key),对齐 vim / grep / git permalink / Python traceback 等 LLM 训练语料里高频的"路径锚点"习惯,token 短、形态可猜、description 几乎不用教;`?query=` 留给"对一组同质资源按属性过滤 / 分页"(未来场景:`agent://?type=task&enabled=true` 列表过滤、`log://?level=warn&since=10m` 日志查询、`session://?label=bug` session 搜索),对齐 HTTP / web API 的 query 习惯。**绝不**把行号 / 页码这种锚点语义改写成 `?range=` / `?page=` —— `?range=` 这个 token 在 LLM 语料里几乎不存在(HTTP 里行号是 `Range:` header 不是 query),换过去 LLM 会按"过滤参数"的味道乱填,token 数还涨 3 倍。两套语法在 path 的不同位置(`?` 之前 vs `:` 之后)互不冲突,共存即可
 - **绝对路径在 LLM 视角是边缘 case,不是主路径** —— URI(`local://` / `knowledge://` / `skill://`)走精确高亮 + 关联视图、是工具 args/result 的 first-class 形态;绝对路径只在 LLM 显式 `read /etc/hosts` 这种**外部 fs** 场景出现,renderer `extractFilePathsFromText` 的 abs path 正则**仅作兜底分支**保留(URI 主匹配 + abs 降级)。新增 LLM-facing 字段时默认要求 URI,绝对路径分支需要单独论证
-- **不在 system prompt 里"请求"LLM 用 URI** —— 弱约束,LLM 会偶发破坏。真正有效的强约束是工具 args / result schema 全 URI(LLM 看见的样本驱动它的输出形态)。如果某工具字段叫 `fileUri` 却承载绝对路径,那是**字段名漂移 = 反训练样本**(LLM 学到"fileUri 可以是 abs",反过来污染其它工具的 args),按必修缺陷对待:让默认值落 sandbox(`download_file.saveDirectory` 默认 `local://` 是范本),URI 入则 URI 出 / abs 入则 abs 出
+- **不在 system prompt 里"请求"LLM 用 URI** —— 弱约束,LLM 会偶发破坏。真正有效的强约束是工具 args / result schema 全 URI(LLM 看见的样本驱动它的输出形态)。如果某工具字段叫 `fileUri` 却承载绝对路径,那是**字段名漂移 = 反训练样本**(LLM 学到"fileUri 可以是 abs",反过来污染其它工具的 args),按必修缺陷对待:让默认值落 sandbox(`download.saveDirectory` 默认 `local://` 是范本),URI 入则 URI 出 / abs 入则 abs 出
 
 ---
 

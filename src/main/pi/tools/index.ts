@@ -19,7 +19,6 @@ import { write } from './write';
 import { find } from './find';
 import { search } from './search';
 import { ask } from './ask';
-import { presentDeliverables } from './presentDeliverables';
 
 // Internal URL router 启动期注册全部 ProtocolHandler(skill / ...)—— 必须
 // 在 `./read` 的 dispatch 真正被调用之前完成。side-effect import 保证。
@@ -48,7 +47,7 @@ import { shell } from './shell';
 // import('../../impl/readOfficeFile')` 推迟到首调,bundle 行为完全一致)。
 
 // 批 F:heavy / lazy(剩 download)
-import { downloadFile } from './downloadFile';
+import { downloadFile } from './download';
 
 let registered = false;
 export function registerAllTools(): void {
@@ -63,7 +62,6 @@ export function registerAllTools(): void {
   tools.register(find);
   tools.register(search);
   tools.register(ask);
-  tools.register(presentDeliverables);
 
   // 批 G:app shell facade。注册顺序对外部语义无影响,但需在 import 顺序
   // 之后(`../appcmd` side-effect 已经把 helloCommand 等灌进 appCommands)。

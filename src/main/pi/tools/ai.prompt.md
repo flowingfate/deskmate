@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-14 -->
+<!-- Last verified: 2026-06-16 -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -122,13 +122,13 @@ async function loadImpl() {
 `index.ts::registerAllTools()`:
 
 ```
-批 A:纯本地轻量(`read` / `write` / `find` / `search` / `ask` / `present_deliverables`)。`read` 是统一读入口 —— 取代了 `read_file` / `read_office_file`,内部按"scheme/extension"两级分发到 `read/backends/{filesystem,internal-url,office}.ts`(office backend 自带 lazy import,首调时才解析 mammoth/jszip/pdfreader)
+批 A:纯本地轻量(`read` / `write` / `find` / `search` / `ask`)。`read` 是统一读入口 —— 取代了 `read_file` / `read_office_file`,内部按"scheme/extension"两级分发到 `read/backends/{filesystem,internal-url,office}.ts`(office backend 自带 lazy import,首调时才解析 mammoth/jszip/pdfreader)。`present_deliverables` 已下线 —— LLM 在最终消息文字里直接提到产出 URI,renderer 端通过 `extractFilePathsFromText` 抽取路径渲染卡片。
 批 G:`app` shell facade(LocalTool 总入口;`appcmd/index.ts` 已先 side-effect import 完所有 AppCommand)
 批 B:依赖 main 子系统 —— 仅 `executeCommand`(LLM 看到名为 `shell`)。`manageProcess` 已下线
 批 C:已下线(mcp / agent / skill → `app` shell facade,详见 `appcmd/builtins/`)
 批 D:已下线(schedule → `app` shell facade;feature flag 守卫挪到 `appcmd/index.ts`)
 批 E:已下线(spawn / spawn-many → `app subagent` shell facade;feature flag 守卫挪到 `appcmd/index.ts`)
-批 F:heavy / lazy(`downloadFile`)。web 域已下线到 `app web ...`,业务内核在 `appcmd/builtins/web/kernel/`;`read_office_file` 一并下线 —— office 现在是 `read` 工具的内部 backend,通过 `read/backends/office.ts::loadImpl()` 推迟加载 `impl/readOfficeFile.ts`(独立 lazy chunk 输出,bundle 体积不变)
+批 F:heavy / lazy(`downloadFile.ts`,LLM-visible 名为 `download`)。web 域已下线到 `app web ...`,业务内核在 `appcmd/builtins/web/kernel/`;`read_office_file` 一并下线 —— office 现在是 `read` 工具的内部 backend,通过 `read/backends/office.ts::loadImpl()` 推迟加载 `impl/readOfficeFile.ts`(独立 lazy chunk 输出,bundle 体积不变)
 
 注册顺序对 LLM 看到的工具列表顺序没有语义,但保持稳定有助于 prompt cache 命中率;
 新加工具往对应组里塞,**不要散落**。

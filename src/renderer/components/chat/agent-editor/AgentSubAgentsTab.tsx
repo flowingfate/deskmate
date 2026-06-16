@@ -7,6 +7,7 @@ import { Badge } from '@/shadcn/badge'
 
 import { TabComponentProps } from './types';
 import { useSubAgents } from '../../userData/userDataProvider';
+import { markSettingsCameFromApp } from '@/lib/navigation/settingsBackSentinel';
 
 /**
  * AgentSubAgentsTab - Agent Sub-Agents configuration tab
@@ -124,14 +125,14 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
 
   // Navigate to Sub-Agents management page
   const handleManageAll = useCallback(() => {
-    sessionStorage.setItem('previousPath', location.pathname);
+    markSettingsCameFromApp();
     navigate('/settings/sub-agents');
   }, [navigate, location.pathname]);
 
   // Navigate to Sub-Agents management page and select the corresponding sub-agent
   const handleManageSubAgent = useCallback(
     (subAgentName: string) => {
-      sessionStorage.setItem('previousPath', location.pathname);
+      markSettingsCameFromApp();
 
       // Close Agent Editor first
       window.dispatchEvent(new CustomEvent('agent:closeEditor'));

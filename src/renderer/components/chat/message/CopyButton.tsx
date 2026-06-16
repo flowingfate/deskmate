@@ -44,7 +44,7 @@ export const CopyButton: React.FC<CopyButtonProps> = ({ text }) => {
   return (
     <Button
       variant="ghost"
-      size="icon"
+      size="icon-xs"
       className="copy-btn"
       onClick={handleCopy}
       title={isCopied ? 'Copied' : 'Copy'}

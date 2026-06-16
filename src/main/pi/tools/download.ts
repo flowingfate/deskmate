@@ -1,5 +1,5 @@
 /**
- * `download_file`:从 HTTP/HTTPS URL 下载文件到本地。
+ * `download`:从 HTTP/HTTPS URL 下载文件到本地(LLM-visible 工具名)。
  *
  * 依赖仅 `fs`/`path`/`os` + native fetch,无重模块,所以走 static import 即可,
  * 不需要 `lazy`。
@@ -11,8 +11,8 @@
  *  - 任意绝对路径 —— 兼容老接口,**仍受 homedir 沙箱限制**(防 LLM 写到 /etc 等)。
  *
  * 落盘后 `result.fileUri` 形态对齐输入:URI 进 → URI 出(`local://photo.png`),
- * abs 进 → abs 出。统一规则保证 LLM 拿到的 fileUri 能直接喂给后续 `read` /
- * `present_deliverables` 等工具。
+ * abs 进 → abs 出。统一规则保证 LLM 拿到的 fileUri 能直接喂给后续 `read`
+ * 等工具。
  *
  * Security:
  *   - Path traversal protection on filename
@@ -351,7 +351,7 @@ export async function downloadFileInternal(
 
     fullFilePath = path.join(resolved.abs, filename);
     // LLM-visible 形态:URI 进 → URI 出;abs 进 → abs 出。统一规则保证 LLM 拿到的
-    // fileUri 能直接喂给后续 read / present_deliverables 等工具。
+    // fileUri 能直接喂给后续 read 等工具。
     displayFileUri = resolved.isUri
       ? joinInternalUri(resolved.uriBase!, filename)
       : fullFilePath;
@@ -467,7 +467,7 @@ export async function downloadFileInternal(
 
 export const downloadFile: LocalTool = {
   spec: {
-    name: 'download_file',
+    name: 'download',
     description: DESCRIPTION,
     parameters: PARAMETERS,
   },

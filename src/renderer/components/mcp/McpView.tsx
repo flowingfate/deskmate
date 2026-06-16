@@ -218,16 +218,6 @@ const McpView: React.FC = () => {
     [navigate, onMcpServerEdit],
   );
 
-  // Handle server added callback
-  const handleServerAdded = useCallback(() => {
-    // Refresh global state to reflect newly added/updated server
-    setTimeout(async () => {
-      try {
-        await refreshRuntimeInfo();
-      } catch (error) {}
-    }, 500); // Slightly extend wait time to ensure server initialization is complete
-  }, [refreshRuntimeInfo]);
-
   return (
     <SettingsLayout
       icon={<Cable size={18} />}

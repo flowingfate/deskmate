@@ -135,8 +135,8 @@ build/*
 # Electron distribution
 out/
 
-# Electron app packaged
-app/
+# Electron app packaged (root-level output dir only)
+/app/
 
 # Release artifacts
 release/

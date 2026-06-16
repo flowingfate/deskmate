@@ -62,9 +62,9 @@ const ToolListView: React.FC<ToolListViewProps> = ({
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="truncate font-medium">{tool.name}</span>
                 {tool.description && (
-                  <span className="truncate text-xs text-sc-muted-foreground">
-                    {tool.description}
-                  </span>
+                  <pre className="overflow-hidden truncate font-sans text-xs text-sc-muted-foreground">
+                    {tool.description.split('\n')[0]}
+                  </pre>
                 )}
               </div>
             </button>

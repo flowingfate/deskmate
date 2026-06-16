@@ -18,6 +18,7 @@ import {
   type SelectionsMap,
 } from './toolConflictHelper';
 import AgentMcpServerCard from './AgentMcpServerCard';
+import { markSettingsCameFromApp } from '@/lib/navigation/settingsBackSentinel';
 import { log } from '@/log';
 
 const logger = log.child({ mod: 'AgentMcpServersTab' });
@@ -272,7 +273,7 @@ const AgentMcpServersTab: React.FC<TabComponentProps> = ({
   }, []);
 
   const handleManageServers = useCallback(() => {
-    sessionStorage.setItem('previousPath', location.pathname);
+    markSettingsCameFromApp();
     navigate('/settings/mcp');
   }, [navigate, location.pathname]);
 

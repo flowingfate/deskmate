@@ -10,6 +10,7 @@ import { useSkills } from '../../userData/userDataProvider';
 import { isBuiltinSkill } from '../../../../shared/constants/builtinSkills';
 import { isBuiltinAgent } from '../../../lib/userData/types';
 import ListSearchBox from '../../ui/ListSearchBox';
+import { markSettingsCameFromApp } from '@/lib/navigation/settingsBackSentinel';
 import { log } from '@/log';
 const logger = log.child({ mod: 'AgentSkillsTab' });
 
@@ -140,7 +141,7 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
   // Navigate to Skills management page (settings page)
   const handleManageSkills = useCallback(() => {
     // Save current path to sessionStorage
-    sessionStorage.setItem('previousPath', location.pathname);
+    markSettingsCameFromApp();
     navigate('/settings/skills');
   }, [navigate, location.pathname]);
 
@@ -148,7 +149,7 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
   const handleManageSkill = useCallback(
     (skillName: string) => {
       // Save current path to sessionStorage
-      sessionStorage.setItem('previousPath', location.pathname);
+      markSettingsCameFromApp();
 
       // First close the Agent Editor
       window.dispatchEvent(new CustomEvent('agent:closeEditor'));

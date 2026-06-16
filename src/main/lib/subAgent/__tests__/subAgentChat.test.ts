@@ -355,40 +355,44 @@ describe('trackDeliverables', () => {
   // 名字落到 default 分支而失败,且对真实行为零覆盖。
 
 
-  it('tracks download_file from saveDirectory + filename', () => {
+  it('tracks download from saveDirectory + filename', () => {
     const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download_file', { saveDirectory: '/d', filename: 'a.png' });
+    inner(chat).trackDeliverables('download', { saveDirectory: '/d', filename: 'a.png' });
     expect(inner(chat).deliverables).toEqual(['/d/a.png']);
   });
 
-  it('tracks download_file with local:// (default sandbox) → URI-form deliverable', () => {
+  it('tracks download with local:// (default sandbox) → URI-form deliverable', () => {
     const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download_file', { saveDirectory: 'local://', filename: 'a.png' });
+    inner(chat).trackDeliverables('download', { saveDirectory: 'local://', filename: 'a.png' });
     expect(inner(chat).deliverables).toEqual(['local://a.png']);
   });
 
-  it('tracks download_file with local:// sub-path → URI sub-path/filename', () => {
+  it('tracks download with local:// sub-path → URI sub-path/filename', () => {
     const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download_file', { saveDirectory: 'local://reports', filename: 'q3.json' });
+    inner(chat).trackDeliverables('download', { saveDirectory: 'local://reports', filename: 'q3.json' });
     expect(inner(chat).deliverables).toEqual(['local://reports/q3.json']);
   });
 
-  it('tracks download_file with knowledge:// → URI form', () => {
+  it('tracks download with knowledge:// → URI form', () => {
     const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download_file', { saveDirectory: 'knowledge://', filename: 'manual.pdf' });
+    inner(chat).trackDeliverables('download', { saveDirectory: 'knowledge://', filename: 'manual.pdf' });
     expect(inner(chat).deliverables).toEqual(['knowledge://manual.pdf']);
   });
 
-  it('tracks download_file with omitted saveDirectory → defaults to local:// URI', () => {
+  it('tracks download with omitted saveDirectory → defaults to local:// URI', () => {
     const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download_file', { filename: 'fallback.png' });
+    inner(chat).trackDeliverables('download', { filename: 'fallback.png' });
     expect(inner(chat).deliverables).toEqual(['local://fallback.png']);
   });
 
-  it('tracks present_deliverables fileUris array', () => {
+  it('ignores non-file tools', () => {
+    // 历史:此处用 `bing_web_search` → `get_current_datetime` 等反例(它们
+    // 从来不输出文件)。`present_deliverables` 已下线;改用常驻注册但非
+    // file-output 的 `find` 作为稳定反例 —— 它在 FILE_OUTPUT_TOOLS 之外,
+    // tracker 看到就直接 return,deliverables 不变。
     const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('present_deliverables', { fileUris: ['/a.md', '/b.md'] });
-    expect(inner(chat).deliverables).toEqual(['/a.md', '/b.md']);
+    inner(chat).trackDeliverables('find', { pattern: '*.ts' });
+    expect(inner(chat).deliverables).toEqual([]);
   });
 
   it('deduplicates repeated entries', () => {
@@ -396,15 +400,6 @@ describe('trackDeliverables', () => {
     inner(chat).trackDeliverables('write', { fileUri: '/dup.md' });
     inner(chat).trackDeliverables('write', { fileUri: '/dup.md' });
     expect(inner(chat).deliverables).toEqual(['/dup.md']);
-  });
-
-  it('ignores non-file tools', () => {
-    // 历史:此处用 `bing_web_search` → `get_current_datetime` 等反例(它们
-    // 从来不输出文件)。web / datetime 工具已下线,改用 `present_deliverables`
-    // 作为稳定反例 —— 它本身就是个标记工具,从不写盘,但又是常驻注册。
-    const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('present_deliverables', {});
-    expect(inner(chat).deliverables).toEqual([]);
   });
 
   it('does not throw on missing args', () => {

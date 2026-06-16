@@ -10,6 +10,7 @@ import { Separator } from '@/shadcn/separator';
 import { TabComponentProps } from './types';
 import { useLocalTools, useLocalToolsLoading } from '@/states/tools.atom';
 import ListSearchBox from '../../ui/ListSearchBox';
+import { markSettingsCameFromApp } from '@/lib/navigation/settingsBackSentinel';
 
 /**
  * AgentToolsTab - Agent 本地工具白名单 tab(deskmate 原生 tools)。
@@ -115,7 +116,7 @@ const AgentToolsTab: React.FC<TabComponentProps> = ({
   }, [readOnly]);
 
   const handleManageTools = useCallback(() => {
-    sessionStorage.setItem('previousPath', location.pathname);
+    markSettingsCameFromApp();
     navigate('/settings/tools');
   }, [navigate, location.pathname]);
 

@@ -8,6 +8,7 @@ import { EditingMessageState, editMessageAtom } from './message/edit-message.ato
 import { getChatRenderItemStableKey, isVisibleChatRenderItem, ChatRenderItemComponent, type ChatRenderItem, hasTextContent } from './ChatRenderItem';
 import { GreetingMessage } from './message/GreetingMessage';
 import { Button } from '@/shadcn/button';
+import { CHAT_SCROLL_BOX_CLS } from './tool/AnimatedHeight';
 
 interface ChatContainerProps {
   messages: RenderMessage[];
@@ -469,6 +470,26 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
     editMessageActions.start(chatSessionId!, index, message, warning(), toast);
   }, [chatSessionId, messages, toast]);
 
+  // 编辑中的用户消息在 renderItemsWithActivity 里的位置(render-items 坐标系);
+  // 后续 dim 比对就在这个坐标系里做,不再回头去 messages 数组拿下标。
+  const editingItemIndex = useMemo(() => {
+    const editingId = editingMessage?.id;
+    if (!editingId) return -1;
+    return renderItemsWithActivity.findIndex(
+      (it) => it.type === 'user' && it.message.id === editingId,
+    );
+  }, [editingMessage?.id, renderItemsWithActivity]);
+
+  // 列表里最后一个 tool-section 的位置;chat 非 idle 时,只有它有可能还在被驱动。
+  const lastSectionIndex = useMemo(() => {
+    for (let i = renderItemsWithActivity.length - 1; i >= 0; i--) {
+      if (renderItemsWithActivity[i].type === 'tool-calls-section') return i;
+    }
+    return -1;
+  }, [renderItemsWithActivity]);
+
+  const chatIsActive = chatStatus !== undefined && chatStatus !== 'idle';
+
   const isCompressing = chatStatus === 'compressing_context';
   const renderLoadingIndicator = useCallback((className?: string) => {
     let loadingText = '';
@@ -509,7 +530,7 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
 
   return (
     <div className="chat-container-with-overlay">
-      <div className="chat-container-reverse flex-1" ref={containerRef} onScroll={handleContainerScroll}>
+      <div className={'flex-1 ' + CHAT_SCROLL_BOX_CLS} ref={containerRef} onScroll={handleContainerScroll}>
         <div className="chat-message-flow-reverse" ref={messageFlowRef}>
           {/* Fixed boundary container */}
           {shouldShowBoundaryContainer() && (
@@ -529,13 +550,17 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
           )}
 
           {renderItemsWithActivity.reduceRight((acc, item, index) => {
+            const shouldDim = editingItemIndex >= 0 && index > editingItemIndex;
+            const isLive =
+              item.type === 'tool-calls-section' && index === lastSectionIndex && chatIsActive;
             const rendered = (
               <ChatRenderItemComponent
                 key={getChatRenderItemStableKey(item)}
                 item={item}
                 isLast={index === renderItemsWithActivity.length - 1}
+                shouldDim={shouldDim}
+                isLive={isLive}
                 renderLoadingIndicator={renderLoadingIndicator}
-                editingSourceMessageIndex={editingMessage?.index ?? -1}
                 chatStatus={chatStatus}
                 editingMessage={editingMessage}
                 onSaveEditedMessage={editMessageActions.save}

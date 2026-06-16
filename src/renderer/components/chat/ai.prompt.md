@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-14 -->
+<!-- Last verified: 2026-06-17 -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -17,7 +17,18 @@
 | `message/GreetingMessage.tsx` | 欢迎消息渲染：MarkdownView + 可选 SayHiActionItems | ~30 LOC |
 | `message/AttachmentList.tsx` | 用户消息附件列表（图片 / 文件 / Office / 其它）；点击通过 `window.dispatchEvent('imageViewer:open' / 'fileViewer:open')` 唤起全局 viewer | ~145 LOC |
 | `message/CopyButton.tsx` | 复制到剪贴板按钮；`text` 支持字符串或惰性 getter | ~60 LOC |
-| `message/ToolCallsSection.tsx` / `message/ToolCallItem.tsx` | 折叠面板包装器，根据工具类型选择正确的 `toolCallViews/` 组件 | — |
+| `tool/ToolCallsSection.tsx` | 工具调用章节;两套视图共享同一外壳 + CSS transition(220ms): **collapsed** 紧凑 600px 卡片(chip 行 + 单选 detail);**expanded** (view all) 贴边浅灰条 max-h 60vh 内滚,所有工具纵向列出(每张白卡片复用 `ToolDetailView`)。水平 inset 模式:`.tool-section-wrapper` 这层豁免 `.chat-message-flow-reverse > *` 的默认 `--chat-pad-x` padding,由本组件正向控制 margin(collapsed 推内容对齐其他消息)或 padding(expanded bg 撑满 wrapper + 内 padding 拉回对齐) — **不用负 margin breakout**,bg 天然占满 chat 全宽;高度切换由 `AnimatedHeight` 平滑过渡,避免 column-reverse 上方兄弟闪动。`selectedId` 切 mode 时保留 | ~350 LOC |
+| `tool/ToolChip.tsx` | 单个工具胶囊；状态点 executing(琥珀脉动) / failed(红实心) / completed(无点)；选中态深色填充；接收 `label` props 由 ToolCallsSection 计算（renderer 的 `chipLabel` 覆盖优先） | ~75 LOC |
+| `tool/ToolDetailView.tsx` | 唯一的两段式详情容器(input/output)；按 slot 优先级（粗 InputBlock/OutputSuccessBlock/OutputExecutingBlock > 细 inputArgsText/outputResultText > 默认）注入 renderer 覆盖。一个 renderer 一旦提供粗粒度 block,就**完全接管**该 slot,不会再回到细粒度 —— 多层兜底由 renderer 自己内部完成(典型例子:`renderers/app/`)。`verticallyUnbounded?: boolean` prop:默认 false → 默认 pre 限高 220px + 内滚(单 detail 展开);true → pre 不限高,由调用方外层统一滚动(view-all 模式由 `ToolCallsSection` 的 ExpandedView 传入,避免嵌套滚动条) | ~165 LOC |
+| `tool/types.ts` | `ToolCallExecutionStatus`、`ToolRenderer`（slot-only,无 id/match）、`ToolSlotProps` / `ToolChipSlotProps` / `ToolOutputSuccessSlotProps`，复导出 shared 的 ShellToolArgs/Result、WriteToolArgs/Result | ~85 LOC |
+| `tool/toolRendererRegistry.ts` | `Map<toolName, ToolRenderer>`：`registerToolRenderer(toolName, renderer)` / `resolveToolRenderer(toolName)`；一个工具一个坑，O(1) 查询，幂等去重 | ~40 LOC |
+| `tool/registerBuiltins.ts` | 集中注册三个内置 renderer（`app` / `shell` / `write`）。子命令分派由各 renderer 自己负责，不在本表 | ~25 LOC |
+| `tool/index.ts` | barrel；import 副作用触发 `registerBuiltinToolRenderers()`；导出 ToolCallsSection / ToolDetailView / registry helpers | ~25 LOC |
+| `tool/renderers/shell/index.tsx` | `shellRenderer` —— `chipLabel` (`shell: <cmd>`) + `InputBlock`（终端 prompt+command）+ `OutputSuccessBlock`（stdout/stderr/exit 终端块） | ~110 LOC |
+| `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，触发 `fileViewer:open` / `imageViewer:open`） | ~110 LOC |
+| `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；内部 `pickSubRenderer` 调子命令路由（subagent → spawn / spawn-many；未来 mcp / skill / web ...）；不命中时给出朴素兜底（chip = `app:<sub>`，input = cmd 字符串，output = result 文本） | ~95 LOC |
+| `tool/renderers/app/cmdline.ts` | App 子命令分派的 cmdline 工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
+| `tool/renderers/app/subagent/` | `app subagent spawn` / `spawn-many` 子命令的 renderer 实现包：`index.ts`（路由 spawn/spawn-many）+ `parse.ts`（cmdline 字段抽取）+ `helpers.tsx`（共享 timer / progress bar / steps list）+ `spawn.tsx`（单 task 三 slot）+ `spawnMany.tsx`（并行 task 三 slot）。订阅 `subAgent:stateUpdate` IPC 渲染实时进度 | — |
 | `message/MermaidDiagram.tsx` | 延迟加载的 Mermaid 图表渲染器，支持全屏 | — |
 | `message/ImageGallery.tsx` | `<IMAGE_REGISTRY>` 分段解析 + `ImageGalleryNew` 渲染 | — |
 | `InteractiveRequestCard.tsx` | 时间线原生渲染器，用于待处理的 `approval`、`choice` 和 `form` 交互 | — |
@@ -29,7 +40,6 @@
 | `chat-input/shared/transformMentions.ts` | 纯函数；把 `[@knowledge://...]`、`[@local://...]`、`[#skill:...]` 这些 mention bracket 形态转换为 markdown inline code（防止前后符号被解析为粗体/链接） | 小 |
 | `chat-input/ThinkingLevelSelector.tsx` | 单聊会话的 thinking level 选择器（pi-ai `ThinkingLevel` 枚举：`minimal/low/medium/high/xhigh`）；仅在活跃模型支持 ≥2 个等级时渲染；写入 `chat.agent.thinkingLevel`，通过 `updateAgent` 持久化到 AGENT.md front-matter。dropdown 顶部 "Auto" 项写入 `thinkingLevel: null` 清除字段，回到 provider 默认 —— 前端不假装知道默认值。运行时由 `pi.streamSimple({ reasoning })` 翻译给各 provider，不再走旧的"Claude→high / GPT→medium"启发式 | 小 |
 | `chat-input/ContextMenu.tsx` | @-提及下拉菜单，用于文件、技能和工作区项目 | — |
-| `toolCallDisplayConfig.ts` | 工具名称 → 显示标签/图标的静态映射 | — |
 | `ErrorBar.tsx` | 聊天中的内联错误显示 | — |
 | `ChatInlinePreviewOverlay.tsx` | inline 文件预览的全屏浮层;铺满整个 chat-content 区域(连 ComposeInput 一起遮住),通过 `fileViewer:open` 自定义事件触发。导出的 `inlinePreviewCoordinator.mounted` 让 `OverlayFileViewer` 在本组件挂载时让出处理权,避免同一事件被两个 viewer 同时打开 | — |
 | `chat-side.atom.ts` | `WorkspaceExplorerAtom` 和 `InlinePreviewAtom` 的 atom | — |
@@ -38,11 +48,6 @@
 | `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（基本信息、上下文增强、知识库、MCP 服务器、技能、子 agent、系统提示词） | — |
 | `agent-editor/AddScheduleOverlay.tsx` | 共享的定时任务创建/编辑对话框；由 `components/agent-side/jobs/JobsView` 与 `JobRunsView` 调用 | — |
 | `agent-editor/scheduleTemplates.ts` | 内置定时任务模板，被 `JobHeader` 的"+"下拉消费 | — |
-| `toolCallViews/ShellToolCallView.tsx` | Shell 命令结果展示，包含退出码、stdout/stderr | — |
-| `toolCallViews/WebFetchToolCallView.tsx` | 抓取页面内容展示 | — |
-| `toolCallViews/WebSearchToolCallView.tsx` | 搜索结果卡片 | — |
-| `toolCallViews/WriteToolCallView.tsx` | 写入文件路径和差异摘要 | — |
-| `toolCallViews/SubAgentToolCallView.tsx` | 子 agent 任务进度和结果展示 | — |
 | `workspace/FileTreeExplorer.tsx` | 活动工作区的可展开文件树 | — |
 | `workspace/PasteToWorkspaceDialog.tsx` | 将 AI 生成内容保存到工作区文件的对话框 | — |
 
@@ -77,13 +82,23 @@ ChatView (路由同步, 会话操作)
 5. 所有 markdown 都经过 `MarkdownView`（同步无 state） — 流式与已完成走同一渲染路径，区别仅在容器外层的 `streaming` CSS 类
 
 ### 渲染项系统
-`lib/chat/render-items-manager.ts` 把扁平的 `Message[]` 转换成类型化可辨识联合类型的渲染项 `ChatRenderItem[]`，并在 `recompute` 时通过 `reuseUnchangedItems()` 按 stable key 对齐前后两版，**复用未变化的 item 引用**，这样下游 `ChatRenderItemComponent` 的 `React.memo` 浅比较才能跳过未变项。
+`lib/chat/render-items-manager.ts` 把扁平的 `Message[]` 转换成类型化可辨识联合类型的渲染项 `ChatRenderItem[]`,并在 `recompute` 时通过 `reuseUnchangedItems()` 按 stable key 对齐前后两版,**复用未变化的 item 引用**,这样下游 `ChatRenderItemComponent` 的 `React.memo` 浅比较才能跳过未变项。
 
-该模块还集中处理：
-- 把连续的 tool-result 消息归并为 `tool-calls-section` 项
-- 把 assistant message 的 derived 文本（去 `<FINAL_SUMMARY>` 前缀）与 schedule job id 提前抽出并缓存（WeakMap by message reference），喂给 `AssistantMessage` 的 `cleanedText` / `scheduleIds` props
-- 通过 `extractFilePathsFromText` 抽出 generated file 列表
-- 通过扫描 tool calls 抽出 `present_deliverables` 的 `presentedFiles`
+**坐标系契约**:
+- `item.index` 在所有 item 类型(user / assistant / tool-calls-section / activity-*)上都是 **items 数组下标**(render-items 坐标)。从前 user/assistant 的 `index` 携带的是 messages 坐标,tool-section 携带的是 items 坐标 —— 同名异义的隐性 bug,已纠正。
+- messages 坐标系仅用于 domain 操作(如 `editMessageAtom.save` 的 `messages.slice(0, index)` 截断),**不再走私进 render items**。
+- dim / live 这类位置派生量由 iterator(`ChatContainer`) 在 render-items 坐标系里现算,以 props 形式下发,**不再 bake 进 item**。
+
+该模块还集中处理:
+- **合并连续的 "空文本 + 仅 tool_calls" 的 assistant** 成单个 `tool-calls-section`(一段连续操作流);`sectionKey = tool-section-${firstOwnerId}__${lastOwnerId}` 编码端点 owner,owner 链变 → key 变 → 自动失效复用。带文本的 assistant 截断 merge 链;它的 section(若有 tool_calls)单独成块。
+- 把 assistant message 的 derived 文本与 schedule job id 提前抽出并缓存(WeakMap by message reference),喂给 `AssistantMessage` 的 `cleanedText` / `scheduleIds` props
+- 通过 `extractFilePathsFromText` 扫描 assistant 收尾文字里的 `local://` / `knowledge://` URI 与绝对路径,作为产出文件卡片的唯一数据源
+
+**位置派生量在 `ChatContainer` 里现算**(以 `useMemo`/iterator-local 形式):
+- `editingItemIndex` —— 编辑中的用户消息在 `renderItemsWithActivity` 里的下标。由 `editingMessage?.id` 在 render-items 里现找,不再借用 `editingMessage.index`(那是 messages 坐标,只服务 `save()` 截断)。
+- `lastSectionIndex` —— 整列里末位 tool-section 的下标。
+- 迭代时为每项算出 `shouldDim = idx > editingItemIndex`、`isLive = item 是 tool-section ∧ idx === lastSectionIndex ∧ chatStatus 非 idle`,作为 props 下发给 `ChatRenderItemComponent`。
+- `ToolCallsSection` 只收 `isLive: boolean`(连 `chatStatus` 都不再要),状态函数 3 行: `allDone? completed : !isLive? interrupted : (有部分? partial : executing)`。
 
 ### 滚动管理
 `ChatContainer.useAutoScroll` 把滚动所有权与反向消息布局分离：外层 `.chat-container-reverse` 是滚动容器，内层反向流包装器处理 `column-reverse`。触发跟随滚动的入口：
@@ -110,7 +125,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 场景 | 需要修改的文件 | 备注 |
 |------|---------------|------|
 | 修改 markdown 渲染（代码块、链接、表格、Mermaid） | `message/MarkdownView.tsx` — `markdownComponents` 对象 | 全部消息（assistant / user / greeting）共享同一渲染器，一处修改全局生效 |
-| 添加新的工具调用展示 | `toolCallViews/<NewTool>ToolCallView.tsx`、`toolCallViews/index.ts`、`message/toolCallDisplayConfig.ts`、`message/ToolCallItem.tsx` | 遵循现有视图组件模式；在 `index.ts` 和显示配置映射中注册 |
+| 添加新的工具调用展示 | 顶层工具：新建 `tool/renderers/<tool>/index.tsx`（export `<tool>Renderer: ToolRenderer`）+ `tool/registerBuiltins.ts` 加一行 `registerToolRenderer('<tool>', <tool>Renderer)`。子命令域（如 `app mcp`）：新建 `tool/renderers/app/<sub>/`（export 子 renderer + `resolve<Sub>Renderer(tokens)` 路由），在 `tool/renderers/app/index.tsx` 的 `pickSubRenderer` 加一行委派 | 三个点位 chip / input / output 每个可细（label / argsText / resultText）或粗（Chip / InputBlock / OutputSuccessBlock）二选一覆盖；output 额外允许 OutputExecutingBlock。**注意**：粗粒度 block 一旦提供就完全接管该 slot，多层兜底由 renderer 自己内部承担 |
 | 添加新的渲染项类型 | `lib/chat/render-items-manager.ts`（`ChatRenderItem` 联合类型 + `computeRenderItems` + `isSameRenderItem`） + `ChatRenderItem.tsx`（`ChatRenderItemComponent` 分发） | derived 字段一并加入 `MessageDerived` + `reuseUnchangedItems` 复用判定 |
 | 修改主聊天输入行为 | `chat-input/ComposeInput.tsx` | 涉及发送、取消生成、模型选择和 ErrorBar |
 | 修改内联编辑输入行为 | `chat-input/EditInlineInput.tsx` | 涉及编辑确认、重新生成、编辑态附件与取消按钮 |
@@ -123,7 +138,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 ## 联动变更映射
 | 变更内容 | 同时需要修改 |
 |----------|-------------|
-| 新工具调用类型 | `toolCallViews/<New>ToolCallView.tsx` + `toolCallViews/index.ts` + `message/toolCallDisplayConfig.ts` + `message/ToolCallItem.tsx` |
+| 新工具调用类型 | `tool/renderers/<tool>/index.tsx` + `tool/registerBuiltins.ts`（顶层），或 `tool/renderers/<parent>/<sub>/` + 父级 `pickSubRenderer`（子命令域） |
 | 新渲染项类型 | `lib/chat/render-items-manager.ts`（类型联合 + `computeRenderItems` + `isSameRenderItem` + `getChatRenderItemStableKey`）+ `ChatRenderItem.tsx`（分发） |
 | 聊天输入中的新附件类型 | `chat-input/shared/useFileHandling.ts` + `contentUtils.ts`(`ContentPartFactory`)+ `@shared/types/chatTypes`(`UnifiedContentPart`)+ shared constants 中的 `FILE_ATTACHMENT_LIMITS` + `message/AttachmentList.tsx`(渲染分支)+ [`src/main/lib/attachment/`](../../../main/lib/attachment/ai.prompt.md)(若新来源需要新的 main 端 attach 入口) |
 | 新交互式请求控件类型 | `InteractiveRequestCard.tsx` + `@shared/types/interactiveRequestTypes` + `agentSessionCacheManager.ts` |
@@ -131,6 +146,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 会话滚动/布局变更 | `ChatContainer.tsx` + `ChatContainer.css` — 始终验证基于 `chatSessionId` 的重置，而非基于 `agentId` |
 | Markdown 渲染变更 | `message/MarkdownView.tsx` + `message/MarkdownView.scss`（全局生效） |
 | 发送门控逻辑 | `chat-input/ComposeInput.tsx` + `chat-input/EditInlineInput.tsx`（显式 `chatStatus === 'idle'` 守卫）+ 渲染进程发送入口点缓存状态重新检查 |
+| `.chat-container-reverse` 左右 inset 改动 | `ChatContainer.scss` 的 `--chat-pad-x` CSS 变量是唯一写入点 — 水平 inset 由 `.chat-message-flow-reverse > *` 选择器统一加给所有直接子项(替代旧的 `.chat-container-reverse` 自带 padding);`ToolCallsSection` 通过 `.tool-section-wrapper` className 豁免该 padding 自己控制。改值只能改 `--chat-pad-x`;**禁止**删除该变量或在其它地方 hardcode 36px |
 
 ## 反模式
 - **在 `ChatContainer` 内部读取 `useMessages()`**：会导致会话切换时的过时渲染。消息列表必须由 `ChatViewContent` 拥有并通过 props 传递。
@@ -167,6 +183,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 - Agent 编辑器标签页路由使用嵌套的 React Router `<Outlet>` — 添加标签页需要同时修改组件树和 `AppRoutes.tsx`。
 - Mermaid 图表作为异步 webpack chunk 延迟加载；避免在同步加载的聊天文件中直接导入 `mermaid`。
 - AttachmentList 通过 `window.dispatchEvent('imageViewer:open' / 'fileViewer:open')` 与全局 viewer 解耦。新加附件类型时记得在两侧都注册（事件 detail 字段与 viewer 监听）。
+- `.chat-container-reverse` 本身**没有水平 padding** —— 已迁到 `.chat-message-flow-reverse > *` 的子选择器上,通过 `--chat-pad-x` 变量统一。`.tool-section-wrapper` 豁免该 padding,让 `ToolCallsSection` expanded 模式 bg 能天然铺满 chat 全宽。新增直接子元素时自动继承默认 padding;若要做"贴边铺满"效果,加上 `tool-section-wrapper` 同款豁免类。
 
 ## 后续可做（Backlog）
 

@@ -3,7 +3,7 @@ import type { UserMessage as UserMessageType } from '@shared/types/message';
 import UserMessage from './message/UserMessage';
 import AssistantMessage from './message/AssistantMessage';
 import { EditInlineInput } from './chat-input';
-import { ToolCallsSection } from './message/ToolCallsSection';
+import { ToolCallsSection } from './tool';
 import { CachedFilePath, ChatStatus } from '../../lib/chat/agentSessionCacheManager';
 import type { EditingMessageState } from './message/edit-message.atom';
 
@@ -17,9 +17,19 @@ import type { ChatRenderItem } from '../../lib/chat/render-items-manager';
 
 export interface ChatRenderItemProps {
   item: ChatRenderItem;
+  /** items 列表里是否最后一项(activity 已纳入考虑);驱动 `chat-latest-live-item` CSS hook。 */
   isLast?: boolean;
+  /**
+   * 用户在编辑某条更早的消息,此项位于编辑点之后 → 需半透明。
+   * 由 `ChatContainer` 在 render-items 坐标系里算好下发,本组件不做位置计算。
+   */
+  shouldDim: boolean;
+  /**
+   * 仅 `tool-calls-section` 用:整列里"还可能被驱动"的那一段。`true` ↔ 它是
+   * 末位 tool-section 且 chat 非 idle。`ChatContainer` 算好下发。
+   */
+  isLive: boolean;
   renderLoadingIndicator: (className?: string) => React.ReactNode;
-  editingSourceMessageIndex: number;
   chatStatus?: ChatStatus;
   editingMessage?: EditingMessageState | null;
   onSaveEditedMessage: (updatedMessage: UserMessageType) => void;
@@ -36,8 +46,9 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
   const {
     item,
     isLast,
+    shouldDim,
+    isLive,
     renderLoadingIndicator,
-    editingSourceMessageIndex,
     chatStatus,
     editingMessage,
     onSaveEditedMessage,
@@ -60,26 +71,24 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
     );
   }
 
+  const dimStyle = shouldDim ? DIM_STYLE : undefined;
+
   if (item.type === 'tool-calls-section' && item.toolCalls.length > 0) {
-    const shouldDim =
-      editingSourceMessageIndex >= 0 && (item.sourceMessageIndex ?? -1) > editingSourceMessageIndex;
+    // tool-section-wrapper 让 .chat-message-flow-reverse 跳过默认水平 padding,
+    // 由 ToolCallsSection 自己根据 collapsed/expanded 状态精确控制 inset。
+    const className = isLast
+      ? 'tool-section-wrapper chat-latest-live-item'
+      : 'tool-section-wrapper';
     return (
-      <div
-        className={isLast ? 'chat-latest-live-item' : undefined}
-        style={shouldDim ? DIM_STYLE : undefined}
-      >
+      <div className={className} style={dimStyle}>
         <ToolCallsSection
           toolCalls={item.toolCalls}
-          chatStatus={chatStatus}
-          sourceMessageIndex={item.sourceMessageIndex}
           sectionKey={item.sectionKey}
-          hasSubsequentConversationMessage={item.hasSubsequentConversation}
+          isLive={isLive}
         />
       </div>
     );
   }
-
-  // system 消息已从 Domain 模型移除;render-items-manager 不再产出 'system' item。
 
   if (item.type === 'user') {
     const isEditing = editingMessage?.id === item.message.id;
@@ -97,10 +106,9 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
       );
     }
 
-    const shouldDim = editingSourceMessageIndex >= 0 && item.index > editingSourceMessageIndex;
     const allowEdit = !editingMessage && !!canEditUserMessage;
     return (
-      <div style={shouldDim ? DIM_STYLE : undefined}>
+      <div style={dimStyle}>
         <UserMessage
           message={item.message}
           canEditUserMessage={allowEdit}
@@ -112,23 +120,17 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
 
   if (item.type === 'assistant') {
     const isStreaming = streamingMessageId === item.message.id;
-    const shouldDim = editingSourceMessageIndex >= 0 && item.index > editingSourceMessageIndex;
-
-    const hasPresentedFiles = (item.presentedFiles?.length ?? 0) > 0;
-    const extractedFilePaths = item.extractedFilePaths ?? [];
-    const cachedFilePaths: CachedFilePath[] =
-      !hasPresentedFiles && extractedFilePaths.length > 0
-        ? extractedFilePaths.map((p) => ({ path: p, exists: fileExistsCache[p] ?? true }))
-        : [];
+    const cachedFilePaths: CachedFilePath[] = item.extractedFilePaths.map(
+      (p) => ({ path: p, exists: fileExistsCache[p] ?? true }),
+    );
 
     return (
-      <div style={shouldDim ? DIM_STYLE : undefined}>
+      <div style={dimStyle}>
         <AssistantMessage
           message={item.message}
           cleanedText={item.message.content}
           scheduleIds={item.scheduleIds}
           isStreaming={isStreaming}
-          presentedFiles={item.presentedFiles}
           cachedFilePaths={cachedFilePaths}
           chatStatus={chatStatus}
         />
@@ -141,8 +143,8 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
 
 /**
  * 自定义 equality —
- * `RenderItemsManager.recompute()` 已经做了 item 引用复用：内容没变的 item 直接复用旧引用，
- * 所以这里只需要做严格的 `===` 浅比较；fileExistsCache 单独按命中字段比。
+ * `RenderItemsManager.recompute()` 已经做了 item 引用复用:内容没变的 item 直接复用旧引用,
+ * 这里对 item 做严格 `===` 浅比较;位置派生的 shouldDim/isLive 则单独比较布尔值。
  */
 function areChatRenderItemPropsEqual(
   prev: ChatRenderItemProps,
@@ -150,7 +152,8 @@ function areChatRenderItemPropsEqual(
 ): boolean {
   if (prev.item !== next.item) return false;
   if (prev.isLast !== next.isLast) return false;
-  if (prev.editingSourceMessageIndex !== next.editingSourceMessageIndex) return false;
+  if (prev.shouldDim !== next.shouldDim) return false;
+  if (prev.isLive !== next.isLive) return false;
   if (prev.chatStatus !== next.chatStatus) return false;
   if (prev.canEditUserMessage !== next.canEditUserMessage) return false;
   if (prev.streamingMessageId !== next.streamingMessageId) return false;
@@ -162,7 +165,7 @@ function areChatRenderItemPropsEqual(
 
   // fileExistsCache 引用每次都变 — 只看 assistant item 关心的子集是否变化。
   if (next.item.type === 'assistant') {
-    for (const p of next.item.extractedFilePaths ?? []) {
+    for (const p of next.item.extractedFilePaths) {
       if (prev.fileExistsCache[p] !== next.fileExistsCache[p]) return false;
     }
   }

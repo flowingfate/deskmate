@@ -54,7 +54,7 @@ const UserMessageInner: React.FC<UserMessageProps> = ({
           {canEdit && (
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-xs"
               onClick={onEditUserMessage}
               title="Edit message"
               aria-label="Edit message"

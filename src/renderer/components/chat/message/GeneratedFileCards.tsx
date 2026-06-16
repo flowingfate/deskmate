@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { Package, MoreHorizontal, FolderOpen, Folder, Eye, Download, BookPlus, Copy } from 'lucide-react';
+import { MoreHorizontal, FolderOpen, Folder, Eye, Download, BookPlus, Copy } from 'lucide-react';
 import { fsApi } from '@/ipc/fs';
 import { workspaceApi } from '@/ipc/workspace';
 
@@ -21,13 +21,7 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 's
 
 export interface GeneratedFileCardItem {
   fileUri: string;
-  groupLabel?: string;
   exists?: boolean;
-}
-
-export interface PresentedFile {
-  fileUri: string;
-  description: string;
 }
 
 export interface GeneratedFileCardsProps {
@@ -35,26 +29,6 @@ export interface GeneratedFileCardsProps {
   chatStatus?: ChatStatus;
 }
 
-export function normalizePresentedFilesToGeneratedFileItems(files: PresentedFile[]): GeneratedFileCardItem[] {
-  return files.flatMap((file) => {
-    try {
-      const parsed = JSON.parse(file.fileUri);
-      if (Array.isArray(parsed)) {
-        return parsed.map((fileUri: string) => ({
-          fileUri: typeof fileUri === 'string' ? fileUri.trim() : fileUri,
-          groupLabel: file.description || 'Final deliverables',
-        }));
-      }
-    } catch {
-      // Fall through to single-path handling.
-    }
-
-    return [{
-      fileUri: file.fileUri.trim(),
-      groupLabel: file.description || 'Final deliverables',
-    }];
-  });
-}
 
 function getFileName(filePath: string): string {
   if (filePath.includes('/')) {
@@ -122,24 +96,8 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
   const allFilePathsKey = useMemo(() => allFilePaths.join('\0'), [allFilePaths]);
   const installSkillActions = ApplySkillDialogAtom.useChange();
 
-  const groupedItems = useMemo(() => {
-    const groups = new Map<string, GeneratedFileCardItem[]>();
-
-    items.forEach((item) => {
-      const key = item.groupLabel?.trim() || '';
-      if (!groups.has(key)) {
-        groups.set(key, []);
-      }
-      groups.get(key)!.push(item);
-    });
-
-    return Array.from(groups.entries()).map(([label, groupItems]) => ({
-      label,
-      items: groupItems,
-    }));
-  }, [items]);
-
-  const hasGroupHeaders = groupedItems.some(group => group.label);
+  // groupLabel 字段连带分组渲染随 `present_deliverables` 工具一起下线 —— 现在
+  // items 直接就是平铺的文件卡片列表,没有 description / 标题分组。
   const isSessionIdle = !chatStatus || chatStatus === 'idle';
 
   useEffect(() => {
@@ -250,7 +208,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
         ...prev,
         [filePath]: {
           top: rect.bottom + 4,
-          left: hasGroupHeaders ? rect.left - 180 : rect.left,
+          left: rect.left,
         },
       }));
     }
@@ -393,7 +351,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
         }
       >
         <span className="file-attachment-icon">
-          <FileTypeIcon fileName={fileName} size={24} />
+          <FileTypeIcon fileName={fileName} size={16} />
         </span>
         <span className="file-attachment-name" title={filePath}>
           {fileName}
@@ -406,12 +364,12 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
         {isAvailable && (
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-xs"
             className="file-attachment-menu-trigger"
             onClick={(event) => handleFileMenuToggle(filePath, event)}
             title="More options"
           >
-            <MoreHorizontal size={16} strokeWidth={2} />
+            <MoreHorizontal size={12} strokeWidth={2} />
           </Button>
         )}
       </div>
@@ -420,21 +378,10 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
 
   return (
     <>
-      <div className={hasGroupHeaders ? 'presented-files-card' : 'message-file-attachments'}>
-        {groupedItems.map((group, groupIndex) => (
-          <div key={`${group.label || 'default'}-${groupIndex}`} className={hasGroupHeaders ? 'presented-files-group' : undefined}>
-            {group.label && (
-              <div className="presented-files-header">
-                <Package size={18} className="presented-files-icon" />
-                <span className="presented-files-description">{group.label}</span>
-              </div>
-            )}
-
-            <div className="file-attachments-list">
-              {group.items.map(renderGeneratedFileItem)}
-            </div>
-          </div>
-        ))}
+      <div className="message-file-attachments">
+        <div className="file-attachments-list">
+          {items.map(renderGeneratedFileItem)}
+        </div>
       </div>
 
       {Object.entries(fileMenuOpen).map(([filePath, isOpen]) => {

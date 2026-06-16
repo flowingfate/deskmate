@@ -57,9 +57,9 @@ const McpToolListView: React.FC<McpToolListViewProps> = ({
                 isSelected && 'border-sc-border bg-sc-accent text-sc-accent-foreground',
               )}
             >
-              <Wrench className="size-4 shrink-0 text-sc-muted-foreground" />
+              <Wrench size={14} className="shrink-0 text-sc-muted-foreground" />
               <span className="min-w-0 flex-1 truncate font-medium">{tool.name}</span>
-              <ChevronRight className="size-4 shrink-0 text-sc-muted-foreground opacity-60" />
+              <ChevronRight size={14} className="shrink-0 text-sc-muted-foreground opacity-60" />
             </button>
           </li>
         );
