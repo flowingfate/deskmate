@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Settings, RotateCw } from 'lucide-react';
+import { Settings, RotateCw, Loader2 } from 'lucide-react';
 import { Checkbox } from '@/shadcn/checkbox'
 import { Button } from '@/shadcn/button';
 import { Badge } from '@/shadcn/badge';
+import { cn } from '@/lib/utilities/utils';
 
 import { TabComponentProps } from './types';
 import { useSkills } from '../../userData/userDataProvider';
@@ -174,13 +175,13 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
   return (
     <div className="agent-tab">
       {/* Tab Header */}
-      <div className="tab-header">
-        <div className="header-summary">
-          <span className="summary-text">
+      <div className="flex items-center justify-between p-2 min-h-[44px] shrink-0 bg-surface-primary border-b border-black/[0.08]">
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="font-medium text-[13px] leading-[18px] text-content-secondary">
             {selectedCount} selected from available skills
           </span>
         </div>
-        <div className="header-actions">
+        <div className="flex items-center shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -193,16 +194,16 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
       </div>
 
       {/* Tab Body */}
-      <div className="tab-body">
+      <div className="flex-1 overflow-y-auto overflow-x-visible p-2 custom-scrollbar">
         {isLoading ? (
-          <div className="loading-state">
-            <div className="spinner">🔄</div>
+          <div className="flex flex-col items-center justify-center gap-3 px-5 py-8 text-content-secondary">
+            <Loader2 className="animate-spin" size={24} />
             <span>Loading Skills...</span>
           </div>
         ) : globalSkills && globalSkills.length > 0 ? (
           <>
             {/* Skills List */}
-            <div className="skill-cards">
+            <div className="flex flex-col gap-2">
               <ListSearchBox
                 value={agentSkillSearchQuery}
                 onChange={setAgentSkillSearchQuery}
@@ -224,14 +225,17 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
                 return (
                   <div
                     key={skill.name}
-                    className={`skill-card ${isSelected ? 'selected' : ''} ${readOnly ? 'readonly' : ''}`}
+                    className={cn(
+                      'w-full rounded-md border border-transparent bg-transparent transition-[background,border-color] border-black/7',
+                      !readOnly && 'hover:bg-black/2',
+                      isSelected && 'bg-black/1',
+                    )}
                     onClick={() => !readOnly && handleSkillToggle(skill.name)}
                     style={readOnly ? { cursor: 'default', opacity: 0.75 } : undefined}
                   >
-                    <div className="skill-card-header">
-                      <div className="skill-info">
+                    <div className="flex items-center justify-between w-full px-3 py-2.5 bg-transparent">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
                         <Checkbox
-
                           checked={isSelected}
                           onCheckedChange={() => {
                             if (!readOnly && !isSkillLocked) {
@@ -241,10 +245,10 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
                           onClick={(e) => e.stopPropagation()}
                           disabled={readOnly || isSkillLocked}
                         />
-                        <div className="skill-card-name-group">
-                          <div className="server-title-row">
-                            <span className="skill-card-name">{skill.name}</span>
-                            {isSkillBuiltin && <Badge className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 px-1.5 py-0 text-[0.55rem] rounded align-super relative -top-1">Built-in</Badge>}
+                        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="m-0 font-medium text-sm leading-5 text-content truncate">{skill.name}</span>
+                            {isSkillBuiltin && <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[0.6rem] font-medium rounded">Built-in</Badge>}
                           </div>
                           <div
                             style={{
@@ -255,18 +259,17 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
                             }}
                           >
                             {skill.version && (
-                              <span className="skill-card-version">
+                              <span className="inline-flex items-center justify-center self-start px-2 py-1 gap-1 rounded-lg bg-slate-400/30 text-slate-800 text-xs font-semibold leading-4 whitespace-nowrap">
                                 v{skill.version}
                               </span>
                             )}
                           </div>
                         </div>
                       </div>
-                      <div className="skill-actions">
+                      <div className="flex shrink-0 items-center">
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="manage-btn always-visible"
+                          size="icon-sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleManageSkill(skill.name);
@@ -283,7 +286,7 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
             </div>
           </>
         ) : (
-          <div className="empty-state">
+          <div className="flex flex-col items-center justify-center gap-4 px-5 py-8 text-center text-content-secondary">
             <h4>No available Skills to select</h4>
             <Button variant="outline" size="sm" onClick={handleManageSkills}>
               Go to Manage Available Skills

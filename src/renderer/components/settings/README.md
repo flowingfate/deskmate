@@ -603,7 +603,6 @@ Pages that are fully shipped to all users do not need a feature flag.
 |------|------|--------------|
 | About | `/settings/about` | — |
 | Screenshot | `/settings/screenshot` | `deskmateFeatureScreenshot` |
-| Toolbar | `/settings/toolbar` | `deskmateFeatureToolbarSettings` |
 | Runtime | `/settings/runtime` | — |
 
 ---

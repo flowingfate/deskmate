@@ -7,7 +7,6 @@ import { MCPTool } from '../../types/mcpTypes';
 
 interface McpToolListViewProps {
   tools: MCPTool[];
-  selectedTool: MCPTool | null;
   onSelectTool: (tool: MCPTool) => void;
   isLoading?: boolean;
 }
@@ -20,7 +19,6 @@ interface McpToolListViewProps {
  */
 const McpToolListView: React.FC<McpToolListViewProps> = ({
   tools,
-  selectedTool,
   onSelectTool,
   isLoading = false,
 }) => {
@@ -43,23 +41,33 @@ const McpToolListView: React.FC<McpToolListViewProps> = ({
   }
 
   return (
-    <ul className="flex flex-col gap-1.5">
+    <ul className="grid grid-cols-2 gap-3">
       {tools.map((tool) => {
-        const isSelected = selectedTool?.name === tool.name;
         return (
           <li key={`${tool.serverId}-${tool.name}`}>
             <button
               type="button"
               onClick={() => onSelectTool(tool)}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md border border-transparent px-3 py-2 text-left text-sm transition-colors',
-                'hover:bg-sc-accent hover:text-sc-accent-foreground',
-                isSelected && 'border-sc-border bg-sc-accent text-sc-accent-foreground',
+                'group flex h-full w-full items-start gap-3 rounded-xl border border-sc-border bg-sc-card p-4 text-left transition-colors',
+                'hover:border-indigo-300 hover:bg-sc-accent/60 dark:hover:border-indigo-500/40',
               )}
             >
-              <Wrench size={14} className="shrink-0 text-sc-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate font-medium">{tool.name}</span>
-              <ChevronRight size={14} className="shrink-0 text-sc-muted-foreground opacity-60" />
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500 transition-colors group-hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-400 dark:group-hover:bg-indigo-500/25">
+                <Wrench size={16} />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate text-sm font-semibold text-sc-foreground transition-colors group-hover:text-indigo-500 dark:group-hover:text-indigo-400">{tool.name}</span>
+                {tool.description && (
+                  <span className="line-clamp-2 text-xs leading-relaxed text-sc-muted-foreground">
+                    {tool.description}
+                  </span>
+                )}
+              </span>
+              <ChevronRight
+                size={16}
+                className="mt-1 shrink-0 text-sc-muted-foreground opacity-0 transition-opacity group-hover:opacity-60"
+              />
             </button>
           </li>
         );

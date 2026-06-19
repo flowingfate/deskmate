@@ -22,14 +22,6 @@ import { FeatureFlagConfig, FeatureFlagName, FeatureFlagContext, FeatureFlagDefa
  * Grouped by feature module for easier maintenance
  */
 export const FEATURE_FLAG_DEFINITIONS: FeatureFlagConfig[] = [
-  // ============== Settings Page ==============
-  {
-    name: 'deskmateFeatureToolbarSettings',
-    description: 'Show Toolbar entry in Settings page (dev environment only)',
-
-    defaultValue: (ctx) => ctx.isDev,
-  },
-
   // ============== Screenshot ==============
   {
     name: 'deskmateFeatureScreenshot',

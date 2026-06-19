@@ -90,14 +90,14 @@ const SkillViewPanel: React.FC<SkillViewPanelProps> = ({
 
   if (!skill) {
     return (
-      <div className="skill-view-panel-empty">
+      <div className="flex h-full flex-col items-center justify-center p-8 text-center text-sm text-sc-muted-foreground">
         <span>Select a skill to view details</span>
       </div>
     )
   }
 
   return (
-    <div className="skill-view-panel-container">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {viewMode === 'folder' ? (
         <SkillFolderExplorer
           skill={skill}

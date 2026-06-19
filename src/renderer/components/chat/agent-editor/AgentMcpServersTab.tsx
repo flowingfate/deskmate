@@ -299,9 +299,9 @@ const AgentMcpServersTab: React.FC<TabComponentProps> = ({
   }, [servers, searchQuery]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-3">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-2 border-b border-black/7">
         <span className="text-sm text-sc-foreground">
           <strong className="font-semibold">{totalSelectedTools}</strong>
           <span className="text-sc-muted-foreground"> tools selected from external MCP servers</span>
@@ -316,11 +316,9 @@ const AgentMcpServersTab: React.FC<TabComponentProps> = ({
         </Button>
       </div>
 
-      <Separator />
-
       {/* Body */}
       {isLoading ? (
-        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-sc-muted-foreground">
+        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-sc-muted-foreground p-2">
           <Loader2 className="size-4 animate-spin" />
           <span>Loading MCP servers...</span>
         </div>
@@ -334,14 +332,14 @@ const AgentMcpServersTab: React.FC<TabComponentProps> = ({
           </Button>
         </div>
       ) : (
-        <>
+        <div className="p-2 flex flex-col gap-2">
           <ListSearchBox
             value={searchQuery}
             onChange={setSearchQuery}
             placeholder="Search MCP servers..."
           />
           <ScrollArea className="min-h-0 flex-1">
-            <ul className="flex flex-col gap-2 pr-2">
+            <ul className="flex flex-col gap-2">
               {filteredServers.map((server) => (
                 <li key={server.name}>
                   <AgentMcpServerCard
@@ -368,7 +366,7 @@ const AgentMcpServersTab: React.FC<TabComponentProps> = ({
               ))}
             </ul>
           </ScrollArea>
-        </>
+        </div>
       )}
     </div>
   );

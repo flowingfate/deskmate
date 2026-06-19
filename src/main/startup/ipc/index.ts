@@ -2,7 +2,6 @@ import { app, ipcMain } from 'electron';
 import { registerSchedulerIPC } from '../../lib/scheduler/SchedulerIPC';
 import { schedulerManager } from '../../lib/scheduler/SchedulerManager';
 import { log } from '@main/log';
-import { safeConsole } from '../../lib/utilities/safeConsole';
 import { isFeatureEnabled } from "../../lib/featureFlags";
 import { getAppDataPath } from "@main/persist/lib/path";
 import { listenInMain as listenHumanLoop } from '@shared/ipc/human-loop';
@@ -20,14 +19,12 @@ import handleFsIPC from './fs';
 import handleWorkspaceIPC from './workspace';
 import handleLlmIPC from './llm';
 import handleWindowIPC from './window';
-import handleToolbarIPC from './toolbar';
 import handleChatSessionIPC from './chat-session';
 import { registerLogIPC } from './log';
 import { registerLogViewerIPC } from '../../log/viewer-window';
 import handleDoctorIPC from './doctor';
 import handleFeatureFlagsIPC from './featureFlags';
 import setUpToolsIPC from './tools';
-import handleMainWindowIPC from './main-window';
 import handleQuickStartImageCacheIPC from './quick-start-image-cache';
 import handleUpdateIPC from './update';
 import handleAttachmentIPC from './attachment';
@@ -40,26 +37,6 @@ export function setUpIPC(ctx: Context) {
   registerLogIPC();
   registerLogViewerIPC();
 
-  // 🔥 Fix: add cleanup handling before app exit
-  app.on('before-quit', (event) => {
-    try {
-      // Ensure SelectionHook is properly cleaned up before app exit
-      ctx.cleanupSelectionHook();
-    } catch (error) {
-      // Ignore cleanup errors to avoid preventing app exit
-      safeConsole.warn('[APP-EXIT] Error during SelectionHook cleanup:', error);
-    }
-  });
-
-  app.on('will-quit', (event) => {
-    try {
-      // Last chance to clean up SelectionHook
-      ctx.cleanupSelectionHook();
-    } catch (error) {
-      // Ignore cleanup errors, ensure app can exit normally
-      safeConsole.warn('[APP-EXIT] Final cleanup error (ignored):', error);
-    }
-  });
   app.on('before-quit', ctx.onBeforeQuit);
 
   handleAppIPC(ctx);
@@ -76,7 +53,6 @@ export function setUpIPC(ctx: Context) {
   handleWorkspaceIPC(ctx);
   handleLlmIPC(ctx);
   handleWindowIPC(ctx);
-  handleToolbarIPC(ctx);
   handleChatSessionIPC(ctx);
   handleDoctorIPC(ctx);
   handleFeatureFlagsIPC();
@@ -84,7 +60,6 @@ export function setUpIPC(ctx: Context) {
   RuntimeManager.getInstance();
 
   setUpToolsIPC(ctx);
-  handleMainWindowIPC(ctx);
   handleUpdateIPC(ctx);
   handleQuickStartImageCacheIPC();
 

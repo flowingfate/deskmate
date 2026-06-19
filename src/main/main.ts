@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell, protocol, powerMonitor, screen, globalShortcut } from 'electron';
+import { app, BrowserWindow, Menu, shell, protocol, powerMonitor } from 'electron';
 import { createWindow } from './startup/wins';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -19,8 +19,6 @@ protocol.registerSchemesAsPrivileged([
     }
   },
 ]);
-import SelectionHook, { type SelectionHookInstance, type TextSelectionData } from 'selection-hook'
-import { recoverSelectionText } from './lib/selectionHookEncoding';
 
 import { UpdateManager } from './lib/autoUpdate/updateManager';
 
@@ -39,6 +37,7 @@ import { featureFlagManager, isFeatureEnabled } from './lib/featureFlags';
 import { PRELOAD_PATH } from './lib/buildPaths';
 
 import { getAppCacheManager } from './startup/lazy';
+import { restoreBounds, trackBounds } from './startup/windowState';
 import { Profiles } from './persist/profiles';
 import { setUpIPC } from './startup/ipc';
 import { startEvalMode } from './startup/evalMode';
@@ -49,8 +48,6 @@ import { getAppDataPath, getLogsDir, getProfileDirectoryPath } from "@main/persi
 
 import { mainToRender as appMainToRender } from '@shared/ipc/app';
 import { mainToRender as windowMainToRender } from '@shared/ipc/window';
-import { mainToRender as toolbarMainToRender } from '@shared/ipc/toolbar';
-import { PSEUDO_AGENT_SEARCH_GOOGLE, PSEUDO_AGENT_SEARCH_BING } from '@shared/constants/pseudoAgents';
 import { APP_NAME } from '@shared/constants/branding';
 
 
@@ -94,12 +91,8 @@ if (!hasSingleInstanceLock) {
 
 class ElectronApp {
   private mainWindow: BrowserWindow | null = null;
-  private toolBarWindow: BrowserWindow | null = null; // ToolBar window
-  private toolBarVisible: boolean = false; // ToolBar visibility state
-  private selectedText: string = ''; // Store captured selected text
   private isDev: boolean = false;
   private updateManager: UpdateManager | null = null;
-  private selectionHook: SelectionHookInstance | null = null; // SelectionHook instance
 
   // 🚀 State tracking: app component initialization status
   private isAgentChatReady: boolean = false;
@@ -198,11 +191,9 @@ class ElectronApp {
         this.logSchedulerLifecycleState('before-quit', {
           appUptimeSeconds: Math.round(process.uptime()),
         });
-        // Ensure SelectionHook is properly cleaned up before app exit
-        this.cleanupSelectionHook();
       } catch (error) {
-        // Ignore cleanup errors to avoid preventing app exit
-        safeConsole.warn('[APP-EXIT] Error during SelectionHook cleanup:', error);
+        // Ignore logging errors to avoid preventing app exit
+        safeConsole.warn('[APP-EXIT] before-quit lifecycle log error (ignored):', error);
       }
     });
 
@@ -211,8 +202,6 @@ class ElectronApp {
         this.logSchedulerLifecycleState('will-quit', {
           appUptimeSeconds: Math.round(process.uptime()),
         });
-        // Last chance to clean up SelectionHook
-        this.cleanupSelectionHook();
       } catch (error) {
         // Ignore cleanup errors, ensure app can exit normally
         safeConsole.warn('[APP-EXIT] Final cleanup error (ignored):', error);
@@ -224,7 +213,6 @@ class ElectronApp {
     class Injection {
       get isDev() { return host.isDev; }
       get isAgentChatReady() { return host.isAgentChatReady; }
-      get selectedText() { return host.selectedText; }
 
       get updateManager() {
         if (host.updateManager) {
@@ -236,22 +224,12 @@ class ElectronApp {
         return Promise.resolve(manager);
       }
 
-      cleanupSelectionHook = host.cleanupSelectionHook.bind(host);
       onBeforeQuit = host.onBeforeQuit.bind(host);
-      registerGlobalShortcuts = host.registerGlobalShortcuts.bind(host);
       getPersistedWindowZoomLevel = host.getPersistedWindowZoomLevel.bind(host);
       applyWindowZoomLevel = host.applyWindowZoomLevel.bind(host);
       stepWindowZoomLevel = host.stepWindowZoomLevel.bind(host);
       resetWindowZoomLevel = host.resetWindowZoomLevel.bind(host);
       getMenuTemplate = host.getMenuTemplate.bind(host);
-      showToolBar = host.showToolBar.bind(host);
-      toggleToolBar = host.toggleToolBar.bind(host);
-      handleWebSearch = host.handleWebSearch.bind(host);
-      getToolBarAutoHide = host.getToolBarAutoHide.bind(host);
-      hideToolBar = host.hideToolBar.bind(host);
-      applyToolBarSettings = host.applyToolBarSettings.bind(host);
-      unregisterGlobalShortcuts = host.unregisterGlobalShortcuts.bind(host);
-      calculateToolBarPosition = host.calculateToolBarPosition.bind(host);
     }
     setUpIPC(new Injection());
   }
@@ -508,17 +486,6 @@ class ElectronApp {
         exitSafeLog('UpdateManager destroyed');
       }
 
-      // Clean up global shortcuts
-      exitSafeLog('Phase 3: Cleaning up global shortcuts');
-      this.unregisterGlobalShortcuts();
-
-      // Clean up ToolBar window
-      exitSafeLog('Phase 3: Cleaning up ToolBar window');
-      if (this.toolBarWindow && !this.toolBarWindow.isDestroyed()) {
-        this.toolBarWindow.close();
-        this.toolBarWindow = null;
-        exitSafeLog('ToolBar window closed');
-      }
 
       // Phase 3.5: Flush persist (pending messages.jsonl) + close SQLite connections.
       // 必须在 Phase 4 (log close) 前面：persist 路径仍要写日志；放在 logger 关闭后 emit 会丢。
@@ -626,6 +593,8 @@ class ElectronApp {
     this.mainWindow = createWindow({
       width: 1200,
       height: 800,
+      // 展开上次记忆的几何（位置 + 尺寸）；无记忆或窗口已离屏时回退上面的默认值。
+      ...restoreBounds(),
       minWidth: 1008,
       minHeight: 702,
       show: false, // Start hidden and show when ready
@@ -656,6 +625,9 @@ class ElectronApp {
     crashCaptureManager.recordBreadcrumb('window', 'main-window-created', {
       windowId: this.mainWindow.id,
     });
+
+    // 挂载窗口几何记忆：move / resize 后防抖保存，下次启动恢复到同一屏幕与位置。
+    trackBounds(this.mainWindow);
 
     // Native right-click context menu for editable fields (Cut/Copy/Paste/Select All)
     this.mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -797,8 +769,9 @@ class ElectronApp {
         // 📸 Deferred registration of screenshot feature IPC handlers
         setImmediate(async () => {
           try {
-            const { registerScreenshotIPC } = await import('./lib/screenshot');
+            const { registerScreenshotIPC, registerScreenshotShortcut } = await import('./lib/screenshot');
             registerScreenshotIPC({});
+            await registerScreenshotShortcut({});
           } catch (error) {
             safeConsole.error('[Startup] Failed to register screenshot IPC:', error);
           }
@@ -845,12 +818,6 @@ class ElectronApp {
       } else {
         // On non-macOS systems, quit program when main window is closed
         try {
-          // Close ToolBar window
-          if (this.toolBarWindow && !this.toolBarWindow.isDestroyed()) {
-            this.toolBarWindow.close();
-            this.toolBarWindow = null;
-          }
-
           this.mainWindow = null;
 
         } catch (error) {
@@ -910,482 +877,6 @@ class ElectronApp {
     }
   }
 
-  /**
-   * Calculate ToolBar window width based on content
-   */
-  private calculateToolBarWidth(): number {
-    let width = 300; // Default fallback
-
-    if (Profiles.get().activeProfileId) {
-      try {
-        // 同步读 persist —— bootstrap 完成后 activeSync + listAgents (sync) 不阻塞登录链路。
-        // 未 bootstrap 时抛错走 catch 兜底返回 default。
-        const profile = Profiles.get().activeSync();
-        const configs = profile.listAgents();
-        const settings = profile.settings.toolBar;
-        const visibleAgents = settings?.visibleAgents || [];
-
-        let count = 0;
-
-        // 1. Count Real Agents
-        if (visibleAgents.length === 0) {
-          // If empty, show all real agents
-          count = configs.length;
-        } else {
-          // If specified, show only those
-          count = configs.filter((c) =>
-            visibleAgents.includes(c.id),
-          ).length;
-        }
-
-        // 2. Count Pseudo Agents
-        if (visibleAgents.includes(PSEUDO_AGENT_SEARCH_GOOGLE)) {
-          count++;
-        }
-        if (visibleAgents.includes(PSEUDO_AGENT_SEARCH_BING)) {
-          count++;
-        }
-
-        const itemWidth = 48;
-        const handleWidth = 48;
-        const extraPadding = 24;
-
-        width = handleWidth + count * itemWidth + extraPadding;
-
-        if (count === 0) {
-          width = 200; // Enough for "No agents available" message
-        }
-
-        width = Math.max(width, 120);
-        width = Math.min(width, 1200);
-      } catch (e) {
-        safeConsole.error('Error calculating toolbar width:', e);
-      }
-    }
-    return width;
-  }
-
-  /**
-   * Calculate ToolBar window display position
-   * Strategy: intelligently determine above or below based on cursor position
-   * - Cursor in upper half of screen → ToolBar shows below cursor
-   * - Cursor in lower half of screen → ToolBar shows above cursor
-   * - Horizontal: ToolBar horizontally centered on cursor, avoid exceeding screen bounds
-   * - Multi-monitor support: calculate coordinates based on the screen where cursor is located
-   */
-  private calculateToolBarPosition(): { x: number; y: number } {
-    // Get current cursor position
-    const cursorPos = screen.getCursorScreenPoint();
-
-    // Optimization: get the screen where cursor is, not the primary screen
-    const display = screen.getDisplayNearestPoint(cursorPos);
-    // Get current screen work area (excluding taskbar/Dock)
-    const { x: workAreaX, y: workAreaY, width: workAreaWidth, height: workAreaHeight } = display.workArea;
-
-    // ToolBar window dimensions
-    const toolBarHeight = 72;
-
-    // Actual width dynamically calculated based on content
-    const toolBarWidth = this.calculateToolBarWidth();
-
-    // Determine if cursor is in upper or lower half of current screen
-    // Note: must be determined based on relative coordinates of current screen
-    const relativeY = cursorPos.y - workAreaY;
-    const isMouseInUpperHalf = relativeY < (workAreaHeight / 2);
-
-    // Calculate horizontal position: center-align to cursor
-    let toolBarX = cursorPos.x - (toolBarWidth / 2);
-    // Ensure it does not exceed current screen left/right bounds
-    toolBarX = Math.max(workAreaX + 10, Math.min(toolBarX, workAreaX + workAreaWidth - toolBarWidth - 10));
-
-    // Calculate vertical position
-    let toolBarY: number;
-    if (isMouseInUpperHalf) {
-      // Cursor in upper half → ToolBar shows below
-      toolBarY = cursorPos.y + 20; // 20px spacing below cursor
-      // Ensure it does not exceed current screen bottom
-      toolBarY = Math.min(toolBarY, workAreaY + workAreaHeight - toolBarHeight - 10);
-    } else {
-      // Cursor in lower half → ToolBar shows above
-      toolBarY = cursorPos.y - toolBarHeight - 10; // 10px spacing above cursor
-      // Ensure it does not exceed current screen top
-      toolBarY = Math.max(workAreaY + 10, toolBarY);
-    }
-
-
-    return { x: Math.round(toolBarX), y: Math.round(toolBarY) };
-  }
-
-  /**
-   * Create ToolBar window
-   * Frameless, transparent, always-on-top floating window for quick Agent access
-   */
-  private async createToolBarWindow(): Promise<void> {
-    // If toolbar already exists, update position and show
-    if (this.toolBarWindow && !this.toolBarWindow.isDestroyed()) {
-      this.showToolBar();
-      return;
-    }
-
-    // Calculate initial position (based on current cursor position)
-    const position = this.calculateToolBarPosition();
-    const width = this.calculateToolBarWidth();
-
-    // Create frameless window
-    this.toolBarWindow = createWindow({
-      minWidth: 100,
-      maxWidth: 1200,
-      width: width,
-      height: 72,
-      x: position.x,
-      y: position.y,
-      show: false, // Initially hidden
-      frame: false, // Frameless
-      transparent: true,
-      backgroundColor: '#00000000', // Fix possible black flicker/artifacts with transparent windows on Windows
-      alwaysOnTop: true,
-      skipTaskbar: true,
-      autoHideMenuBar: true,
-      resizable: false,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false, // [macOS] must be false
-      movable: true,
-      hasShadow: false,
-      thickFrame: false,
-      roundedCorners: true,
-
-      // Platform specific settings
-      //   [macOS] DO NOT set focusable to false, it will make other windows bring to front together
-      //   [macOS] `panel` conflicts with other settings ,
-      //           and log will show `NSWindow does not support nonactivating panel styleMask 0x80`
-      //           but it seems still work on fullscreen apps, so we set this anyway
-      ...(process.platform === 'win32'
-        ? { type: 'toolbar', focusable: true }
-        : { type: 'panel' }),
-      hiddenInMissionControl: true, // [macOS only]
-      acceptFirstMouse: true, // [macOS only]
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: PRELOAD_PATH.toolbar,
-        webSecurity: false,
-        sandbox: false,
-      },
-    }, { role: 'toolbar' });
-
-    // Window event listeners
-    this.toolBarWindow.on('closed', () => {
-      this.toolBarWindow = null;
-      this.toolBarVisible = false;
-    });
-
-    this.toolBarWindow.on('blur', () => {
-      // Auto-hide on focus loss (configurable)
-      if (this.getToolBarAutoHide()) {
-        this.hideToolBar();
-      }
-    });
-
-    // Load toolbar UI
-    if (this.isDev) {
-      // Development mode: load specified route
-      await this.toolBarWindow.loadURL(`${DEV_SERVER_URL}/toolbar.html`);
-    } else {
-      // Production mode: load dedicated toolbar.html, distinguished by hash route
-      await this.toolBarWindow.loadFile(
-        path.join(__dirname, '../renderer/toolbar.html'),
-        { hash: '/toolbar' },
-      );
-    }
-  }
-
-  /**
-   * Show ToolBar window
-   */
-  private async showToolBar(): Promise<void> {
-    if (!this.toolBarWindow || this.toolBarWindow.isDestroyed()) {
-      await this.createToolBarWindow();
-    }
-
-    if (this.toolBarWindow && !this.toolBarWindow.isDestroyed()) {
-      // Dynamic width calculation
-      const width = this.calculateToolBarWidth();
-
-      const position = this.calculateToolBarPosition();
-
-      // Optimization: set always-on-top level on every show, ensure above macOS fullscreen apps
-      if (process.platform === 'darwin') {
-        this.toolBarWindow.setAlwaysOnTop(true, 'screen-saver');
-      }
-      // Move off-screen first to prevent flicker during animation
-      if (process.platform === 'win32') {
-        this.toolBarWindow.setPosition(50000, 0);
-        setTimeout(() => {
-          this.toolBarWindow?.setBounds({
-            width: width,
-            height: 72,
-            x: position.x,
-            y: position.y,
-          });
-        }, 100);
-      } else {
-        this.toolBarWindow?.setBounds({
-          width: width,
-          height: 72,
-          x: position.x,
-          y: position.y,
-        });
-      }
-
-      this.toolBarWindow.show();
-      this.toolBarWindow.focus();
-
-      this.toolBarVisible = true;
-
-      // if (this.isDev) {
-      //   setTimeout(() => {
-      //     this.toolBarWindow?.webContents.openDevTools({ mode: 'detach' });
-      //   }, 1000);
-      // }
-    }
-  }
-
-  /**
-   * Hide ToolBar window
-   */
-  private hideToolBar(): void {
-    if (this.toolBarWindow && !this.toolBarWindow.isDestroyed()) {
-      this.toolBarWindow.hide();
-      this.toolBarVisible = false;
-
-      // Clear selected text cache
-      this.selectedText = '';
-    }
-  }
-
-  /**
-   * Toggle ToolBar window visibility
-   * Capture selected text before showing
-   */
-  private async toggleToolBar(): Promise<void> {
-    if (this.toolBarVisible) {
-      this.hideToolBar();
-    } else {
-      await this.captureSelectedText();
-      if(this.selectedText) {
-        await this.showToolBar();
-      }
-    }
-  }
-
-  private initSelectionHook() {
-    const logger = log;
-
-    if( this.selectionHook) {
-      return;
-    }
-
-    try {
-      const selectionHook = new SelectionHook();
-
-      selectionHook.on('text-selection', (selection: TextSelectionData) => {
-        logger.info({ msg: '[SELECTION-HOOK] Text selection event received:' + selection.text });
-        if (selection && selection.text && selection.text.length > 0 && selection.text.length < 20000) {
-          this.selectedText = recoverSelectionText(selection.text.trim());
-        }
-      });
-
-      this.selectionHook = selectionHook;
-      this.selectionHook!.start({debug: this.isDev});
-
-      // 🔥 Fix: register process exit listener to safely clean up SelectionHook
-      process.on('exit', () => {
-        this.cleanupSelectionHook();
-      });
-      logger.info({ msg: '[SELECTION-HOOK] selection-hook initialized successfully' });
-    } catch (error) {
-      logger.warn({ msg: `[SELECTION-HOOK] Failed to initialize selection-hook: ${error instanceof Error ? error.message : String(error)}` });
-      // If selection-hook initialization fails, set to null, fall back to clipboard approach
-      this.selectionHook = null;
-    }
-  }
-
-  /**
-   * Safely clean up SelectionHook instance
-   * Prevent crash during app exit
-   */
-  private cleanupSelectionHook() {
-    if (this.selectionHook) {
-      try {
-        // Try to safely stop SelectionHook
-        if (typeof this.selectionHook.stop === 'function') {
-          this.selectionHook.stop();
-        }
-
-        // Clear reference, let garbage collector handle it
-        this.selectionHook = null;
-
-      } catch (error) {
-        // Ignore errors during cleanup to avoid crash
-        safeConsole.warn('[SELECTION-HOOK] Error during cleanup (ignored):', error);
-        this.selectionHook = null;
-      }
-    }
-  }
-
-  /**
-   * Capture user-selected text
-   * Strategy: three-tier fallback strategy
-   * 1. selection-hook native module (recommended, directly reads system selected text)
-   * 2. Electron clipboard API (fallback, requires user to manually copy)
-   * 3. Exception fault tolerance handling
-   */
-  private async captureSelectedText(): Promise<void> {
-    if (process.platform === 'darwin') {
-      return;
-    }
-    // Approach 1: selection-hook (real-time monitoring)
-    // If selectionHook is initialized, rely on 'selection' event to update this.selectedText in real-time
-    if (this.selectionHook) {
-      // 🟢 Optimization: proactively get current selection (more reliable than relying on events, especially in shortcut-triggered scenarios)
-      // Reference SelectionService.ts processSelectTextByShortcut implementation
-      try {
-        const logger = log;
-        // @ts-ignore - selection-hook typing might vary
-        if (typeof this.selectionHook.getCurrentSelection === 'function') {
-           // @ts-ignore
-           const selection = this.selectionHook.getCurrentSelection();
-           if (selection && selection.text && selection.text.length > 0) {
-               this.selectedText = recoverSelectionText(selection.text.trim());
-               logger.info({ msg: '[SELECTION-HOOK] Active capture success: ' + this.selectedText.substring(0, 50) + '...' });
-           }
-        }
-      } catch (e) {
-         // logger.warn('[SELECTION-HOOK] Active capture failed, falling back to cached event data', e);
-      }
-    }
-  }
-
-  /**
-   * Get ToolBar auto-hide configuration
-   * Read user configuration from ProfileCacheManager
-   */
-  private getToolBarAutoHide(): boolean {
-    try {
-      // Check if there is a current user session
-      if (!Profiles.get().activeProfileId) {
-        return true; // Default to auto-hide
-      }
-
-      // 同步读 persist —— bootstrap 完成后 activeSync 不阻塞登录链路。
-      // 未 bootstrap 时抛错走 catch 兜底返回 default。
-      const profile = Profiles.get().activeSync();
-      const toolBarSettings = profile.settings.toolBar;
-
-      return toolBarSettings?.autoHide ?? true;
-    } catch (error) {
-      // Use default value in exceptional cases
-      return true; // Default to auto-hide
-    }
-  }
-
-  /**
-   * Apply ToolBar configuration to window
-   * @param settings Partial configuration items
-   */
-  private applyToolBarSettings(settings: any): void {
-    if (!this.toolBarWindow || this.toolBarWindow.isDestroyed()) return;
-
-    // Apply always-on-top setting
-    if (settings.alwaysOnTop !== undefined) {
-      this.toolBarWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
-    }
-
-    // Notify ToolBar window that configuration has been updated
-    toolbarMainToRender.bindWebContents(this.toolBarWindow.webContents).settingsUpdated(settings);
-
-  }
-
-  /**
-   * Register global shortcuts
-   * Register toolbar toggle shortcut (Command+Shift+Space or Ctrl+Shift+Space)
-   */
-  private async registerGlobalShortcuts(): Promise<void> {
-    const logger = log;
-    // Unregister existing shortcuts to prevent duplicates or stale shortcuts
-    this.unregisterGlobalShortcuts();
-
-    // Register toolbar shortcut
-    let toolBarShortcut = process.platform === 'darwin'
-      ? 'Command+Shift+Space'
-      : 'Ctrl+Shift+Space';
-    // Try to read shortcut from user settings
-    logger.info({ msg: '[SHORTCUT] Attempting to get toolbar shortcut from user settings activeProfileId:' + Profiles.get().activeProfileId });
-    try {
-      if (Profiles.get().activeProfileId) {
-        const profile = await Profiles.get().active();
-        const settings = profile.settings.toolBar;
-        logger.info({ msg: `[SHORTCUT] Retrieved toolbar settings for shortcut: ${JSON.stringify(settings)}` });
-        if (settings && settings.shortcut) {
-          toolBarShortcut = settings.shortcut;
-        }
-      }
-    } catch (error) {
-      // ignore error, use default shortcut
-      logger.warn({ msg: `[SHORTCUT] Failed to get toolbar shortcut from settings, using default: ${toolBarShortcut}` });
-    }
-    logger.info({ msg: `[SHORTCUT] Registering ToolBar toggle shortcut: ${toolBarShortcut}` });
-    const success = globalShortcut.register(toolBarShortcut, () => {
-      this.toggleToolBar();
-    });
-    logger.info({ msg: `[SHORTCUT] ToolBar shortcut registration success: ${success}` });
-    if (success) {
-      this.initSelectionHook();
-    } else {
-    }
-
-    // Register screenshot shortcut
-    const { registerScreenshotShortcut } = await import('./lib/screenshot');
-    await registerScreenshotShortcut({});
-  }
-
-  /**
-   * Unregister all global shortcuts
-   */
-  private unregisterGlobalShortcuts(): void {
-    globalShortcut.unregisterAll();
-  }
-
-  private async handleWebSearch(agentId: string): Promise<{ success: boolean; error?: string }> {
-    const logger = log;
-    try {
-      const selectedText = this.selectedText ? this.selectedText.trim() : '';
-      logger.info({ msg: `[WEB-SEARCH] Performing web search for agentId: ${agentId} with selected text: ${selectedText.substring(0, 50)}...` });
-      const query = encodeURIComponent(selectedText);
-      let url = '';
-
-      if (agentId === PSEUDO_AGENT_SEARCH_BING) {
-        url = selectedText ? `https://www.bing.com/search?q=${query}` : 'https://www.bing.com';
-      } else {
-        // Default to Google
-        url = selectedText ? `https://www.google.com/search?q=${query}` : 'https://www.google.com';
-      }
-
-
-
-      await shell.openExternal(url);
-
-      // Auto-hide
-      if (this.getToolBarAutoHide()) {
-        this.hideToolBar();
-      }
-      return { success: true };
-    } catch (error) {
-      safeConsole.error('Failed to perform web search:', error);
-      return { success: false, error: String(error) };
-    }
-  }
 
   private normalizeWindowZoomLevel(level: number): number {
     const zoomStep = 0.5;

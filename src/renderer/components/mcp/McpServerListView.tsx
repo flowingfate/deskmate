@@ -148,7 +148,7 @@ const McpServerListView: React.FC<McpServerListViewProps> = ({
         placeholder="Search MCP servers..."
       />
       <ScrollArea className="min-h-0 flex-1">
-        <ul className="flex flex-col gap-1.5 pr-2">
+        <ul className="flex flex-col gap-1.5">
           {filteredServers.map((server, index) => {
             const isSelected = selectedServer?.name === server.name;
             const serverName = server.name || `Server ${index + 1}`;

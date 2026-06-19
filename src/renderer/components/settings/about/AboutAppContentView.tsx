@@ -22,7 +22,7 @@ const AboutAppContentView: React.FC<AboutAppContentViewProps> = () => {
 
   // Get brand configuration info
   const brandDisplayName = BRAND_CONFIG.productName || APP_NAME;
-  const brandHomepage = BRAND_CONFIG.homepage || 'https://www.deskmate.top';
+  const brandHomepage = BRAND_CONFIG.homepage || 'https://deskmate.top';
   useEffect(() => {
     const loadAppInfo = async () => {
       try {

@@ -2,8 +2,9 @@ import React, { useState, useCallback, useEffect } from 'react'
 
 import { TabComponentProps } from './types'
 import { Button } from '@/shadcn/button'
+import { Popover, PopoverTrigger, PopoverContent } from '@/shadcn/popover'
 import { Badge } from '@/shadcn/badge'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Cpu, ChevronDown } from 'lucide-react'
 import EmojiPicker from './EmojiPicker'
 import { useAgents } from '@/states/agents.atom'
 import { AgentAvatar } from '../../common/AgentAvatar'
@@ -41,7 +42,7 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
 
   // UI state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [showModelDropdown, setShowModelDropdown] = useState(false)
+  const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [isInitialized, setIsInitialized] = useState(false)
   const [loadedAgentId, setLoadedAgentId] = useState<string | null>(null)
@@ -64,7 +65,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
   })
 
   // Available model list 由 GroupedModelPicker 内部 hook 拉取
-  const modelDropdownRef = React.useRef<HTMLDivElement>(null)
   const { label: modelDisplayLabel, invalid: modelInvalid } = useModelDisplayLabel(formData.model)
 
   // Load existing data - only runs on initial component mount or when explicit re-sync is needed
@@ -131,22 +131,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
     }
   }, [mode, agentData?.id, isInitialized, loadedAgentId, cachedData])
 
-  // Handle clicking outside to close model dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
-        setShowModelDropdown(false)
-      }
-    }
-
-    if (showModelDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside)
-      }
-    }
-  }, [showModelDropdown])
-
 
   // Check for duplicate Agent name
   const checkDuplicateName = useCallback((name: string): boolean => {
@@ -208,7 +192,7 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
     // For the name field, check for duplicates in real time
     if (field === 'name') {
       if (value.trim() && checkDuplicateName(value)) {
-        setNameWarning('⚠️ This agent name already exists')
+        setNameWarning('This agent name already exists')
       } else {
         setNameWarning('')
       }
@@ -236,7 +220,7 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
   // Handle model selection
   const handleModelSelect = useCallback((modelId: string) => {
     handleInputChange('model', modelId)
-    setShowModelDropdown(false)
+    setModelPickerOpen(false)
   }, [handleInputChange])
 
   // Dynamically determine the current effective mode
@@ -251,13 +235,13 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
   return (
     <div className="agent-tab">
       {/* Tab Body */}
-      <div className="tab-body">
+      <div className="flex-1 overflow-y-auto overflow-x-visible p-5 custom-scrollbar">
         {/* Avatar Section */}
-        <div className="form-section">
-          <label className="form-label">Agent Avatar</label>
-          <div className="emoji-section">
+        <div className="mb-[18px]">
+          <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Avatar</label>
+          <div className="flex items-center gap-4">
             <div
-              className={`emoji-display ${isAvatarNameDisabled ? 'disabled' : ''}`}
+              className="flex items-center justify-center size-12 rounded-lg border border-black/10 bg-surface-primary text-2xl cursor-pointer transition-all hover:border-gray-400 hover:bg-black/5"
               onClick={() => !isAvatarNameDisabled && setShowEmojiPicker(true)}
               title={readOnly ? "Avatar cannot be modified" : isKobiAgent ? "Kobi Agent's avatar cannot be modified" : "Click to change avatar"}
               style={isAvatarNameDisabled ? { cursor: 'not-allowed', opacity: 0.6 } : undefined}
@@ -270,98 +254,83 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
                 version={agentMeta.version}
               />
             </div>
-            <span className="emoji-hint">
+            <span className="text-content-secondary text-[13px] font-normal">
               {readOnly ? "Avatar cannot be modified" : isKobiAgent ? "Kobi Agent's avatar cannot be modified" : "Click to choose avatar"}
             </span>
           </div>
         </div>
 
         {/* Agent Name */}
-        <div className="form-section">
-          <label className="form-label">Agent Name</label>
+        <div className="mb-[18px]">
+          <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Name</label>
           <input
             type="text"
-            className={`form-input ${(validationErrors.name || fieldErrors?.name) ? 'warning' : ''} ${nameWarning ? 'warning' : ''}`}
+            className={`w-full px-3 py-2 rounded-lg border border-black/10 bg-surface-primary text-content text-sm transition-all box-border hover:enabled:border-gray-400 focus:outline-none focus:border-content focus:shadow-[0_0_0_1px_#272320] ${(validationErrors.name || fieldErrors?.name || nameWarning) ? 'border-status-warning bg-amber-400/10 focus:border-status-warning focus:shadow-[0_0_0_1px_#f59e0b]' : ''}`}
             value={formData.name}
             onChange={(e) => handleInputChange('name', e.target.value)}
             placeholder="Enter agent name..."
             disabled={isAvatarNameDisabled}
           />
           {(validationErrors.name || fieldErrors?.name) && (
-            <div className="warning-message">{validationErrors.name || fieldErrors?.name}</div>
+            <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-md text-[13px] bg-[#FEF3C7] border-l-2 border-status-warning text-amber-800">
+              <AlertTriangle size={14} className="shrink-0" />
+              <span>{validationErrors.name || fieldErrors?.name}</span>
+            </div>
           )}
           {nameWarning && !validationErrors.name && !fieldErrors?.name && (
-            <div className="warning-message">{nameWarning}</div>
+            <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-md text-[13px] bg-[#FEF3C7] border-l-2 border-status-warning text-amber-800">
+              <AlertTriangle size={14} className="shrink-0" />
+              <span>{nameWarning}</span>
+            </div>
           )}
         </div>
 
         {/* Model Selection */}
-        <div className="form-section">
-          <label className="form-label">Agent Model</label>
-          <div className="model-selector" ref={modelDropdownRef}>
-            <Button
-              variant="ghost"
-              size="icon"
-              type="button"
-              className={`model-button ${validationErrors.model ? 'error' : ''}`}
-              onClick={() => !isModelDisabled && setShowModelDropdown(!showModelDropdown)}
-              disabled={isModelDisabled}
-              style={isModelDisabled ? { cursor: 'not-allowed', opacity: 0.7 } : undefined}
+        <div className="mb-[18px]">
+          <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Model</label>
+          <Popover open={modelPickerOpen} onOpenChange={(o) => !isModelDisabled && setModelPickerOpen(o)}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                type="button"
+                disabled={isModelDisabled}
+                className={`w-full justify-start gap-2 h-auto px-3 py-2 font-normal ${validationErrors.model ? 'border-destructive' : ''}`}
+              >
+                <Cpu size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
+                <span className="flex-1 text-left truncate">
+                  {modelInvalid ? <><AlertTriangle size={12} className="inline mr-1 text-amber-500" />Select Model</> : modelDisplayLabel}
+                </span>
+                <ChevronDown
+                  size={16}
+                  strokeWidth={1.75}
+                  className={`shrink-0 opacity-50 transition-transform ${modelPickerOpen ? 'rotate-180' : ''}`}
+                />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-[var(--radix-popover-trigger-width)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overflow-x-hidden p-1"
+              align="start"
+              sideOffset={4}
             >
-              <svg
-                className="model-icon"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                />
-              </svg>
-              <span className="model-name">
-                {modelInvalid ? <><AlertTriangle size={12} className="inline mr-1 text-amber-500" />Select Model</> : modelDisplayLabel}
-              </span>
-              <svg
-                className={`dropdown-arrow ${showModelDropdown ? 'rotated' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </Button>
-            {showModelDropdown && !isModelDisabled && (
-              <div className="model-dropdown">
-                <div className="model-list">
-                  <GroupedModelPicker
-                    value={formData.model}
-                    onChange={handleModelSelect}
-                    variant="list"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+              <GroupedModelPicker
+                value={formData.model}
+                onChange={handleModelSelect}
+                variant="popover"
+              />
+            </PopoverContent>
+          </Popover>
           {validationErrors.model && (
-            <div className="error-message">{validationErrors.model}</div>
+            <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-md text-[13px] bg-[#FEE2E2] border-l-2 border-status-error text-red-900">{validationErrors.model}</div>
           )}
         </div>
 
         {agentMeta.version && (
-          <div className="form-section agent-meta-section">
-            <label className="form-label">Agent Info</label>
-            <div className="agent-meta-row">
-              <div className="agent-meta-item">
-                <span className="agent-meta-label">Version:</span>
-                <span className="agent-meta-value">{agentMeta.version}</span>
+          <div className="mb-[18px] mt-2 pt-4 border-t border-slate-300/50">
+            <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Info</label>
+            <div className="flex flex-wrap gap-6">
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] text-content-secondary font-medium">Version:</span>
+                <span className="text-[13px] text-content-heading font-normal">{agentMeta.version}</span>
               </div>
             </div>
           </div>

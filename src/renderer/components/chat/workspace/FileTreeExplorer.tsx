@@ -1,220 +1,45 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import {
-  Folder,
-  FolderOpen,
-  FileText,
-  FileCode,
-  FileJson,
-  FileType,
-  Palette,
-  Globe,
-  Image as ImageIcon,
-  ChevronRight,
-  ChevronDown,
-} from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { FolderOpen } from 'lucide-react';
 import { FileTreeNode } from '../../../lib/chat/workspaceOps';
-import { workspaceApi } from '@/ipc/workspace';
-import { FileTreeNodeMenuAtom } from '../../menu/FileTreeNodeContextMenu';
+import { FileTreeNodeItem } from './FileTreeNodeItem';
+import { cn } from '@renderer/lib/utilities';
 import { log } from '@/log';
+
 const logger = log.child({ mod: 'FileTreeExplorer' });
 
-interface FileTreeExplorerProps {
+export interface FileTreeExplorerProps {
   nodes: FileTreeNode[];
   workspacePath: string;
   onFileClick?: (node: FileTreeNode) => void;
   className?: string;
-  directoryStack?: FileTreeNode[];
-  onDirectoryStackChange?: (stack: FileTreeNode[]) => void;
-  showBreadcrumb?: boolean; // Whether to show breadcrumb navigation
-  /** Lazy loading callback: called when expanding directory, parent component responsible for fetching and injecting child nodes */
-  onLoadChildren?: (dirPath: string) => Promise<void>;
-}
-
-interface FileTreeNodeItemProps {
-  node: FileTreeNode;
-  workspacePath: string;
-  level?: number;
-  onFileClick?: (node: FileTreeNode) => void;
-  expandedDirs: Set<string>;
-  onToggleExpand?: (path: string) => void;
+  /** 懒加载回调：展开目录时调用，父组件负责拉取并注入子节点 */
   onLoadChildren?: (dirPath: string) => Promise<void>;
 }
 
 /**
- * Single file/folder node component (Tree View)
- */
-const FileTreeNodeItem: React.FC<FileTreeNodeItemProps> = React.memo(({
-  node,
-  workspacePath,
-  level = 0,
-  onFileClick,
-  expandedDirs,
-  onToggleExpand,
-  onLoadChildren,
-}) => {
-
-  const isExpanded = expandedDirs.has(node.path);
-  const hasChildren = node.type === 'directory' && node.children && node.children.length > 0;
-  const isDirectory = node.type === 'directory';
-
-  const handleClick = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-
-    if (node.type === 'file') {
-      // File click: handle through onFileClick callback
-      if (onFileClick) {
-        onFileClick(node);
-      } else {
-        // Fallback: open with system default application
-        try {
-          await workspaceApi.openPath(node.path);
-        } catch (error) {
-          logger.error({ msg: "Error opening file:", err: error });
-        }
-      }
-    } else if (node.type === 'directory' && onToggleExpand) {
-      const isCurrentlyExpanded = expandedDirs.has(node.path);
-      // When expanding, first toggle state (immediate response), then lazy load child nodes
-      onToggleExpand(node.path);
-      if (!isCurrentlyExpanded && onLoadChildren) {
-        await onLoadChildren(node.path);
-      }
-    }
-  }, [node, onToggleExpand, onFileClick, expandedDirs, onLoadChildren]);
-
-  const fileTreeNodeMenuActions = FileTreeNodeMenuAtom.useChange();
-
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    fileTreeNodeMenuActions.open(e.clientX, e.clientY, node, workspacePath);
-  }, [node, workspacePath]);
-
-  // Get icon
-  const getIcon = useMemo(() => {
-    if (node.type === 'directory') {
-      return isExpanded ? <FolderOpen size={16} /> : <Folder size={16} />;
-    }
-
-    // Return different icons based on file extension
-    const ext = node.name.split('.').pop()?.toLowerCase();
-    switch (ext) {
-      case 'ts':
-      case 'tsx':
-      case 'js':
-      case 'jsx':
-        return <FileCode size={16} />;
-      case 'json':
-        return <FileJson size={16} />;
-      case 'md':
-        return <FileType size={16} />;
-      case 'css':
-      case 'scss':
-        return <Palette size={16} />;
-      case 'html':
-        return <Globe size={16} />;
-      case 'png':
-      case 'jpg':
-      case 'jpeg':
-      case 'gif':
-      case 'svg':
-        return <ImageIcon size={16} />;
-      default:
-        return <FileText size={16} />;
-    }
-  }, [node.type, node.name, isExpanded]);
-
-  return (
-    <>
-      <div
-        className="file-tree-node"
-        style={{ paddingLeft: `${level * 16}px` }}
-      >
-        <div
-          className={`file-tree-node-content tree-view ${node.type === 'file' ? 'file' : 'directory'}`}
-          onClick={handleClick}
-          onContextMenu={handleContextMenu}
-          title={node.path}
-        >
-          {isDirectory && (
-            <span className="expand-icon">
-              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            </span>
-          )}
-          <span className="node-icon">{getIcon}</span>
-          <span className="node-name">{node.name}</span>
-        </div>
-      </div>
-
-      {/* Recursively render child nodes */}
-      {isDirectory && isExpanded && hasChildren && (
-        <div className="file-tree-children">
-          {node.children!.map((child) => (
-            <FileTreeNodeItem
-              key={child.path}
-              node={child}
-              workspacePath={workspacePath}
-              level={level + 1}
-              onFileClick={onFileClick}
-              expandedDirs={expandedDirs}
-              onToggleExpand={onToggleExpand}
-              onLoadChildren={onLoadChildren}
-            />
-          ))}
-        </div>
-      )}
-    </>
-  );
-});
-
-FileTreeNodeItem.displayName = 'FileTreeNodeItem';
-
-/**
- * Find node in tree
- */
-const findNodeInTree = (nodes: FileTreeNode[], targetPath: string): FileTreeNode | null => {
-  for (const node of nodes) {
-    if (node.path === targetPath) {
-      return node;
-    }
-    if (node.children) {
-      const found = findNodeInTree(node.children, targetPath);
-      if (found) return found;
-    }
-  }
-  return null;
-};
-
-/**
- * File tree Explorer component
- * Tree View, supports expanding/collapsing multiple directory levels
+ * 文件树 Explorer：Tree View，支持多级目录展开 / 折叠。
+ * 展开态持久化到 localStorage（按 workspacePath 分键）。
  */
 const FileTreeExplorer: React.FC<FileTreeExplorerProps> = ({
   nodes,
   workspacePath,
   onFileClick,
-  className = '',
-  directoryStack: externalDirectoryStack,
-  onDirectoryStackChange,
-  showBreadcrumb = true, // Keep this parameter for backward compatibility, but not used in Tree View
-  onLoadChildren
+  className,
+  onLoadChildren,
 }) => {
-  // Use localStorage key to save expansion state for each workspace
   const storageKey = `fileTree_expanded_${workspacePath}`;
 
-  // Load saved expansion state from localStorage
+  // 从 localStorage 读取已保存的展开态
   const loadExpandedDirs = useCallback((): Set<string> => {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        const paths = JSON.parse(saved) as string[];
-        return new Set(paths);
+        return new Set(JSON.parse(saved) as string[]);
       }
     } catch (error) {
-      logger.error({ msg: "Failed to load expanded dirs:", err: error });
+      logger.error({ msg: 'Failed to load expanded dirs:', err: error });
     }
-
-    // Default expand root directory
+    // 默认展开根目录（当根只有单个目录时）
     const initialExpanded = new Set<string>();
     if (nodes.length === 1 && nodes[0].type === 'directory') {
       initialExpanded.add(nodes[0].path);
@@ -222,56 +47,51 @@ const FileTreeExplorer: React.FC<FileTreeExplorerProps> = ({
     return initialExpanded;
   }, [storageKey, nodes]);
 
-  // Save expansion state to localStorage
   const saveExpandedDirs = useCallback((dirs: Set<string>) => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(Array.from(dirs)));
     } catch (error) {
-      logger.error({ msg: "Failed to save expanded dirs:", err: error });
+      logger.error({ msg: 'Failed to save expanded dirs:', err: error });
     }
   }, [storageKey]);
 
-  // Expanded directories set (using path as key)
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => loadExpandedDirs());
 
-  // When workspacePath switches, restore expansion state from localStorage.
-  // Note: Do not trim and write back when nodes only have shallow data, otherwise deep expansion records will be mistakenly deleted.
+  // workspacePath 切换时从 localStorage 恢复展开态。
+  // 注意：nodes 仅含浅层数据时不要回写裁剪，否则会误删深层展开记录。
   React.useEffect(() => {
-    const savedDirs = loadExpandedDirs();
-    setExpandedDirs(savedDirs);
+    setExpandedDirs(loadExpandedDirs());
   }, [storageKey, loadExpandedDirs]);
 
-  // Toggle directory expansion/collapse state
   const handleToggleExpand = useCallback((path: string) => {
     setExpandedDirs(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(path)) {
-        newSet.delete(path);
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
       } else {
-        newSet.add(path);
+        next.add(path);
       }
-      // Save to localStorage
-      saveExpandedDirs(newSet);
-      return newSet;
+      saveExpandedDirs(next);
+      return next;
     });
   }, [saveExpandedDirs]);
 
   if (!nodes || nodes.length === 0) {
     return (
-      <div className={`file-tree-explorer empty ${className}`}>
-        <div className="empty-state">
-          <div className="empty-icon">📂</div>
-          <p>No files in workspace</p>
-          <small>The workspace folder is empty or inaccessible</small>
+      <div className={cn('flex flex-col w-full select-none', className)}>
+        <div className="flex flex-col items-center justify-center gap-3 py-12 px-6 text-center">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-surface-subtle border border-border-subtle">
+            <FolderOpen size={22} strokeWidth={1.75} className="text-content-tertiary" />
+          </div>
+          <p className="m-0 text-xs font-medium text-content-secondary">This folder is empty or inaccessible</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`file-tree-explorer tree-view ${className}`}>
-      {/* Tree View content */}
-      <div className="tree-content">
+    <div className={cn('flex flex-col w-full select-none px-2 py-1.5', className)}>
+      <div className="flex flex-col gap-px min-w-min overflow-x-auto">
         {nodes.map((node) => (
           <FileTreeNodeItem
             key={node.path}

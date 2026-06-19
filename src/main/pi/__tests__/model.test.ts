@@ -3,10 +3,12 @@ import type { OAuthCredentials } from '@earendil-works/pi-ai';
 
 const getApiKeyMock = vi.fn<(provider: string) => Promise<string | null>>();
 const getOAuthCredentialsMock = vi.fn<(provider: string) => Promise<OAuthCredentials | null>>();
+const getBaseUrlMock = vi.fn<(provider: string) => Promise<string | undefined>>();
 vi.mock('../auth', () => ({
   getPiAuthManager: vi.fn(() => ({
     getApiKey: getApiKeyMock,
     getOAuthCredentials: getOAuthCredentialsMock,
+    getBaseUrl: getBaseUrlMock,
   })),
 }));
 
@@ -24,6 +26,7 @@ import { resolveModel, resolveApiKey, resolveCredentials, listModels, getModelIn
 beforeEach(() => {
   vi.clearAllMocks();
   getOAuthCredentialsMock.mockResolvedValue(null);
+  getBaseUrlMock.mockResolvedValue(undefined);
   getOAuthProviderMock.mockReturnValue(undefined);
   modifyModelsMock.mockReset();
 });
@@ -34,9 +37,9 @@ beforeEach(() => {
 
 describe('resolveModel', () => {
   it('已知 model → pi.Model', async () => {
-    const m = await resolveModel({ provider: 'openai-codex', modelId: 'gpt-5.2' });
+    const m = await resolveModel({ provider: 'openai-codex', modelId: 'gpt-5.5' });
     expect(m.provider).toBe('openai-codex');
-    expect(m.id).toBe('gpt-5.2');
+    expect(m.id).toBe('gpt-5.5');
   });
 
   it('github-copilot 走 pi-ai 内置表', async () => {
@@ -66,6 +69,7 @@ describe('resolveApiKey', () => {
     // so OAuth-path branch in resolveCredentials stays inactive for these
     // apiKey-only tests.
     getOAuthCredentialsMock.mockResolvedValue(null);
+    getBaseUrlMock.mockResolvedValue(undefined);
   });
 
   it('PiAuthManager 返回 token → 直接透传', async () => {
@@ -104,6 +108,7 @@ describe('resolveCredentials', () => {
     // 复位 top-level beforeEach 设的 defaults（vi.clearAllMocks 把它们清了）
     getOAuthCredentialsMock.mockResolvedValue(null);
     getOAuthProviderMock.mockReturnValue(undefined);
+    getBaseUrlMock.mockResolvedValue(undefined);
   });
 
   it('OAuth provider 有 modifyModels hook → baseUrl 被 fresh credentials 改写', async () => {

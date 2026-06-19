@@ -160,8 +160,7 @@ export function computeRenderItems(messages: RenderMessage[]): ChatRenderItem[] 
     const hasTools = message.tool_calls.length > 0;
 
     if (hasText) {
-      // 把已积累的 tool 段先冲出来 —— 文本是时间线分隔点;它本条的 tools 会
-      // 起一个新的 merge 链,继续吸收后续 empty-text+tools 的 assistant。
+      // 文本是时间线分隔点：先把已积累的 empty-only tool 链冲出来。
       flushPending();
       const derived = getAssistantDerived(message);
       items.push({
@@ -171,8 +170,20 @@ export function computeRenderItems(messages: RenderMessage[]): ChatRenderItem[] 
         extractedFilePaths: derived.extractedFilePaths,
         scheduleIds: derived.scheduleIds,
       });
+      // text+tools：本条 tools 属于这次"有文本"的 turn，自己单独成段，
+      // 不与后续 empty-only assistant 合并（merge 仅限纯 tool-only 链）。
+      if (hasTools) {
+        pending = {
+          toolCalls: [...message.tool_calls],
+          firstOwnerId: message.id,
+          lastOwnerId: message.id,
+        };
+        flushPending();
+      }
+      continue;
     }
 
+    // empty-text assistant：tool-only merge 链的组成单元。
     if (!hasTools) continue;
 
     if (!pending) {

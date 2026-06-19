@@ -103,28 +103,28 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
   if (!isOpen) return null
 
   return (
-    <div className="emoji-picker-overlay" onClick={handleOverlayClick}>
-      <div className="emoji-picker-modal">
+    <div className="fixed inset-0 flex items-center justify-center p-8 z-[1100] bg-black/30 animate-[fadeIn_0.2s_ease-out]" onClick={handleOverlayClick}>
+      <div className="w-[min(400px,90vw)] bg-white rounded-2xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.3)] animate-[slideIn_0.3s_ease-out]">
         {/* Header */}
-        <div className="picker-header">
-          <h3>Choose Agent Avatar</h3>
+        <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-slate-50">
+          <h3 className="m-0 text-lg font-semibold text-content-strong">Choose Agent Avatar</h3>
           <Button variant="ghost" size="icon" onClick={onClose}>×</Button>
         </div>
 
         {/* Selected Display */}
-        <div className="selected-display">
-          <div className="selected-emoji">{selectedEmoji}</div>
-          <span className="selected-label">Selected</span>
+        <div className="px-6 py-6 text-center bg-slate-50 border-b border-border">
+          <div className="text-5xl mb-2 leading-none">{selectedEmoji}</div>
+          <span className="text-content-secondary text-sm font-medium">Selected</span>
         </div>
 
         {/* Category Tabs */}
-        <div className="emoji-category-tabs">
+        <div className="flex flex-wrap gap-1.5 px-4 py-3 border-b border-border bg-surface-subtle">
           {CATEGORY_NAMES.map((category) => (
             <Button
               key={category}
               variant="ghost"
               size="icon"
-              className={`category-tab ${activeCategory === category ? 'active' : ''}`}
+              className={`flex items-center justify-center w-auto h-auto px-3 py-1.5 rounded-2xl border border-border bg-surface-secondary text-content-secondary text-xs font-medium cursor-pointer transition-all whitespace-nowrap hover:bg-blue-500/10 hover:border-blue-500/30 hover:text-blue-500 ${activeCategory === category ? 'bg-blue-500 border-blue-500 text-white' : ''}`}
               onClick={() => setActiveCategory(category)}
             >
               {category}
@@ -133,13 +133,13 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
         </div>
 
         {/* Emoji Grid */}
-        <div className="emoji-grid">
+        <div className="grid grid-cols-8 gap-1.5 px-5 py-4 h-[184px] min-h-[184px] max-h-[184px] overflow-y-auto overflow-x-hidden custom-scrollbar">
           {(EMOJI_CATEGORIES[activeCategory] || []).map((emoji, index) => (
             <Button
               key={`${emoji}-${index}`}
               variant="ghost"
               size="icon"
-              className={`emoji-item ${selectedEmoji === emoji ? 'selected' : ''}`}
+              className={`flex items-center justify-center size-10 min-w-10 min-h-10 rounded-lg border-2 border-transparent bg-transparent text-xl cursor-pointer transition-all shrink-0 hover:bg-blue-500/10 hover:border-blue-500/30 hover:scale-110 ${selectedEmoji === emoji ? 'bg-blue-500/20 border-blue-500 scale-110' : ''}`}
               onClick={() => handleEmojiClick(emoji)}
             >
               {emoji}
@@ -148,7 +148,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="picker-footer">
+        <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-border bg-slate-50">
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>

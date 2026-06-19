@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '../../ui/ToastProvider'
 import { getAgents, listenAgents, useAgents } from '@/states/agents.atom'
@@ -6,8 +6,8 @@ import { addAgentConfig } from '../../../lib/chat/agentOps'
 import EmojiPicker from '../agent-editor/EmojiPicker'
 import { BUILTIN_SKILL_NAMES } from '../../../../shared/constants/builtinSkills'
 import { Button } from '@/shadcn/button'
-import { AlertTriangle } from 'lucide-react'
-import './AgentCreation.scss'
+import { Popover, PopoverTrigger, PopoverContent } from '@/shadcn/popover'
+import { AlertTriangle, Cpu, ChevronDown } from 'lucide-react'
 import { log } from '@/log';
 import { GroupedModelPicker, useModelDisplayLabel } from '../GroupedModelPicker'
 const logger = log.child({ mod: 'CreateCustomAgentViewContent' });
@@ -37,31 +37,14 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
   const [isCreating, setIsCreating] = useState(false)
 
   // UI state
-  const [showModelDropdown, setShowModelDropdown] = useState(false)
+  const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [isFormValid, setIsFormValid] = useState(false)
   const [nameWarning, setNameWarning] = useState<string>('')
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const modelDropdownRef = React.useRef<HTMLDivElement>(null)
   const { label: modelDisplayLabel, invalid: modelInvalid } = useModelDisplayLabel(formData.model)
 
   // 模型列表由 GroupedModelPicker 内部 hook 拉取，无需在此 effect 同步
-
-  // Handle clicking outside to close model dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
-        setShowModelDropdown(false)
-      }
-    }
-
-    if (showModelDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside)
-      }
-    }
-  }, [showModelDropdown])
 
   // Validate Agent name logic
   const validateAgentName = useCallback((name: string): boolean => {
@@ -86,7 +69,7 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
     // For the name field, check for duplicates and validity in real time
     if (field === 'name') {
       if (value.trim() && !validateAgentName(value)) {
-        setNameWarning('⚠️ This agent name already exists')
+        setNameWarning('This agent name already exists')
       } else {
         setNameWarning('')
       }
@@ -105,7 +88,7 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
   // Handle model selection
   const handleModelSelect = useCallback((modelId: string) => {
     handleInputChange('model', modelId)
-    setShowModelDropdown(false)
+    setModelPickerOpen(false)
   }, [handleInputChange])
 
   // Handle Emoji selection
@@ -199,100 +182,88 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
   }, [formData, navigate, showToast, waitForChatInCache, validateAgentName])
 
   return (
-    <div className="create-agent-content">
+    <div className="flex-1 overflow-y-auto bg-white p-6">
       {/* Agent Avatar section */}
-      <div className="agent-avatar-section">
-        <label className="form-label">Agent Avatar</label>
-        <div className="emoji-section">
+      <div className="mb-6">
+        <label className="mb-2 block text-sm font-semibold leading-5 text-[#272320]">Agent Avatar</label>
+        <div className="flex items-center gap-4">
           <div
-            className="emoji-display"
+            className="flex size-16 cursor-pointer items-center justify-center rounded-xl border border-black/20 bg-white text-3xl transition-colors hover:border-[#007AFF] hover:bg-[#007AFF]/5"
             onClick={() => setShowEmojiPicker(true)}
             title="Click to change emoji"
           >
             {formData.emoji}
           </div>
-          <span className="emoji-hint">Click to choose avatar</span>
+          <span className="text-sm font-medium text-gray-500">Click to choose avatar</span>
         </div>
       </div>
 
       {/* Agent Name section */}
-      <div className="agent-name-section">
-        <label className="form-label">Agent Name</label>
+      <div className="mb-6">
+        <label className="mb-2 block text-sm font-semibold leading-5 text-[#272320]">Agent Name</label>
         <input
           type="text"
-          className={`agent-name-input ${validationErrors.name ? 'error' : ''} ${nameWarning ? 'warning' : ''}`}
+          className={`w-full rounded-lg border bg-white px-4 py-3 text-sm leading-5 text-[#272320] outline-none transition-colors focus:shadow-[0_0_0_3px_rgba(0,122,255,0.1)] ${
+            validationErrors.name
+              ? 'border-[#FF3B30] bg-[#FF3B30]/5'
+              : nameWarning
+                ? 'border-amber-500 bg-amber-100/10 focus:border-amber-500 focus:shadow-[0_0_0_3px_rgba(245,158,11,0.1)]'
+                : 'border-black/20 focus:border-[#007AFF]'
+          }`}
           value={formData.name}
           onChange={(e) => handleInputChange('name', e.target.value)}
           placeholder="Enter agent name..."
         />
         {validationErrors.name && (
-          <div className="validation-error">
+          <div className="mt-1 text-xs leading-4 text-[#FF3B30]">
             {validationErrors.name}
           </div>
         )}
         {nameWarning && !validationErrors.name && (
-          <div className="warning-message">
-            {nameWarning}
+          <div className="mt-2 flex items-center gap-2 rounded-md border-l-2 border-amber-500 bg-amber-100/90 px-3 py-2 text-[13px] text-amber-900">
+            <AlertTriangle size={14} className="shrink-0" />
+            <span>{nameWarning}</span>
           </div>
         )}
       </div>
 
       {/* Agent Model section */}
-      <div className="agent-model-section">
-        <label className="form-label">Agent Model</label>
-        <div className="model-selector" ref={modelDropdownRef}>
-          <Button
-            type="button"
-            variant="ghost"
-            className="model-button"
-            onClick={() => setShowModelDropdown(!showModelDropdown)}
+      <div className="mb-6">
+        <label className="mb-2 block text-sm font-semibold leading-5 text-[#272320]">Agent Model</label>
+        <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              type="button"
+              className="w-full justify-start gap-2 h-auto px-3 py-2 font-normal"
+            >
+              <Cpu size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
+              <span className="flex-1 text-left truncate">
+                {modelInvalid ? <><AlertTriangle size={12} className="inline mr-1 text-amber-500" />Select Model</> : modelDisplayLabel}
+              </span>
+              <ChevronDown
+                size={16}
+                strokeWidth={1.75}
+                className={`shrink-0 opacity-50 transition-transform ${modelPickerOpen ? 'rotate-180' : ''}`}
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-[var(--radix-popover-trigger-width)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overflow-x-hidden p-1"
+            align="start"
+            sideOffset={4}
           >
-            <svg
-              className="model-icon"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-            <span className="model-name">
-              {modelInvalid ? <><AlertTriangle size={12} className="inline mr-1 text-amber-500" />Select Model</> : modelDisplayLabel}
-            </span>
-            <svg
-              className={`dropdown-arrow ${showModelDropdown ? 'rotated' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </Button>
-          {showModelDropdown && (
-            <div className="model-dropdown">
-              <div className="model-list">
-                <GroupedModelPicker
-                  value={formData.model}
-                  onChange={handleModelSelect}
-                  variant="list"
-                />
-              </div>
-            </div>
-          )}
-        </div>
+            <GroupedModelPicker
+              value={formData.model}
+              onChange={handleModelSelect}
+              variant="popover"
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Action buttons */}
-      <div className="agent-actions">
+      <div className="mt-8 flex items-center justify-end gap-3 border-t border-black/10 pt-6">
         <Button
           variant="secondary"
           onClick={() => navigate('/agent/creation')}

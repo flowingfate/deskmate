@@ -44,7 +44,7 @@ src/renderer/components/...       ← 业务代码通过 `import { xxxApi } from
 
 ### 命名空间一览
 
-共 30+ 个命名空间，覆盖所有 IPC 通道：app、window、auth、signin、featureFlags、misc（folder/debug）、profile、agentChat、chatSession、models、llm、fs、workspace、mcp/mcpAuth、toolbar、navigate、skills、builtinTools、subAgent、runtime、sync、update、mainWindow、msalAuth、sharepoint/quickStartImageCache、logViewer（dev-only）。
+共 30+ 个命名空间，覆盖所有 IPC 通道：app、window、auth、signin、featureFlags、misc（folder/debug）、profile、agentChat、chatSession、models、llm、fs、workspace、mcp/mcpAuth、navigate、skills、builtinTools、subAgent、runtime、sync、update、msalAuth、sharepoint/quickStartImageCache、logViewer（dev-only）。
 
 **例外**：`log:write` 是 renderer → main 的**单向** `send`，不走类型化框架（每条日志加 invoke round-trip 太重）；见下文「日志流」。
 
@@ -52,7 +52,7 @@ src/renderer/components/...       ← 业务代码通过 `import { xxxApi } from
 
 - `fs.getPathForFile`：同步 webUtils 调用，不走 IPC，保留在 preload 直接暴露
 - `electronAPI.platform`：静态属性（`process.platform`），非 IPC 通道
-- `preload/toolbar.ts`、`preload/screenshot.ts`：独立窗口的 preload 脚本，各自仅暴露所需的命名空间子集
+- `preload/screenshot.ts`：独立窗口的 preload 脚本，仅暴露所需的命名空间子集
 
 ### 新增 IPC 通道的步骤
 
@@ -96,7 +96,7 @@ Renderer 触发写操作（如 agentOps.updateAgent）
   → 老 invoke 通道到 main（IPC 写路径短期内不重做）
   → Profiles.get().active() → Profile.getAgent(id) → agent.patchFront(...) + agent.persist()
   → persist/lib/emit.ts 按写入域 emit 对应通道（150ms 防抖，按 id 维度）
-  → mainWindow + toolbar 双 webContents 收到 persist:* 事件
+  → mainWindow webContents 收到 persist:* 事件
   → 对应 src/renderer/states/<domain>.atom.ts 增量 reconcile
   → useXxx() hook 通过 useSyncExternalStore 触发组件重渲染
 ```

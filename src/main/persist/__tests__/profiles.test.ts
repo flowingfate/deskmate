@@ -266,12 +266,12 @@ describe('Profile persist/load round-trip', () => {
     await reg.bootstrap();
     const id = reg.activeProfileId;
     const profile = await reg.active();
-    await profile.patchSettings({ toolBar: { enabled: true, alwaysOnTop: false, autoHide: false, shortcut: '' } });
+    await profile.patchSettings({ confirmation: { inlineEditRegenerate: { skipConfirmation: true } } });
 
     const fresh = await freshModules();
     await fresh.Profiles.get().bootstrap();
     const reloaded = await fresh.Profile.getOrLoad(id);
-    expect(reloaded.settings.toolBar).toEqual({ enabled: true, alwaysOnTop: false, autoHide: false, shortcut: '' });
+    expect(reloaded.settings.confirmation).toEqual({ inlineEditRegenerate: { skipConfirmation: true } });
   });
 });
 
@@ -318,12 +318,13 @@ describe('Profile patchSettings', () => {
     profile.settings.confirmation = { inlineEditRegenerate: { skipConfirmation: true } };
     await profile.settings.persist();
 
-    await profile.patchSettings({
-      toolBar: { enabled: true, alwaysOnTop: true, autoHide: false, shortcut: '' },
-    });
-    expect(profile.settings.toolBar?.alwaysOnTop).toBe(true);
-    // confirmation 字段未传，保持不变
+    // 空 partial：partialAssign 仅写传入字段，不应清掉已存在的 confirmation
+    await profile.patchSettings({});
     expect(profile.settings.confirmation?.inlineEditRegenerate?.skipConfirmation).toBe(true);
+
+    // 传入 confirmation 时正常更新
+    await profile.patchSettings({ confirmation: { inlineEditRegenerate: { skipConfirmation: false } } });
+    expect(profile.settings.confirmation?.inlineEditRegenerate?.skipConfirmation).toBe(false);
   });
 });
 

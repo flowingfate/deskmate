@@ -25,15 +25,12 @@ interface SimpleMenuState {
 
 export interface SettingsMenus {
   mcpServerMenu: NamedMenuState;
-  mcpAddMenu: SimpleMenuState;
   skillsAddMenu: SimpleMenuState;
   skillMenu: SkillMenuState;
   subAgentsAddMenu: SimpleMenuState;
 
   handleMcpServerMenuToggle: (serverName: string, buttonElement: HTMLElement) => void;
   handleMcpServerMenuClose: () => void;
-  handleMcpAddMenuToggle: (buttonElement: HTMLElement) => void;
-  handleMcpAddMenuClose: () => void;
   handleSkillsAddMenuToggle: (buttonElement: HTMLElement) => void;
   handleSkillsAddMenuClose: () => void;
   handleSkillMenuToggle: (skillName: string, buttonElement: HTMLElement) => void;
@@ -46,11 +43,6 @@ export function useSettingsMenus(): SettingsMenus {
   const [mcpServerMenu, setMcpServerMenu] = useState<NamedMenuState>({
     isOpen: false,
     serverName: null,
-    anchorElement: null,
-  });
-
-  const [mcpAddMenu, setMcpAddMenu] = useState<SimpleMenuState>({
-    isOpen: false,
     anchorElement: null,
   });
 
@@ -80,16 +72,6 @@ export function useSettingsMenus(): SettingsMenus {
 
   const handleMcpServerMenuClose = () => {
     setMcpServerMenu({ isOpen: false, serverName: null, anchorElement: null });
-  };
-
-  const handleMcpAddMenuToggle = (buttonElement: HTMLElement) => {
-    setMcpAddMenu((prev) =>
-      prev.isOpen ? { isOpen: false, anchorElement: null } : { isOpen: true, anchorElement: buttonElement },
-    );
-  };
-
-  const handleMcpAddMenuClose = () => {
-    setMcpAddMenu({ isOpen: false, anchorElement: null });
   };
 
   const handleSkillsAddMenuToggle = (buttonElement: HTMLElement) => {
@@ -126,14 +108,11 @@ export function useSettingsMenus(): SettingsMenus {
 
   return {
     mcpServerMenu,
-    mcpAddMenu,
     skillsAddMenu,
     skillMenu,
     subAgentsAddMenu,
     handleMcpServerMenuToggle,
     handleMcpServerMenuClose,
-    handleMcpAddMenuToggle,
-    handleMcpAddMenuClose,
     handleSkillsAddMenuToggle,
     handleSkillsAddMenuClose,
     handleSkillMenuToggle,

@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { BookMarked, MoreHorizontal, Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utilities/utils'
 import { Button } from '@/shadcn/button'
-import { Badge } from '@/shadcn/badge'
+import { ScrollArea } from '@/shadcn/scroll-area'
 import { SkillConfig } from '../../lib/userData/types'
 import { isBuiltinSkill } from '../../../shared/constants/builtinSkills'
 import ListSearchBox from '../ui/ListSearchBox'
@@ -16,24 +17,7 @@ interface SkillListPanelProps {
   onSkillMenuToggle?: (skillName: string, buttonElement: HTMLElement) => void
 }
 
-// Loading spinner component
-const LoadingSpinner = () => (
-  <div className="skill-loading-spinner">
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ animation: 'spin 1s linear infinite' }}
-    >
-      <circle cx="12" cy="12" r="10" stroke="#e0e0e0" strokeWidth="2"/>
-      <path d="M22 12C22 17.5228 17.5228 22 12 22" stroke="#272320" strokeWidth="2" strokeLinecap="round"/>
-    </svg>
-  </div>
-)
-
-// Skill card component - consistent structure with MCP ServerCard
+// Skill card — 与 MCP ServerCard / ToolListView 行项风格一致(Tailwind + semantic tokens)
 interface SkillCardProps {
   skill: SkillConfig
   isSelected: boolean
@@ -45,41 +29,65 @@ const SkillCard: React.FC<SkillCardProps> = ({
   skill,
   isSelected,
   onSelect,
-  onMenuClick
+  onMenuClick,
 }) => {
   const isBuiltin = isBuiltinSkill(skill.name)
 
   return (
     <div
-      className={`skill-card-wrapper ${isSelected ? 'selected' : ''}`}
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
+      className={cn(
+        'group flex w-full cursor-pointer items-center gap-3 rounded-lg border border-transparent px-2.5 py-2 text-left transition-colors',
+        'hover:bg-sc-accent/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-sc-ring',
+        isSelected && 'border-sc-border bg-sc-accent text-sc-accent-foreground',
+      )}
     >
-      <div className="skill-card">
-        <div className="skill-card-header">
-          <div className="skill-card-info">
-            <div className="skill-card-name-group">
-              <div className="skill-card-title-row">
-                <span className="skill-card-name">{skill.name}</span>
-                {isBuiltin && <Badge className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 px-1.5 py-0 text-[0.55rem] rounded align-super relative -top-1">Built-in</Badge>}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center' }}>
-                {skill.version && (
-                  <span className="skill-card-version">v{skill.version}</span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="skill-menu-container">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onMenuClick}
-            >
-              <MoreHorizontal size={16} strokeWidth={1.5} />
-            </Button>
-          </div>
+      <span
+        className={cn(
+          'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+          isSelected
+            ? 'bg-indigo-100 text-indigo-500 dark:bg-indigo-500/25 dark:text-indigo-400'
+            : 'bg-sc-muted text-sc-muted-foreground group-hover:bg-indigo-50 group-hover:text-indigo-500 dark:group-hover:bg-indigo-500/15 dark:group-hover:text-indigo-400',
+        )}
+      >
+        <BookMarked size={15} />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={cn(
+              'truncate text-sm font-semibold',
+              isSelected && 'text-indigo-500 dark:text-indigo-400',
+            )}
+          >
+            {skill.name}
+          </span>
+          {isBuiltin && (
+            <span className="shrink-0 rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-500 dark:text-indigo-400">
+              Built-in
+            </span>
+          )}
         </div>
+        {skill.version && (
+          <span className="text-xs text-sc-muted-foreground">v{skill.version}</span>
+        )}
       </div>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+        onClick={onMenuClick}
+      >
+        <MoreHorizontal size={15} strokeWidth={1.5} />
+      </Button>
     </div>
   )
 }
@@ -89,7 +97,7 @@ const SkillListPanel: React.FC<SkillListPanelProps> = ({
   selectedSkill,
   isLoading,
   onSelectSkill,
-  onSkillMenuToggle
+  onSkillMenuToggle,
 }) => {
   // Search filter — hooks must be at top level, before any early returns
   const [searchQuery, setSearchQuery] = useState('')
@@ -147,40 +155,44 @@ const SkillListPanel: React.FC<SkillListPanelProps> = ({
 
   if (isLoading) {
     return (
-      <div className="skill-list-loading">
-        <LoadingSpinner />
-        <span>Loading skills...</span>
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-sc-muted-foreground">
+        <Loader2 className="size-6 animate-spin" />
+        <p className="text-sm">Loading skills...</p>
       </div>
     )
   }
 
   if (skills.length === 0) {
     return (
-      <div className="skill-list-empty">
-        <span>No skills available</span>
-        <span className="skill-list-empty-hint">Add a skill to get started</span>
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-sc-muted-foreground">
+        <BookMarked className="size-10 opacity-40" />
+        <p className="text-sm font-medium">No skills available</p>
+        <p className="text-xs">Add a skill to get started.</p>
       </div>
     )
   }
 
   return (
-    <div className="skill-list-container">
-      <div className="skill-cards">
-        <ListSearchBox
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Search skills..."
-        />
-        {filteredSkills.map((skill) => (
-          <SkillCard
-            key={skill.name}
-            skill={skill}
-            isSelected={selectedSkill?.name === skill.name}
-            onSelect={() => onSelectSkill(skill)}
-            onMenuClick={(e) => handleMenuClick(skill, e)}
-          />
-        ))}
-      </div>
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <ListSearchBox
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search skills..."
+      />
+      <ScrollArea className="min-h-0 flex-1">
+        <ul className="flex flex-col gap-1.5">
+          {filteredSkills.map((skill) => (
+            <li key={skill.name}>
+              <SkillCard
+                skill={skill}
+                isSelected={selectedSkill?.name === skill.name}
+                onSelect={() => onSelectSkill(skill)}
+                onMenuClick={(e) => handleMenuClick(skill, e)}
+              />
+            </li>
+          ))}
+        </ul>
+      </ScrollArea>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-17 -->
+<!-- Last verified: 2026-06-26 -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -46,9 +46,14 @@
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
 | `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（基本信息、上下文增强、知识库、MCP 服务器、技能、子 agent、系统提示词） | — |
+| `agent-area/AgentEditingView.tsx` | Agent 设置页外壳：顶栏（返回 / agent 头像 / Save All + 未保存计数）、左侧 `AgentSettingsNav`、按 activeTab 渲染对应 Tab；管理跨 Tab 的 pending changes 缓存与统一保存 | ~770 LOC |
+| `agent-editor/AgentSettingsNav.tsx` | 设置页左侧导航；数据驱动的 `NAV_ITEMS`（key/label/Lucide 图标），每项带未保存改动小圆点。**新增 Tab 时在此加一项** | 小 |
 | `agent-editor/AddScheduleOverlay.tsx` | 共享的定时任务创建/编辑对话框；由 `components/agent-side/jobs/JobsView` 与 `JobRunsView` 调用 | — |
 | `agent-editor/scheduleTemplates.ts` | 内置定时任务模板，被 `JobHeader` 的"+"下拉消费 | — |
-| `workspace/FileTreeExplorer.tsx` | 活动工作区的可展开文件树 | — |
+| `workspace/WorkspaceExplorerSidepane.tsx` | 工作区侧栏容器：Agent Knowledge（`knowledge://`）+ Session Deliverables（`local://`）两个 `FileExplorerSection` | — |
+| `workspace/FileExplorerSection.tsx` | 单个文件根的展示外壳（折叠态 / 头部 / body 分发）；全部逻辑下沉到 `useFileExplorerSection`，状态视图在 `FileExplorerSectionStates.tsx`。纯 Tailwind，无 scss | — |
+| `workspace/useFileExplorerSection.ts` | FileExplorerSection 的数据/副作用 hook：URI→路径解析、文件树加载与懒加载、文件监听、拖拽复制、菜单动作 | — |
+| `workspace/FileTreeExplorer.tsx` + `FileTreeNodeItem.tsx` | 可展开文件树容器 + 单节点；展开态持久化到 localStorage；图标查表在 `fileTreeIcons.tsx` | — |
 | `workspace/PasteToWorkspaceDialog.tsx` | 将 AI 生成内容保存到工作区文件的对话框 | — |
 
 ## 架构
@@ -132,7 +137,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 修改两种输入共享的附件/截图逻辑 | `chat-input/shared/useFileHandling.ts` | 同时影响 compose 和 inline edit,两边都要回归;新增 attach 路径(自定义来源等)记得同样走 `copyFileToSandbox` 让 sandbox URI 化 |
 | 修改用户消息附件展示 | `message/AttachmentList.tsx` | image / file / office / others 共用 |
 | 更改 approval / choice / form 交互 | `InteractiveRequestCard.tsx`、`ChatRenderItem.tsx`、`agentSessionCacheManager.ts` | 待处理请求经 `render-items-manager` 进入渲染流水线，由 `ChatRenderItemComponent` 分发 |
-| 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`AppRoutes.tsx` 中的路由、编辑器外壳中的标签页导航 | 遵循现有标签页外壳模式 |
+| 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`AppRoutes.tsx` 中的路由、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS`、`agent-area/AgentEditingView.tsx` 的 Tab 渲染分支 | 遵循现有标签页外壳模式 |
 | 修改滚动行为 | `ChatContainer.tsx` — `useAutoScroll` hook | 始终验证基于 `chatSessionId` 的重置；流式跟随由 `streamingMessageTextLength` effect 驱动 |
 
 ## 联动变更映射
@@ -142,7 +147,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 新渲染项类型 | `lib/chat/render-items-manager.ts`（类型联合 + `computeRenderItems` + `isSameRenderItem` + `getChatRenderItemStableKey`）+ `ChatRenderItem.tsx`（分发） |
 | 聊天输入中的新附件类型 | `chat-input/shared/useFileHandling.ts` + `contentUtils.ts`(`ContentPartFactory`)+ `@shared/types/chatTypes`(`UnifiedContentPart`)+ shared constants 中的 `FILE_ATTACHMENT_LIMITS` + `message/AttachmentList.tsx`(渲染分支)+ [`src/main/lib/attachment/`](../../../main/lib/attachment/ai.prompt.md)(若新来源需要新的 main 端 attach 入口) |
 | 新交互式请求控件类型 | `InteractiveRequestCard.tsx` + `@shared/types/interactiveRequestTypes` + `agentSessionCacheManager.ts` |
-| 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `AppRoutes.tsx`（嵌套路由）+ 编辑器外壳导航 |
+| 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `AppRoutes.tsx`（嵌套路由）+ `agent-editor/AgentSettingsNav.tsx`（`NAV_ITEMS`）+ `agent-area/AgentEditingView.tsx`（Tab 渲染分支） |
 | 会话滚动/布局变更 | `ChatContainer.tsx` + `ChatContainer.css` — 始终验证基于 `chatSessionId` 的重置，而非基于 `agentId` |
 | Markdown 渲染变更 | `message/MarkdownView.tsx` + `message/MarkdownView.scss`（全局生效） |
 | 发送门控逻辑 | `chat-input/ComposeInput.tsx` + `chat-input/EditInlineInput.tsx`（显式 `chatStatus === 'idle'` 守卫）+ 渲染进程发送入口点缓存状态重新检查 |

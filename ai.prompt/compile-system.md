@@ -54,7 +54,7 @@ npm run dist:*   # 各平台正式打包（mac/win/linux/arm64/x64/universal）
 ## 关键设计点
 
 - **三段产物各自独立目录**：`out/main` / `out/preload` / `out/renderer` 完全分离。看一眼目录就知道产物归属，watch 模式下两个 watcher 不会互相覆写，孤儿文件自动随 rebuild 清空。
-- **Preload 路径常量集中在 `src/main/lib/buildPaths.ts` 的 `PRELOAD_PATH`**：所有窗口创建（main / toolbar / screenshot / log viewer）一律 `import { PRELOAD_PATH }` 取路径，禁止散落的 `path.join(__dirname, 'preload.*.js')`。目录布局调整时只需改这一个文件。
+- **Preload 路径常量集中在 `src/main/lib/buildPaths.ts` 的 `PRELOAD_PATH`**：所有窗口创建（main / screenshot / log viewer）一律 `import { PRELOAD_PATH }` 取路径，禁止散落的 `path.join(__dirname, 'preload.*.js')`。目录布局调整时只需改这一个文件。
 - **Preload 强制 CJS**：ESM preload 无法 `require('electron')`。
 - **`externalizeDeps`**：main 进程把 `node_modules` 外部化，由 Node.js `require` 运行时解析，体积大幅小于 webpack 单 bundle。
 - **HTML 入口使用 EJS**：`<%- entryScript %>` 注入 Vite 的 `<script type="module">`；`<%= connectSrcExtra %>` 注入 dev 模式 CSP 所需的 `ws: wss:`。

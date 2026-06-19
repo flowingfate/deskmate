@@ -1,7 +1,7 @@
 /**
  * settings 域 atom（D7）。
  *
- * 数据：当前 active profile 的 `settings.json`（toolBar / confirmation
+ * 数据：当前 active profile 的 `settings.json`（confirmation
  * 等 UI 偏好）。
  *
  * 订阅通道：

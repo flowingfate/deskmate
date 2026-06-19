@@ -8,13 +8,11 @@ import ChatView from '../components/chat/ChatView';
 import McpView from '../components/mcp/McpView';
 import ToolsView from '../components/tools/ToolsView';
 import AddNewMcpServerView from '../components/mcp/AddNewMcpServerView';
-import ImportMcpServerView from '../components/mcp/ImportMcpServerView';
 import SkillsView from '../components/skills/SkillsView';
 import SubAgentsView from '../components/subAgents/SubAgentsView';
 import CreateSubAgentView from '../components/subAgents/CreateSubAgentView';
 import EditSubAgentView from '../components/subAgents/EditSubAgentView';
 import RuntimeSettingsView from '../components/settings/runtime/RuntimeSettingsView';
-import ToolbarSettingsView from '../components/settings/toolbar/ToolbarSettingsView';
 import { navigateEvents } from '@/ipc/navigate';
 import ScreenshotSettingsView from '../components/settings/screenshot/ScreenshotSettingsView';
 import AboutAppView from '../components/settings/about/AboutAppView';
@@ -80,12 +78,10 @@ export const AppRoutes: React.FC = () => {
         {/* Settings Routes - separate from agent */}
         <Route path="/settings" element={<SettingsPage />}>
           <Route index element={<Navigate to="mcp" replace />} />
-          <Route path="toolbar" element={<ToolbarSettingsView />} />
           <Route path="screenshot" element={<ScreenshotSettingsView />} />
           <Route path="mcp" element={<McpView />} />
           <Route path="mcp/new" element={<AddNewMcpServerView />} />
           <Route path="mcp/edit/:editServerName" element={<AddNewMcpServerView />} />
-          <Route path="mcp/import-config" element={<ImportMcpServerView />} />
           <Route path="runtime" element={<RuntimeSettingsView />} />
           <Route path="skills" element={<SkillsView />} />
           <Route path="tools" element={<ToolsView />} />

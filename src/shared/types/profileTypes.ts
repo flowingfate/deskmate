@@ -524,7 +524,7 @@ export interface AgentPersona {
 
 /**
  * AgentEnvelope —— 历史 `ChatConfig` 形态的重命名 + 清场版本。Agent 在 V2 已是
- * 一等公民，渲染器仍有少量代码（`agentOps.ts`、Toolbar、AgentEditingView）依赖
+ * 一等公民，渲染器仍有少量代码（`agentOps.ts`、AgentEditingView）依赖
  * 这个 envelope 形状（`agent_id` 即是 agent 的 ULID）。新代码不要使用本类型，
  * 直接消费 `AgentRecord` / `AgentDetail`（@shared/persist/types）。
  *
@@ -543,21 +543,6 @@ export interface AgentEnvelope {
 
 
 
-/**
- * ToolBar settings configuration (Phase 6.1)
- */
-export interface ToolBarSettings {
-  /** Whether to enable ToolBar */
-  enabled: boolean;
-  /** Whether window is always on top */
-  alwaysOnTop: boolean;
-  /** Whether to auto-hide */
-  autoHide: boolean;
-  /** Global shortcut */
-  shortcut: string;
-  /** Visible Agent list (optional, shows all when empty) */
-  visibleAgents?: string[];
-}
 
 
 export interface InlineEditRegenerateConfirmationSettings {
@@ -596,8 +581,6 @@ export interface Profile {
    * only name/version are kept here for ProfileCacheManager notification.
    */
   sub_agents?: SubAgentIndex[];
-  /** ToolBar settings configuration (Phase 6.1) */
-  toolBarSettings?: ToolBarSettings;
   /** Confirmation dialog preferences */
   confirmationSettings?: ConfirmationSettings;
 }
@@ -695,13 +678,6 @@ export const DEFAULT_MCP_SERVER: McpServerConfig = {
   version: "1.0.0",
 };
 
-export const DEFAULT_TOOLBAR_SETTINGS: ToolBarSettings = {
-  enabled: false,
-  alwaysOnTop: false,
-  autoHide: true,
-  shortcut: 'CommandOrControl+Shift+Space',
-  visibleAgents: [],
-};
 
 
 export const DEFAULT_CONFIRMATION_SETTINGS: ConfirmationSettings = {

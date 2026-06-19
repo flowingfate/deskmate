@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   McpServerDropdownMenu,
-  McpAddMenuDropdown,
   SkillsAddMenuDropdown,
   SkillDropdownMenu,
   SubAgentsAddMenuDropdown,
@@ -37,13 +36,6 @@ const SettingsFloatingMenus: React.FC<SettingsFloatingMenusProps> = ({
           onDelete={onMcpServerDelete}
           onEdit={onMcpServerEdit}
           onClose={menus.handleMcpServerMenuClose}
-        />
-      )}
-
-      {menus.mcpAddMenu.isOpen && menus.mcpAddMenu.anchorElement && (
-        <McpAddMenuDropdown
-          anchorElement={menus.mcpAddMenu.anchorElement}
-          onClose={menus.handleMcpAddMenuClose}
         />
       )}
 

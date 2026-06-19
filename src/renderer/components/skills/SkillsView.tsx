@@ -175,11 +175,11 @@ const SkillsView: React.FC = () => {
       actions={
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-sm"
           onClick={(e) => handleAddClick(e.currentTarget)}
           title="Add Skill"
         >
-          <Plus size={16} />
+          <Plus size={14} />
         </Button>
       }
     >

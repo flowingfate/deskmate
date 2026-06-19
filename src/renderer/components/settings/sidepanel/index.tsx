@@ -7,10 +7,9 @@ import {
   Camera,
   ChevronLeft,
   Info,
-  Settings,
   ShieldCheck,
   Terminal,
-  Users,
+  Bot,
   Wrench,
 } from 'lucide-react';
 import { ScrollArea } from '@/shadcn/scroll-area';
@@ -26,9 +25,6 @@ interface SettingsNavigationProps {
 const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
   const location = useLocation();
   const navigate = useNavigate();
-
-  // Toolbar entry display state (controlled by feature flag)
-  const toolbarEnabled = useFeatureFlag('deskmateFeatureToolbarSettings');
 
 
   // Sub-Agent feature controlled by feature flag
@@ -54,7 +50,6 @@ const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
     if (path.includes('/settings/tools')) return 'tools';
     if (path.includes('/settings/skills')) return 'skills';
     if (path.includes('/settings/sub-agents')) return 'sub-agents';
-    if (path.includes('/settings/toolbar')) return 'toolbar';
     if (path.includes('/settings/screenshot')) return 'screenshot';
     if (path.includes('/settings/about')) return 'about';
     if (path.includes('/settings/provider')) return 'provider';
@@ -114,7 +109,7 @@ const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
 
         {subAgentEnabled && (
           <NavItem
-            icon={<Users size={16} />}
+            icon={<Bot size={16} />}
             label="Sub-Agents"
             isActive={activeView === 'sub-agents'}
             onClick={() => navigate('/settings/sub-agents')}
@@ -130,16 +125,6 @@ const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
           ariaLabel="Runtime Environment"
         />
 
-        {/* Toolbar entry controlled by feature flag */}
-        {toolbarEnabled && (
-          <NavItem
-            icon={<Settings size={16} />}
-            label="Toolbar"
-            isActive={activeView === 'toolbar'}
-            onClick={() => navigate('/settings/toolbar')}
-            ariaLabel="Toolbar Settings"
-          />
-        )}
 
 
         {screenshotEnabled && (

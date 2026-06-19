@@ -8,24 +8,13 @@ export interface Context {
   readonly updateManager: Promise<UpdateManager>;
   readonly isDev: boolean;
   readonly isAgentChatReady: boolean;
-  readonly selectedText: string;
 
-  readonly cleanupSelectionHook: () => void;
   readonly onBeforeQuit: (event: Electron.Event) => Promise<void>
-  readonly registerGlobalShortcuts: () => Promise<void>;
   readonly getPersistedWindowZoomLevel: () => Promise<number>;
   readonly applyWindowZoomLevel: (level: number) => number;
   readonly stepWindowZoomLevel: (level: number) => Promise<number>;
   readonly resetWindowZoomLevel: () => Promise<number>;
   readonly getMenuTemplate: () => Electron.MenuItemConstructorOptions[];
-  readonly showToolBar: () => void;
-  readonly toggleToolBar: () => void;
-  readonly handleWebSearch: (agentId: string) => Promise<{ success: boolean; error?: string }>;
-  readonly getToolBarAutoHide: () => boolean;
-  readonly hideToolBar: () => void;
-  readonly applyToolBarSettings: (settings: any) => void;
-  readonly unregisterGlobalShortcuts: () => void;
-  readonly calculateToolBarPosition: () => ({ x: number; y: number });
 }
 
 

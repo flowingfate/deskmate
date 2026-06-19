@@ -58,9 +58,23 @@ const ToolListView: React.FC<ToolListViewProps> = ({
                 isSelected && 'border-sc-border bg-sc-accent text-sc-accent-foreground',
               )}
             >
-              <Wrench className="mt-0.5 size-4 shrink-0 text-sc-muted-foreground" />
+              <Wrench
+                className={cn(
+                  'mt-0.5 size-4 shrink-0 transition-colors',
+                  isSelected
+                    ? 'text-indigo-500 dark:text-indigo-400'
+                    : 'text-sc-muted-foreground',
+                )}
+              />
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-medium">{tool.name}</span>
+                <span
+                  className={cn(
+                    'truncate font-medium',
+                    isSelected && 'text-indigo-500 dark:text-indigo-400',
+                  )}
+                >
+                  {tool.name}
+                </span>
                 {tool.description && (
                   <pre className="overflow-hidden truncate font-sans text-xs text-sc-muted-foreground">
                     {tool.description.split('\n')[0]}

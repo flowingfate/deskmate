@@ -19,7 +19,7 @@
  * When monaco starts a worker it reads the global `self.MonacoEnvironment.getWorker(_, label)`.
  * See call chain: node_modules/monaco-editor/esm/vs/base/browser/webWorkerFactory.js
  *
- * Only applies to index.html — the toolbar / screenshot entries do not use monaco.
+ * Only applies to index.html — the screenshot entry does not use monaco.
  */
 
 import type { Plugin } from 'vite'

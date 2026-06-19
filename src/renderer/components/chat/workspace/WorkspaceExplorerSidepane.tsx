@@ -1,5 +1,4 @@
 import React from 'react';
-import './WorkspaceExplorerSidepane.scss';
 import { ScrollArea } from '@/shadcn/scroll-area';
 import { useCurrentChatSessionId, useCurrentAgentId } from '../../../lib/chat/agentSessionCacheManager';
 import FileExplorerSection from './FileExplorerSection';
@@ -43,7 +42,7 @@ const WorkspaceExplorerSidepane: React.FC = () => {
   }
 
   return (
-    <ScrollArea className="file-explorer-sidepane flex-1 min-h-0">
+    <ScrollArea className="flex-1 min-h-0">
       <div className="flex flex-col">
         {/* Agent Knowledge — knowledge:// (空 path = KB 根目录) */}
         <FileExplorerSection

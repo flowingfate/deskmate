@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react'
 
 import { Button } from '@/shadcn/button'
+import { Sparkles, Loader2, Lock } from 'lucide-react'
 import { TabComponentProps } from './types'
 import MarkdownEditor from './MarkdownEditor'
 import { useToast } from '../../ui/ToastProvider'
@@ -134,32 +135,36 @@ Add your specific instructions here...`
   }, [systemPrompt])
 
   return (
-    <div className="agent-tab">
+    <div className="agent-tab flex h-full min-h-0 flex-col">
       {/* Tab Header */}
-      <div className="tab-header">
-        <div className="header-tabs">
+      <div className="flex items-center justify-between p-2 min-h-[44px] shrink-0 bg-surface-primary border-b border-black/[0.08]">
+        <div className="flex items-center shrink-0">
           <div
-            className={`header-tab ${!showPreview ? 'active' : ''}`}
+            className={`relative px-3 py-1.5 rounded-md bg-transparent text-content-secondary font-medium text-[13px] cursor-pointer select-none transition-all hover:bg-black/5 hover:text-content ${!showPreview ? 'bg-black/5 text-content' : ''}`}
             onClick={() => !showPreview || handleTogglePreview()}
           >
             Contents
           </div>
           <div
-            className={`header-tab ${showPreview ? 'active' : ''}`}
+            className={`relative px-3 py-1.5 rounded-md bg-transparent text-content-secondary font-medium text-[13px] cursor-pointer select-none transition-all hover:bg-black/5 hover:text-content ${showPreview ? 'bg-black/5 text-content' : ''}`}
             onClick={() => showPreview || handleTogglePreview()}
           >
             Preview
           </div>
         </div>
-        <div className="header-actions">
+        <div className="flex items-center shrink-0">
           {!isEditDisabled && (
             <Button
               variant="ghost"
-              size="icon"
+              size="sm"
+              className="gap-1.5"
               onClick={handleAIOptimize}
               disabled={isOptimizing || !systemPrompt.trim()}
               title={!systemPrompt.trim() ? 'Enter a prompt first' : 'Polish prompt'}
             >
+              {isOptimizing
+                ? <Loader2 size={14} className="animate-spin" />
+                : <Sparkles size={14} strokeWidth={1.75} />}
               {isOptimizing ? 'Polishing...' : 'Polish with AI'}
             </Button>
           )}
@@ -167,24 +172,24 @@ Add your specific instructions here...`
       </div>
 
       {/* Tab Body */}
-      <div className="tab-body">
-        <MarkdownEditor
-          value={systemPrompt}
-          onChange={handleContentChange}
-          showPreview={showPreview}
-          onTogglePreview={handleTogglePreview}
-          readOnly={isEditDisabled}
-        />
+      <div className="flex flex-1 min-h-0 flex-col p-2">
+        <div className="min-h-0 flex-1">
+          <MarkdownEditor
+            value={systemPrompt}
+            onChange={handleContentChange}
+            showPreview={showPreview}
+            onTogglePreview={handleTogglePreview}
+            readOnly={isEditDisabled}
+          />
+        </div>
         {isEditDisabled && (
-          <div style={{
-            marginTop: '12px',
-            padding: '12px',
-            backgroundColor: '#fef3c7',
-            borderRadius: '8px',
-            color: '#92400e',
-            fontSize: '14px'
-          }}>
-            ⚠️ {readOnly ? "Library Agent's system prompt cannot be modified." : "Kobi Agent's system prompt cannot be modified."}
+          <div className="flex shrink-0 items-center gap-2 mt-2 px-3 py-2 rounded-md text-[13px] bg-[#FEF3C7] border-l-2 border-status-warning text-amber-800">
+            <Lock size={14} className="shrink-0" />
+            <span>
+              {readOnly
+                ? "Library Agent's system prompt cannot be modified."
+                : "Kobi Agent's system prompt cannot be modified."}
+            </span>
           </div>
         )}
       </div>

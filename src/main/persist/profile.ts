@@ -32,7 +32,6 @@ const SETTINGS_FILE_VERSION = 1 as const;
 
 /** 对应 settings.json —— UI 偏好聚合。 */
 class ProfileSettings extends PersistBase {
-  public toolBar?: SettingsFile['toolBar'];
   public confirmation?: SettingsFile['confirmation'];
 
   constructor(public readonly profileId: string) {
@@ -56,13 +55,11 @@ class ProfileSettings extends PersistBase {
   public async load() {
     const settings = await readJsonOrNull<SettingsFile>(PERSIST_PATH.settingsFile(getAppRoot(), this.profileId));
     if (!settings) return;
-    if (settings.toolBar !== undefined)      this.toolBar = settings.toolBar;
     if (settings.confirmation !== undefined) this.confirmation = settings.confirmation;
   }
 
   public toFile(): SettingsFile {
     const file: SettingsFile = { version: SETTINGS_FILE_VERSION };
-    if (this.toolBar !== undefined)        file.toolBar = this.toolBar;
     if (this.confirmation !== undefined)   file.confirmation = this.confirmation;
     return file;
   }
@@ -260,7 +257,7 @@ export class Profile {
 
   /**
    * 取 agent record 列表。`Profile.load()` 已在 bootstrap 阶段 preload `agentRegistry`，
-   * sync 返回（含登录关键路径 main.ts toolbar 计算 / subAgentManager 同步 lookup 在内的所有调用方共用）。
+   * sync 返回（含 subAgentManager / skill 等登录关键路径上的同步 lookup 调用方共用）。
    */
   public listAgents(): AgentRecord[] {
     return this.agentRegistry.items;

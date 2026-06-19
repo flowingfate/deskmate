@@ -113,8 +113,8 @@ const McpContentView: React.FC<McpContentViewProps> = ({
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 gap-3 p-3">
-      <Card className="flex w-80 shrink-0 flex-col overflow-hidden p-3">
+    <div className="flex h-full">
+      <div className="p-3 w-65 border-r border-black/7">
         <McpServerListView
           servers={servers}
           isLoading={isLoading}
@@ -136,14 +136,13 @@ const McpContentView: React.FC<McpContentViewProps> = ({
             onEdit,
           }}
         />
-      </Card>
+      </div>
 
-      <Card className="flex min-w-0 flex-1 flex-col overflow-hidden p-4">
+      <div className="flex flex-1 p-3">
         {viewMode === 'list' ? (
           <ScrollArea className="min-h-0 flex-1">
             <McpToolListView
               tools={selectedServerTools}
-              selectedTool={selectedTool}
               onSelectTool={handleToolSelect}
               isLoading={isLoading && !selectedServer}
             />
@@ -155,7 +154,7 @@ const McpContentView: React.FC<McpContentViewProps> = ({
             onBack={handleBackToList}
           />
         )}
-      </Card>
+      </div>
     </div>
   );
 };

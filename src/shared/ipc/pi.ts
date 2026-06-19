@@ -78,7 +78,7 @@ type RenderToMain = {
   startLogin: { call: [provider: string]; return: IpcResult<{ sessionId: string }> };
   cancelLogin: { call: [sessionId: string]; return: IpcResult };
   submitPrompt: { call: [sessionId: string, value: string | undefined]; return: IpcResult };
-  setApiKey: { call: [provider: string, apiKey: string]; return: IpcResult };
+  setApiKey: { call: [provider: string, apiKey: string, baseUrl?: string]; return: IpcResult };
   logout: { call: [provider: string]; return: IpcResult };
 
   // ── models ──

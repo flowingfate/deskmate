@@ -135,7 +135,7 @@ export class Profiles {
 
   /**
    * 同步取 active profile —— 仅在 bootstrap() 完成后可用。
-   * 给登录关键路径上的 sync getter（main.ts toolBarSettings 同步读取等）用。
+   * 给登录关键路径上的 sync getter（skill / subAgent 等同步 lookup）用。
    * 实现走 `Profile.get()` 同步缓存（bootstrap 已 load 进 cache）；未 bootstrap 时抛错。
    */
   public activeSync(): Profile {

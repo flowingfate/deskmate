@@ -44,16 +44,13 @@ export type ProfileIndexEntry = GuestProfileEntry | SignedInProfileEntry;
 
 export interface SettingsFile {
   version: 1;
-  toolBar?: ToolBarSettings;
   confirmation?: ConfirmationSettings;
 }
 
 export type {
-  ToolBarSettings,
   ConfirmationSettings,
 } from '../types/profileTypes';
 import type {
-  ToolBarSettings,
   ConfirmationSettings,
 } from '../types/profileTypes';
 

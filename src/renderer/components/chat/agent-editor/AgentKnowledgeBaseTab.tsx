@@ -12,8 +12,6 @@ import {
   FolderPlus,
   ChevronLeft,
   ChevronRight,
-  Plus,
-  ChevronDown,
   File,
   Trash2,
   Clipboard,
@@ -98,19 +96,19 @@ const FileIcon: React.FC<{ extension: string | null; fileName?: string }> = ({ e
 
 // Loading animation component - consistent with SkillFolderExplorer
 const LoadingSpinner = () => (
-  <div className="skill-folder-loading">
+  <div className="flex flex-col items-center justify-center gap-4 px-5 py-16 text-content-secondary">
     <svg
       width="32"
       height="32"
       viewBox="0 0 32 32"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      style={{ animation: 'spin 1s linear infinite' }}
+      className="animate-spin"
     >
       <circle cx="16" cy="16" r="14" stroke="#e0e0e0" strokeWidth="2"/>
       <path d="M30 16C30 23.732 23.732 30 16 30" stroke="#272320" strokeWidth="2" strokeLinecap="round"/>
     </svg>
-    <span>Loading directory...</span>
+    <span className="text-base">Loading directory...</span>
   </div>
 );
 
@@ -141,8 +139,6 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
 
 
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [showAddMenu, setShowAddMenu] = useState(false);
-  const addMenuRef = useRef<HTMLDivElement>(null);
   const { openPasteDialog } = usePasteToWorkspace();
   const watchStartedRef = useRef(false);
   const fileChangeListenerRef = useRef<(() => void) | null>(null);
@@ -667,7 +663,6 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
     } catch (error) {
       logger.error({ msg: "Error in handleAddFiles:", err: error });
     }
-    setShowAddMenu(false);
   }, [readOnly, workspacePath, directoryStack, reloadExplorer]);
 
   // Handle add folder button click
@@ -719,7 +714,6 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
     } catch (error) {
       logger.error({ msg: "Error in handleAddFolder:", err: error });
     }
-    setShowAddMenu(false);
   }, [readOnly, workspacePath, directoryStack, reloadExplorer]);
 
   // ========== Paste to Knowledge Base feature ==========
@@ -804,23 +798,6 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
     fileTreeNodeMenuActions.open(e.clientX, e.clientY, node, workspacePath);
   }, [workspacePath]);
 
-  // Click outside to close dropdown menu
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (addMenuRef.current && !addMenuRef.current.contains(event.target as Node)) {
-        setShowAddMenu(false);
-      }
-    };
-
-    if (showAddMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showAddMenu]);
-
   // Get empty state message
   const getEmptyStateMessage = useCallback(() => {
     const agentName = agentData?.name || 'Agent';
@@ -837,162 +814,99 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
 
   return (
     <div
-      className={`agent-tab agent-workspace-tab ${isDraggingOver ? 'dragging-over' : ''}`}
+      className={`relative flex h-full min-h-0 flex-col ${isDraggingOver ? 'bg-blue-500/5' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Drop Overlay */}
       {isDraggingOver && (
-        <div className="workspace-drop-overlay">
-          <div className="workspace-drop-overlay-content">
-            <div className="workspace-drop-icon">📁</div>
-            <p>Drop files or folders here to add to Knowledge Base</p>
+        <div className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center bg-blue-500/10">
+          <div className="rounded-xl border-2 border-dashed border-blue-500 bg-surface-primary/90 p-8 text-center shadow-lg backdrop-blur-sm">
+            <div className="mb-4 animate-bounce text-6xl">📁</div>
+            <p className="m-0 text-lg font-medium text-blue-500">Drop files or folders here to add to Knowledge Base</p>
           </div>
         </div>
       )}
 
-      {/* Tab Body - consistent structure with SkillFolderExplorer */}
-      <div className="tab-body workspace-tab-body">
-        {/* Workspace Content - use skill-folder-explorer styles */}
+      {/* Tab Body */}
+      <div className="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-hidden">
         {isValidWorkspacePath(workspacePath) ? (
-          <div className="skill-folder-explorer">
-            {/* Header: breadcrumb navigation - consistent with SkillFolderExplorer */}
-            <div className="skill-folder-explorer-header">
-              <Folder size={18} className="skill-folder-header-icon" />
-              {directoryStack.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="skill-folder-back-btn"
-                  onClick={handleBack}
-                  title="Go back"
-                >
-                  <ChevronLeft size={20} strokeWidth={2} />
-                </Button>
-              )}
-              <div className="skill-folder-breadcrumb">
-                {breadcrumbParts.map((part, index, arr) => (
-                  <React.Fragment key={part.path}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`skill-folder-breadcrumb-item ${index === arr.length - 1 ? 'active' : ''}`}
-                      onClick={() => handleBreadcrumbClick(index)}
-                      disabled={index === arr.length - 1}
-                    >
-                      {part.name}
-                    </Button>
-                    {index < arr.length - 1 && (
-                      <span className="skill-folder-breadcrumb-separator">/</span>
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
-
-              {/* Action Section - fixed on the right */}
-              {!readOnly && (
-                <div className="workspace-actions">
-
-                  {/* Clear Current Folder button - show when items exist, disabled when path unsaved */}
-                  {currentItems.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="workspace-delete-btn"
-                      onClick={handleClearCurrentFolder}
-                      title="Clear all items in current folder"
-                    >
-                      <Trash2 size={16} />
-                      <span>Clear Current Folder</span>
-                    </Button>
-                  )}
-
-                  {/* Add dropdown menu - disabled when path unsaved */}
-                  <div className="workspace-add-menu-container" ref={addMenuRef}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="workspace-add-files-btn"
-                      onClick={() => setShowAddMenu(!showAddMenu)}
-                      title="Add files or folders"
-                    >
-                      <Plus size={16} />
-                      <span>Add</span>
-                      <ChevronDown size={14} className={`workspace-add-chevron ${showAddMenu ? 'open' : ''}`} />
-                    </Button>
-
-                    {showAddMenu && (
-                      <div className="workspace-add-dropdown">
+          <div
+            className={`flex h-full flex-initial flex-col ${isDraggingOver ? 'rounded-xl outline-dashed outline-2 outline-blue-500/50' : ''
+              }`}
+          >
+            {/* Header */}
+            {directoryStack.length > 0 && (
+              <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
+                <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="size-7 shrink-0"
+                    onClick={handleBack}
+                    title="Go back"
+                  >
+                    <ChevronLeft size={18} strokeWidth={2} />
+                  </Button>
+                  <div className="flex flex-wrap items-center gap-1 overflow-hidden">
+                    {breadcrumbParts.map((part, index, arr) => (
+                      <React.Fragment key={part.path}>
                         <Button
                           variant="ghost"
-                          className="workspace-add-dropdown-item"
-                          onClick={handleAddFiles}
+                          size="sm"
+                          className={`h-auto px-2 py-1 text-sm ${index === arr.length - 1
+                            ? 'font-semibold text-content-heading'
+                            : 'font-medium text-content-secondary'
+                            }`}
+                          onClick={() => handleBreadcrumbClick(index)}
+                          disabled={index === arr.length - 1}
                         >
-                          <File size={16} />
-                          <span>Add Files</span>
+                          {part.name}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          className="workspace-add-dropdown-item"
-                          onClick={handleAddFolder}
-                        >
-                          <FolderPlus size={16} />
-                          <span>Add Folder</span>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="workspace-add-dropdown-item"
-                          onClick={handleOpenPasteDialog}
-                        >
-                          <Clipboard size={16} />
-                          <span>Paste Text</span>
-                        </Button>
-                      </div>
-                    )}
+                        {index < arr.length - 1 && (
+                          <span className="text-content-tertiary">/</span>
+                        )}
+                      </React.Fragment>
+                    ))}
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Content: file and directory list */}
-            <div className="skill-folder-explorer-content">
+            <div className="flex-1 overflow-y-auto p-4 pb-3">
               {isLoading ? (
                 <LoadingSpinner />
               ) : currentItems.length > 0 ? (
-                <div className="skill-folder-items">
+                <div className="flex flex-col gap-3">
                   {currentItems.map((item) => (
                     <div
                       key={item.path}
-                      className={`skill-folder-item ${item.isDirectory ? 'directory' : 'file'}`}
+                      className="group flex cursor-pointer items-center gap-3 rounded border border-border bg-surface-primary px-4 py-3 transition-colors hover:bg-surface-secondary"
                       onClick={() => item.isDirectory ? handleDirectoryClick(item) : handleFileClick(item)}
                     >
-                      <div className="skill-folder-item-icon">
+                      <div className="flex shrink-0 items-center justify-center text-content-secondary">
                         {item.isDirectory ? (
                           <Folder size={16} />
                         ) : (
                           <FileIcon extension={item.extension} fileName={item.name} />
                         )}
                       </div>
-                      <div className="skill-folder-item-info">
-                        <span className="skill-folder-item-name">{item.name}</span>
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <span className="flex-1 break-words text-sm font-semibold text-content-heading">{item.name}</span>
                         {item.isFile && (
-                          <span className="skill-folder-item-size">
+                          <span className="shrink-0 text-xs text-content-tertiary">
                             {formatFileSize(item.size)}
                           </span>
                         )}
                       </div>
-                      {item.isDirectory && (
-                        <div className="skill-folder-item-arrow">
-                          <ChevronRight size={20} />
-                        </div>
-                      )}
                       {/* More options button - triggers context menu via AgentLayout */}
                       {!readOnly && (
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="skill-folder-item-more-btn"
+                          size="icon-sm"
+                          className="size-7 shrink-0 text-content-tertiary"
                           onClick={(e) => handleItemMoreMenu(e, item)}
                           title="More options"
                         >
@@ -1003,51 +917,72 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
                   ))}
                 </div>
               ) : (
-                /* Empty folder state - reference skills-empty-state design */
-                <div className="workspace-folder-empty-state">
-                  <div className="workspace-folder-empty-content">
-                    <div className="workspace-folder-empty-icon">
-                      <FolderOpen size={56} />
+                /* Empty folder state */
+                <div className="flex h-full items-center justify-center">
+                  <div className="flex max-w-[480px] flex-col items-center gap-2 p-6 text-center">
+                    <div className="mb-1 text-content-tertiary">
+                      <FolderOpen size={40} />
                     </div>
-                    <p className="workspace-folder-empty-text">{emptyMessage.title}</p>
-                    <p className="workspace-folder-empty-subtext">{emptyMessage.subtitle}</p>
-                    {!readOnly && (
-                      <div className="workspace-folder-empty-actions">
-                        <Button
-                          className="workspace-folder-empty-btn primary"
-                          onClick={handleAddFiles}
-                        >
-                          <File size={18} />
-                          <span>Add Files</span>
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          className="workspace-folder-empty-btn secondary"
-                          onClick={handleAddFolder}
-                        >
-                          <FolderPlus size={18} />
-                          <span>Add Folder</span>
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          className="workspace-folder-empty-btn secondary"
-                          onClick={handleOpenPasteDialog}
-                        >
-                          <Clipboard size={18} />
-                          <span>Paste Text</span>
-                        </Button>
-                      </div>
-                    )}
+                    <p className="m-0 text-lg font-semibold text-content-heading">{emptyMessage.title}</p>
+                    <p className="m-0 text-base text-content-secondary">{emptyMessage.subtitle}</p>
                   </div>
                 </div>
               )}
             </div>
+
+            {/* Footer toolbar: breadcrumb navigation (when nested) + actions */}
+            {!readOnly && (
+              <div className="flex shrink-0 items-center gap-2 border-t border-border px-4 py-2">
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                  {currentItems.length > 0 && (
+                    <Button
+                      size="sm"
+                      className="gap-1.5 border border-red-500/30 bg-red-500/[0.08] text-red-600 hover:border-red-500/50 hover:bg-red-500/15 hover:text-red-600"
+                      onClick={handleClearCurrentFolder}
+                      title="Clear all items in current folder"
+                    >
+                      <Trash2 size={16} />
+                      <span>Clear</span>
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleAddFiles}
+                    title="Add files"
+                  >
+                    <File size={16} />
+                    <span>Add Files</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleAddFolder}
+                    title="Add folder"
+                  >
+                    <FolderPlus size={16} />
+                    <span>Add Folder</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleOpenPasteDialog}
+                    title="Paste text"
+                  >
+                    <Clipboard size={16} />
+                    <span>Paste Text</span>
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <LoadingSpinner />
         )}
       </div>
-
     </div>
   );
 };

@@ -1,12 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { skillsApi } from '@/ipc/skill'
 import {
   ChevronLeft,
   ChevronRight,
   Folder,
-  FolderOpen,
   FileText,
   FileCode,
   FileJson,
@@ -14,8 +13,11 @@ import {
   Palette,
   Globe,
   Image as ImageIcon,
+  Loader2,
 } from 'lucide-react'
+import { cn } from '@/lib/utilities/utils'
 import { Button } from '@/shadcn/button'
+import { ScrollArea } from '@/shadcn/scroll-area'
 import { SkillConfig } from '../../lib/userData/types'
 import { FileInfo } from './SkillViewPanel'
 import { log } from '@/log';
@@ -42,27 +44,8 @@ interface SkillFolderExplorerProps {
   onFileSelect: (fileInfo: FileInfo) => void
 }
 
-// Loading spinner component
-const LoadingSpinner = () => (
-  <div className="skill-folder-loading">
-    <svg
-      width="32"
-      height="32"
-      viewBox="0 0 32 32"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ animation: 'spin 1s linear infinite' }}
-    >
-      <circle cx="16" cy="16" r="14" stroke="#e0e0e0" strokeWidth="2"/>
-      <path d="M30 16C30 23.732 23.732 30 16 30" stroke="#272320" strokeWidth="2" strokeLinecap="round"/>
-    </svg>
-    <span>Loading directory...</span>
-  </div>
-)
-
-// File icon component - consistent with FileTreeExplorer
+// File icon by extension — consistent with FileTreeExplorer
 const FileIcon: React.FC<{ extension: string | null }> = ({ extension }) => {
-  // Return different icons based on file extension, consistent with FileTreeExplorer
   const ext = extension?.toLowerCase()
   switch (ext) {
     case 'ts':
@@ -136,7 +119,6 @@ const SkillFolderExplorer: React.FC<SkillFolderExplorerProps> = ({
       const { skillName } = event.detail;
       // Only refresh when the refreshed skill is the currently displayed skill
       if (skillName === skill.name) {
-        // Reload current directory
         loadDirectory(currentPath);
       }
     };
@@ -184,15 +166,6 @@ const SkillFolderExplorer: React.FC<SkillFolderExplorerProps> = ({
     }
   }, [pathHistory, loadDirectory])
 
-  // Get current directory name
-  const getCurrentDirectoryName = () => {
-    if (!currentPath) {
-      return skill.name
-    }
-    const parts = currentPath.split(/[/\\]/)
-    return parts[parts.length - 1] || skill.name
-  }
-
   // Build breadcrumb path
   const getBreadcrumbParts = () => {
     const parts = [{ name: skill.name, path: '' }]
@@ -209,15 +182,12 @@ const SkillFolderExplorer: React.FC<SkillFolderExplorerProps> = ({
 
   // Handle breadcrumb click
   const handleBreadcrumbClick = useCallback((targetPath: string) => {
-    // If clicking the current path, do nothing
     if (targetPath === currentPath) {
       return
     }
 
-    // Build new history based on target path
-    // All paths before the target path should become the new history
     const pathParts = targetPath ? targetPath.split(/[/\\]/).filter(Boolean) : []
-    const newHistory: string[] = [''] // Start from root (empty string represents root)
+    const newHistory: string[] = ['']
     let accumulatedPath = ''
     for (const part of pathParts) {
       accumulatedPath = accumulatedPath ? `${accumulatedPath}/${part}` : part
@@ -225,93 +195,116 @@ const SkillFolderExplorer: React.FC<SkillFolderExplorerProps> = ({
         newHistory.push(accumulatedPath)
       }
     }
-    // Remove root empty string from history, unless it is the only entry
     if (targetPath !== '') {
-      setPathHistory(newHistory.slice(1)) // Do not include root in history
+      setPathHistory(newHistory.slice(1))
     } else {
       setPathHistory([])
     }
     loadDirectory(targetPath)
   }, [loadDirectory, currentPath])
 
+  const breadcrumbParts = getBreadcrumbParts()
+
   return (
-    <div className="skill-folder-explorer">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Header: breadcrumb navigation */}
-      <div className="skill-folder-explorer-header">
+      <div className="flex shrink-0 items-center gap-1 border-b border-sc-border px-3 py-2.5">
         {pathHistory.length > 0 && (
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
+            className="shrink-0"
             onClick={handleBack}
             title="Go back"
           >
-            <ChevronLeft size={20} strokeWidth={2} />
+            <ChevronLeft size={16} />
           </Button>
         )}
-        <div className="skill-folder-breadcrumb">
-          {getBreadcrumbParts().map((part, index, arr) => (
-            <React.Fragment key={part.path}>
-              <Button
-                variant="ghost"
-                className={`skill-folder-breadcrumb-item ${index === arr.length - 1 ? 'active' : ''}`}
-                onClick={() => handleBreadcrumbClick(part.path)}
-                disabled={index === arr.length - 1}
-              >
-                {part.name}
-              </Button>
-              {index < arr.length - 1 && (
-                <span className="skill-folder-breadcrumb-separator">/</span>
-              )}
-            </React.Fragment>
-          ))}
+        <div className="flex min-w-0 flex-wrap items-center gap-0.5">
+          {breadcrumbParts.map((part, index, arr) => {
+            const isLast = index === arr.length - 1
+            return (
+              <React.Fragment key={part.path}>
+                <button
+                  type="button"
+                  onClick={() => handleBreadcrumbClick(part.path)}
+                  disabled={isLast}
+                  className={cn(
+                    'max-w-[12rem] truncate rounded px-1.5 py-0.5 text-sm transition-colors',
+                    isLast
+                      ? 'font-semibold text-sc-foreground'
+                      : 'text-sc-muted-foreground hover:bg-sc-accent hover:text-sc-foreground',
+                  )}
+                >
+                  {part.name}
+                </button>
+                {!isLast && (
+                  <span className="text-sm text-sc-muted-foreground/60">/</span>
+                )}
+              </React.Fragment>
+            )
+          })}
         </div>
       </div>
 
       {/* Content: file and directory list */}
-      <div className="skill-folder-explorer-content">
-        {isLoading ? (
-          <LoadingSpinner />
-        ) : error ? (
-          <div className="skill-folder-error">
-            <span>⚠️ {error}</span>
-          </div>
-        ) : directoryContents && directoryContents.items.length > 0 ? (
-          <div className="skill-folder-items">
+      {isLoading ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-sc-muted-foreground">
+          <Loader2 className="size-6 animate-spin" />
+          <p className="text-sm">Loading directory...</p>
+        </div>
+      ) : error ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-red-500">
+          <p>{error}</p>
+        </div>
+      ) : directoryContents && directoryContents.items.length > 0 ? (
+        <ScrollArea className="min-h-0 flex-1">
+          <ul className="flex flex-col gap-1.5 p-3">
             {directoryContents.items.map((item) => (
-              <div
-                key={item.path}
-                className={`skill-folder-item ${item.isDirectory ? 'directory' : 'file'}`}
-                onClick={() => item.isDirectory ? handleDirectoryClick(item) : handleFileClick(item)}
-              >
-                <div className="skill-folder-item-icon">
-                  {item.isDirectory ? (
-                    <Folder size={16} />
-                  ) : (
-                    <FileIcon extension={item.extension} />
+              <li key={item.path}>
+                <button
+                  type="button"
+                  onClick={() => item.isDirectory ? handleDirectoryClick(item) : handleFileClick(item)}
+                  className={cn(
+                    'group flex w-full items-center gap-3 rounded-lg border border-sc-border bg-sc-card px-3 py-2.5 text-left transition-colors',
+                    'hover:border-indigo-300 hover:bg-sc-accent/60 dark:hover:border-indigo-500/40',
                   )}
-                </div>
-                <div className="skill-folder-item-info">
-                  <span className="skill-folder-item-name">{item.name}</span>
+                >
+                  <span
+                    className={cn(
+                      'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+                      item.isDirectory
+                        ? 'bg-indigo-50 text-indigo-500 group-hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-400 dark:group-hover:bg-indigo-500/25'
+                        : 'bg-sc-muted text-sc-muted-foreground',
+                    )}
+                  >
+                    {item.isDirectory ? <Folder size={16} /> : <FileIcon extension={item.extension} />}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-sc-foreground">
+                    {item.name}
+                  </span>
                   {item.isFile && (
-                    <span className="skill-folder-item-size">
+                    <span className="shrink-0 text-xs tabular-nums text-sc-muted-foreground">
                       {formatFileSize(item.size)}
                     </span>
                   )}
-                </div>
-                {item.isDirectory && (
-                  <div className="skill-folder-item-arrow">
-                    <ChevronRight size={20} />
-                  </div>
-                )}
-              </div>
+                  {item.isDirectory && (
+                    <ChevronRight
+                      size={16}
+                      className="shrink-0 text-sc-muted-foreground opacity-0 transition-opacity group-hover:opacity-60"
+                    />
+                  )}
+                </button>
+              </li>
             ))}
-          </div>
-        ) : (
-          <div className="skill-folder-empty">
-            <span>This directory is empty</span>
-          </div>
-        )}
-      </div>
+          </ul>
+        </ScrollArea>
+      ) : (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-sm text-sc-muted-foreground">
+          <Folder className="size-10 opacity-40" />
+          <p>This directory is empty</p>
+        </div>
+      )}
     </div>
   )
 }

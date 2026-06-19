@@ -61,7 +61,11 @@ export class PiAuthManager {
   /** 已登录的 provider id 列表 */
   async listProviders(): Promise<ProviderAccountSummary[]> {
     await this.ensureLoaded();
-    return Object.entries(this.cached!.providers).map(([provider, p]) => ({ provider, type: p.type }));
+    return Object.entries(this.cached!.providers).map(([provider, p]) => ({
+      provider,
+      type: p.type,
+      ...(p.type === 'apiKey' && p.baseUrl ? { baseUrl: p.baseUrl } : {}),
+    }));
   }
 
   /**
@@ -81,6 +85,14 @@ export class PiAuthManager {
     if (!entry) return null;
     if (entry.type === 'apiKey') return entry.apiKey;
     return null;
+  }
+
+  /** 取 apiKey provider 存储的自定义 baseUrl（用于 OpenAI/Anthropic 兼容厂商）。 */
+  async getBaseUrl(provider: string): Promise<string | undefined> {
+    await this.ensureLoaded();
+    const entry = this.cached!.providers[provider];
+    if (!entry || entry.type !== 'apiKey') return undefined;
+    return entry.baseUrl;
   }
 
   /**
@@ -129,9 +141,9 @@ export class PiAuthManager {
     await this.writeProvider(provider, { type: 'oauth', credentials });
   }
 
-  async setApiKey(provider: string, apiKey: string): Promise<void> {
+  async setApiKey(provider: string, apiKey: string, baseUrl?: string): Promise<void> {
     if (!apiKey) throw new Error('[pi/auth] setApiKey: apiKey is empty');
-    await this.writeProvider(provider, { type: 'apiKey', apiKey });
+    await this.writeProvider(provider, { type: 'apiKey', apiKey, ...(baseUrl ? { baseUrl } : {}) });
   }
 
   async logout(provider: string): Promise<void> {

@@ -163,10 +163,10 @@ export default function (ctx: Context) {
     return { success: true };
   });
 
-  handle.setApiKey(async (_event, provider, apiKey) => {
+  handle.setApiKey(async (_event, provider, apiKey, baseUrl) => {
     try {
       const profileId = Profiles.get().activeProfileId;
-      await getPiAuthManager(profileId).setApiKey(provider, apiKey);
+      await getPiAuthManager(profileId).setApiKey(provider, apiKey, baseUrl);
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };

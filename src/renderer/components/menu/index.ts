@@ -2,7 +2,6 @@
 export { default as AgentDropdownMenu } from './AgentDropdownMenu';
 export { default as McpServerDropdownMenu } from './McpServerDropdownMenu';
 export { default as WorkspaceMenuDropdown } from './WorkspaceMenuDropdown';
-export { default as McpAddMenuDropdown } from './McpAddMenuDropdown';
 export { default as SkillsAddMenuDropdown } from './SkillsAddMenuDropdown';
 export { default as SkillDropdownMenu } from './SkillDropdownMenu';
 export { default as EditAgentMenuDropdown } from './EditAgentMenuDropdown';

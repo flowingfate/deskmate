@@ -1,0 +1,14 @@
+/* =========================================================
+   Ladle 全局样式入口
+
+   复用 app 真实主题：globals.css 自身已 `@import "tailwindcss"`
+   + shadcn 设计令牌（sc-* 颜色、--radius、.dark 暗色变量）+
+   base reset / 滚动条等。直接复用避免与生产环境样式漂移。
+
+   @source 显式声明 shadcn 组件目录与 story 目录，
+   保证 Tailwind v4 在任何 cwd 下都能扫描到这些类名。
+   ========================================================= */
+@import "../src/renderer/styles/globals.css";
+
+@source "../src/renderer/shadcn/**/*.{ts,tsx}";
+@source "../src/renderer/story/**/*.{ts,tsx}";

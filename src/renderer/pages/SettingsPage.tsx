@@ -43,7 +43,6 @@ const SettingsPage: React.FC = () => {
     onMcpServerEdit: actions.handleMcpServerEdit,
     onMcpServerMenuToggle: menus.handleMcpServerMenuToggle,
     mcpServerMenuState: menus.mcpServerMenu,
-    onMcpAddMenuToggle: menus.handleMcpAddMenuToggle,
     onSkillsAddMenuToggle: menus.handleSkillsAddMenuToggle,
     onSkillMenuToggle: menus.handleSkillMenuToggle,
     onSubAgentsAddMenuToggle: menus.handleSubAgentsAddMenuToggle,

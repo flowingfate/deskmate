@@ -26,7 +26,6 @@ const McpView: React.FC = () => {
     onMcpServerReconnect,
     onMcpServerDelete,
     onMcpServerEdit,
-    onMcpAddMenuToggle,
   } = useOutletContext<AgentContextType>();
 
   // MCP runtime servers + stats（runtime state 来自 mcpClientCacheManager）
@@ -232,11 +231,11 @@ const McpView: React.FC = () => {
       actions={
         <Button
           variant="ghost"
-          size="icon"
-          onClick={(e) => (onMcpAddMenuToggle || (() => {}))(e.currentTarget)}
+          size="icon-sm"
+          onClick={() => navigate('/settings/mcp/new')}
           title="Add MCP Server"
         >
-          <Plus size={16} />
+          <Plus size={14} />
         </Button>
       }
     >

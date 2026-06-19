@@ -162,7 +162,10 @@ export async function resolveCredentials(
         `Please sign in via Settings → Providers.`,
     );
   }
-  return { apiKey, model: baseModel };
+  // 用户自定义 baseUrl（兼容 OpenAI/Anthropic 的第三方厂商）→ 覆盖 model 默认值
+  const customBaseUrl = await auth.getBaseUrl(baseModel.provider);
+  const model = customBaseUrl ? { ...baseModel, baseUrl: customBaseUrl } : baseModel;
+  return { apiKey, model };
 }
 
 /**

@@ -61,31 +61,31 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           result.push('</ul>')
           inList = false
         }
-        result.push(`<h3>${line.substring(4)}</h3>`)
+        result.push(`<h3 class="text-lg font-semibold text-content-heading mt-0 mb-1">${line.substring(4)}</h3>`)
       } else if (line.startsWith('## ')) {
         if (inList) {
           result.push('</ul>')
           inList = false
         }
-        result.push(`<h2>${line.substring(3)}</h2>`)
+        result.push(`<h2 class="text-xl font-semibold text-content-strong mt-0 mb-2 pb-1 border-b border-border">${line.substring(3)}</h2>`)
       } else if (line.startsWith('# ')) {
         if (inList) {
           result.push('</ul>')
           inList = false
         }
-        result.push(`<h1>${line.substring(2)}</h1>`)
+        result.push(`<h1 class="text-2xl font-bold text-content-strong mt-0 mb-2 pb-2 border-b-2 border-border">${line.substring(2)}</h1>`)
       } else if (line.startsWith('- ')) {
         // List items
         if (!inList) {
-          result.push('<ul>')
+          result.push('<ul class="mt-0 mb-2 pl-6 list-disc">')
           inList = true
         }
         let listContent = line.substring(2)
         // Apply inline formatting
         listContent = listContent
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        result.push(`<li>${listContent}</li>`)
+          .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-content-strong">$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em class="italic text-gray-600">$1</em>')
+        result.push(`<li class="my-1 text-content-heading first:mt-0 last:mb-0">${listContent}</li>`)
       } else {
         // Regular paragraphs
         if (inList) {
@@ -95,9 +95,9 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         let content = line
         // Apply inline formatting
         content = content
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        result.push(`<p>${content}</p>`)
+          .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-content-strong">$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em class="italic text-gray-600">$1</em>')
+        result.push(`<p class="mt-0 mb-2 text-content-heading last:mb-0">${content}</p>`)
       }
     }
 
@@ -110,14 +110,14 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   }
 
   return (
-    <div className="markdown-editor">
+    <div className="flex flex-col h-full bg-white">
 
       {/* Content Area */}
-      <div className="content-area">
+      <div className="flex-1 overflow-hidden relative">
         {showPreview ? (
           /* Preview Mode */
           <div
-            className="preview-content"
+            className="h-full p-2 overflow-y-auto leading-[1.6] text-content-heading"
             dangerouslySetInnerHTML={{
               __html: renderMarkdown(value)
             }}
@@ -126,11 +126,11 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           /* Edit Mode */
           <>
             {!value && !readOnly && (
-              <div className="edit-textarea-tips" aria-hidden="true">
+              <div className="absolute inset-0 right-0 bottom-auto p-2 text-content-tertiary text-sm leading-[1.6] pointer-events-none whitespace-pre-wrap" aria-hidden="true">
                 {SYSTEM_PROMPT_TIPS.map((line, index) => (
                   <span
                     key={`${index}-${line}`}
-                    className={line ? 'edit-textarea-tips-line' : 'edit-textarea-tips-spacer'}
+                    className="block"
                   >
                     {line || '\u00A0'}
                   </span>
@@ -139,7 +139,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             )}
             <Textarea
               ref={textareaRef}
-              className={`edit-textarea ${readOnly ? 'readonly' : ''}`}
+              className="w-full h-full p-6 border-none outline-none resize-none text-sm leading-[1.6] text-content-heading bg-white box-border overflow-y-auto"
               value={value}
               onChange={(e) => !readOnly && onChange(e.target.value)}
               readOnly={readOnly}

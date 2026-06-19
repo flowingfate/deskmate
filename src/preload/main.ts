@@ -17,14 +17,12 @@ import invokeChatSession from './chatSession/invoke';
 import invokeFs from './fs/invoke';
 import invokeWorkspace from './workspace/invoke';
 import { invokeMcp, invokeMcpAuth } from './mcp/invoke';
-import invokeToolbar from './toolbar/invoke';
 import { invokeSkills } from './skill/invoke';
 import invokeTools from './tools/invoke';
 import { invokeSubAgent } from './subAgent/invoke';
 import invokeRuntime from './runtime/invoke';
 import invokeUpdate from './update/invoke';
 import invokeQuickStartImageCache from './quickStartImageCache/invoke';
-import invokeMainWindow from './mainWindow/invoke';
 import invokeAttachment from './attachment/invoke';
 import invokeInternalUrls from './internalUrls/invoke';
 
@@ -114,11 +112,6 @@ export interface ElectronAPI {
     off: OnOff;
   };
 
-  // Main window control (typed IPC)
-  mainWindow: {
-    invoke: InvokeFn;
-  };
-
   // Logger — 渲染进程统一日志通道（单向 send，main 端不返回）
   log: {
     write: (level: LogLevel, fields: LogFields) => void;
@@ -164,12 +157,6 @@ export interface ElectronAPI {
 
 
 
-  // ToolBar management (Phase 5.4 + Phase 6.4)
-  toolbar: {
-    invoke: InvokeFn;
-    on: OnOff;
-    off: OnOff;
-  };
 
   // Quick Start Image Cache APIs (typed IPC)
   quickStartImageCache: {
@@ -279,10 +266,6 @@ export const electronAPI: ElectronAPI = {
     on: ipcOn,
     off: ipcOff,
   },
-  // Main window control
-  mainWindow: {
-    invoke: invokeMainWindow,
-  },
   log: {
     write: (level: LogLevel, fields: LogFields) =>
       ipcRenderer.send('log:write', { level, fields }),
@@ -307,13 +290,6 @@ export const electronAPI: ElectronAPI = {
 
   workspace: {
     invoke: invokeWorkspace,
-    on: ipcOn,
-    off: ipcOff,
-  },
-
-  // ToolBar management
-  toolbar: {
-    invoke: invokeToolbar,
     on: ipcOn,
     off: ipcOff,
   },

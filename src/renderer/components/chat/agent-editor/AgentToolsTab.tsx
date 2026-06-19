@@ -134,9 +134,9 @@ const AgentToolsTab: React.FC<TabComponentProps> = ({
   const isAllSelected = totalSelected === allTools.length && allTools.length > 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-3">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-2 border-b border-black/7">
         <div className="flex items-center gap-2 text-sm text-sc-foreground">
           <span>
             <strong className="font-semibold">{totalSelected}</strong>
@@ -164,22 +164,21 @@ const AgentToolsTab: React.FC<TabComponentProps> = ({
             Clear
           </Button>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
+            className="gap-1.5"
             onClick={handleManageTools}
             title="Open local tools catalog"
           >
-            <ExternalLink data-icon="inline-start" />
+            <ExternalLink size={14} data-icon="inline-start" />
             View Catalog
           </Button>
         </div>
       </div>
 
-      <Separator />
-
       {/* Body */}
       {isLoading ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-sc-muted-foreground">
+        <div className="flex flex-1 items-center justify-center text-sm text-sc-muted-foreground p-2">
           Loading tools...
         </div>
       ) : allTools.length === 0 ? (
@@ -189,14 +188,14 @@ const AgentToolsTab: React.FC<TabComponentProps> = ({
           <p className="text-xs">No tools are currently registered in the local catalog.</p>
         </div>
       ) : (
-        <>
+        <div className="p-2 gap-2 flex flex-1 flex-col min-h-0">
           <ListSearchBox
             value={searchQuery}
             onChange={setSearchQuery}
             placeholder="Search local tools..."
           />
           <ScrollArea className="min-h-0 flex-1">
-            <ul className="flex flex-col gap-1.5 pr-2">
+            <ul className="flex flex-col gap-1.5">
               {filteredTools.map((tool) => {
                 const isSelected = selectedTools.has(tool.name);
                 return (
@@ -215,9 +214,9 @@ const AgentToolsTab: React.FC<TabComponentProps> = ({
                           {tool.name}
                         </span>
                         {tool.description && (
-                          <span className="text-xs leading-relaxed text-sc-muted-foreground">
+                          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-sc-muted-foreground">
                             {tool.description}
-                          </span>
+                          </pre>
                         )}
                       </div>
                     </label>
@@ -226,7 +225,7 @@ const AgentToolsTab: React.FC<TabComponentProps> = ({
               })}
             </ul>
           </ScrollArea>
-        </>
+        </div>
       )}
     </div>
   );

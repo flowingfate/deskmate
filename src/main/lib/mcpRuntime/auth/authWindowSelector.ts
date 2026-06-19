@@ -38,10 +38,6 @@ export function isPrimaryAuthUiWindow(window: AuthUiWindowCandidate): boolean {
     return false;
   }
 
-  if (url.includes('toolbar.html') || url.includes('/toolbar')) {
-    return false;
-  }
-
   if (url.includes('screenshot.html') || url.includes('/screenshot')) {
     return false;
   }

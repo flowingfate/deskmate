@@ -132,7 +132,6 @@ export const Selectors = {
   SETTINGS_NAV_ABOUT: 'a[href*="settings/about"]',
   SETTINGS_NAV_SCREENSHOT: 'a[href*="settings/screenshot"]',
   SETTINGS_NAV_BROWSER: 'a[href*="settings/browser-control"]',
-  SETTINGS_NAV_TOOLBAR: 'a[href*="settings/toolbar"]',
 
   // ==================== MCP management ====================
   MCP_ADD_SERVER_BUTTON: 'button:has-text("Add")',

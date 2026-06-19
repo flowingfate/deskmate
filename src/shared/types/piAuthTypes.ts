@@ -19,9 +19,10 @@ export interface PiAuthFile {
 
 export type ProviderAuth =
   | { type: 'oauth'; credentials: OAuthCredentials }
-  | { type: 'apiKey'; apiKey: string };
+  | { type: 'apiKey'; apiKey: string; baseUrl?: string };
 
 export interface ProviderAccountSummary {
   provider: string;
   type: ProviderAuth['type'];
+  baseUrl?: string;
 }

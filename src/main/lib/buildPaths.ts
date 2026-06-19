@@ -2,7 +2,7 @@
 //
 // 构建布局（dev 与 prod 一致）：
 //   out/main/        main / bootstrap / chunks / sqlite-transport.cjs
-//   out/preload/     preload.js / preload.toolbar.js / preload.screenshot.js / preload.log-viewer.js
+//   out/preload/     preload.js / preload.screenshot.js / preload.log-viewer.js
 //   out/renderer/    React SPA
 //
 // 打包时 scripts/vite/pack.ts 把整个 out/ 复制为 vite-pack/out/，
@@ -19,7 +19,6 @@ const PRELOAD_DIR = path.join(MAIN_DIR, '..', 'preload');
 
 export const PRELOAD_PATH = {
   main: path.join(PRELOAD_DIR, 'preload.js'),
-  toolbar: path.join(PRELOAD_DIR, 'preload.toolbar.js'),
   screenshot: path.join(PRELOAD_DIR, 'preload.screenshot.js'),
   logViewer: path.join(PRELOAD_DIR, 'preload.log-viewer.js'),
 } as const;

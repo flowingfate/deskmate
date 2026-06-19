@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter, useLocation } from 'react-router-dom';
 import { ToastHost } from '../components/ui/ToastProvider';
 import { UpdateHost } from '../components/autoUpdate/UpdateProvider';
-import { ToolBarPage } from '../pages/ToolBarPage';
 import { AppRoutes } from './main.routes';
 import { TitleBar } from '../pages/layout/titlebar';
 import WindowZoomHotkeys from '../pages/layout/WindowZoomHotkeys';
@@ -23,15 +22,6 @@ const McpConnectionFailureToastListener: React.FC = () => {
 };
 
 const AppContent: React.FC = () => {
-  // Check if this is a ToolBar window
-  const isToolBarWindow = window.location.pathname === '/toolbar';
-
-  // If this is a ToolBar window, render the ToolBar page directly
-  if (isToolBarWindow) {
-    logger.debug({ msg: "Rendering ToolBar page" });
-    return <ToolBarPage />;
-  }
-
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       {/* McpConnectionFailureToastListener must be inside HashRouter because it uses useNavigate */}
@@ -87,7 +77,6 @@ const App: React.FC = () => {
 
 
   // 🚀 Loading Screen (Wait for Backend Services)
-  // ToolBar window bypasses this check if needed, or follows same flow
   // We check isAppReady for everyone to ensure backend is ready
   if (!isAppReady) {
     return (

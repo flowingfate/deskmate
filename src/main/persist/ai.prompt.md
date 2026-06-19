@@ -56,7 +56,7 @@ Profiles.get().active()          → Profile
 
 ### 同步 vs 异步访问 active profile
 - `Profiles.get().active(): Promise<Profile>` —— 常规路径，bootstrap 后从 cache 直接返。
-- `Profiles.get().activeSync(): Profile` —— 仅供登录关键路径上的 sync getter 用（如 main.ts toolBarSettings 同步读取）。bootstrap 未完成时直接抛错，防止误吞 null。`switch()` 后 cache 自动更新。
+- `Profiles.get().activeSync(): Profile` —— 仅供登录关键路径上的 sync getter 用（如 skill / subAgent 等同步 lookup）。bootstrap 未完成时直接抛错，防止误吞 null。`switch()` 后 cache 自动更新。
 
 ### Session 物理位置
 `Session` 是抽象基类（messages.jsonl I/O + files sandbox + 节流 persist + 元数据 mutate），路径树由子类各自实现：
@@ -120,7 +120,7 @@ Profiles.get().active()          → Profile
 |---|---|---|
 | `Profiles.bootstrap()` 幂等 | `profiles.ts` | 多入口（main / lazy / evalMode）可重复调；二次调用 no-op |
 | `Profiles.activeSync(): Profile` | `profiles.ts` | 登录链 sync getter；bootstrap 未完抛错 |
-| `Profile.patchSettings(partial)` | `profile.ts` | 细粒度更新 toolBar/confirmation 等子域，未传字段不动 |
+| `Profile.patchSettings(partial)` | `profile.ts` | 细粒度更新 confirmation 等子域，未传字段不动 |
 | `Profile.duplicateAgent(srcId, newName)` | `profile.ts` | 复制 agent：front-matter + systemPrompt + knowledge 目录；sessions/schedules 不拷 |
 | `Agent.toRecord()` / `Agent.toDetail()` | `agent.ts` | 两层视图：record 是 hot list 字段（同步 `agents.json#items`），detail 是 cold 字段（systemPrompt + mcp + skills + ...）。`Agent.patchFront` 内部自动写两边；renderer 按 hook 取 record，按 lazy fetch 取 detail。**`toView()` 已删**（Step 5）—— 不要恢复 |
 | `Session.tailMessages(n)` / `sliceMessages(offset, n)` | `session.ts` | 分页加载 messages.jsonl（合并 disk + pending），返回 `{items, hasMore, nextOffset, total}` |

@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useMemo } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { ChevronLeft, FileText } from 'lucide-react'
+import React, { useState } from 'react'
+import { ArrowLeft, Copy, Check, FileText } from 'lucide-react'
 import { Button } from '@/shadcn/button'
+import { Badge } from '@/shadcn/badge'
+import { ScrollArea } from '@/shadcn/scroll-area'
+import { MarkdownView } from '../chat/message/MarkdownView'
 import { SkillConfig } from '../../lib/userData/types'
 import { FileInfo } from './SkillViewPanel'
 import { FrontMatter, parseFrontMatter } from '../../lib/utils/yamlFrontMatter'
@@ -15,20 +16,21 @@ interface SkillFileViewerProps {
   onBack: () => void
 }
 
-// Front Matter table component
+// Front matter — 紧凑的 key/value 表(Tailwind)
 const FrontMatterTable: React.FC<{ frontMatter: FrontMatter }> = ({ frontMatter }) => {
   const entries = Object.entries(frontMatter)
-
   if (entries.length === 0) return null
 
   return (
-    <div className="skill-file-frontmatter">
-      <table className="skill-file-frontmatter-table">
+    <div className="mb-5 overflow-hidden rounded-md border border-sc-border">
+      <table className="w-full text-sm">
         <tbody>
-          {entries.map(([key, value]) => (
-            <tr key={key}>
-              <td className="skill-file-frontmatter-key">{key}</td>
-              <td className="skill-file-frontmatter-value">{value}</td>
+          {entries.map(([key, value], i) => (
+            <tr key={key} className={i > 0 ? 'border-t border-sc-border' : undefined}>
+              <td className="w-32 whitespace-nowrap bg-sc-muted/40 px-3 py-2 align-top font-medium text-sc-muted-foreground">
+                {key}
+              </td>
+              <td className="break-words px-3 py-2 text-sc-foreground">{value}</td>
             </tr>
           ))}
         </tbody>
@@ -37,21 +39,37 @@ const FrontMatterTable: React.FC<{ frontMatter: FrontMatter }> = ({ frontMatter 
   )
 }
 
-// Code highlight component (simple implementation)
+// 代码 / 纯文本块 — 浅色边框卡片,风格与 ToolDetailView 的 schema pre 一致
 const CodeBlock: React.FC<{ code: string; language: string }> = ({ code, language }) => {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // ignore
+    }
+  }
+
   return (
-    <div className="skill-file-code-block">
-      <div className="skill-file-code-header">
-        <span className="skill-file-code-language">{language}</span>
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-md border border-sc-border">
+      <div className="flex items-center justify-between border-b border-sc-border bg-sc-muted/40 px-3 py-1.5">
+        <span className="text-xs font-medium tracking-wide text-sc-muted-foreground">{language}</span>
+        <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={handleCopy}>
+          {copied ? <Check size={13} /> : <Copy size={13} />}
+          {copied ? 'Copied' : 'Copy'}
+        </Button>
       </div>
-      <pre className="skill-file-code-content">
+      <pre className="overflow-auto bg-sc-muted/20 p-3 font-mono text-xs leading-relaxed text-sc-foreground">
         <code>{code}</code>
       </pre>
     </div>
   )
 }
 
-// Get language display name
+// Display name for the language badge / code header
 const getLanguageDisplayName = (extension: string): string => {
   const languageMap: Record<string, string> = {
     'md': 'Markdown',
@@ -71,20 +89,9 @@ const getLanguageDisplayName = (extension: string): string => {
   return languageMap[extension] || extension.toUpperCase()
 }
 
-// Get file icon color
-const getFileIconColor = (extension: string): string => {
-  const colorMap: Record<string, string> = {
-    'md': '#0066cc',
-    'js': '#f7df1e',
-    'jsx': '#f7df1e',
-    'ts': '#3178c6',
-    'tsx': '#3178c6',
-    'py': '#3776ab',
-    'json': '#6b7280',
-    'css': '#264de4',
-    'html': '#e34f26'
-  }
-  return colorMap[extension] || '#9c9c9c'
+const CODE_EXTENSIONS: Record<string, true> = {
+  js: true, jsx: true, ts: true, tsx: true, py: true, json: true,
+  yaml: true, yml: true, css: true, html: true, xml: true,
 }
 
 const SkillFileViewer: React.FC<SkillFileViewerProps> = ({
@@ -94,7 +101,8 @@ const SkillFileViewer: React.FC<SkillFileViewerProps> = ({
 }) => {
   if (!fileInfo) {
     return (
-      <div className="skill-file-viewer-empty">
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-sm text-sc-muted-foreground">
+        <FileText className="size-10 opacity-40" />
         <span>No file selected</span>
       </div>
     )
@@ -102,98 +110,79 @@ const SkillFileViewer: React.FC<SkillFileViewerProps> = ({
 
   // Render file content
   const renderContent = () => {
-    // Unsupported file format
     if (!fileInfo.isSupported) {
       return (
-        <div className="skill-file-unsupported">
-          <FileText size={48} color="#9c9c9c" strokeWidth={1} />
-          <span className="skill-file-unsupported-text">This format is not supported for preview</span>
-          <span className="skill-file-unsupported-hint">
+        <div className="flex flex-col items-center justify-center gap-3 py-20 text-center text-sc-muted-foreground">
+          <FileText size={48} strokeWidth={1} className="opacity-40" />
+          <span className="text-sm font-medium">This format is not supported for preview</span>
+          <span className="text-xs text-sc-muted-foreground/70">
             File type: {fileInfo.extension ? `.${fileInfo.extension}` : 'Unknown'}
           </span>
         </div>
       )
     }
 
-    // No content
     if (!fileInfo.content) {
       return (
-        <div className="skill-file-empty-content">
+        <div className="flex items-center justify-center py-16 text-sm text-sc-muted-foreground">
           <span>File content is empty</span>
         </div>
       )
     }
 
-    // Render content based on file type
-    switch (fileInfo.extension) {
-      case 'md':
-        // Markdown rendering (supports YAML front matter and GFM tables)
-        const { frontMatter, content: markdownContent } = parseFrontMatter(fileInfo.content)
-        return (
-          <div className="skill-file-markdown">
-            {frontMatter && <FrontMatterTable frontMatter={frontMatter} />}
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
-          </div>
-        )
-
-      case 'js':
-      case 'jsx':
-      case 'ts':
-      case 'tsx':
-      case 'py':
-      case 'json':
-      case 'yaml':
-      case 'yml':
-      case 'css':
-      case 'html':
-      case 'xml':
-        // Code file rendering
-        return (
-          <CodeBlock
-            code={fileInfo.content}
-            language={getLanguageDisplayName(fileInfo.extension)}
-          />
-        )
-
-      default:
-        // Plain text rendering
-        return (
-          <div className="skill-file-text">
-            <pre>{fileInfo.content}</pre>
-          </div>
-        )
+    if (fileInfo.extension === 'md') {
+      const { frontMatter, content: markdownContent } = parseFrontMatter(fileInfo.content)
+      return (
+        <div>
+          {frontMatter && <FrontMatterTable frontMatter={frontMatter} />}
+          <MarkdownView text={markdownContent} />
+        </div>
+      )
     }
+
+    if (CODE_EXTENSIONS[fileInfo.extension]) {
+      return (
+        <CodeBlock
+          code={fileInfo.content}
+          language={getLanguageDisplayName(fileInfo.extension)}
+        />
+      )
+    }
+
+    // Plain text
+    return (
+      <pre className="overflow-auto whitespace-pre-wrap break-words rounded-md border border-sc-border bg-sc-muted/20 p-3 font-mono text-xs leading-relaxed text-sc-foreground">
+        {fileInfo.content}
+      </pre>
+    )
   }
 
   return (
-    <div className="skill-file-viewer">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Header: file name and back button */}
-      <div className="skill-file-viewer-header">
+      <div className="flex shrink-0 items-center gap-2 border-b border-sc-border px-3 py-2.5">
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-sm"
+          className="shrink-0"
           onClick={onBack}
           title="Back to folder"
         >
-          <ChevronLeft size={20} strokeWidth={2} />
+          <ArrowLeft size={16} />
         </Button>
-        <div className="skill-file-info">
-          <FileText
-            size={18}
-            color={getFileIconColor(fileInfo.extension)}
-            strokeWidth={1.5}
-          />
-          <span className="skill-file-name">{fileInfo.fileName}</span>
-          <span className="skill-file-type">
-            {getLanguageDisplayName(fileInfo.extension)}
-          </span>
-        </div>
+        <FileText size={16} className="shrink-0 text-sc-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-sc-foreground">
+          {fileInfo.fileName}
+        </span>
+        <Badge variant="secondary" className="shrink-0 text-xs">
+          {getLanguageDisplayName(fileInfo.extension)}
+        </Badge>
       </div>
 
       {/* Content: file content */}
-      <div className="skill-file-viewer-content">
-        {renderContent()}
-      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-4 pb-12">{renderContent()}</div>
+      </ScrollArea>
     </div>
   )
 }

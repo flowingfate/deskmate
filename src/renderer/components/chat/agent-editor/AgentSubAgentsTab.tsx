@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Settings } from 'lucide-react';
+import { Settings, Loader2 } from 'lucide-react';
 import { Button } from '@/shadcn/button'
 import { Checkbox } from '@/shadcn/checkbox'
 import { Badge } from '@/shadcn/badge'
+import { cn } from '@/lib/utilities/utils';
 
 import { TabComponentProps } from './types';
 import { useSubAgents } from '../../userData/userDataProvider';
@@ -152,13 +153,13 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
   return (
     <div className="agent-tab">
       {/* Tab Header */}
-      <div className="tab-header">
-        <div className="header-summary">
-          <span className="summary-text">
+      <div className="flex items-center justify-between p-2 min-h-[44px] shrink-0 bg-surface-primary border-b border-black/[0.08]">
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="font-medium text-[13px] leading-[18px] text-content-secondary">
             {selectedCount} selected from available sub-agents
           </span>
         </div>
-        <div className="header-actions">
+        <div className="flex items-center shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -171,28 +172,32 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
       </div>
 
       {/* Tab Body */}
-      <div className="tab-body">
+      <div className="flex-1 overflow-y-auto overflow-x-visible p-2 custom-scrollbar">
         {isLoading ? (
-          <div className="loading-state">
-            <div className="spinner">🔄</div>
+          <div className="flex flex-col items-center justify-center gap-3 px-5 py-8 text-content-secondary">
+            <Loader2 className="animate-spin" size={24} />
             <span>Loading Sub-Agents...</span>
           </div>
         ) : globalSubAgents && globalSubAgents.length > 0 ? (
           <>
             {/* Sub-Agent Cards List */}
-            <div className="skill-cards">
+            <div className="flex flex-col gap-2">
               {globalSubAgents.map((subAgent) => {
                 const isSelected = selectedSubAgents.has(subAgent.name);
 
                 return (
                   <div
                     key={subAgent.name}
-                    className={`skill-card ${isSelected ? 'selected' : ''} ${readOnly ? 'readonly' : ''}`}
+                    className={cn(
+                      'w-full rounded-lg border border-transparent bg-transparent transition-[background,border-color] border-black/7',
+                      !readOnly && 'hover:bg-black/2',
+                      isSelected && 'bg-black/1',
+                    )}
                     onClick={() => !readOnly && handleToggle(subAgent.name)}
                     style={readOnly ? { cursor: 'default' } : undefined}
                   >
-                    <div className="skill-card-header">
-                      <div className="skill-info">
+                    <div className="flex items-center justify-between w-full px-3 py-2.5 bg-transparent">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
                         <Checkbox
 
                           checked={isSelected}
@@ -204,10 +209,10 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
                           onClick={(e) => e.stopPropagation()}
                           disabled={readOnly}
                         />
-                        <div className="skill-card-name-group">
-                          <div className="server-title-row">
-                            <span className="sub-agent-emoji" style={{ marginRight: '6px' }}>{subAgent.emoji}</span>
-                            <span className="skill-card-name">{subAgent.display_name}</span>
+                        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="mr-1.5">{subAgent.emoji}</span>
+                            <span className="m-0 font-medium text-sm leading-5 text-content truncate">{subAgent.display_name}</span>
 
                           </div>
                           <div
@@ -219,21 +224,20 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
                             }}
                           >
                             {subAgent.version && (
-                              <span className="skill-card-version">
+                              <span className="inline-flex items-center justify-center self-start px-2 py-1 gap-1 rounded-lg bg-slate-400/30 text-slate-800 text-xs font-semibold leading-4 whitespace-nowrap">
                                 v{subAgent.version}
                               </span>
                             )}
-                            <span className="skill-card-version">
+                            <span className="inline-flex items-center justify-center self-start px-2 py-1 gap-1 rounded-lg bg-slate-400/30 text-slate-800 text-xs font-semibold leading-4 whitespace-nowrap">
                               {subAgent.context_access}
                             </span>
                           </div>
                         </div>
                       </div>
-                      <div className="skill-actions">
+                      <div className="flex shrink-0 items-center">
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="manage-btn always-visible"
+                          size="icon-sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleManageSubAgent(subAgent.name);
@@ -263,7 +267,7 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
             </div>
           </>
         ) : (
-          <div className="empty-state">
+          <div className="flex flex-col items-center justify-center gap-4 px-5 py-8 text-center text-content-secondary">
             <h4>No available Sub-Agents to select</h4>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary, #6b7280)', margin: '8px 0 16px' }}>
               Go to Settings → Sub-Agents to create or install sub-agents.

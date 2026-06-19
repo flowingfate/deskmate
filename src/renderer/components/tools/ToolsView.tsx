@@ -63,8 +63,8 @@ const ToolsView: React.FC = () => {
         </Badge>
       }
     >
-      <div className="flex h-full min-h-0 gap-3 p-3">
-        <Card className="flex w-80 shrink-0 flex-col gap-2 overflow-hidden p-3">
+      <div className="flex h-full">
+        <div className="p-3 flex flex-col gap-2 w-65 overflow-hidden border-r border-black/7">
           <ListSearchBox
             value={searchQuery}
             onChange={setSearchQuery}
@@ -78,11 +78,11 @@ const ToolsView: React.FC = () => {
               isLoading={isLoading}
             />
           </ScrollArea>
-        </Card>
+        </div>
 
-        <Card className="flex min-w-0 flex-1 flex-col overflow-hidden p-4">
+        <div className="p-3 flex min-w-0 flex-1 flex-col overflow-hidden">
           <ToolDetailView tool={selectedTool} />
-        </Card>
+        </div>
       </div>
     </SettingsLayout>
   );

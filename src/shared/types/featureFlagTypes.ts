@@ -4,7 +4,6 @@
  * Add new feature flags here
  */
 export type FeatureFlagName =
-  | 'deskmateFeatureToolbarSettings'    // Settings page Toolbar entry
   | 'deskmateFeatureScreenshot'         // Screenshot capture feature
   | 'deskmateUseGit'                    // Git integration feature
   | 'deskmateFeatureScheduler'          // Cron-based scheduled task system

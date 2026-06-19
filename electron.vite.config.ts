@@ -52,7 +52,6 @@ export default defineConfig(({ command, mode }) => {
         lib: {
           entry: {
             preload: resolve(__dirname, 'src/preload/main.ts'),
-            'preload.toolbar': resolve(__dirname, 'src/preload/toolbar.ts'),
             'preload.screenshot': resolve(__dirname, 'src/preload/screenshot.ts'),
             'preload.log-viewer': resolve(__dirname, 'src/preload/log-viewer.ts'),
           },
@@ -76,7 +75,6 @@ export default defineConfig(({ command, mode }) => {
         rolldownOptions: {
           input: {
             index: resolve(__dirname, 'src/renderer/index.html'),
-            toolbar: resolve(__dirname, 'src/renderer/toolbar.html'),
             screenshot: resolve(__dirname, 'src/renderer/screenshot.html'),
             'log-viewer': resolve(__dirname, 'src/renderer/log-viewer.html'),
           },
@@ -123,7 +121,6 @@ export default defineConfig(({ command, mode }) => {
         warmup: {
           clientFiles: [
             './index.tsx',
-            './toolbar.tsx',
             './screenshot.tsx',
           ],
         },

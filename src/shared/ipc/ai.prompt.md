@@ -157,5 +157,5 @@ const result = await screenshotApi.saveToFile(displayId, rect, imageData);
 
 ## 相关模块
 - 被使用于：所有跨进程通信的 main 和 renderer 模块，共 30+ 个命名空间已全部类型化。
-- 基础被消费于：`src/preload/main.ts`、`src/preload/toolbar.ts`、`src/preload/screenshot.ts`、`src/main/startup/ipc/` 下的 handler 文件。
+- 基础被消费于：`src/preload/main.ts`、`src/preload/screenshot.ts`、`src/main/startup/ipc/` 下的 handler 文件。
 - 另请参阅：[data-flow.md](../../../ai.prompt/data-flow.md) 了解更广泛的 IPC 和聊天消息数据流上下文。

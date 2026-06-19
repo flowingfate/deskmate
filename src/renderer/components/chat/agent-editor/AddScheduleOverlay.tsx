@@ -11,6 +11,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Switch } from '@/shadcn/switch'
 import { Button } from '@/shadcn/button'
 import { Input } from '@/shadcn/input'
+import { Popover, PopoverTrigger, PopoverContent } from '@/shadcn/popover'
+import { ChevronDown, Check } from 'lucide-react'
 import { Textarea } from '@/shadcn/textarea'
 import { schedulerApi } from '../../../ipc/scheduler'
 import type { SchedulerJob } from '@shared/ipc/scheduler'
@@ -385,8 +387,7 @@ const AddScheduleOverlay: React.FC<AddScheduleOverlayProps> = ({
   const [notifyOnCompletion, setNotifyOnCompletion] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showAgentDropdown, setShowAgentDropdown] = useState(false)
-  const agentDropdownRef = React.useRef<HTMLDivElement>(null)
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -433,22 +434,9 @@ const AddScheduleOverlay: React.FC<AddScheduleOverlayProps> = ({
 
     setSubmitting(false)
     setError(null)
-    setShowAgentDropdown(false)
+    setAgentPickerOpen(false)
     setMultiDailyDraftMessage(null)
   }, [open, editingJob, defaultAgentId, agents, initialValues])
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (agentDropdownRef.current && !agentDropdownRef.current.contains(event.target as Node)) {
-        setShowAgentDropdown(false)
-      }
-    }
-
-    if (showAgentDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showAgentDropdown])
 
   const dailyMultiTimesResult = useMemo(() => {
     if (mode !== 'recurring' || recurringPreset !== 'daily_multi_times') {
@@ -647,85 +635,51 @@ const AddScheduleOverlay: React.FC<AddScheduleOverlayProps> = ({
             </div>
             <div>
               <div style={sectionTitleStyle}>Agent</div>
-              <div className="model-selector" ref={agentDropdownRef}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  type="button"
-                  className="model-button"
-                  onClick={() => !isAgentSelectionLocked && setShowAgentDropdown(!showAgentDropdown)}
-                  disabled={isAgentSelectionLocked}
-                  title="Select Agent"
-                  style={isAgentSelectionLocked
-                    ? {
-                        ...fieldStyle,
-                        ...disabledFieldStyle,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        minHeight: '42px',
-                        margin: 0,
-                        appearance: 'none',
-                        WebkitAppearance: 'none',
-                      }
-                    : {
-                        ...fieldStyle,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        minHeight: '42px',
-                        margin: 0,
-                        appearance: 'none',
-                        WebkitAppearance: 'none',
-                      }}
-                >
-                  <span className="model-name">
-                    {agents.find((agent) => agent.id === agentId)?.name || 'Select Agent'}
-                  </span>
-                  <svg
-                    className={`dropdown-arrow ${showAgentDropdown ? 'rotated' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+              <Popover
+                open={agentPickerOpen}
+                onOpenChange={(o) => !isAgentSelectionLocked && setAgentPickerOpen(o)}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    disabled={isAgentSelectionLocked}
+                    title="Select Agent"
+                    className="w-full justify-start gap-2 h-auto px-3 py-2 font-normal"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
+                    <span className="flex-1 text-left truncate">
+                      {agents.find((agent) => agent.id === agentId)?.name || 'Select Agent'}
+                    </span>
+                    <ChevronDown
+                      size={16}
+                      className={`shrink-0 opacity-50 transition-transform ${agentPickerOpen ? 'rotate-180' : ''}`}
                     />
-                  </svg>
-                </Button>
-
-                {showAgentDropdown && !isAgentSelectionLocked && (
-                  <div className="model-dropdown">
-                    <div className="model-list">
-                      {agents.map((agent) => (
-                        <Button
-                          key={agent.id}
-                          variant="ghost"
-                          size="icon"
-                          type="button"
-                          className={`model-option ${agentId === agent.id ? 'selected' : ''}`}
-                          onClick={() => {
-                            setAgentId(agent.id)
-                            setShowAgentDropdown(false)
-                          }}
-                        >
-                          <div className="model-info chat-input-vertical">
-                            <span className="model-option-name">{agent.name}</span>
-                          </div>
-                          {agentId === agent.id && (
-                            <svg className="check-icon" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overflow-x-hidden p-1"
+                  align="start"
+                  sideOffset={4}
+                >
+                  {agents.map((agent) => (
+                    <Button
+                      key={agent.id}
+                      variant="ghost"
+                      type="button"
+                      className={`w-full justify-start gap-2 h-auto px-2 py-1.5 ${agentId === agent.id ? 'bg-sc-accent/50' : ''}`}
+                      onClick={() => {
+                        setAgentId(agent.id)
+                        setAgentPickerOpen(false)
+                      }}
+                    >
+                      <span className="flex-1 text-left truncate">{agent.name}</span>
+                      {agentId === agent.id && (
+                        <Check size={16} className="shrink-0 text-accent" />
+                      )}
+                    </Button>
+                  ))}
+                </PopoverContent>
+              </Popover>
               {isAgentSelectionLocked && (
                 <div style={{
                   marginTop: '6px',

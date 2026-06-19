@@ -17,7 +17,7 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
   children,
   className,
 }) => {
-  className = 'flex-1 min-h-0 ' + (className || '');
+  className = 'flex-1 min-h-0 overflow-y-auto ' + (className || '');
   return (
     <div
       className="flex flex-col h-full"

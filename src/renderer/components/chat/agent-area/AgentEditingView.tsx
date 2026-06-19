@@ -16,10 +16,12 @@ import { updateAgent } from '../../../lib/chat/agentOps'
 import { AgentPersona } from '../../../lib/userData/types'
 import { useToast } from '../../ui/ToastProvider'
 import { useFeatureFlag } from '../../../lib/featureFlags'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Loader2, Save } from 'lucide-react'
 import { Button } from '@/shadcn/button'
 import { Badge } from '@/shadcn/badge'
 import AgentPane from '@/pages/layout/agent/agent-pane'
+import { AgentAvatar } from '../../common/AgentAvatar'
+import AgentSettingsNav from '../agent-editor/AgentSettingsNav'
 import { log } from '@/log'
 
 const logger = log.child({ mod: 'AgentEditingView' })
@@ -256,7 +258,8 @@ const AgentEditingView: React.FC = () => {
   }, [pendingChanges, tabChangesCache, agentData, agentId, allAgents])
 
   // Check if there are any pending changes
-  const hasAnyPendingChanges = Object.values(pendingChanges).some(hasChange => hasChange)
+  const pendingCount = Object.values(pendingChanges).filter(Boolean).length
+  const hasAnyPendingChanges = pendingCount > 0
 
   // Check if save is possible (has changes and validation passes)
   const validationResult = validateAllChanges()
@@ -538,7 +541,7 @@ const AgentEditingView: React.FC = () => {
   // If no agentId, show error
   if (!agentId) {
     return (
-      <div className="agent-editing-view-error">
+      <div className="flex flex-col items-center justify-center h-full gap-4 p-6 text-center">
         <p>No agent selected. Please select an agent from the left navigation.</p>
         <Button onClick={() => navigate('/agent')}>Go to Chat</Button>
       </div>
@@ -546,21 +549,32 @@ const AgentEditingView: React.FC = () => {
   }
 
   return (
-    <AgentPane className="agent-editing-view h-full w-full">
+    <AgentPane className="flex flex-col h-full w-full bg-surface-primary">
       <AgentPane.Head>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={handleBackToChat}
             title="Back to Chat"
           >
-            <ArrowLeft size={20} strokeWidth={1.5} />
+            <ArrowLeft size={18} strokeWidth={1.75} />
           </Button>
-          <span className="text-sm font-semibold">
-           {agentData ? `${agentData.name} - Settings` : 'Agent Settings'}
-
-         </span>
+          {agentData && (
+            <AgentAvatar
+              emoji={agentData.emoji}
+              avatar={agentData.avatar}
+              name={agentData.name}
+              size="sm"
+              version={agentData.version}
+            />
+          )}
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span className="text-sm font-semibold truncate">
+              {agentData ? agentData.name : 'Agent'}
+            </span>
+            <span className="text-xs opacity-50 shrink-0">Settings</span>
+          </div>
         </div>
         <Button
           onClick={handleSaveAll}
@@ -573,30 +587,27 @@ const AgentEditingView: React.FC = () => {
                 : 'No Changes to Save'
           }
           size="sm"
-          style={{
-            padding: '6px 16px',
-            fontSize: '13px',
-            fontWeight: 500,
-            borderRadius: '6px',
-            border: 'none',
-            cursor: canSaveAll && !isLoading ? 'pointer' : 'not-allowed',
-            transition: 'all 0.2s ease',
-            backgroundColor: canSaveAll ? '#dc2626' : '#e5e7eb',
-            color: canSaveAll ? 'white' : '#9ca3af',
-            opacity: isLoading ? 0.7 : 1,
-          }}
+          className="gap-1.5 shrink-0"
         >
+          {isLoading
+            ? <Loader2 size={15} className="animate-spin" />
+            : <Save size={15} strokeWidth={1.75} />}
           {isLoading ? 'Saving...' : 'Save'}
+          {!isLoading && pendingCount > 0 && (
+            <Badge className="ml-0.5 h-4 px-1.5 py-0 text-[11px] font-semibold border-transparent bg-white/25 text-white">
+              {pendingCount}
+            </Badge>
+          )}
         </Button>
       </AgentPane.Head>
 
       <AgentPane.Body>
 
      {/* Content */}
-     <div className="agent-editing-view-content h-full">
+     <div className="flex flex-1 min-h-0 overflow-hidden h-full">
        {/* Error Display */}
        {error && (
-          <div className="agent-editing-view-error-banner">
+          <div className="px-6 shrink-0">
             <ErrorHandler
               error={error}
               onDismiss={handleClearError}
@@ -605,66 +616,20 @@ const AgentEditingView: React.FC = () => {
         )}
 
         {/* Left Navigation */}
-        <div className="agent-editing-view-navigation">
-          <div
-            className={`nav-tab ${tabState.activeTab === 'basic' ? 'active' : ''} ${tabState.tabsEnabled.basic ? '' : 'disabled'}`}
-            onClick={() => handleTabSwitch('basic')}
-          >
-            Basic
-            {pendingChanges.basic && <span className="change-indicator">●</span>}
-          </div>
-          <div
-            className={`nav-tab ${tabState.activeTab === 'knowledge' ? 'active' : ''} ${tabState.tabsEnabled.knowledge ? '' : 'disabled'}`}
-            onClick={() => handleTabSwitch('knowledge')}
-          >
-            Knowledge
-          </div>
-          <div
-            className={`nav-tab ${tabState.activeTab === 'mcp' ? 'active' : ''} ${tabState.tabsEnabled.mcp ? '' : 'disabled'}`}
-            onClick={() => handleTabSwitch('mcp')}
-          >
-            MCP Servers
-            {pendingChanges.mcp && <span className="change-indicator">●</span>}
-          </div>
-          <div
-            className={`nav-tab ${tabState.activeTab === 'tools' ? 'active' : ''} ${tabState.tabsEnabled.tools ? '' : 'disabled'}`}
-            onClick={() => handleTabSwitch('tools')}
-          >
-            Tools
-            {pendingChanges.tools && <span className="change-indicator">●</span>}
-          </div>
-          <div
-            className={`nav-tab ${tabState.activeTab === 'skills' ? 'active' : ''} ${tabState.tabsEnabled.skills ? '' : 'disabled'}`}
-            onClick={() => handleTabSwitch('skills')}
-          >
-            Skills
-            {pendingChanges.skills && <span className="change-indicator">●</span>}
-          </div>
-          {subAgentEnabled && (
-            <div
-              className={`nav-tab ${tabState.activeTab === 'sub_agents' ? 'active' : ''} ${tabState.tabsEnabled.sub_agents ? '' : 'disabled'}`}
-              onClick={() => handleTabSwitch('sub_agents')}
-            >
-              Sub-Agents
-              {pendingChanges.sub_agents && <span className="change-indicator">●</span>}
-            </div>
-          )}
-          <div
-            className={`nav-tab ${tabState.activeTab === 'prompt' ? 'active' : ''} ${tabState.tabsEnabled.prompt ? '' : 'disabled'}`}
-            onClick={() => handleTabSwitch('prompt')}
-          >
-            System Prompt
-            {pendingChanges.prompt && <span className="change-indicator">●</span>}
-          </div>
-        </div>
+        <AgentSettingsNav
+          activeTab={tabState.activeTab}
+          pendingChanges={pendingChanges}
+          subAgentEnabled={subAgentEnabled}
+          onSwitch={handleTabSwitch}
+        />
 
         {/* Right Content Area */}
-        <div className="agent-editing-view-main">
+        <div className="flex-1 min-w-0 overflow-hidden relative bg-white/95 box-border">
           {/* Loading Overlay */}
           {isLoading && (
-            <div className="loading-overlay">
-              <div className="loading-spinner">🔄</div>
-              <span className="loading-text">Saving...</span>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-[100] bg-white/70 backdrop-blur-[2px]">
+              <Loader2 className="text-accent animate-spin" size={20} strokeWidth={2} />
+              <span className="text-sm text-content-secondary font-medium">Saving...</span>
             </div>
           )}
 
