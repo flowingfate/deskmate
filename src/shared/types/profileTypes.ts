@@ -569,7 +569,7 @@ export interface Profile {
   alias: string;
   /** Whether First Run Experience is completed */
   freDone?: boolean;
-  /** Primary Agent, displayed first in AgentChatList and used as the default Agent on app startup. Defaults to Kobi */
+  /** Primary Agent, displayed first in AgentChatList and used as the default Agent on app startup. Falls back to the first agent when unset. */
   primaryAgent?: string;
   /** MCP server configuration */
   mcp_servers: McpServerConfig[];
@@ -632,9 +632,9 @@ export const DEFAULT_ZERO_STATES: ZeroStates = {
  */
 export const DEFAULT_AGENT_PERSONA: AgentPersona = {
   role: "Default Assistant",
-  emoji: "🐬",
+  emoji: "🦦",
   avatar: "",
-  name: "Kobi",
+  name: "Otto",
   model: DEFAULT_MODEL_ID,
   version: "1.0.0",
   // 不引外部 MCP;`tools: []` ⇒ 本地工具全开(见 `AgentMarkdownFrontBase.tools` 语义)。
@@ -687,18 +687,3 @@ export const DEFAULT_CONFIRMATION_SETTINGS: ConfirmationSettings = {
 };
 
 
-/**
- * Built-in Agent name constants
- */
-export const BUILTIN_AGENT_NAMES: string[] = ['Kobi'];
-
-export function getBuiltinAgentNames(): string[] {
-  return BUILTIN_AGENT_NAMES;
-}
-
-export function isBuiltinAgent(agentName: string | undefined | null): boolean {
-  if (!agentName) return false;
-  return BUILTIN_AGENT_NAMES.some(
-    name => name.toLowerCase() === agentName.toLowerCase()
-  );
-}

@@ -251,11 +251,11 @@ export class EvalAgentRunner {
       if (agent) return primary;
     }
     const records = profile.listAgents();
-    const byName = records.find((r) => r.name === 'Kobi') ?? records[0];
-    if (!byName) {
+    const fallback = records[0];
+    if (!fallback) {
       throw new Error(`No agents found under profile "${profile.id}"`);
     }
-    return byName.id;
+    return fallback.id;
   }
 
   /**

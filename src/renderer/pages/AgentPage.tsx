@@ -2,7 +2,7 @@ import React, { memo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import AgentLayout from './layout/agent/AgentLayout';
-import { getAgents, getPrimaryAgentName } from '@/states/agents.atom';
+import { getAgents, getPrimaryAgentId } from '@/states/agents.atom';
 import { getProfileId } from '@/states/profile.atom';
 import {
   useMessagesWithStream,
@@ -53,16 +53,16 @@ export const AgentPage: React.FC = () => {
         return;
       }
 
-      const primaryAgentName = getPrimaryAgentName();
       const agents = getAgents();
-      logger.debug({ msg: "Primary agent name", primaryAgentName, agentsCount: agents.length });
+      logger.debug({ msg: "Selecting startup agent", agentsCount: agents.length });
 
       if (agents.length === 0) {
         logger.warn({ msg: "No agents found in profile" });
         return;
       }
 
-      const primaryAgent = agents.find((a) => a.name === primaryAgentName);
+      const primaryAgentId = getPrimaryAgentId();
+      const primaryAgent = primaryAgentId ? agents.find((a) => a.id === primaryAgentId) : undefined;
 
       let targetAgentId: string | undefined;
 

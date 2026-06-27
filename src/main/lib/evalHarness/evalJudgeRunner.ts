@@ -49,16 +49,14 @@ export class EvalJudgeRunner {
 
     const records = profile.listAgents();
     const primaryId = profile.getPrimaryAgentId();
-    const primaryRecord = primaryId ? records.find((r) => r.id === primaryId) : undefined;
-    const primaryAgentName = primaryRecord?.name ?? 'Kobi';
-    const match = records.find((r) => r.name === primaryAgentName);
+    const match = (primaryId ? records.find((r) => r.id === primaryId) : undefined) ?? records[0];
     if (!match) {
-      throw new Error(`Primary agent "${primaryAgentName}" not found in profile`);
+      throw new Error(`No agents found in profile`);
     }
     const agent = await profile.getAgent(match.id);
     const model = agent?.config.model;
     if (!model) {
-      throw new Error(`No model configured for primary agent "${primaryAgentName}"`);
+      throw new Error(`No model configured for primary agent "${match.name}"`);
     }
     return model;
   }

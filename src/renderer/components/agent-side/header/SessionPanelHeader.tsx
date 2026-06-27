@@ -2,7 +2,6 @@ import React, { useCallback } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import { Badge } from '@/shadcn/badge';
-import { isBuiltinAgent } from '@/lib/userData/types';
 import type { AgentRecord } from '@shared/persist/types';
 import { AgentMenuAtom } from '@/components/menu/AgentDropdownMenu';
 import AlarmToggleButton, { type SessionPanelMode } from './AlarmToggleButton';
@@ -29,7 +28,7 @@ const SessionPanelHeader: React.FC<SessionPanelHeaderProps> = ({ agentId, agent,
   }, [agentId, agentMenuActions]);
 
   const agentName = agent?.name || 'No Agent Selected';
-  const isBuiltin = isBuiltinAgent(agent?.name);
+  const isBuiltin = agent?.locked === true;
 
   return (
     <div

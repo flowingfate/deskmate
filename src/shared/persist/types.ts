@@ -121,6 +121,12 @@ interface AgentRecordBase {
   emoji?: string;
   avatar?: string;
   /**
+   * 受保护标记。`true` ⇒ 该 agent 的身份(name/emoji/avatar)、system prompt、
+   * 内置 skill 绑定不可在 UI 修改,且不可归档/删除。源真值在 AGENT.md front-matter,
+   * 派生到 record(hot)供 sidebar/menu 无需 cold fetch 即可判定。缺席 ⇒ 普通可编辑 agent。
+   */
+  locked?: boolean;
+  /**
    * 列表层就要展示（chat header、model selector），下沉到 AgentDetail 会让
    * 每个 chat header 触发一次 detail fetch；与 name/version 同等待遇。
    * 是 AGENT.md front-matter `model` 的派生缓存，patchFront 写两边。
@@ -141,6 +147,8 @@ interface AgentMarkdownFrontBase {
   name: string;
   emoji?: string;
   avatar?: string;
+  /** 受保护标记;语义同 `AgentRecordBase.locked`。AGENT.md 是源真值。 */
+  locked?: boolean;
   version: string;
   model: string;
   thinkingLevel?: ThinkingLevel;
@@ -182,7 +190,7 @@ export interface AgentMarkdownFile {
  * 「patch 字段 ⊂ record ∪ detail」契约。
  */
 export type AgentFrontPatch =
-  & Partial<Pick<AgentRecordBase, 'name' | 'version' | 'model' | 'emoji' | 'avatar'>>
+  & Partial<Pick<AgentRecordBase, 'name' | 'version' | 'model' | 'emoji' | 'avatar' | 'locked'>>
   & Partial<Pick<AgentDetail, 'tools' | 'mcpServers' | 'skills' | 'subAgents' | 'zeroStates'>>
   & {
     /**

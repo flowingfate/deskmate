@@ -27,13 +27,6 @@ export type { SchedulerJob } from '../../../../main/lib/scheduler/types'
 export type { AppConfig, RuntimeEnvironment, RuntimeMode } from '@shared/types/appConfig'
 export { DEFAULT_RUNTIME_ENVIRONMENT, DEFAULT_APP_CONFIG, isAppConfig, isRuntimeEnvironment, isRuntimeMode } from '@shared/types/appConfig'
 
-// Re-export builtin agent constants and utilities
-export {
-  BUILTIN_AGENT_NAMES,
-  getBuiltinAgentNames,
-  isBuiltinAgent
-} from '@shared/types/profileTypes'
-
 /**
  * MCP Server status enumeration - matches backend
  * @deprecated Please import this type from mcpClientCacheManager

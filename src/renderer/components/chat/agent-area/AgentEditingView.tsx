@@ -193,6 +193,7 @@ const AgentEditingView: React.FC = () => {
         systemPrompt: detail?.systemPrompt ?? '',
         skills: detail?.skills,
         subAgents: detail?.subAgents,
+        locked: currentAgent.locked,
         createdAt: new Date(),
         updatedAt: new Date()
       }
@@ -352,6 +353,7 @@ const AgentEditingView: React.FC = () => {
           mcpServers: detail?.mcpServers ?? [],
           tools: detail?.tools,
           systemPrompt: detail?.systemPrompt ?? '',
+          locked: currentAgent.locked,
           createdAt: new Date(),
           updatedAt: new Date()
         }

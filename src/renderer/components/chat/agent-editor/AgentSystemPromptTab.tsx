@@ -16,11 +16,11 @@ const AgentSystemPromptTab: React.FC<TabComponentProps> = ({
   cachedData,
   readOnly = false
 }) => {
-  // Check if this is the Kobi Agent (system prompt modification is prohibited)
-  const isKobiAgent = agentData?.name?.toLowerCase() === 'kobi'
+  // 受保护(locked)的 agent：system prompt 不可编辑
+  const isLocked = agentData?.locked === true
 
-  // Check if editing is disabled (read-only mode or Kobi Agent)
-  const isEditDisabled = readOnly || isKobiAgent
+  // Check if editing is disabled (read-only mode or locked agent)
+  const isEditDisabled = readOnly || isLocked
 
   const [systemPrompt, setSystemPrompt] = useState('')
   const [showPreview, setShowPreview] = useState(false)
@@ -188,7 +188,7 @@ Add your specific instructions here...`
             <span>
               {readOnly
                 ? "Library Agent's system prompt cannot be modified."
-                : "Kobi Agent's system prompt cannot be modified."}
+                : "This agent is locked; its system prompt cannot be modified."}
             </span>
           </div>
         )}

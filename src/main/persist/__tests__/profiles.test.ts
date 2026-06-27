@@ -336,22 +336,22 @@ describe('Profile duplicateAgent', () => {
     const profile = await reg.active();
 
     const src = await profile.createAgent({
-      name: 'Kobi',
+      name: 'Otto',
       version: '2.0.0',
       
       model: 'github-copilot::claude-sonnet-4.6',
-      systemPrompt: 'You are Kobi.',
+      systemPrompt: 'You are Otto.',
     });
     await src.patchFront({ skills: ['skill-a'], subAgents: ['sub-a'] });
 
-    const dst = await profile.duplicateAgent(src.id, 'Kobi Clone');
+    const dst = await profile.duplicateAgent(src.id, 'Otto Clone');
     expect(dst.id).not.toBe(src.id);
-    expect(dst.config.name).toBe('Kobi Clone');
+    expect(dst.config.name).toBe('Otto Clone');
     expect(dst.config.version).toBe('1.0.0');
     expect(dst.config.model).toBe(src.config.model);
     expect(dst.config.skills).toEqual(['skill-a']);
     expect(dst.config.subAgents).toEqual(['sub-a']);
-    expect(dst.systemPrompt).toBe('You are Kobi.');
+    expect(dst.systemPrompt).toBe('You are Otto.');
 
     // 出现在 agents.json items
     const list = profile.listAgents();

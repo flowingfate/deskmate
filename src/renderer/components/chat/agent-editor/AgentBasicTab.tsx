@@ -48,11 +48,11 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
   const [loadedAgentId, setLoadedAgentId] = useState<string | null>(null)
   const [nameWarning, setNameWarning] = useState<string>('')
 
-  // Check if this is the Kobi Agent (emoji modification is prohibited)
-  const isKobiAgent = agentData?.name?.toLowerCase() === 'kobi'
+  // 受保护(locked)的 agent：身份(name/emoji/avatar)不可编辑
+  const isLocked = agentData?.locked === true
 
-  // avatar/emoji/name are not editable for Kobi or in read-only mode
-  const isAvatarNameDisabled = readOnly || isKobiAgent
+  // avatar/emoji/name are not editable for locked agents or in read-only mode
+  const isAvatarNameDisabled = readOnly || isLocked
   const isModelDisabled = readOnly
 
   // Initial data used to detect modifications
@@ -243,7 +243,7 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
             <div
               className="flex items-center justify-center size-12 rounded-lg border border-black/10 bg-surface-primary text-2xl cursor-pointer transition-all hover:border-gray-400 hover:bg-black/5"
               onClick={() => !isAvatarNameDisabled && setShowEmojiPicker(true)}
-              title={readOnly ? "Avatar cannot be modified" : isKobiAgent ? "Kobi Agent's avatar cannot be modified" : "Click to change avatar"}
+              title={readOnly ? "Avatar cannot be modified" : isLocked ? "This agent is locked; its avatar cannot be modified" : "Click to change avatar"}
               style={isAvatarNameDisabled ? { cursor: 'not-allowed', opacity: 0.6 } : undefined}
             >
               <AgentAvatar
@@ -255,7 +255,7 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
               />
             </div>
             <span className="text-content-secondary text-[13px] font-normal">
-              {readOnly ? "Avatar cannot be modified" : isKobiAgent ? "Kobi Agent's avatar cannot be modified" : "Click to choose avatar"}
+              {readOnly ? "Avatar cannot be modified" : isLocked ? "This agent is locked; its avatar cannot be modified" : "Click to choose avatar"}
             </span>
           </div>
         </div>

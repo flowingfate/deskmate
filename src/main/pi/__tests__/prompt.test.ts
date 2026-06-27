@@ -34,7 +34,7 @@ import { buildSystemPrompt } from '../prompt';
 
 function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
   return {
-    name: 'Kobi',
+    name: 'Otto',
     emoji: '🤖',
     model: 'github-copilot::claude-sonnet-4.6',
     mcpServers: [],
@@ -65,7 +65,7 @@ describe('buildSystemPrompt', () => {
     });
     expect(out.startsWith('You are helpful.')).toBe(true);
     expect(out).toContain('Your Identity:');
-    expect(out).toContain('**Kobi**');
+    expect(out).toContain('**Otto**');
     expect(out).toContain('<<GLOBAL_PROMPT>>');
     // 三段以 \n\n---\n\n 连接
     expect(out.split('\n\n---\n\n').length).toBe(3);

@@ -10,7 +10,7 @@ import type { AgentMarkdownFile } from '../types';
 
 const SAMPLE: AgentMarkdownFile = {
   frontMatter: {
-    name: 'Kobi',
+    name: 'Otto',
     version: '1.0.0',
     model: 'github-copilot::claude-sonnet-4.6',
     emoji: '🤖',
@@ -25,7 +25,7 @@ describe('shared/persist/markdown', () => {
     const parsed = parseAgentMarkdown(raw);
     const reSerialized = serializeAgentMarkdown(parsed);
     expect(reSerialized).toBe(raw);
-    expect(parsed.frontMatter.name).toBe('Kobi');
+    expect(parsed.frontMatter.name).toBe('Otto');
     expect(parsed.systemPrompt).toBe(SAMPLE.systemPrompt);
   });
 
@@ -43,7 +43,7 @@ describe('shared/persist/markdown', () => {
     const patched = patchFrontMatter(raw, { version: '2.0.0' });
     const parsed = parseAgentMarkdown(patched);
     expect(parsed.frontMatter.version).toBe('2.0.0');
-    expect(parsed.frontMatter.name).toBe('Kobi');
+    expect(parsed.frontMatter.name).toBe('Otto');
     expect(parsed.systemPrompt).toBe(SAMPLE.systemPrompt);
   });
 
@@ -52,6 +52,6 @@ describe('shared/persist/markdown', () => {
     const patched = patchSystemPrompt(raw, 'new body');
     const parsed = parseAgentMarkdown(patched);
     expect(parsed.systemPrompt).toBe('new body\n');
-    expect(parsed.frontMatter.name).toBe('Kobi');
+    expect(parsed.frontMatter.name).toBe('Otto');
   });
 });

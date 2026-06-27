@@ -2,7 +2,6 @@ import React, { useState, createElement, useCallback } from 'react';
 import { Pencil, Trash2, Copy, Upload, Archive, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../ui/ToastProvider';
-import { isBuiltinAgent } from '../../lib/userData/types';
 import { useAgentById, getAgentById, usePrimaryAgentId } from '@/states/agents.atom';
 import { persistApi } from '@/ipc/persist';
 import { agentChatApi } from '@/ipc/agentChat';
@@ -60,8 +59,8 @@ const AgentDropdownMenu: React.FC<InnerProps> = ({
 
   const anchorRect = anchorElement.getBoundingClientRect();
 
-  // Determine if this is a built-in agent
-  const isBuiltinAgentFlag = isBuiltinAgent(currentAgent?.name);
+  // 受保护(locked)的 agent 不可归档/删除
+  const isLocked = currentAgent?.locked === true;
 
   // Check if the current Agent is already the Primary Agent（按 id 直接比对）
   const isPrimaryAgent = primaryAgentId !== null && primaryAgentId === agentId;
@@ -199,13 +198,13 @@ const AgentDropdownMenu: React.FC<InnerProps> = ({
             <span>Duplicate</span>
           </DropdownMenuItem>
         )}
-        {onArchiveAgent && !isBuiltinAgentFlag && !isPrimaryAgent && (
+        {onArchiveAgent && !isLocked && !isPrimaryAgent && (
           <DropdownMenuItem onClick={() => { if (agentId) onArchiveAgent(agentId); }}>
             <Archive size={16} strokeWidth={1.5} />
             <span>Archive Agent</span>
           </DropdownMenuItem>
         )}
-        {!isBuiltinAgentFlag && !isPrimaryAgent && (
+        {!isLocked && !isPrimaryAgent && (
           <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => handleDeleteAgentClick(agentId!)}>
             <Trash2 size={16} strokeWidth={1.5} />
             <span>Delete Agent</span>

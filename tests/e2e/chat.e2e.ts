@@ -28,14 +28,14 @@ const TARGET_SESSION_TITLE = 'Archived Session Scroll Target';
 const TARGET_SESSION_OLDEST_MARKER = 'OLDEST_TARGET_MARKER';
 const TARGET_SESSION_NEWEST_MARKER = 'NEWEST_TARGET_MARKER';
 
-async function ensureKobiSessionListVisible(chatWindow: any): Promise<void> {
+async function ensureOttoSessionListVisible(chatWindow: any): Promise<void> {
   const sessionList = chatWindow.locator(Selectors.CHAT_SESSION_LIST).first();
 
   if (await sessionList.isVisible().catch(() => false)) {
     return;
   }
 
-  await chatWindow.getByRole('button', { name: 'Kobi' }).first().click();
+  await chatWindow.getByRole('button', { name: 'Otto' }).first().click();
   await expect(sessionList).toBeVisible({ timeout: 10_000 });
 }
 
@@ -292,7 +292,7 @@ mockedChatReadyTest.describe('Chat functionality tests', () => {
       await expect(textarea).toBeVisible({ timeout: 30_000 });
 
       // 2. Type message
-      const testMessage = 'Hello, Kobi! This is a test message.';
+      const testMessage = 'Hello, Otto! This is a test message.';
       await textarea.click();
       await textarea.pressSequentially(testMessage);
 
@@ -332,7 +332,7 @@ mockedChatReadyTest.describe('Chat functionality tests', () => {
       await expect(textarea).toBeVisible({ timeout: 30_000 });
 
       // 2. Send message
-      const testMessage = 'Hi Kobi, how are you?';
+      const testMessage = 'Hi Otto, how are you?';
       await textarea.click();
       await textarea.pressSequentially(testMessage);
 
@@ -356,12 +356,12 @@ mockedChatReadyTest.describe('Chat functionality tests', () => {
       await expect(assistantMessage.first()).toBeVisible({ timeout: 15_000 });
 
       // 5. Verify assistant message contains mock response content
-      //    Mock response: "Hello! I am Kobi, your AI assistant. How can I help you today?"
+      //    Mock response: "Hello! I am Otto, your AI assistant. How can I help you today?"
       const assistantContent = assistantMessage
         .first()
         .locator(Selectors.CHAT_MESSAGE_CONTENT)
         .first();
-      await expect(assistantContent).toContainText('Kobi', {
+      await expect(assistantContent).toContainText('Otto', {
         timeout: 10_000,
       });
 
@@ -510,7 +510,7 @@ mockedChatReadyTest.describe('Chat functionality tests', () => {
   mockedChatReadyTest(
     'scrolls stably to the latest message after switching to a historical session',
     async ({ chatWindow }) => {
-      await ensureKobiSessionListVisible(chatWindow);
+      await ensureOttoSessionListVisible(chatWindow);
 
       const targetSession = chatWindow
         .locator(Selectors.CHAT_SESSION_ITEM)
@@ -521,7 +521,7 @@ mockedChatReadyTest.describe('Chat functionality tests', () => {
       await targetSession.click();
 
       await expect(chatWindow).toHaveURL(
-        new RegExp(`#/agent/mock-chat-kobi/${TARGET_SESSION_ID}$`),
+        new RegExp(`#/agent/mock-chat-otto/${TARGET_SESSION_ID}$`),
         { timeout: 15_000 },
       );
 

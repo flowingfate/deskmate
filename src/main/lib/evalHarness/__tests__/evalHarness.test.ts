@@ -44,7 +44,7 @@ vi.mock('../../../persist', () => ({
         id: 'p_mock',
         getAgent: async (id: string) => (id === 'chat-1' ? { id } : undefined),
         getPrimaryAgentId: () => 'chat-1',
-        listAgents: () => [{ id: 'chat-1', name: 'Kobi' }],
+        listAgents: () => [{ id: 'chat-1', name: 'Otto' }],
       }),
     }),
   },
