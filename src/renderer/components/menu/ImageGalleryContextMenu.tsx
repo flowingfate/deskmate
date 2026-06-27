@@ -107,6 +107,9 @@ const ImageGalleryContextMenu: React.FC<InnerProps> = ({
         reject(new Error('Failed to load image for conversion'));
       };
 
+      // media:// / http(s) 是跨源:不设 crossOrigin 会污染 canvas → toBlob 抛
+      // SecurityError。media:// 带 corsEnabled,匿名请求可得未污染像素;file:// 本地不需。
+      if (/^(media|https?):\/\//.test(imageUrl)) img.crossOrigin = 'anonymous';
       img.src = imageUrl;
     });
   }, []);

@@ -437,6 +437,7 @@ export class SubAgentSession {
         time: Date.now(),
         status: result.isError ? 'fail' : 'success',
         result: content,
+        images: result.images ?? [],
       };
       this.applyToolResponse(call.id, toolResult);
 

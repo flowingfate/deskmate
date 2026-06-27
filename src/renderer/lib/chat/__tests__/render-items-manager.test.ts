@@ -42,7 +42,7 @@ function assistantWithTool(
         time: 2,
         args: { path: '/x' },
         ...(withResponse
-          ? { response: { time: 3, status: 'success' as const, result: 'ok' } }
+          ? { response: { time: 3, status: 'success' as const, result: 'ok', images: [] } }
           : {}),
       },
     ],

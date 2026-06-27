@@ -32,7 +32,7 @@ const PARAMETERS = jsonSchema({
 });
 
 const DESCRIPTION = [
-  'Read text files, office documents (PDF/DOCX/PPTX/XLSX), and internal resources through a single `path` string.',
+  'Read text files, office documents (PDF/DOCX/PPTX/XLSX), images (PNG/JPEG/GIF/WEBP), and internal resources through a single `path` string.',
   '',
   '# Path forms',
   '- `src/foo.ts` — local text file (relative to cwd or absolute)',
@@ -40,6 +40,7 @@ const DESCRIPTION = [
   '- `local://<path>` — file in the current session sandbox (write via `write local://<path>`)',
   '- `knowledge://<path>` — file in the current agent\'s Knowledge Base (write via `write knowledge://<path>`)',
   '- `skill://my-skill` — load a skill\'s SKILL.md (browse available skills via `app skill list`)',
+  '- `photo.png` / `local://uploads/shot.jpg` — image file; returns the image so you can view its contents',
   '',
   '# Line selectors (append `:<sel>` to path)',
   'Bare path with no selector reads from the start (text files: up to 2000 lines or 256KB).',

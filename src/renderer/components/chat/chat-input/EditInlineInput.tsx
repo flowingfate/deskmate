@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
-import { useAgentById } from '@/states/agents.atom';
+import { useSupportsImages } from '@/lib/models/useSupportsImages';
 import { ChatStatus } from '@/lib/chat/agentSessionCacheManager';
 import type { UserMessage } from '@shared/types/message';
-import { useModelInfo } from '@/lib/models/useModelInfo';
 import { getChatInputShortcutHint } from '@/lib/chat/chatInputKeyboard';
 import '../ChatInput.scss';
 import { log } from '@/log';
@@ -14,6 +13,8 @@ import { Button } from '@/shadcn/button';
 import { useChatInputState } from './shared/useChatInputState';
 import { useFileHandling } from './shared/useFileHandling';
 import { transformMentions } from './shared/transformMentions';
+import type { AttachContext } from '@/lib/attachment/copyToSandbox';
+import { useToast } from '../../ui/ToastProvider';
 
 const logger = log.child({ mod: 'EditInlineInput' });
 
@@ -25,13 +26,6 @@ interface EditInlineInputProps {
   warningMessage?: string | null;
 }
 
-function useSupportsImages(): boolean {
-  const agentId = agentSessionCacheManager.getCurrentAgentId();
-  const agent = useAgentById(agentId);
-  const { info } = useModelInfo(agent?.model ?? null);
-  return info?.supportsImages ?? false;
-}
-
 export const EditInlineInput: React.FC<EditInlineInputProps> = ({
   initialMessage,
   onSubmitEditedMessage,
@@ -39,16 +33,23 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
   chatStatus,
   warningMessage,
 }) => {
-  const { textareaStateAtom, attachmentsStateAtom, textareaManager, attachmentManager, hasValidInput } = useChatInputState();
+  const { textareaStateAtom, attachmentsStateAtom, textareaManager, attachmentManager, hasValidInput } = useChatInputState('edit');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [isAwaitingEditConfirmation, setIsAwaitingEditConfirmation] = useState(false);
-  const supportsImages = useSupportsImages();
+  const supportsImages = useSupportsImages(agentSessionCacheManager.getCurrentAgentId());
+  const { showToast } = useToast();
 
   const chatInputShortcutHint = getChatInputShortcutHint(
     typeof navigator === 'undefined' ? undefined : navigator.platform,
   );
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const getAttachContext = (): AttachContext | null => {
+    const agentId = agentSessionCacheManager.getCurrentAgentId();
+    const sessionId = agentSessionCacheManager.getCurrentChatSessionId();
+    return agentId && sessionId ? { agentId, sessionId } : null;
+  };
 
   const {
     isProcessing,
@@ -61,11 +62,6 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
   } = useFileHandling({
     attachmentManager,
     supportsImages,
-    getAttachContext: () => {
-      const agentId = agentSessionCacheManager.getCurrentAgentId();
-      const sessionId = agentSessionCacheManager.getCurrentChatSessionId();
-      return agentId && sessionId ? { agentId, sessionId } : null;
-    },
   });
 
   useEffect(() => {
@@ -104,16 +100,29 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
 
   const handleSend = async () => {
     if (isIdle && hasValidInput && !isProcessing && !isSubmittingEdit) {
-      const messageToSend = attachmentManager.createMessage(textareaManager.get(), {
-        id: initialMessage.id,
-        timestamp: initialMessage.time,
-      });
-      messageToSend.content = transformMentions(messageToSend.content);
-
+      const ctx = getAttachContext();
+      if (!ctx) {
+        showToast('No active chat session. Open a chat before sending.', 'error');
+        return;
+      }
       setIsAwaitingEditConfirmation(true);
       try {
         const confirmed = await requestInlineEditConfirmation(editConfirmDescription);
         if (!confirmed) return;
+
+        // 确认后才物化附件 —— 取消重新生成不会留下落盘文件。
+        let messageToSend: UserMessage;
+        try {
+          messageToSend = await attachmentManager.createMessage(textareaManager.get(), ctx, {
+            id: initialMessage.id,
+            timestamp: initialMessage.time,
+          });
+        } catch (error) {
+          logger.error({ msg: 'Failed to materialize attachments on inline edit', err: error });
+          showToast('Failed to attach files. Please try again.', 'error');
+          return;
+        }
+        messageToSend.content = transformMentions(messageToSend.content);
 
         setIsSubmittingEdit(true);
         try {

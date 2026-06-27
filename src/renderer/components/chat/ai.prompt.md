@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-26 -->
+<!-- Last verified: 2026-06-27 -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -15,7 +15,7 @@
 | `message/AssistantMessage.tsx` | 渲染单条 assistant 文本消息；消费 `render-items-manager` 预清洗好的 `cleanedText` / `scheduleIds`，装配 MarkdownView、GeneratedFileCards、GeneratedScheduleCards、CopyButton | ~140 LOC |
 | `message/UserMessage.tsx` | 渲染单条用户消息：MarkdownView + AttachmentList + Copy/Edit 按钮 | ~75 LOC |
 | `message/GreetingMessage.tsx` | 欢迎消息渲染：MarkdownView + 可选 SayHiActionItems | ~30 LOC |
-| `message/AttachmentList.tsx` | 用户消息附件列表（图片 / 文件 / Office / 其它）；点击通过 `window.dispatchEvent('imageViewer:open' / 'fileViewer:open')` 唤起全局 viewer | ~145 LOC |
+| `message/AttachmentList.tsx` | 用户消息附件列表（图片 / 文件 / Office / 其它）；sandbox 大图(`local://`+fileRef / opaque)经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) 构造 `media://` URL 由 `<img loading=lazy>` 字节直供（不读 base64），小图内联 dataURL；点击通过 `window.dispatchEvent('imageViewer:open' / 'fileViewer:open')` 唤起全局 viewer | ~215 LOC |
 | `message/CopyButton.tsx` | 复制到剪贴板按钮；`text` 支持字符串或惰性 getter | ~60 LOC |
 | `tool/ToolCallsSection.tsx` | 工具调用章节;两套视图共享同一外壳 + CSS transition(220ms): **collapsed** 紧凑 600px 卡片(chip 行 + 单选 detail);**expanded** (view all) 贴边浅灰条 max-h 60vh 内滚,所有工具纵向列出(每张白卡片复用 `ToolDetailView`)。水平 inset 模式:`.tool-section-wrapper` 这层豁免 `.chat-message-flow-reverse > *` 的默认 `--chat-pad-x` padding,由本组件正向控制 margin(collapsed 推内容对齐其他消息)或 padding(expanded bg 撑满 wrapper + 内 padding 拉回对齐) — **不用负 margin breakout**,bg 天然占满 chat 全宽;高度切换由 `AnimatedHeight` 平滑过渡,避免 column-reverse 上方兄弟闪动。`selectedId` 切 mode 时保留 | ~350 LOC |
 | `tool/ToolChip.tsx` | 单个工具胶囊；状态点 executing(琥珀脉动) / failed(红实心) / completed(无点)；选中态深色填充；接收 `label` props 由 ToolCallsSection 计算（renderer 的 `chipLabel` 覆盖优先） | ~75 LOC |
@@ -30,13 +30,13 @@
 | `tool/renderers/app/cmdline.ts` | App 子命令分派的 cmdline 工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
 | `tool/renderers/app/subagent/` | `app subagent spawn` / `spawn-many` 子命令的 renderer 实现包：`index.ts`（路由 spawn/spawn-many）+ `parse.ts`（cmdline 字段抽取）+ `helpers.tsx`（共享 timer / progress bar / steps list）+ `spawn.tsx`（单 task 三 slot）+ `spawnMany.tsx`（并行 task 三 slot）。订阅 `subAgent:stateUpdate` IPC 渲染实时进度 | — |
 | `message/MermaidDiagram.tsx` | 延迟加载的 Mermaid 图表渲染器，支持全屏 | — |
-| `message/ImageGallery.tsx` | `<IMAGE_REGISTRY>` 分段解析 + `ImageGalleryNew` 渲染 | — |
+| `message/ImageGallery.tsx` | `<IMAGE_REGISTRY>` 分段解析 + `ImageGalleryNew` 渲染；图 src 经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) `toImageDisplaySrc` 同步解析（`local://`/`knowledge://`→media://、远程 http(s) 原样），**不再** `fetch`+base64 缓存 | — |
 | `InteractiveRequestCard.tsx` | 时间线原生渲染器，用于待处理的 `approval`、`choice` 和 `form` 交互 | — |
 | `InteractiveAuthCard.tsx` | 时间线原生渲染器，用于交互式 CLI 认证提示（设备码、链接、倒计时），使用相同的卡片样式系统 | — |
 | `chat-input/ComposeInput.tsx` | 主聊天输入组件；负责新消息编写、附件/截图、上下文 @-提及、模型选择、thinking level 选择、取消生成与 ErrorBar 展示 | ~290 LOC |
 | `chat-input/EditInlineInput.tsx` | 内联编辑输入组件；负责编辑已有 user message、附件补充、确认弹窗触发和重新生成提交 | ~220 LOC |
-| `chat-input/shared/useFileHandling.ts` | 输入组件共享 hook;封装拖拽、Electron 文件选择器、浏览器 fallback、图片压缩、截图捕获与 MIME 推断;所有附件在 `attachmentManager.addXxx` 前都会经 `prepareForSandbox` → `copyFileToSandbox` 物化到当前 session `files/uploads/`,`(file as FileWithSource).fullPath` 改写为 `local://uploads/<name>` URI(下游 ContentConverter 把 URI 写进 `filePath` 字段) | ~310 LOC |
-| `chat-input/shared/useChatInputState.ts` | 输入组件共享 hook；创建 textarea/attachments atom，并在卸载时清理状态 | 小 |
+| `chat-input/shared/useFileHandling.ts` | 输入组件共享 hook;封装拖拽、Electron 文件选择器、浏览器 fallback、截图捕获与 MIME 推断。**附件只「暂存」不落盘**:`addImage`/`addFile`/`addOffice`/`addOthers` 都把原始 `File` 存进 atom 内 `pendingFiles` WeakMap(image 另存 objectURL 预览),附件 URI/dataUrl 留空占位。真正物化推迟到 `attachmentManager.createMessage(text, ctx)`(= 点击发送):image 走 `processImage` IPC(main 用 sharp 按【解码尺寸】判别 inline/sandbox)、其余走 `copyFileToSandbox` → `local://uploads/<name>`。落盘 = 发送,取消/不发则永不进 session `files/uploads/`。**图片阈值判别已搬到 main**(`startup/ipc/attachment.ts` 的 `processImageAttachment`,`width×height×4` vs `IMAGE_INLINE_MAX_BYTES`=256KB,≈256×256;不看编码字节 —— PNG 对截图压得太好):小图回原始 base64 建 `image`+`dataUrl` 内联随消息发送(不压缩),大图落 sandbox 建 `image`+`fileRef` 附件(原图;非 opaque),annotation 把 URI+尺寸告诉模型,模型按需 `read local://uploads/<name>.png`(read backend 按 OpenAI vision 指南压缩后回 base64)。useFileHandling 不再读尺寸、不再判别 | ~300 LOC |
+| `chat-input/shared/useChatInputState.ts` | 输入组件共享 hook；按 `scope`('compose' \| 'edit')选定一组**模块级** textarea/attachments/valid atom（`composeXxxAtom` / `editXxxAtom`，定义在 `Textarea.tsx` / `Attachments.tsx`），并在卸载时清理草稿状态。**不再用工厂动态建 atom** —— compose 与 inline-edit 各自一组具名模块级 atom 即可隔离（框架按 store 懒初始化，每个 atom 持有独立闭包状态），避免旧工厂把 per-mount atom 槽位永久泄漏进 `WithStore` 根 store | 小 |
 | `chat-input/shared/transformMentions.ts` | 纯函数；把 `[@knowledge://...]`、`[@local://...]`、`[#skill:...]` 这些 mention bracket 形态转换为 markdown inline code（防止前后符号被解析为粗体/链接） | 小 |
 | `chat-input/ThinkingLevelSelector.tsx` | 单聊会话的 thinking level 选择器（pi-ai `ThinkingLevel` 枚举：`minimal/low/medium/high/xhigh`）；仅在活跃模型支持 ≥2 个等级时渲染；写入 `chat.agent.thinkingLevel`，通过 `updateAgent` 持久化到 AGENT.md front-matter。dropdown 顶部 "Auto" 项写入 `thinkingLevel: null` 清除字段，回到 provider 默认 —— 前端不假装知道默认值。运行时由 `pi.streamSimple({ reasoning })` 翻译给各 provider，不再走旧的"Claude→high / GPT→medium"启发式 | 小 |
 | `chat-input/ContextMenu.tsx` | @-提及下拉菜单，用于文件、技能和工作区项目 | — |
@@ -134,7 +134,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 添加新的渲染项类型 | `lib/chat/render-items-manager.ts`（`ChatRenderItem` 联合类型 + `computeRenderItems` + `isSameRenderItem`） + `ChatRenderItem.tsx`（`ChatRenderItemComponent` 分发） | derived 字段一并加入 `MessageDerived` + `reuseUnchangedItems` 复用判定 |
 | 修改主聊天输入行为 | `chat-input/ComposeInput.tsx` | 涉及发送、取消生成、模型选择和 ErrorBar |
 | 修改内联编辑输入行为 | `chat-input/EditInlineInput.tsx` | 涉及编辑确认、重新生成、编辑态附件与取消按钮 |
-| 修改两种输入共享的附件/截图逻辑 | `chat-input/shared/useFileHandling.ts` | 同时影响 compose 和 inline edit,两边都要回归;新增 attach 路径(自定义来源等)记得同样走 `copyFileToSandbox` 让 sandbox URI 化 |
+| 修改两种输入共享的附件/截图逻辑 | `chat-input/shared/useFileHandling.ts` + `chat-input/Attachments.tsx`(atom) | 同时影响 compose 和 inline edit,两边都要回归。物化推迟到发送:新增 attach 路径(自定义来源等)只需把原始 `File` 交给 `attachmentManager.addXxx`,`createMessage` 发送时统一走 `copyFileToSandbox` 落盘;**切勿在 attach 阶段调 `copyFileToSandbox`**,否则又会未发送先落盘 |
 | 修改用户消息附件展示 | `message/AttachmentList.tsx` | image / file / office / others 共用 |
 | 更改 approval / choice / form 交互 | `InteractiveRequestCard.tsx`、`ChatRenderItem.tsx`、`agentSessionCacheManager.ts` | 待处理请求经 `render-items-manager` 进入渲染流水线，由 `ChatRenderItemComponent` 分发 |
 | 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`AppRoutes.tsx` 中的路由、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS`、`agent-area/AgentEditingView.tsx` 的 Tab 渲染分支 | 遵循现有标签页外壳模式 |

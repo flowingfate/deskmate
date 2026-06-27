@@ -449,6 +449,7 @@ export class SessionManager {
       time: chunk.time,
       status: chunk.status,
       result: chunk.result,
+      images: [],   // 渲染层不接收 tool 结果图片(只回灌给 LLM);保持 Domain 必填
     };
     // 倒着找最近一条带匹配 tool_call.id 的 assistant。Domain 模型保证 tool 结果
     // 一定属于 *上一条* assistant —— 但跨多 turn 的 retry 也可能命中更早 assistant,

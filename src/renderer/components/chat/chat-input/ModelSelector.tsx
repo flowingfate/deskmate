@@ -5,31 +5,20 @@ import { updateAgent } from '../../../lib/chat/agentOps';
 import { Popover, PopoverTrigger, PopoverContent } from '@/shadcn/popover';
 import { Button } from '@/shadcn/button';
 import { GroupedModelPicker, useModelDisplayLabel } from '../GroupedModelPicker';
-import { parseAgentModel } from '@shared/utils/agentModelId';
 
 interface Props {
   currentAgentId: string | null;
   shouldLockComposeUi: boolean;
-  setSupportsImages: (supports: boolean) => void;
 }
 
 function Selector(props: Props) {
-  const { currentAgentId, shouldLockComposeUi, setSupportsImages } = props;
+  const { currentAgentId, shouldLockComposeUi } = props;
 
   const [open, setOpen] = useState(false);
   const [pendingModel, setPendingModel] = useState<string | null>(null);
   const agent = useAgentById(currentAgentId);
   const currentModel = agent?.model ?? null;
   const displayModel = pendingModel ?? currentModel;
-
-  useEffect(() => {
-    // Step 9 起 model 字段是 `${provider}::${modelId}`；只有 GHC 系列才能从
-    // 本地 cache 拿到 vision 标志。其他 provider 暂以"未知 → 不开图片"处理，
-    // 后续可在 pi.listModelsForProvider 里返回 vision 字段后再细化。
-    const parsed = parseAgentModel(displayModel);
-    setSupportsImages(false);
-    if (!parsed) return;
-  }, [displayModel, setSupportsImages]);
 
   // 服务端落实 → 清掉 pending
   useEffect(() => {

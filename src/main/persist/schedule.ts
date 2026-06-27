@@ -104,8 +104,8 @@ class ScheduleJobConfig {
       enabled: this.enabled,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
-      ...(this.description !== undefined ? { description: this.description } : {}),
-      ...(this.notifyOnCompletion !== undefined ? { notifyOnCompletion: this.notifyOnCompletion } : {}),
+      description: this.description,
+      notifyOnCompletion: this.notifyOnCompletion,
     };
     if (this.schedule.kind === 'cron') {
       const file: CronScheduleJobFile = { ...common, scheduleType: 'cron', cron: this.schedule.cron };

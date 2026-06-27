@@ -3,8 +3,7 @@ import { screenshotApi } from '@/ipc/screenshot-main';
 import { fsApi } from '@/ipc/fs';
 import { validateImageFile } from '@shared/types/chatTypes';
 import { FileProcessor } from '@/lib/utilities/contentUtils';
-import { smartCompressImage, shouldCompressImage } from '@/lib/utilities/imageCompression';
-import { copyFileToSandbox, type AttachContext, type FileWithSource } from '@/lib/attachment/copyToSandbox';
+import { type FileWithSource } from '@/lib/attachment/copyToSandbox';
 import { log } from '@/log';
 const logger = log.child({ mod: 'FileHandling' });
 
@@ -40,37 +39,12 @@ interface UseFileHandlingOptions {
   attachmentManager: AttachmentManagerLike;
   supportsImages: boolean;
   disabled?: boolean;
-  /**
-   * Returns the current chat agent + session ids; null when no chat session
-   * is selected (e.g. between route transitions). When null, attachments are
-   * rejected with a toast — sandbox materialisation requires a session, so
-   * "drop a file before picking a chat" is not a supported flow.
-   */
-  getAttachContext: () => AttachContext | null;
 }
 
-export function useFileHandling({ attachmentManager, supportsImages, disabled = false, getAttachContext }: UseFileHandlingOptions) {
+export function useFileHandling({ attachmentManager, supportsImages, disabled = false }: UseFileHandlingOptions) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  /**
-   * 把 File 物化进当前 session sandbox,把 `(file as FileWithSource).fullPath`
-   * 改写为 `local://uploads/<name>` URI。改写后,下游 ContentConverter 把这个 URI
-   * 写进 FileContentPart / OfficeContentPart / OthersContentPart 的 `filePath` 字段;
-   * Image 走 base64 inline 给 LLM,URI 留作 dedup + 未来"打开原文件"用。
-   *
-   * 没拿到 session ctx → 报错。"在没选 chat 时拖文件" 不是支持的流程
-   * (这条路径会让 `filePath` 落成原始绝对路径,绕过 sandbox 契约)。
-   */
-  const prepareForSandbox = useCallback(async (file: FileWithSource): Promise<void> => {
-    const ctx = getAttachContext();
-    if (!ctx) {
-      throw new Error('No active chat session. Open a chat before attaching files.');
-    }
-    const uri = await copyFileToSandbox(file, ctx);
-    file.fullPath = uri;
-  }, [getAttachContext]);
 
   const handleImageSelect = useCallback(async (file: FileWithSource) => {
     if (!validateImageFile(file)) {
@@ -80,16 +54,9 @@ export function useFileHandling({ attachmentManager, supportsImages, disabled = 
 
     setIsProcessing(true);
     try {
-      let processedFile: FileWithSource = file;
-      if (shouldCompressImage(file)) {
-        const compressionResult = await smartCompressImage(file);
-        // 压缩生成的 File 是 fresh 对象,fullPath 不会沿用。我们要让 sandbox 收的是
-        // 压缩后的字节(LLM 也吃压缩后内容),所以不把原 fullPath 复制过去 ——
-        // 压缩文件没有源绝对路径,prepareForSandbox 自然走 attachFromBytes。
-        processedFile = compressionResult.compressedFile as FileWithSource;
-      }
-      await prepareForSandbox(processedFile);
-      await attachmentManager.addImage(processedFile);
+      // 草稿态:不在 attach 阶段判别/落盘。「内联 vs 落 sandbox」由发送时的
+      // processImage IPC 在 main 用 sharp 按【解码尺寸】算一次(见 Attachments.finalize)。
+      await attachmentManager.addImage(file);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.startsWith('DUPLICATE:')) {
@@ -101,14 +68,13 @@ export function useFileHandling({ attachmentManager, supportsImages, disabled = 
     } finally {
       setIsProcessing(false);
     }
-  }, [attachmentManager, prepareForSandbox]);
+  }, [attachmentManager]);
 
   const handleFileSelect = useCallback(async (file: FileWithSource) => {
     logger.debug({ msg: "handleFileSelect called:", name: file.name, type: file.type, size: file.size, fullPath: file.fullPath, isOffice: FileProcessor.isOfficeFile(file), isText: FileProcessor.isTextFile(file) });
 
     setIsProcessing(true);
     try {
-      await prepareForSandbox(file);
       if (FileProcessor.isOfficeFile(file)) {
         await attachmentManager.addOffice(file);
       } else if (FileProcessor.isTextFile(file)) {
@@ -127,7 +93,7 @@ export function useFileHandling({ attachmentManager, supportsImages, disabled = 
     } finally {
       setIsProcessing(false);
     }
-  }, [attachmentManager, prepareForSandbox]);
+  }, [attachmentManager]);
 
   const resolveFilePath = useCallback((file: FileWithSource): string | undefined => {
     let resolvedPath: string | undefined;

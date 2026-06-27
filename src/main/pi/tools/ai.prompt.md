@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-16 -->
+<!-- Last verified: 2026-06-27 -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -30,8 +30,11 @@ interface LocalTool<TParams extends TSchema = TSchema> {
 - `spec` 直接喂给 `pi.streamSimple({ tools })`,不再经 `toPiTools` 翻译。
 - `args` 在 handler 入口由 caller 一次性 cast 成具体 args interface;
   pi-ai `validateToolCall` 已在外层校验,handler 只负责执行。
-- `ToolResult` = `{ ok: true; content: string } | { ok: false; error: string }`;
+- `ToolResult` = `{ ok: true; content: string; images?: ToolResultImage[] } | { ok: false; error: string }`;
   失败直接 `throw`,registry `execute` 在外层捕获并落成 `{ ok: false }`。
+  `images`(可选)让工具把图片回灌给模型:`read` 一个图片文件时填充,经
+  `executeToolCall → session.ts → Domain ToolResult.images → messageBridge` 拼成 pi
+  `ToolResultMessage` 的 ImageContent。base64 随 `tool_res` 行落盘(仅被读取时)。
 
 ### ToolContext —— 显式上下文
 

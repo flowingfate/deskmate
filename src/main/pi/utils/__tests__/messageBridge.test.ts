@@ -25,8 +25,8 @@ const piAssistant = (overrides: Partial<PiAssistantMessage> = {}): PiAssistantMe
   usage: overrides.usage ?? { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
   stopReason: overrides.stopReason ?? 'stop',
   timestamp: overrides.timestamp ?? 12345,
-  ...(overrides.responseId !== undefined ? { responseId: overrides.responseId } : {}),
-  ...(overrides.errorMessage !== undefined ? { errorMessage: overrides.errorMessage } : {}),
+  responseId: overrides.responseId,
+  errorMessage: overrides.errorMessage,
 });
 
 const u = (overrides: Partial<UserMessage> = {}): UserMessage => ({
@@ -55,7 +55,7 @@ const tc = (id: string, withResponse: 'success' | 'fail' | false = false): ToolC
   time: 1,
   args: { path: `/x/${id}` },
   ...(withResponse
-    ? { response: { time: 2, status: withResponse, result: `R-${id}` } }
+    ? { response: { time: 2, status: withResponse, result: `R-${id}`, images: [] } }
     : {}),
 });
 
@@ -205,7 +205,7 @@ describe('toPiContext 出境', () => {
           content: 'see file',
           attachments: [
             {
-              kind: 'file',
+              kind: 'text',
               fileName: 'a.md',
               fileSize: 100,
               mimeType: 'text/markdown',
@@ -222,6 +222,38 @@ describe('toPiContext 出境', () => {
     expect(txt).toContain('see file');
     expect(txt).toContain('Text Files List');
     expect(txt).toContain('a.md');
+  });
+
+  it('user 带 image+fileRef(大图)→ 不内联, 走 annotation 让模型 read', () => {
+    const ctx = toPiContext(
+      [
+        u({
+          content: 'big pic',
+          attachments: [
+            {
+              kind: 'image',
+              fileName: 'big.png',
+              fileSize: 900000,
+              mimeType: 'image/png',
+              source: { kind: 'fileRef', uri: 'local://uploads/big.png' as never },
+              width: 2000,
+              height: 1500,
+            },
+          ],
+        }),
+      ],
+      '',
+      tools,
+    );
+    const content = (ctx.messages[0] as { content: { type: string; text?: string }[] }).content;
+    // 只有一段 text(annotation),没有 image content —— 大图不内联。
+    expect(content).toHaveLength(1);
+    expect(content[0].type).toBe('text');
+    const txt = content[0].text ?? '';
+    expect(txt).toContain('big pic');
+    expect(txt).toContain('Image Files List');
+    expect(txt).toContain('local://uploads/big.png');
+    expect(txt).toContain('2000×1500');
   });
 
   it('assistant 1→N 展开: assistant 紧跟其 tool_calls 中已 response 的 toolResult', () => {
@@ -243,6 +275,26 @@ describe('toPiContext 出境', () => {
     expect(tr1.isError).toBe(false);
     expect(tr2.toolCallId).toBe('t2');
     expect(tr2.isError).toBe(true);                                           // fail → isError=true
+  });
+
+  it('tool response 带 images → toolResult content 追加 ImageContent(text 在前,image 在后)', () => {
+    const withImg: ToolCall = {
+      id: 't1',
+      name: 'read',
+      time: 1,
+      args: { path: 'local://uploads/shot.png' },
+      response: {
+        time: 2,
+        status: 'success',
+        result: '{"url":"local://uploads/shot.png"}',
+        images: [{ data: 'QkFTRTY0', mimeType: 'image/png' }],
+      },
+    };
+    const ctx = toPiContext([a({ tool_calls: [withImg] })], '', tools);
+    const tr = ctx.messages[1] as { content: Array<{ type: string; data?: string; mimeType?: string }> };
+    expect(tr.content.map((c) => c.type)).toEqual(['text', 'image']);
+    expect(tr.content[1].data).toBe('QkFTRTY0');
+    expect(tr.content[1].mimeType).toBe('image/png');
   });
 
   it('assistant.content 携带 thinking + text + toolCall parts (按顺序: thinking 先, text 中, toolCall 末尾)', () => {

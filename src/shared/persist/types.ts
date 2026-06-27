@@ -389,6 +389,7 @@ import type {
   AssistantMessage,
   ToolCall,
   ToolResult,
+  ToolResultImage,
   UserMessage,
 } from '../types/message';
 
@@ -409,10 +410,9 @@ export type PersistedAssistantMessage =
  * Tool 结果。`id` 与上一条 AssistantMessage.tool_calls 中某项的 id 对齐。
  * 同 id 多条 = 重试历史，读取时最新一条胜出。
  */
-export interface PersistedToolResponse extends ToolResult {
-  role: 'tool_res';
-  id: string;                                                                 // = ToolCall.id
-}
+export type PersistedToolResponse =
+  & Omit<ToolResult, 'images'>
+  & { role: 'tool_res'; id: string; images?: ToolResultImage[] };   // id = ToolCall.id;空 images 不入盘
 
 export type PersistedJsonLine =
   | PersistedUserMessage

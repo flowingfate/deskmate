@@ -157,7 +157,7 @@ export class UserInputPlaceholderParser {
       varName: actualVarName,
       isRequired,
       label: this.generateFieldLabel(type, control, actualVarName, isRequired),
-      ...(defaultValue !== undefined ? { defaultValue } : {}),
+      defaultValue,
     };
   }
 

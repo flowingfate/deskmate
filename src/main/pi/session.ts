@@ -868,6 +868,7 @@ export class RegularSession extends BaseSession {
         time: Date.now(),
         status: result.isError ? 'fail' : 'success',
         result: result.content,
+        images: result.images ?? [],
       };
       this.applyToolResponse(result.toolCallId, toolResult);
       stream.send({
@@ -1150,6 +1151,7 @@ export class JobRun extends BaseSession {
         time: Date.now(),
         status: result.isError ? 'fail' : 'success',
         result: result.content,
+        images: result.images ?? [],
       });
     }
     if (settled.length > 0) await this.persistSession.flushMessages();

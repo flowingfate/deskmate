@@ -23,6 +23,7 @@ import { executeMcpToolOnServer } from './mcp';
 import type { ToolCatalog } from './toolCatalog';
 import { tools as localTools } from './tools/registry';
 import type { ToolContext } from './tools/types';
+import type { ToolResultImage } from '@shared/types/message';
 
 // ─── 执行 ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,8 @@ export interface ToolCallResult {
   toolName: string;
   content: string;
   isError: boolean;
+  /** 工具回传的图片(如 read 一个图片文件)。仅 local 工具可产出。 */
+  images?: ToolResultImage[];
 }
 
 /**
@@ -66,10 +69,12 @@ export async function executeToolCall(
 
     const args = call.arguments ?? {};
     let rawContent: string;
+    let images: ToolResultImage[] | undefined;
     if (route.kind === 'local') {
       const result = await localTools.execute(call.name, args, ctx);
       if (!result.ok) throw new Error(result.error);
       rawContent = result.content;
+      images = result.images;
     } else {
       // route.kind === 'mcp':server-scoped 执行,显式给定 serverName,避免
       // mcpClientManager 全局 toolToServerMap 的同名冲突歧义。
@@ -88,7 +93,7 @@ export async function executeToolCall(
       isError: false,
       contentBytes: content.length,
     }, 'self'));
-    return { toolCallId: call.id, toolName: call.name, content, isError: false };
+    return { toolCallId: call.id, toolName: call.name, content, isError: false, ...(images ? { images } : {}) };
   } catch (e) {
     log.warn(ctx.tracer.fields({
       msg: 'tool failed',

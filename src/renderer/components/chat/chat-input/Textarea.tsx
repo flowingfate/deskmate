@@ -48,11 +48,12 @@ interface TextAreaProps {
   textareaStateAtom: TextareaStateAtom;
 }
 
-export function createTextareaAtom() {
-  return atom('', (get, set) => ({ get, set }));
-}
+/** 底部主输入(ComposeInput)的草稿文本。模块级单例。 */
+export const composeTextAtom = atom('', (get, set) => ({ get, set }));
+/** 行内编辑(EditInlineInput)的草稿文本;与 compose 隔离。 */
+export const editTextAtom = atom('', (get, set) => ({ get, set }));
 
-export type TextareaStateAtom = ReturnType<typeof createTextareaAtom>;
+export type TextareaStateAtom = typeof composeTextAtom;
 
 export function TextArea(props: TextAreaProps) {
   const { textareaRef, title, readOnly, supportsImages, enableContextMenu, handleSend, handleImageSelect, textareaStateAtom } = props;

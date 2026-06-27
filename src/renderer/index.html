@@ -7,10 +7,10 @@
         default-src 'self';
         script-src 'self' 'unsafe-inline' 'unsafe-eval';
         style-src 'self' 'unsafe-inline' https:;
-        img-src 'self' data: blob: https: file:;
+        img-src 'self' data: blob: https: file: media:;
         font-src 'self' data: https:;
         connect-src 'self' https:<%= connectSrcExtra %>;
-        media-src 'self' file:;
+        media-src 'self' file: media:;
         frame-src 'self' file: blob: https://www.youtube.com https://youtube.com;
     ">
     <title>

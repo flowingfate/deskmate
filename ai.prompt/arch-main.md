@@ -29,6 +29,7 @@
 | 自动更新 | `src/main/lib/autoUpdate/` | electron-updater 封装，CDN/GitHub 更新检查 | — |
 | 功能标志 | `src/main/lib/featureFlags/` | 默认值根据 isDev/brand/platform 控制；CLI `--enable/disable-features` | [ai.prompt.md](../src/main/lib/featureFlags/ai.prompt.md) |
 | 截图 | `src/main/lib/screenshot/` | 多显示器覆盖层，`screenshot://` 协议，全局快捷键 | [ai.prompt.md](../src/main/lib/screenshot/ai.prompt.md) |
+| 媒体协议 | `src/main/lib/media/` | `media://` 字节直供 protocol,渲染层展示 sandbox/knowledge 图片 | [ai.prompt.md](../src/main/lib/media/ai.prompt.md) |
 | Skills | `src/main/lib/skill/` | .zip/.skill 归档，CDN 目录，SKILL.md YAML 前置内容 | — |
 | 终端管理器 | `src/main/lib/terminalManager/` | 池化的 `command`（临时）和 `mcp_transport`（持久）终端 | — |
 | 后台进程管理器 | `src/main/lib/backgroundProcessManager/` | 异步后台进程执行，环形缓冲区输出 | [ai.prompt.md](../src/main/lib/backgroundProcessManager/ai.prompt.md) |

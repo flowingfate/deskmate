@@ -73,8 +73,8 @@ describe('Session.appendToolResponse', () => {
     const { profile, agent } = await makeAgent();
     const s = await agent.createSession({});
 
-    s.appendToolResponse('tc-1', { time: 1234, status: 'success', result: 'OK' });
-    s.appendToolResponse('tc-2', { time: 5678, status: 'fail', result: 'denied' });
+    s.appendToolResponse('tc-1', { time: 1234, status: 'success', result: 'OK', images: [] });
+    s.appendToolResponse('tc-2', { time: 5678, status: 'fail', result: 'denied', images: [] });
     await s.flushMessages();
 
     const file = messagesFilePath(profile.id, agent.id, s.month, s.id);
@@ -165,7 +165,7 @@ describe('Session.rewriteMessages', () => {
       {
         role: 'assistant', id: 'a1', time: 2, think: 'reason', content: 'ok',
         tool_calls: [
-          { id: 't1', name: 'read', time: 3, args: { p: 'x' }, response: { time: 4, status: 'success', result: 'OK' } },
+          { id: 't1', name: 'read', time: 3, args: { p: 'x' }, response: { time: 4, status: 'success', result: 'OK', images: [] } },
         ],
         outcome: { kind: 'stop' },
       },

@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ImageGalleryMenuAtom } from '../../menu/ImageGalleryContextMenu';
 import { log } from '@/log';
+import { useCurrentSession } from '@/states/currentSession.atom';
+import { toImageDisplaySrc } from '@/lib/mediaUrl';
 
 const logger = log.child({ mod: 'ImageGallery' });
 
@@ -177,76 +179,30 @@ export const parseNewFormatMessage = (content: string, messageId: string, isStre
   return segments;
 };
 
-const imageCache = new Map<string, string>();
-
 export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({ imageRegistry }) => {
   const [loadingStates, setLoadingStates] = useState<Map<string, boolean>>(new Map());
   const [errorStates, setErrorStates] = useState<Map<string, boolean>>(new Map());
-  const [cachedUrls, setCachedUrls] = useState<Map<string, string>>(new Map());
   const [imageDimensions, setImageDimensions] = useState<Map<string, { width: number; height: number }>>(new Map());
 
   const FIXED_HEIGHT = 130;
   const imageGalleryMenuActions = ImageGalleryMenuAtom.useChange();
 
-  useEffect(() => {
-    const initialLoadingStates = new Map<string, boolean>();
-    const initialCachedUrls = new Map<string, string>();
+  // media:// 直供需要的 ctx(agent + session);assistant 消息总属当前打开 session。
+  const { agentId, chatSessionId } = useCurrentSession();
 
+  // 同步解析展示 src —— **必须在渲染期算出,绝不延迟到 effect**。否则首帧 `cachedUrls`
+  // 为空,`<img src>` 回退成裸 `local://`:既违反 CSP img-src(控制台报错),又触发
+  // `<img onError>` 把 errorStates 永久置位(effect 后续改成 media:// 也救不回,呈现
+  // 为竞态:restart 偶尔正常、reload 卡错误占位)。
+  // `local://`/`knowledge://` → `media://`;`file://`/`http(s)`/`screenshot://` 原样;
+  // 裸绝对路径 → `file://`。loading 由下方 `<img onLoad/onError>` 推进。
+  const cachedUrls = useMemo(() => {
+    const urls = new Map<string, string>();
     imageRegistry.forEach((imageData, id) => {
-      const url = imageData.url;
-
-      if (imageCache.has(url)) {
-        initialCachedUrls.set(id, imageCache.get(url)!);
-        initialLoadingStates.set(id, false);
-      } else {
-        initialLoadingStates.set(id, true);
-        cacheImage(url, id);
-      }
+      urls.set(id, toImageDisplaySrc(imageData.url, { agentId, sessionId: chatSessionId }));
     });
-
-    setLoadingStates(initialLoadingStates);
-    setCachedUrls(initialCachedUrls);
-  }, [imageRegistry]);
-
-  const resolveImageReady = (imageId: string, cachedUrl: string) => {
-    setCachedUrls(prev => { const m = new Map(prev); m.set(imageId, cachedUrl); return m; });
-    setLoadingStates(prev => { const m = new Map(prev); m.set(imageId, false); return m; });
-  };
-
-  const cacheImage = async (url: string, imageId: string) => {
-    try {
-      if (imageCache.has(url)) {
-        resolveImageReady(imageId, imageCache.get(url)!);
-        return;
-      }
-
-      if (url.startsWith('file://') || url.startsWith('/')) {
-        const directUrl = url.startsWith('/') ? `file://${url}` : url;
-        imageCache.set(url, directUrl);
-        resolveImageReady(imageId, directUrl);
-        return;
-      }
-
-      const response = await fetch(url);
-      const blob = await response.blob();
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64data = reader.result as string;
-        imageCache.set(url, base64data);
-        resolveImageReady(imageId, base64data);
-      };
-
-      reader.onerror = () => {
-        handleImageError(imageId);
-      };
-
-      reader.readAsDataURL(blob);
-    } catch (error) {
-      logger.error({ msg: "Failed to cache image:", err: error, data: url });
-      handleImageError(imageId);
-    }
-  };
+    return urls;
+  }, [imageRegistry, agentId, chatSessionId]);
 
   const handleImageLoad = (imageId: string) => {
     setLoadingStates(prev => {
@@ -340,7 +296,11 @@ export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({
             calculatedWidth = Math.round(FIXED_HEIGHT * aspectRatio);
           }
 
-          const isLocalFile = cachedUrl.startsWith('file://') || cachedUrl.startsWith('/');
+          // 直供 src(本地文件 / sandbox media://)走可见 `<img>`;远程 http(s) 走 div 背景图。
+          const isLocalFile =
+            cachedUrl.startsWith('file://') ||
+            cachedUrl.startsWith('media://') ||
+            cachedUrl.startsWith('/');
 
           return (
             <div

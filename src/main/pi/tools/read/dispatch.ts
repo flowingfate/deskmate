@@ -46,6 +46,7 @@ import {
 } from '@main/pi/internal-urls';
 import type { ToolContext, ToolResult } from '../types';
 import { readFilesystem } from './backends/filesystem';
+import { isImageExtension, readImage } from './backends/image';
 import { readInternalUrl } from './backends/internal-url';
 import { isOfficeExtension, readOffice } from './backends/office';
 import { parseSelector, splitPathAndSel, type ReadSelector } from './path-utils';
@@ -104,6 +105,12 @@ export async function dispatchRead(
       return readOffice({ path: abs, displayUrl: path, selector }, ctx);
     }
 
+    // 图片 URI:绕过文本/filesystem 通道,走 image backend 回 base64,让模型看到图。
+    if (isImageExtension(ext) && router.canResolveToPath(path)) {
+      const abs = await router.resolveToPath(path, toResolveContext(ctx));
+      return readImage({ path: abs, displayUrl: path });
+    }
+
     // 用户 sandbox 文本资源(handler 实现 resolveToPath):走 filesystem backend
     // 流式分页 —— 解除 1MB 上限,binary 文件返回提示而不抛错。`fileName` / `url`
     // 用 LLM-visible URI 注入,abs path 永不外泄(参 office 同模式)。
@@ -123,6 +130,9 @@ export async function dispatchRead(
   const ext = nodePath.extname(path);
   if (isOfficeExtension(ext)) {
     return readOffice({ path, selector }, ctx);
+  }
+  if (isImageExtension(ext)) {
+    return readImage({ path });
   }
 
   // ── 默认:本地文件系统 ──

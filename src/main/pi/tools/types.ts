@@ -16,6 +16,7 @@
  */
 
 import type { Static, Tool as PiTool, TSchema } from '@earendil-works/pi-ai';
+import type { ToolResultImage } from '@shared/types/message';
 import type { Tracer } from '@shared/log/trace';
 import type { SubAgentConfig } from '@shared/types/profileTypes';
 import type { WebContents } from 'electron';
@@ -26,9 +27,13 @@ import type { ToolCatalog } from '../toolCatalog';
  * Tool 结果。成功时 `content` 是 LLM 可见的字符串(与 MCP tool result 等价
  * 形态);失败统一由 registry 在外层捕获并落成 `{ ok: false }` —— handler
  * 直接 throw 即可,不需要自己包 try/catch。
+ *
+ * `images`:可选。工具产出图片时携带(如 `read` 一个图片文件)—— 这些 base64
+ * 图片会被透传进 Domain `ToolResult.images`,最终由 messageBridge 拼成 pi
+ * `ToolResultMessage` 的 ImageContent 回灌给模型。
  */
 export type ToolResult =
-  | { ok: true; content: string }
+  | { ok: true; content: string; images?: ToolResultImage[] }
   | { ok: false; error: string };
 
 /**

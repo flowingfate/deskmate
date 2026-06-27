@@ -229,7 +229,7 @@ function formatAttachmentRow(att: Attachment, msgIdx: number, attIdx: number): s
       row['image.detail'] = strOrEmpty(att.detail);
       break;
     }
-    case 'file':
+    case 'text':
     case 'office': {
       row['file.fileUri'] = att.fileUri;
       row['file.lines'] = strOrEmpty(att.lines);
