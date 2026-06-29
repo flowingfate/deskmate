@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getLogDbPath } from '@main/log';
 import { getAppDataPath, getChromiumDataPath } from '@main/persist/lib/path';
+import { APP_VERSION } from '@shared/constants/branding';
 
 export const getAppInfoToolDef = {
   type: 'function' as const,
@@ -46,7 +47,7 @@ export async function executeGetAppInfo(): Promise<string> {
   const info = {
     app: {
       name: app.getName(),
-      version: app.getVersion(),
+      version: APP_VERSION,
     },
     platform: process.platform,
     arch: process.arch,

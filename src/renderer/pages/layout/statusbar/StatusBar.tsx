@@ -2,6 +2,7 @@ import React from 'react';
 import DoctorStatusIndicator from '@/components/doctor/DoctorStatusIndicator';
 import DoctorInquiry from '@/components/doctor/DoctorInquiry';
 import { appApi } from '@renderer/ipc/app';
+import { APP_NAME } from '@shared/constants/branding';
 
 function useVersion() {
   const [v, set] = React.useState<string>('Unknown');
@@ -16,7 +17,7 @@ export const StatusBar: React.FC = () => {
   return (
     <div className="app-status-bar">
       <div className="app-status-bar-left">
-        <div> V{version}</div>
+        <div>{APP_NAME} v{version}</div>
         <div className="mx-1 flex items-center gap-1">
           <DoctorStatusIndicator />
           <DoctorInquiry />

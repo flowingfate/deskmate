@@ -24,96 +24,79 @@ const ScreenshotSettingsContentView: React.FC<ScreenshotSettingsContentViewProps
   onResetSavePath,
 }) => {
   return (
-    <div className="content-view-container">
-      <div className="toolbar-settings-content">
+    <div className="flex flex-col p-6 bg-(--bg-primary) h-full overflow-auto" data-dbg="screenshot-settings">
+      <div className="max-w-4xl mx-auto w-full">
         {/* Error Message */}
         {error && (
-          <div className="toolbar-settings-error glass-surface">
-            <div className="message-header">
-              <div className="message-indicator"></div>
-              <span className="message-label">Error:</span>
+          <div className="glass-surface mb-4 p-4 border border-[#fecaca] rounded-xl text-[#b91c1c]">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-(--status-error-light) shrink-0"></div>
+              <span className="font-medium">Error:</span>
             </div>
-            <p className="message-text">{error}</p>
+            <p className="mt-1 text-sm leading-5">{error}</p>
           </div>
         )}
 
         {/* Settings Form */}
-        <div className="toolbar-settings-form">
-          <div className="toolbar-settings-form-inner">
-            {/* Enable Screenshot */}
-            <div className="toolbar-settings-card">
-              <div className="toolbar-setting-item">
-                <div className="setting-label-container">
-                  <label className="setting-label">Enable Screenshot</label>
-                </div>
-                <Switch
-                  checked={settings.enabled}
-                  onCheckedChange={(checked) =>
-                    onSettingsChange({
-                      ...settings,
-                      enabled: checked,
-                    })
-                  }
-                />
-              </div>
+        <div className="transition-all duration-300 max-h-500 opacity-100 px-6 pb-6 space-y-6">
+          {/* Enable Screenshot */}
+          <div className="bg-white rounded-md p-3 border border-(--shadow-md) gap-2 flex items-center justify-between">
+            <div className="flex-1">
+              <label className="block text-(--text-primary) text-base font-normal">Enable Screenshot</label>
             </div>
+            <Switch
+              checked={settings.enabled}
+              onCheckedChange={(checked) =>
+                onSettingsChange({
+                  ...settings,
+                  enabled: checked,
+                })
+              }
+            />
+          </div>
 
-            {/* Shortcut Configuration */}
-            <div className="toolbar-settings-card toolbar-shortcut-section">
-              <div className="toolbar-setting-item" style={{ marginBottom: '8px' }}>
-                <div className="setting-label-container">
-                  <label className="setting-label">Enable Shortcut</label>
-                </div>
-                <Switch
-                  checked={settings.shortcutEnabled}
-                  onCheckedChange={(checked) =>
-                    onSettingsChange({
-                      ...settings,
-                      shortcutEnabled: checked,
-                    })
-                  }
-                />
+          {/* Shortcut Configuration */}
+          <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
+            <div className="flex items-center justify-between px-1 py-2.5 mb-2">
+              <div className="flex-1">
+                <label className="block text-(--text-primary) text-base font-normal">Enable Shortcut</label>
               </div>
-              <label className="shortcut-label">Shortcut</label>
-              <ShortcutRecorder
-                value={settings.shortcut}
-                onChange={onShortcutChange}
-                requireModifier
-                disabled={!settings.shortcutEnabled}
+              <Switch
+                checked={settings.shortcutEnabled}
+                onCheckedChange={(checked) =>
+                  onSettingsChange({
+                    ...settings,
+                    shortcutEnabled: checked,
+                  })
+                }
               />
             </div>
+            <label className="block text-(--text-primary) text-base font-normal px-1 py-2.5">Shortcut</label>
+            <ShortcutRecorder
+              value={settings.shortcut}
+              onChange={onShortcutChange}
+              requireModifier
+              disabled={!settings.shortcutEnabled}
+            />
+          </div>
 
-            {/* Save Path Configuration */}
-            <div className="toolbar-settings-card">
-              <div style={{ padding: '10px 4px' }}>
-                <label className="setting-label" style={{ marginBottom: '8px', display: 'block' }}>Save Path</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      backgroundColor: '#F3F4F6',
-                      borderRadius: '8px',
-                      border: '1px solid #E5E7EB',
-                      fontSize: '14px',
-                      color: settings.savePath ? '#272320' : '#6B7280',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {settings.savePath || 'Downloads (Default)'}
-                  </div>
-                  <Button onClick={onSelectSavePath}>
-                    Browse...
-                  </Button>
+          {/* Save Path Configuration */}
+          <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
+            <div className="px-1 py-2.5">
+              <label className="block text-(--text-primary) text-base font-normal mb-2">Save Path</label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 px-3 py-1.75 bg-[#F3F4F6] rounded border border-[#E5E7EB] text-sm overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: settings.savePath ? '#272320' : '#6B7280' }}>
+                  {settings.savePath || 'Downloads (Default)'}
                 </div>
-                {settings.savePath && (
-                  <Button variant="link" size="sm" onClick={onResetSavePath} style={{ marginTop: '8px' }}>
-                    Reset to Default
-                  </Button>
-                )}
+                <Button size="sm" onClick={onSelectSavePath}>
+                  Browse...
+                </Button>
               </div>
+              {settings.savePath && (
+                <Button variant="link" size="sm" onClick={onResetSavePath} className="mt-2">
+                  Reset to Default
+                </Button>
+              )}
             </div>
           </div>
         </div>

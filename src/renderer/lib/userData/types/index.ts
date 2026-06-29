@@ -24,8 +24,8 @@ export type {
 export type { SchedulerJob } from '../../../../main/lib/scheduler/types'
 
 // Re-export App configuration types
-export type { AppConfig, RuntimeEnvironment, RuntimeMode } from '@shared/types/appConfig'
-export { DEFAULT_RUNTIME_ENVIRONMENT, DEFAULT_APP_CONFIG, isAppConfig, isRuntimeEnvironment, isRuntimeMode } from '@shared/types/appConfig'
+export type { AppConfig, RuntimeEnvironment } from '@shared/types/appConfig'
+export { DEFAULT_RUNTIME_ENVIRONMENT, DEFAULT_APP_CONFIG, isAppConfig, isRuntimeEnvironment } from '@shared/types/appConfig'
 
 /**
  * MCP Server status enumeration - matches backend

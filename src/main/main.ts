@@ -62,7 +62,7 @@ import { getAppDataPath, getLogsDir, getProfileDirectoryPath } from "@main/persi
 
 import { mainToRender as appMainToRender } from '@shared/ipc/app';
 import { mainToRender as windowMainToRender } from '@shared/ipc/window';
-import { APP_NAME } from '@shared/constants/branding';
+import { APP_NAME, APP_VERSION } from '@shared/constants/branding';
 
 
 console.timeEnd('[Startup] Module imports');
@@ -1032,7 +1032,7 @@ class ElectronApp {
 
       const manifestJson = JSON.stringify(buildDebugInfoManifest({
         appName: app.getName(),
-        appVersion: app.getVersion(),
+        appVersion: APP_VERSION,
         exportedAt,
         platform: process.platform,
         arch: process.arch,

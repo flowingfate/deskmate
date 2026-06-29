@@ -484,20 +484,6 @@ export class TerminalInstance extends EventEmitter implements ITerminalInstance 
   }
 
   /**
-   * Check whether we are in internal mode (whether to add the bin directory to PATH).
-   */
-  private isInternalMode(): boolean {
-    try {
-      const runtimeManager = RuntimeManager.getInstance();
-      const config = runtimeManager.getRunTimeConfig();
-      return config.mode === 'internal';
-    } catch (e) {
-      logger.warn({ msg: 'RuntimeManager not yet initialized, treating as system mode', mod: 'TerminalInstance', err: e });
-      return false;
-    }
-  }
-
-  /**
    * On Windows ARM, some npm packages started via the Bun-backed internal
    * `node`/`npm`/`npx` shims fail during MCP server startup because optional
    * native dependencies are resolved for the wrong runtime.
@@ -509,9 +495,6 @@ export class TerminalInstance extends EventEmitter implements ITerminalInstance 
    * and use the system PATH so the real Node binary resolves correctly.
    */
   private shouldBypassInternalNodeShims(): boolean {
-    if (!this.isInternalMode()) {
-      return false;
-    }
 
     if (process.platform !== 'win32' || process.arch !== 'arm64') {
       return false;
@@ -552,10 +535,9 @@ export class TerminalInstance extends EventEmitter implements ITerminalInstance 
   }
 
   private async prepareEnvironment(): Promise<Record<string, string>> {
-    // Decide whether to include the bin directory based on runtime mode:
-    // internal mode: prepend {userData}/bin to the front of PATH
-    // system mode: do not add the bin directory
-    const includeBinPath = this.isInternalMode() && !this.shouldBypassInternalNodeShims();
+    // App-managed runtime is always active: prepend {userData}/bin to PATH unless
+    // the Windows-ARM shim bypass applies.
+    const includeBinPath = !this.shouldBypassInternalNodeShims();
 
     // For MCP transports in internal mode, lazy-install the relevant runtime
     // (bun for JS commands, uv for Python commands) on first spawn. The cost
@@ -733,21 +715,15 @@ export class TerminalInstance extends EventEmitter implements ITerminalInstance 
     const home = os.homedir();
     const shellType = shellTypeOverride || this.config.shell || this.platformConfig.getDefaultShell();
 
-    // Decide whether to add the bin directory to PATH based on runtime mode:
-    // internal mode: prepend {userData}/bin to the front of PATH
-    // system mode: do not add the bin directory
-    const isInternal = this.isInternalMode();
+    // App-managed runtime is always active: prepend {userData}/bin to PATH.
     let pathOverride = '';
-
-    if (isInternal) {
-      try {
-        const binPath = getBinDir();
-        // After loading shell config, re-prepend the bin directory to PATH.
-        // This overrides PATH modifications made by tools like pyenv/nvm in .zshrc/.bashrc.
-        pathOverride = `export PATH="${binPath}:$PATH"`;
-      } catch {
-        // Ignore if app is not yet initialized
-      }
+    try {
+      const binPath = getBinDir();
+      // After loading shell config, re-prepend the bin directory to PATH.
+      // This overrides PATH modifications made by tools like pyenv/nvm in .zshrc/.bashrc.
+      pathOverride = `export PATH="${binPath}:$PATH"`;
+    } catch {
+      // Ignore if app is not yet initialized
     }
 
     // Build the loader script for each shell type

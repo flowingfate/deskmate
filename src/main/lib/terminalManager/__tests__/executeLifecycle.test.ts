@@ -15,7 +15,7 @@ vi.mock('electron', async () => ({
 vi.mock('../../runtime/RuntimeManager', async () => ({
   RuntimeManager: {
     getInstance: vi.fn().mockReturnValue({
-      getRunTimeConfig: vi.fn().mockReturnValue({ mode: 'system' }),
+      getRunTimeConfig: vi.fn().mockReturnValue({ bunVersion: '1.3.6', uvVersion: '0.6.17', pinnedPythonVersion: null }),
       getBinPath: vi.fn().mockReturnValue('C:\\test\\bin'),
       resolveCommand: vi.fn((cmd: string) => cmd),
     }),

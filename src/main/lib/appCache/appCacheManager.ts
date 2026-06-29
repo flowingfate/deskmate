@@ -26,7 +26,6 @@ import { log } from '@main/log';
 import { mainWindow, anyVisibleWindow } from '@main/startup/wins';
 import {
   AppConfig,
-  RuntimeMode,
   DEFAULT_RUNTIME_ENVIRONMENT,
   DEFAULT_APP_CONFIG,
   DEFAULT_SCREENSHOT_SETTINGS,
@@ -219,10 +218,6 @@ export class AppCacheManager {
     const re = config.runtimeEnvironment;
     if (re && typeof re === 'object') {
       sanitized.runtimeEnvironment = {
-        mode:
-          re.mode === 'internal' || re.mode === 'system'
-            ? re.mode
-            : DEFAULT_RUNTIME_ENVIRONMENT.mode,
         bunVersion:
           typeof re.bunVersion === 'string' && re.bunVersion
             ? re.bunVersion

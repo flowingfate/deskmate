@@ -113,24 +113,6 @@ describe('RuntimeManager.ensureRuntimeForCommand', () => {
     internals = manager as unknown as RuntimeManagerInternals;
   });
 
-  it('is a noop in system mode even when command needs a runtime', async () => {
-    vi.spyOn(manager, 'getRunTimeConfig').mockReturnValue({
-      mode: 'system',
-      bunVersion: '1.3.6',
-      uvVersion: '0.6.17',
-      pinnedPythonVersion: null,
-    });
-    const installSpy = vi.spyOn(internals, 'installRuntime').mockResolvedValue(undefined);
-    // Defensive: even if the system-mode early return regressed, the cheap
-    // path through ensureToolReady would still skip install when isInstalled
-    // is true. Failing test then points at the early return, not at a runaway
-    // download.
-    vi.spyOn(manager, 'isInstalled').mockReturnValue(true);
-
-    await manager.ensureRuntimeForCommand('python', []);
-    expect(installSpy).not.toHaveBeenCalled();
-  });
-
   it('returns immediately for unknown commands without scheduling install', async () => {
     const installSpy = vi.spyOn(internals, 'installRuntime').mockResolvedValue(undefined);
 
@@ -183,26 +165,6 @@ describe('RuntimeManager.ensureRuntimeForCommand', () => {
     // Second attempt: install retried.
     await manager.ensureRuntimeForCommand('node', []);
     expect(installSpy).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe('RuntimeManager.setRuntimeMode', () => {
-  beforeEach(() => {
-    (RuntimeManager as unknown as SingletonHolder).instance = undefined;
-  });
-
-  it('calls initializeInternalMode when switching to internal', async () => {
-    const manager = RuntimeManager.getInstance();
-    const spy = vi.spyOn(manager, 'initializeInternalMode');
-    await manager.setRuntimeMode('internal');
-    expect(spy).toHaveBeenCalled();
-  });
-
-  it('does not call initializeInternalMode when switching to system', async () => {
-    const manager = RuntimeManager.getInstance();
-    const spy = vi.spyOn(manager, 'initializeInternalMode');
-    await manager.setRuntimeMode('system');
-    expect(spy).not.toHaveBeenCalled();
   });
 });
 

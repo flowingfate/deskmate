@@ -43,7 +43,7 @@ const AgentSettingsNav: React.FC<AgentSettingsNavProps> = ({
   onSwitch,
 }) => {
   return (
-    <nav className="w-[188px] min-w-[188px] shrink-0 px-2 py-2.5 border-r border-black/10 flex flex-col gap-0.5 overflow-y-auto box-border" aria-label="Agent settings sections">
+    <nav className="w-47 min-w-47 shrink-0 px-2 py-2.5 border-r border-black/7 flex flex-col gap-0.5 overflow-y-auto box-border" aria-label="Agent settings sections">
       {NAV_ITEMS.filter(item => !item.flagged || subAgentEnabled).map(({ key, label, icon: Icon }) => {
         const isActive = activeTab === key
         return (

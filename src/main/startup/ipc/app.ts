@@ -3,6 +3,7 @@ import { app, ipcMain } from 'electron';
 import { crashCaptureManager } from '../../lib/crash/CrashCaptureManager';
 import { getAppCacheManager } from '../lazy';
 import { renderToMain } from '@shared/ipc/app';
+import { APP_VERSION } from '@shared/constants/branding';
 
 import type { Context } from './shared';
 import { getOrCreateInstallationDeviceId } from "../../lib/utilities/idFactory";
@@ -11,7 +12,7 @@ import { getAppDataPath } from "@main/persist/lib/path";
 export default function(ctx: Context) {
   const handle = renderToMain.bindMain(ipcMain);
 
-  handle.getVersion(() => app.getVersion());
+  handle.getVersion(() => APP_VERSION);
   handle.getName(() => app.getName());
   handle.isDev(() => ctx.isDev);
 
