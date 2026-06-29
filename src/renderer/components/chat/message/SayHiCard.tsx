@@ -15,7 +15,6 @@
  */
 
 import React from 'react';
-import './SayHiCard.scss';
 
 export interface SayHiCardProps {
   /** Emoji displayed inside the icon box. */
@@ -38,18 +37,18 @@ const SayHiCard: React.FC<SayHiCardProps> = ({ emoji, title, description, onClic
 
   return (
     <div
-      className="say-hi-card"
+      className="group flex items-center gap-3.5 px-4 py-3 border border-[#e8e5e0] rounded-xl bg-white cursor-pointer transition-[border-color,background,box-shadow] duration-180 ease-in-out select-none text-left hover:border-blue-600 hover:bg-[#f8faff] hover:shadow-[0_2px_8px_rgba(37,99,235,0.08)] active:bg-blue-50 focus-visible:outline focus-visible:outline-[#2563eb] focus-visible:outline-offset-2"
       role="button"
       tabIndex={0}
       onClick={onClick}
       onKeyDown={handleKeyDown}
     >
-      <div className="say-hi-card-icon">
+      <div className="flex items-center justify-center w-9.5 h-9.5 bg-[#f0f5ff] rounded-[10px] shrink-0 text-lg leading-none transition-colors duration-180 group-hover:bg-[#e0edff]">
         <span>{emoji}</span>
       </div>
-      <div className="say-hi-card-content">
-        <h4 className="say-hi-card-title">{title}</h4>
-        <p className="say-hi-card-description">{description}</p>
+      <div className="flex-1 min-w-0">
+        <h4 className="text-[13px] font-semibold text-[#1a1a1a] mb-0.5 leading-[1.4]">{title}</h4>
+        <p className="text-xs text-[#888] leading-normal truncate">{description}</p>
       </div>
     </div>
   );

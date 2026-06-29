@@ -48,7 +48,7 @@ const SessionPanel: React.FC = () => {
   return (
     <div
       data-dbg="session-panel"
-      className="flex flex-col h-full min-w-[264px] max-w-[400px] px-2"
+      className="flex flex-col h-full min-w-66 max-w-100 px-2"
     >
       <SessionPanelHeader
         agentId={displayAgentId}

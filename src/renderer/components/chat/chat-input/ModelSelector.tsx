@@ -53,6 +53,7 @@ function Selector(props: Props) {
       <PopoverTrigger asChild>
         <Button
           variant="outline"
+          size="sm"
           disabled={isLoading || shouldLockComposeUi}
           title={invalid ? 'Model misconfigured, please select a model' : 'Select AI Model'}
           className={invalid ? 'border-amber-500 text-amber-600' : ''}
@@ -67,7 +68,7 @@ function Selector(props: Props) {
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-auto min-w-[var(--radix-popover-trigger-width)] max-w-80 max-h-[400px] overflow-y-auto overflow-x-hidden p-1"
+        className="w-auto min-w-(--radix-popover-trigger-width) max-w-80 max-h-100 overflow-y-auto overflow-x-hidden p-1"
         align="start"
         sideOffset={4}
       >

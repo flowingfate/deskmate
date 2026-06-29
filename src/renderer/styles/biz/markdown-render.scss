@@ -6,8 +6,7 @@
   min-width: 0;
   max-width: 696px;
   width: 100%;
-  overflow-x: hidden;
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   line-height: 26px;
   font-weight: 410;
   color: #322D29;
@@ -53,10 +52,10 @@
 
   p {
     font-weight: 410;
-    font-size: var(--text-base);
-    line-height: 26px;
+    font-size: var(--text-sm);
+    line-height: 20px;
     color: #322D29;
-    margin: 8px 0;
+    margin: 4px 0;
     padding: 0;
   }
 
@@ -116,7 +115,7 @@
       padding-bottom: 0;
       counter-increment: list-counter;
       font-weight: 410;
-      font-size: var(--text-lg);
+      font-size: var(--text-sm);
       line-height: 26px;
 
       &::before {
@@ -142,20 +141,6 @@
     font-weight: 620;
   }
 
-  code:not(pre code):not(.code-block-wrapper code) {
-    font-family: var(--font-mono);
-    font-size: 0.875em;
-    font-weight: 400;
-    line-height: 1.4;
-    background-color: var(--inline-code-bg);
-    color: var(--inline-code-text);
-    padding: 0.125em 0.375em;
-    border-radius: var(--radius-sm);
-    white-space: break-spaces;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-
   pre {
     margin: 8px 0 0 0;
     padding: 0;
@@ -166,37 +151,11 @@
     &:first-child {
       margin-top: 0;
     }
-
-    code {
-      display: block;
-      padding: 1em;
-      font-family: var(--font-mono);
-      font-size: 0.875rem;
-      line-height: 1.5;
-      font-weight: 400;
-      color: var(--code-block-text);
-      overflow-x: auto;
-      white-space: pre;
-
-      &::-webkit-scrollbar {
-        height: 3px;
-      }
-
-      &::-webkit-scrollbar-track {
-        background: transparent;
-      }
-
-      &::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.4);
-        border-radius: 10px;
-      }
-    }
   }
 
   blockquote {
     margin: 8px 0 0 0;
-    padding: 12px 16px;
-    padding-left: 20px;
+    padding: 6px;
     background: var(--brand-bg);
     border-left: 4px solid var(--brand-border);
     border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
@@ -224,9 +183,9 @@
     max-width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
-    margin: 8px 0 0 0;
-    border: 1px solid var(--brand-border);
-    border-radius: var(--radius-xl);
+    margin: 8px 0;
+    border: 1px solid var(--brand-border-light);
+    border-radius: var(--radius-md);
 
     table {
       margin: 0;
@@ -242,7 +201,7 @@
   }
 
   th {
-    padding: 12px;
+    padding: 6px 12px;
     font-size: inherit;
     line-height: inherit;
     font-weight: 620;
@@ -254,10 +213,13 @@
     border-bottom: 1px solid var(--brand-border-light);
     border-right: 1px solid var(--brand-border-light);
     white-space: nowrap;
+    &:last-child {
+      border-right: 0;
+    }
   }
 
   td {
-    padding: 12px;
+    padding: 6px 12px;
     font-size: inherit;
     line-height: inherit;
     font-weight: 410;
@@ -273,10 +235,12 @@
     &:first-child {
       font-weight: 620;
     }
+    &:last-child {
+      border-right: 0;
+    }
   }
 
-  tr:last-child td,
-  tr:last-child th {
+  tr:last-child td {
     border-bottom: 0;
   }
 
@@ -302,21 +266,21 @@
 }
 
 :root {
-  --inline-code-bg: var(--brand-code-bg);
-  --inline-code-text: #322D29;
   --code-block-bg: rgb(40, 44, 52);
   --code-block-text: rgb(171, 178, 191);
 }
 
-.inline-code {
+code.inline-code {
   font-family: var(--font-mono);
   font-size: 0.875em;
   font-weight: 400;
   line-height: 1.4;
-  background-color: var(--inline-code-bg);
-  color: var(--inline-code-text);
-  padding: 0.125em 0.375em;
-  border-radius: var(--radius-sm);
+  background-color: rgb(246, 251, 255);
+  outline: 1px solid rgb(225, 238, 255);
+  color: #322D29;
+  padding: 2px 4px;
+  margin: 0 1px;
+  border-radius: 4px;
   white-space: break-spaces;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -340,7 +304,7 @@
     background: var(--code-block-bg) !important;
     color: var(--code-block-text) !important;
     font-family: var(--font-mono) !important;
-    font-size: 0.875rem !important;
+    font-size: 12px !important;
     line-height: 1.5 !important;
     padding: 1em !important;
     margin: 0 !important;
@@ -387,15 +351,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.375rem 0.75rem;
+  padding: 4px 10px;
   background: rgb(30, 33, 40);
   border-radius: 0.375rem 0.375rem 0 0;
-  min-height: 2rem;
 }
 
 .code-block-language {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 12px;
   color: rgba(171, 178, 191, 0.7);
   user-select: none;
   letter-spacing: 0.025em;
@@ -451,11 +414,6 @@
   overflow-x: auto;
   text-align: center;
   width: 100%;
-
-  svg {
-    width: 100%;
-    height: auto;
-  }
 }
 
 .mermaid-diagram-wrapper-interactive {
@@ -627,10 +585,6 @@
     pre {
       background: var(--palette-gray-100);
       border: 1px solid #ddd;
-
-      code {
-        color: #333333;
-      }
     }
 
     a {

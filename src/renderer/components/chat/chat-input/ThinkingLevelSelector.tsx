@@ -81,6 +81,7 @@ function Selector({ currentAgentId, shouldLockComposeUi }: Props) {
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
+          size="sm"
           disabled={isLoading || shouldLockComposeUi}
           title="Thinking level"
         >

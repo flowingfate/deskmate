@@ -211,17 +211,17 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
         <div className="button-area">
           <Button
             variant="outline"
-            size="icon"
+            size="icon-sm"
             onClick={(e) => attachMenuActions.toggle(e.currentTarget)}
             disabled={isProcessing || isInputLocked}
             title="Attach"
           >
-            <Plus size={18} />
+            <Plus size={14} />
           </Button>
 
           <Button
             variant="outline"
-            size="icon"
+            size="icon-sm"
             onClick={(e) => {
               if (isInputLocked) return;
               editAgentMenuActions.toggle(e.currentTarget);
@@ -229,7 +229,7 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
             disabled={isInputLocked}
             title="Edit Agent (MCP Tools, System Prompt & Context Enhancement)"
           >
-            <SlidersHorizontal size={18} />
+            <SlidersHorizontal size={14} />
           </Button>
 
           <input
@@ -254,26 +254,26 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
 
             {isIdle ? (
               <Button
-                size="icon"
+                size="icon-sm"
                 onClick={handleSend}
                 disabled={!hasValidInput || isProcessing || isInputLocked}
                 title={chatInputShortcutHint}
               >
-                {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <ArrowUp size={18} />}
+                {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={14} />}
               </Button>
             ) : chatStatus ? (
               <Button
                 variant="destructive"
-                size="icon"
+                size="icon-sm"
                 onClick={onCancelChat}
                 disabled={isInputLocked}
                 title="Cancel Chat"
               >
-                <X size={18} />
+                <X size={14} />
               </Button>
             ) : (
-              <Button size="icon" disabled title="Waiting for chat status" type="button">
-                <ArrowUp size={18} />
+              <Button size="icon-sm" disabled title="Waiting for chat status" type="button">
+                <ArrowUp size={14} />
               </Button>
             )}
           </div>

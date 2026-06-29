@@ -16,7 +16,6 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import MermaidDiagram from './MermaidDiagram';
 import CodeBlockCopyButton from './CodeBlockCopyButton';
 import { workspaceApi } from '@/ipc/workspace';
-import './MarkdownView.scss';
 
 const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
 
@@ -47,28 +46,17 @@ function encodeMarkdownLinkSpaces(text: string): string {
 }
 
 
-// react-markdown 的 component 类型 — code/pre 节点上 className 是 `language-xxx`。
+// react-markdown v10：code 回调的 fenced 块带 language-xxx className，inline 无；pre 仅透传。
 const markdownComponents: Components = {
-  // 内联代码 — react-markdown 先回调 pre 再回调 code；代码块走 pre 分支，这里只剩 inline。
-  code({ children }) {
-    return <code className="inline-code">{children}</code>;
-  },
-
-  // 代码块 — children 一定包含一个 <code className="language-xxx"> 节点。
-  pre({ children }) {
-    const codeChild = React.Children.toArray(children).find(
-      (child): child is React.ReactElement<{ className?: string; children?: React.ReactNode }> =>
-        React.isValidElement(child) && child.type === 'code',
-    );
-
-    if (!codeChild) {
-      return <div className="pre-wrapper">{children}</div>;
+  // 代码块 + 内联代码统一在 code 回调处理：fenced 带 language-xxx className，inline 无。
+  code({ className, children }) {
+    const match = /language-(\w+)/.exec(className || '');
+    if (!match) {
+      return <code className="inline-code">{children}</code>;
     }
 
-    const { className, children: codeContent } = codeChild.props;
-    const match = /language-(\w+)/.exec(className || '');
-    const language = match ? match[1] : 'text';
-    const content = String(codeContent ?? '').replace(/\n$/, '');
+    const language = match[1];
+    const content = String(children ?? '').replace(/\n$/, '');
 
     if (language === 'mermaid') {
       return <MermaidDiagram definition={content} />;
@@ -77,9 +65,7 @@ const markdownComponents: Components = {
     return (
       <div className="code-block-wrapper">
         <div className="code-block-header">
-          <span className="code-block-language">
-            {language !== 'text' ? `</> ${language.toUpperCase()}` : ''}
-          </span>
+          <span className="code-block-language">{`</> ${language}`}</span>
           <CodeBlockCopyButton code={content} />
         </div>
         <SyntaxHighlighter
@@ -94,6 +80,11 @@ const markdownComponents: Components = {
         </SyntaxHighlighter>
       </div>
     );
+  },
+
+  // pre — 代码块已在 code 回调自带 wrapper，这里仅做透传。
+  pre({ children }) {
+    return <div className="pre-wrapper">{children}</div>;
   },
 
   // 表格 — 横向滚动 wrapper。
@@ -111,7 +102,7 @@ const markdownComponents: Components = {
         <a
           {...rest}
           href="#"
-          className="markdown-link markdown-link-local"
+          className="text-blue-600 underline hover:text-blue-700 cursor-pointer"
           onClick={(e) => {
             e.preventDefault();
             workspaceApi.openPath(decodeURIComponent(href));
@@ -125,7 +116,7 @@ const markdownComponents: Components = {
       <a
         {...rest}
         href={href}
-        className="markdown-link"
+        className="text-blue-600 underline hover:text-blue-700"
         target="_blank"
         rel="noopener noreferrer"
       >
@@ -151,7 +142,7 @@ const MarkdownViewInner: React.FC<MarkdownViewProps> = ({ text, className }) => 
   }
 
   return (
-    <div className={`markdown-view markdown-body ${className ?? ''}`.trim()}>
+    <div className={`markdown-view markdown-body relative min-w-0 w-full max-w-full wrap-break-word transition-[min-height] duration-200 ease-out contain-[layout_style] [&_strong]:font-bold [&_em]:italic [&.markdown-body_*]:transition-opacity [&.markdown-body_*]:duration-100 [&_.code-block-wrapper]:transition-opacity [&_.code-block-wrapper]:duration-100 motion-reduce:transition-none **:motion-reduce:transition-none [&_.code-block-wrapper]:motion-reduce:transition-none ${className ?? ''}`.trim()}>
       <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={markdownComponents}>
         {encoded}
       </ReactMarkdown>
