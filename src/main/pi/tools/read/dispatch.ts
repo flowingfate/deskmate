@@ -46,6 +46,7 @@ import {
 } from '@main/pi/internal-urls';
 import type { ToolContext, ToolResult } from '../types';
 import { readFilesystem } from './backends/filesystem';
+import { isHtmlExtension, readHtml } from './backends/html';
 import { isImageExtension, readImage } from './backends/image';
 import { readInternalUrl } from './backends/internal-url';
 import { isOfficeExtension, readOffice } from './backends/office';
@@ -59,6 +60,9 @@ export interface ReadToolArgs {
    * - 页码 selector(office 文档):`report.pdf:p3-7`、`report.pdf:p3-7:50-100`
    * - 三段组合:`src/foo.ts:50-200:raw`、`report.pdf:p3-7:50-100:raw`
    * - Internal URL:`skill://foo`、`agent://abc/x.md`
+   * - HTML query 轴(`.html`/`.htm` 专属):`page.html?mode=section&section=main`、
+   *   `page.html?mode=selector&selector=%23content`。`?query` 与 `:sel` 正交 ——
+   *   query → 结构化 HTML 阅读(默认 outline);`:sel`(行/页/raw)→ 当纯文本读。
    *
    * 不支持 URL fetch(`https://...`)—— 后续 phase 接入。
    */
@@ -82,7 +86,11 @@ export async function dispatchRead(
   args: ReadToolArgs,
   ctx: ToolContext,
 ): Promise<ToolResult> {
-  const { path, sel } = splitPathAndSel(args.path);
+  // HTML query 轴(`?mode=...`):先于 selector 切下,且**仅当**目标是 HTML 扩展名
+  // 才认 `?`(`splitHtmlQuery` gate)——非 HTML 输入里的 `?` 当字面路径字符,
+  // 对所有现存 read 行为零影响。
+  const { rawPath, query } = splitHtmlQuery(args.path);
+  const { path, sel } = splitPathAndSel(rawPath);
 
   let selector: ReadSelector;
   try {
@@ -111,6 +119,13 @@ export async function dispatchRead(
       return readImage({ path: abs, displayUrl: path });
     }
 
+    // HTML URI:query 或无 selector → 结构化 html backend(默认 outline);
+    // 带 selector(`:50` / `:raw`)→ 视作纯文本,落到下面 filesystem 分支。
+    if (isHtmlMode(ext, query, selector) && router.canResolveToPath(path)) {
+      const abs = await router.resolveToPath(path, toResolveContext(ctx));
+      return readHtml({ path: abs, query, displayUrl: path }, ctx);
+    }
+
     // 用户 sandbox 文本资源(handler 实现 resolveToPath):走 filesystem backend
     // 流式分页 —— 解除 1MB 上限,binary 文件返回提示而不抛错。`fileName` / `url`
     // 用 LLM-visible URI 注入,abs path 永不外泄(参 office 同模式)。
@@ -134,10 +149,43 @@ export async function dispatchRead(
   if (isImageExtension(ext)) {
     return readImage({ path });
   }
+  // HTML 本地文件:query 或无 selector → 结构化 html backend;带 selector → 纯文本。
+  if (isHtmlMode(ext, query, selector)) {
+    return readHtml({ path, query }, ctx);
+  }
 
   // ── 默认:本地文件系统 ──
   const result = await readFilesystem({ path, selector, signal: ctx.signal });
   return { ok: true, content: JSON.stringify(result) };
+}
+
+/** selector 是否承载了任何"当纯文本读"的意图(行/页/raw)。 */
+function hasTextSelector(selector: ReadSelector): boolean {
+  return selector.ranges.length > 0 || selector.pages.length > 0 || selector.raw;
+}
+
+/**
+ * 是否走结构化 HTML backend:HTML 扩展名,且(有 query 或没有 text selector)。
+ * query 优先于 selector —— 同时给(`page.html:50?mode=x`)走 HTML。
+ */
+function isHtmlMode(ext: string, query: string | undefined, selector: ReadSelector): boolean {
+  if (!isHtmlExtension(ext)) return false;
+  return query !== undefined || !hasTextSelector(selector);
+}
+
+/**
+ * 把 `path[:sel]?query` 里的 `?query` 切下来 —— **仅当**剥掉 selector 后的路径
+ * 是 HTML 扩展名才认 `?`(query 只服务 HTML backend)。非 HTML 输入里的 `?`
+ * 保持字面,整串原样回传,走既有分发,零行为变更。
+ */
+function splitHtmlQuery(rawInput: string): { rawPath: string; query: string | undefined } {
+  const qIdx = rawInput.indexOf('?');
+  if (qIdx < 0) return { rawPath: rawInput, query: undefined };
+  const headCandidate = rawInput.slice(0, qIdx);
+  const { path } = splitPathAndSel(headCandidate);
+  const ext = nodePath.extname(stripScheme(path));
+  if (!isHtmlExtension(ext)) return { rawPath: rawInput, query: undefined };
+  return { rawPath: headCandidate, query: rawInput.slice(qIdx + 1) };
 }
 
 /** `local://uploads/report.pdf` → `uploads/report.pdf`(供 extname 提取扩展名)。 */

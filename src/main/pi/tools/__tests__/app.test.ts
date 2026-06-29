@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 
-import { appCommands } from '../../appcmd';
+import { appCommands } from '../../appcmd/builtins/app';
 import { app } from '../app';
 import type { ToolContext } from '../types';
 import { Tracer } from '@shared/log/trace';

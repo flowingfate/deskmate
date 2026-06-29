@@ -42,6 +42,9 @@ module.exports = {
   },
   files: [
     'out/**/*',
+    // ladle (shadcn storybook) 产物落在 out/ladle，纯开发期工具，绝不进发布包。
+    // electron-vite build 的 emptyOutDir 只清各自子目录，不会清掉它，必须在此显式排除。
+    '!out/ladle/**/*',
     'resources/**/*',
     'package.json',
     '!**/*.map',

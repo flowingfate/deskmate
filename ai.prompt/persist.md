@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-06-15 (Phase 5 Domain Message + PersistedJsonLine) -->
+<!-- Last verified: 2026-06-30 (新增 updateWebSearchSettings 通道) -->
 
 ## 1. 范围
 
@@ -152,7 +152,8 @@ Profiles.get().active()        → Profile
 | `getAgentDetail(agentId)` | 懒读单个 agent 的 cold 字段(解析对应 AGENT.md) |
 | `renameSession / setSessionStarred / deleteSession` | session 写路径 |
 | `getUnreadSummary(agentId)` | 未读统计(regular 全量 + schedule_run 窗口),两条 SQL |
-| `updateConfirmationSettings` | settings 写入 |
+| `updateConfirmationSettings` | confirmation settings 写入 |
+| `updateWebSearchSettings` | webSearch settings 写入(Tavily API key) |
 
 ### 6.2 Main → Renderer(send / on,按域 150ms 防抖)
 

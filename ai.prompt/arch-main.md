@@ -1,6 +1,6 @@
 # DESKMATE AI Studio — 主进程架构
 
-<!-- Last verified: 2026-06-12 -->
+<!-- Last verified: 2026-06-30 -->
 ## 1. 范围
 
 本文档覆盖**主进程**（`src/main/`）和**预加载脚本**（`src/preload/`）。渲染进程架构见 [arch-render.md](arch-render.md)。
@@ -29,6 +29,7 @@
 | 自动更新 | `src/main/lib/autoUpdate/` | electron-updater 封装，CDN/GitHub 更新检查 | — |
 | 功能标志 | `src/main/lib/featureFlags/` | 默认值根据 isDev/brand/platform 控制；CLI `--enable/disable-features` | [ai.prompt.md](../src/main/lib/featureFlags/ai.prompt.md) |
 | 截图 | `src/main/lib/screenshot/` | 多显示器覆盖层，`screenshot://` 协议，全局快捷键 | [ai.prompt.md](../src/main/lib/screenshot/ai.prompt.md) |
+| Research window | `src/main/lib/research/` + `src/main/startup/ipc/research.ts` | `web research` 的可见研究窗口管理；Electron `BrowserWindow` + 多个 `WebContentsView` tab 展示外部网页，live DOM 抽取用户确认来源 | — |
 | 媒体协议 | `src/main/lib/media/` | `media://` 字节直供 protocol,渲染层展示 sandbox/knowledge 图片 | [ai.prompt.md](../src/main/lib/media/ai.prompt.md) |
 | Skills | `src/main/lib/skill/` | .zip/.skill 归档，CDN 目录，SKILL.md YAML 前置内容 | — |
 | 终端管理器 | `src/main/lib/terminalManager/` | 池化的 `command`（临时）和 `mcp_transport`（持久）终端 | — |
@@ -47,6 +48,8 @@
 | 崩溃捕获 | `src/main/lib/crash/` | 崩溃包、运行标记、面包屑、最近日志/dump | [crash-bundle.md](../docs/crash-bundle.md) |
 | Microsoft Graph | `src/main/lib/microsoftGraph/` | MSAL 认证 + Graph API 客户端（Teams、邮件、日历、SharePoint） | [ai.prompt.md](../src/main/lib/microsoftGraph/ai.prompt.md) |
 | 调度器 | `src/main/lib/scheduler/` | Cron 和一次性任务，cold-start catch-up 经 `persist/schedulerState.ts` 接通；job/run 落 `agents/{a}/schedules/{j}/` | [ai.prompt.md](../src/main/lib/scheduler/ai.prompt.md) |
+| Research window | `src/main/lib/research/` | `web research` 的 human-in-the-loop 网页研究：lazy-open + 串行单飞的 research `BrowserWindow` + 外部网页 `WebContentsView`（沙箱隔离）+ live DOM 抽取用户确认的来源 | [ai.prompt.md](../src/main/lib/research/ai.prompt.md) |
+| 网页内容提取 | `src/main/lib/research/extract/` | 共享「网页 → Markdown」提取链：Readability + turndown 注入产物（独立 IIFE 子构建），`web research` live view 与 `web fetch` headless 渲染共用 | [ai.prompt.md](../src/main/lib/research/extract/ai.prompt.md) |
 
 ---
 
@@ -77,6 +80,7 @@
 | Graph API、Outlook、日历、SharePoint | Microsoft Graph | `src/main/lib/microsoftGraph/` |
 | cron、定时任务 | 调度器 | `src/main/lib/scheduler/` |
 | AgenticEval、无头 | 评估框架 | `src/main/lib/evalHarness/` |
+| 交互式网页搜索、research window、web research | Research window | `src/main/lib/research/` |
 
 ---
 
@@ -145,7 +149,7 @@
 
 ## 7. 构建系统概览
 
-**Webpack — 主进程**（target `electron-main`）：4 个入口（bootstrap.ts，3× preload）；原生模块外部化；保留 `__dirname`。
+**Webpack — 主进程**（target `electron-main`）：2 个入口（bootstrap/main）+ 3 个 preload bundle（main/screenshot/log-viewer；research window 复用 main preload）；原生模块外部化；保留 `__dirname`。
 
 **品牌配置：** 应用配置（app ID、产品名、userData 文件夹等）由 `brands/deskmate/config.json` 提供，构建脚本和源码均直接 `require`/`import` 该 JSON。
 

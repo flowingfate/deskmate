@@ -16,6 +16,7 @@ import { onRequest } from '@shared/ipc/human-loop';
 import Resolveable from '@shared/resolveable-promise';
 import { currentSessionStore, useCurrentSession } from '@/states/currentSession.atom';
 import { agentIpc } from './agentIpc';
+import { researchEvents } from '@/ipc/research';
 const logger = log.child({ mod: 'AgentSessionCacheManager' });
 
 export type {
@@ -547,5 +548,17 @@ onRequest('device-auth', (request, id) => {
   const cid = request.chatSessionId;
   const task = new Resolveable<InteractiveMap['device-auth']['out']>();
   agentSessionCacheManager.addInteractiveRequest(cid, { type: 'device-auth', id, request, task });
+  return task;
+});
+onRequest('interactive-search', (request, id) => {
+  const cid = request.chatSessionId;
+  const task = new Resolveable<InteractiveMap['interactive-search']['out']>();
+  const cleanupCompleted = researchEvents.completed((_event, payload) => {
+    if (payload.requestId === id && task.isPending) {
+      task.resolve(payload.response);
+    }
+  });
+  task.finally(cleanupCompleted).catch(() => undefined);
+  agentSessionCacheManager.addInteractiveRequest(cid, { type: 'interactive-search', id, request, task });
   return task;
 });

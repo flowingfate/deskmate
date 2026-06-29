@@ -25,6 +25,7 @@ import invokeUpdate from './update/invoke';
 import invokeQuickStartImageCache from './quickStartImageCache/invoke';
 import invokeAttachment from './attachment/invoke';
 import invokeInternalUrls from './internalUrls/invoke';
+import invokeResearch from './research/invoke';
 
 // Define the API that will be exposed to the renderer process
 export interface ElectronAPI {
@@ -199,6 +200,13 @@ export interface ElectronAPI {
     off: OnOff;
   };
 
+  // Research window APIs
+  research: {
+    invoke: InvokeFn;
+    on: OnOff;
+    off: OnOff;
+  };
+
   // Navigate events (M→R only)
   navigate: {
     on: OnOff;
@@ -329,6 +337,12 @@ export const electronAPI: ElectronAPI = {
   // Feedback / Bug Report
   doctor: {
     invoke: invokeDoctor,
+    on: ipcOn,
+    off: ipcOff,
+  },
+
+  research: {
+    invoke: invokeResearch,
     on: ipcOn,
     off: ipcOff,
   },

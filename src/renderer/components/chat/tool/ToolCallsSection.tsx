@@ -233,7 +233,7 @@ const StatusDot: React.FC<{ status: ToolCallExecutionStatus; failed: boolean }> 
   if (status === 'executing') cls = 'bg-amber-400 motion-safe:animate-pulse';
   else if (status === 'interrupted' || failed) cls = 'bg-rose-500';
   else cls = 'bg-emerald-500/70';
-  return <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cls}`} aria-hidden="true" />;
+  return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cls}`} aria-hidden="true" />;
 };
 
 interface ChipSlotProps {

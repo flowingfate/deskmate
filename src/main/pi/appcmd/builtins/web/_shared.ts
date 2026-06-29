@@ -25,19 +25,3 @@ export function parseNumberFlag(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   return NaN;
 }
-
-/** Bing `lang`/`locale` 同源校验:`en/us` 或 `zh/cn`,缺省给 `en/us`。 */
-export function resolveLangLocale(
-  lang: unknown,
-  locale: unknown,
-): { ok: true; lang: 'en' | 'zh'; locale: 'us' | 'cn' } | { ok: false; error: string } {
-  const langRaw = typeof lang === 'string' && lang.trim() !== '' ? lang.trim().toLowerCase() : 'en';
-  const localeRaw = typeof locale === 'string' && locale.trim() !== '' ? locale.trim().toLowerCase() : 'us';
-  if (langRaw !== 'en' && langRaw !== 'zh') {
-    return { ok: false, error: `--lang must be "en" or "zh" (got "${langRaw}")` };
-  }
-  if (localeRaw !== 'us' && localeRaw !== 'cn') {
-    return { ok: false, error: `--locale must be "us" or "cn" (got "${localeRaw}")` };
-  }
-  return { ok: true, lang: langRaw, locale: localeRaw };
-}

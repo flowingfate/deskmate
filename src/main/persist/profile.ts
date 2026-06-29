@@ -33,6 +33,7 @@ const SETTINGS_FILE_VERSION = 1 as const;
 /** 对应 settings.json —— UI 偏好聚合。 */
 class ProfileSettings extends PersistBase {
   public confirmation?: SettingsFile['confirmation'];
+  public webSearch?: SettingsFile['webSearch'];
 
   constructor(public readonly profileId: string) {
     super();
@@ -56,11 +57,13 @@ class ProfileSettings extends PersistBase {
     const settings = await readJsonOrNull<SettingsFile>(PERSIST_PATH.settingsFile(getAppRoot(), this.profileId));
     if (!settings) return;
     if (settings.confirmation !== undefined) this.confirmation = settings.confirmation;
+    if (settings.webSearch !== undefined) this.webSearch = settings.webSearch;
   }
 
   public toFile(): SettingsFile {
     const file: SettingsFile = { version: SETTINGS_FILE_VERSION };
-    if (this.confirmation !== undefined)   file.confirmation = this.confirmation;
+    if (this.confirmation !== undefined) file.confirmation = this.confirmation;
+    if (this.webSearch !== undefined)   file.webSearch = this.webSearch;
     return file;
   }
 }

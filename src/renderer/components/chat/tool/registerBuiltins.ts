@@ -11,6 +11,7 @@ import { registerToolRenderer } from './toolRendererRegistry';
 import { appRenderer } from './renderers/app';
 import { shellRenderer } from './renderers/shell';
 import { writeRenderer } from './renderers/write';
+import { webRenderer } from './renderers/web';
 
 let registered = false;
 
@@ -21,4 +22,5 @@ export function registerBuiltinToolRenderers(): void {
   registerToolRenderer('app', appRenderer);
   registerToolRenderer('shell', shellRenderer);
   registerToolRenderer('write', writeRenderer);
+  registerToolRenderer('web', webRenderer);
 }

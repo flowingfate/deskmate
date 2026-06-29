@@ -279,4 +279,12 @@ export function registerPersistIpc(ipc: IpcMain): void {
       return { success: true };
     } catch (e) { return err(e); }
   });
+
+  handle.updateWebSearchSettings(async (_e, settings) => {
+    try {
+      const profile = await Profiles.get().active();
+      await profile.patchSettings({ webSearch: settings });
+      return { success: true };
+    } catch (e) { return err(e); }
+  });
 }

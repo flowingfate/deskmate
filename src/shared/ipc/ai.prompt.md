@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-07 -->
+<!-- Last verified: 2026-06-30 -->
 # IPC 框架（`src/shared/ipc/`）
 
 > 基于 TypeScript 泛型 + Proxy 的框架，从单一共享定义文件出发，在 Electron 的三个层（main / preload / renderer）之间强制实现类型安全、编译期检查的 IPC。
@@ -145,6 +145,7 @@ const result = await screenshotApi.saveToFile(displayId, rect, imageData);
 | `src/shared/ipc/*.ts` 中的任何类型 | 对应的 `src/preload/*` 白名单、对应的 `src/main/startup/ipc/` 处理器 |
 | `base.ts` 框架 | 所有从 `base.ts` 导入的文件 — 运行 `npm run check:impact -- src/shared/ipc/base.ts` |
 | 添加新的 IPC 契约文件 | 还必须创建 preload invoke 入口和 main 端处理器文件 |
+| 添加新的窗口级 IPC（如 `research`） | 同时更新 `src/preload/main.ts` 的 `ElectronAPI`、`electronAPI` 对象、renderer `ipc/<name>.ts` 绑定，以及 `electron.vite.config.ts` 中需要的新 renderer entry |
 
 ## 反模式
 - 不要使用原始 `ipcMain.handle()` — 使用 `base.ts` 中的 `connectRenderToMain<T>()`。

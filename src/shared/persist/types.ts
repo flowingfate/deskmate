@@ -45,13 +45,16 @@ export type ProfileIndexEntry = GuestProfileEntry | SignedInProfileEntry;
 export interface SettingsFile {
   version: 1;
   confirmation?: ConfirmationSettings;
+  webSearch?: WebSearchSettings;
 }
 
 export type {
   ConfirmationSettings,
+  WebSearchSettings,
 } from '../types/profileTypes';
 import type {
   ConfirmationSettings,
+  WebSearchSettings,
 } from '../types/profileTypes';
 
 // ---------------------------------------------------------------------------

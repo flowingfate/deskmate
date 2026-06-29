@@ -19,7 +19,7 @@ import { FetchWebContentTool, type FetchWebContentInternalResult } from './kerne
 
 import { COMMON_FLAGS, isHelp, isJson } from '../../_commonFlags';
 import { parseFlags, type FlagSpec } from '../../flags';
-import type { AppCmdContext } from '../../types';
+import type { AppCommand, AppCmdContext } from '../../types';
 
 import { parseNumberFlag, toStringArray } from './_shared';
 
@@ -28,14 +28,16 @@ const HELP = `USAGE
   web fetch --url <u> [--url <u>...] [options]
 
 DESCRIPTION
-  Fetch text content from multiple URLs in parallel (max 20). Strips HTML
-  tags/scripts/styles, extracts main content area for HTML; Markdown / JSON
-  / YAML / XML / plain text are passed through with minimal formatting.
+  Fetch content from multiple URLs in parallel (max 20). HTML is rendered in a
+  headless browser (JS executed) and extracted to clean Markdown via Readability
+  + turndown; Markdown / JSON / YAML / XML / plain text pass through with minimal
+  formatting. Use --raw for the legacy plain-text HTML path (no rendering).
 
 OPTIONS
   --url <u>            URL to fetch. Repeatable. Equivalent to positional.
   --timeout <sec>      Per-URL timeout in seconds (5-60). Default: 30.
   --max-size <bytes>   Per-URL content size cap, 1024-10485760. Default: 1048576 (1MB).
+  --raw                Skip headless render for HTML; legacy plain-text extraction.
   --json               Output the raw result envelope as JSON.
   --help, -h           Show this help.
 
@@ -51,6 +53,7 @@ const FLAGS: FlagSpec[] = [
   { name: 'url', type: 'array' },
   { name: 'timeout', type: 'string' },
   { name: 'max-size', type: 'string' },
+  { name: 'raw', type: 'boolean' },
 ];
 
 export async function runFetch(argv: string[], ctx: AppCmdContext): Promise<void> {
@@ -110,6 +113,7 @@ export async function runFetch(argv: string[], ctx: AppCmdContext): Promise<void
         urls,
         timeoutSeconds: timeoutRaw,
         maxContentSize: sizeRaw,
+        raw: parsed.flags.raw === true,
       },
       { signal: ctx.signal },
     );
@@ -160,3 +164,10 @@ export async function runFetch(argv: string[], ctx: AppCmdContext): Promise<void
   }
   ctx.print(lines.join('\n') + '\n');
 }
+
+export const fetchCommand: AppCommand = {
+  name: 'fetch',
+  synopsis: 'Fetch page content from URL',
+  help: HELP,
+  run: runFetch,
+};

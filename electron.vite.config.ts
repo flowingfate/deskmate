@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react-swc'
 import { ejsTemplatePlugin } from './scripts/vite/ejs-template-plugin'
 import { monacoWorkerPlugin } from './scripts/vite/monaco-worker-plugin'
 import { copyFilesPlugin } from './scripts/vite/copy-files-plugin'
+import { extractorBundlePlugin } from './scripts/vite/extractor-plugin'
 import { sharedDefines, rendererOnlyDefines } from './scripts/vite/defines'
 import appConfig from './brands/deskmate/config.json'
 
@@ -54,10 +55,12 @@ export default defineConfig(({ command, mode }) => {
             preload: resolve(__dirname, 'src/preload/main.ts'),
             'preload.screenshot': resolve(__dirname, 'src/preload/screenshot.ts'),
             'preload.log-viewer': resolve(__dirname, 'src/preload/log-viewer.ts'),
+            'preload.research': resolve(__dirname, 'src/preload/research.ts'),
           },
           formats: ['cjs'], // Preload 必须 CJS — ESM preload 无法 require('electron')
         },
       },
+      plugins: [extractorBundlePlugin()],
       define: shared,
       resolve: {
         alias: {
@@ -77,6 +80,7 @@ export default defineConfig(({ command, mode }) => {
             index: resolve(__dirname, 'src/renderer/index.html'),
             screenshot: resolve(__dirname, 'src/renderer/screenshot.html'),
             'log-viewer': resolve(__dirname, 'src/renderer/log-viewer.html'),
+            research: resolve(__dirname, 'src/renderer/research.html'),
           },
         },
         sourcemap: isDev ? 'inline' : false,

@@ -29,6 +29,7 @@ import handleQuickStartImageCacheIPC from './quick-start-image-cache';
 import handleUpdateIPC from './update';
 import handleAttachmentIPC from './attachment';
 import handleInternalUrlsIPC from './internal-urls';
+import handleResearchIPC from './research';
 import { RuntimeManager } from '../../lib/runtime/RuntimeManager';
 
 export function setUpIPC(ctx: Context) {
@@ -54,6 +55,7 @@ export function setUpIPC(ctx: Context) {
   handleLlmIPC(ctx);
   handleWindowIPC(ctx);
   handleChatSessionIPC(ctx);
+  handleResearchIPC();
   handleDoctorIPC(ctx);
   handleFeatureFlagsIPC();
   // This will register runtime ipc hanles

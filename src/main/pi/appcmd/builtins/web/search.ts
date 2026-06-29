@@ -1,63 +1,81 @@
 /**
- * `app web search <query...>` —— Bing 网页搜索,Playwright headless 驱动。
+ * `app web search <query...>` —— Tavily Search REST API 网页搜索。
+ *
+ * 历史:替换原 Bing + Playwright headless 爬虫方案(长期撞风控 / 0 结果),
+ * 改走 Tavily 官方 Search API。需要 Tavily API key:优先读 profile
+ * `settings.json` 的 `webSearch.tavilyApiKey`,缺省回退环境变量
+ * `TAVILY_API_KEY`;两者都空则 fail-fast(exit 1)引导配置。
  *
  * 形态:
- *   - `<query>` positional **可以多次**(每个独立 query 并行跑一次浏览器)
- *   - `--query <q>` / `-q <q>` repeatable —— 等价于 positional,LLM 选哪种顺手
- *     都行(与 `curl -d` repeatable form 同范式)
- *   - `--lang en|zh`(默认 `en`)/ `--locale us|cn`(默认 `us`)
- *   - `--max <n>` 每 query 返回数,1-10,默认 5
+ *   - `<query>` positional **可以多次**(每个 query 并行跑一次 Tavily 请求)
+ *   - `--query <q>` / `-q <q>` repeatable —— 等价于 positional(与 `curl -d`
+ *     repeatable form 同范式)
+ *   - `--topic <general|news|finance>`(默认 general)—— Tavily 搜索类别
+ *   - `--depth <basic|advanced>`(默认 basic)—— basic=1 credit / advanced=2
+ *     credits,相关性更高
+ *   - `--max <n>` 每 query 返回数,1-20,默认 5
  *   - `--timeout <ms>` 单 query 上限,默认 60000(60s)
- *   - `--json` 透传 `BingWebSearchToolResult`,便于链式接 `app web fetch`
+ *   - `--json` 透传结果 envelope,便于链式接 `app web fetch`
  *
  * 不支持 `--dry-run`(纯只读 + 副作用受控,演练无意义)。
- *
- * Bing 母语指引:中文 query 用 `--lang zh --locale cn`,其它 `--lang en --locale us`。
- * 由 LLM 在 cmdline 里显式声明 —— Schema 时代是 enum required,这里同样必填,
- * 但通过 `_shared.resolveLangLocale` 校验,缺省走 `en/us`。
  */
 
-import { BingWebSearchTool, type BingWebSearchToolResult } from './kernel/bingWebSearch';
+import { Profiles } from '@main/persist';
+
+import {
+  TavilySearchTool,
+  type TavilyWebSearchToolResult,
+  type TavilySearchTopic,
+  type TavilySearchDepth,
+} from './kernel/tavilySearch';
 
 import { COMMON_FLAGS, isHelp, isJson } from '../../_commonFlags';
 import { parseFlags, type FlagSpec } from '../../flags';
-import type { AppCmdContext } from '../../types';
+import type { AppCommand, AppCmdContext } from '../../types';
 
-import { parseNumberFlag, resolveLangLocale, toStringArray } from './_shared';
+import { parseNumberFlag, toStringArray } from './_shared';
 
 const HELP = `USAGE
   web search <query> [<query>...] [options]
   web search --query <q> [--query <q>...] [options]
 
 DESCRIPTION
-  Search the web using Bing (Playwright headless Chromium). Each query
-  runs in parallel; up to 10 queries per call. Results merged into one
-  envelope.
+  Search the web using the Tavily Search API. Each query runs in parallel;
+  up to 10 queries per call. Results are merged into one envelope.
+
+  Requires a Tavily API key. Set it in Settings (webSearch.tavilyApiKey) or
+  via the TAVILY_API_KEY environment variable.
 
 OPTIONS
-  -q, --query <q>     Search query. Repeatable. Equivalent to positional.
-  --lang <en|zh>      Search language. Default: en. Use "zh" for Chinese queries.
-  --locale <us|cn>    Search locale. Default: us. Use "cn" for Chinese queries.
-  --max <n>           Max results per query (1-10). Default: 5.
-  --timeout <ms>      Per-query timeout in milliseconds (1000-300000). Default: 60000.
-  --json              Output the raw result envelope as JSON.
-  --help, -h          Show this help.
+  -q, --query <q>          Search query. Repeatable. Equivalent to positional.
+  --topic <general|news|finance>
+                           Search category. Default: general. Use "news" for
+                           real-time current events.
+  --depth <basic|advanced> Search depth. Default: basic (1 credit). "advanced"
+                           (2 credits) returns higher-relevance content.
+  --max <n>                Max results per query (1-20). Default: 5.
+  --timeout <ms>           Per-query timeout in milliseconds (1000-300000). Default: 60000.
+  --json                   Output the raw result envelope as JSON.
+  --help, -h               Show this help.
 
 EXAMPLES
   web search "GitHub Copilot pricing"
   web search "react hooks" "vue composition api" --max 3
-  web search "深圳 天气" --lang zh --locale cn --json
-  web search -q "claude api" -q "openai api" --max 5
+  web search "深圳 天气" --topic news --json
+  web search -q "claude api" -q "openai api" --max 5 --depth advanced
 `;
 
 const FLAGS: FlagSpec[] = [
   ...COMMON_FLAGS,
   { name: 'query', alias: 'q', type: 'array' },
-  { name: 'lang', type: 'string' },
-  { name: 'locale', type: 'string' },
+  { name: 'topic', type: 'string' },
+  { name: 'depth', type: 'string' },
   { name: 'max', type: 'string' },
   { name: 'timeout', type: 'string' },
 ];
+
+const VALID_TOPICS: readonly TavilySearchTopic[] = ['general', 'news', 'finance'];
+const VALID_DEPTHS: readonly TavilySearchDepth[] = ['basic', 'advanced'];
 
 export async function runSearch(argv: string[], ctx: AppCmdContext): Promise<void> {
   const parsed = parseFlags(argv, FLAGS);
@@ -71,7 +89,7 @@ export async function runSearch(argv: string[], ctx: AppCmdContext): Promise<voi
     return;
   }
 
-  // 收 query:positional + --query repeatable,两者合并去重
+  // 收 query:positional + --query repeatable,两者合并
   const queries = [...parsed.positional, ...toStringArray(parsed.flags.query)]
     .map((q) => q.trim())
     .filter((q) => q.length > 0);
@@ -86,21 +104,32 @@ export async function runSearch(argv: string[], ctx: AppCmdContext): Promise<voi
     return;
   }
 
-  const langLocale = resolveLangLocale(parsed.flags.lang, parsed.flags.locale);
-  if (!langLocale.ok) {
-    ctx.printErr(`web search: ${langLocale.error}\n`);
+  // topic 校验,缺省 general
+  const topicRaw = typeof parsed.flags.topic === 'string' ? parsed.flags.topic.trim().toLowerCase() : 'general';
+  if (!VALID_TOPICS.includes(topicRaw as TavilySearchTopic)) {
+    ctx.printErr(`web search: --topic must be one of ${VALID_TOPICS.join(' | ')} (got "${topicRaw}").\n`);
     ctx.setExitCode(2);
     return;
   }
+  const topic = topicRaw as TavilySearchTopic;
+
+  // depth 校验,缺省 basic
+  const depthRaw = typeof parsed.flags.depth === 'string' ? parsed.flags.depth.trim().toLowerCase() : 'basic';
+  if (!VALID_DEPTHS.includes(depthRaw as TavilySearchDepth)) {
+    ctx.printErr(`web search: --depth must be one of ${VALID_DEPTHS.join(' | ')} (got "${depthRaw}").\n`);
+    ctx.setExitCode(2);
+    return;
+  }
+  const searchDepth = depthRaw as TavilySearchDepth;
 
   const maxRaw = parseNumberFlag(parsed.flags.max);
   if (Number.isNaN(maxRaw)) {
-    ctx.printErr(`web search: --max must be a number (1-10).\n`);
+    ctx.printErr(`web search: --max must be a number (1-20).\n`);
     ctx.setExitCode(2);
     return;
   }
-  if (maxRaw !== undefined && (!Number.isInteger(maxRaw) || maxRaw < 1 || maxRaw > 10)) {
-    ctx.printErr(`web search: --max must be an integer between 1 and 10 (got ${maxRaw}).\n`);
+  if (maxRaw !== undefined && (!Number.isInteger(maxRaw) || maxRaw < 1 || maxRaw > 20)) {
+    ctx.printErr(`web search: --max must be an integer between 1 and 20 (got ${maxRaw}).\n`);
     ctx.setExitCode(2);
     return;
   }
@@ -117,11 +146,33 @@ export async function runSearch(argv: string[], ctx: AppCmdContext): Promise<voi
     return;
   }
 
-  const result: BingWebSearchToolResult = await BingWebSearchTool.execute(
+  // API key:settings.json 优先,环境变量兜底。两者都空 → fail-fast。
+  let apiKey: string | undefined;
+  try {
+    const key = Profiles.get().activeSync().settings.webSearch?.tavilyApiKey;
+    if (typeof key === 'string' && key.trim() !== '') apiKey = key.trim();
+  } catch {
+    // 无 active profile(未登录 / 测试环境)—— 落到环境变量。
+  }
+  if (apiKey === undefined) {
+    const env = process.env.TAVILY_API_KEY;
+    if (typeof env === 'string' && env.trim() !== '') apiKey = env.trim();
+  }
+  if (apiKey === undefined) {
+    ctx.printErr(
+      'web search: no Tavily API key configured. Set webSearch.tavilyApiKey in Settings ' +
+        'or the TAVILY_API_KEY environment variable.\n',
+    );
+    ctx.setExitCode(1);
+    return;
+  }
+
+  const result: TavilyWebSearchToolResult = await TavilySearchTool.execute(
     {
       queries,
-      lang: langLocale.lang,
-      locale: langLocale.locale,
+      apiKey,
+      topic,
+      searchDepth,
       maxResults: maxRaw,
       timeout: timeoutRaw,
     },
@@ -176,3 +227,10 @@ function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, max - 1) + '…';
 }
+
+export const searchCommand: AppCommand = {
+  name: 'search',
+  synopsis: 'Web search via Tavily API (use research instead if this is not available or erroring)',
+  help: HELP,
+  run: runSearch,
+};

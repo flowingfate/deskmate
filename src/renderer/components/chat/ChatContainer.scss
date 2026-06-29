@@ -43,13 +43,6 @@
     content-visibility: auto;
     contain-intrinsic-size: auto 200px;
   }
-
-  // ToolCallsSection 自己控制水平 inset(collapsed: margin 推内容对齐;
-  // expanded: bg 撑满 wrapper,内 padding 拉回内容对齐)。
-  > .tool-section-wrapper {
-    padding-left: 0;
-    padding-right: 0;
-  }
 }
 
 // ToolCallsSection 外壳几何:collapsed 紧凑白卡片 ↔ expanded 贴边浅灰条。
@@ -80,7 +73,7 @@
     padding: 8px;
     background-color: #ffffff;
     border-radius: 4px;
-    box-shadow: inset 0 0 0 1px rgba(229, 231, 235, 0.7);
+    box-shadow: inset 0 0 0 1px rgba(237, 239, 242, 0.7);
   }
 
   // expanded (view all): bg 撑满 wrapper 全宽,内 padding 拉回对齐
@@ -96,7 +89,7 @@
 
 .chat-jump-to-latest-button {
   position: absolute;
-  left: 24px;
+  left: 20px;
   bottom: 16px;
   display: inline-flex;
   align-items: center;
@@ -188,12 +181,6 @@
   display: flex;
   align-items: flex-start;
   margin-top: 8px;
-}
-
-.chat-latest-live-item {
-  display: flex;
-  align-items: flex-start;
-  min-height: 48px;
 }
 
 .inline-edit-message-shell {

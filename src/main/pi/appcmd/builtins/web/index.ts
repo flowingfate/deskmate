@@ -1,86 +1,35 @@
 /**
- * `web` AppCommand —— Web 抓取与搜索能力域。
+ * `web` 能力域的**子命令注册表** `webCommands`。
  *
- * 4 个 subcommand,全部 **read-only**:
- *   - `search <query>`     Bing 网页搜索(Playwright)
- *   - `image <query>`      Bing 图片搜索(Playwright)
- *   - `fetch <url>`        多 URL 并行抓取 + 纯文本抽取
- *   - `read-html <file>`   agent-safe HTML reader,绝不返全页
+ * 与 `app` 完全对等的结构:每个顶层工具拥有**自己的**注册表,与其成员命令
+ * 同住一包(`builtins/web/` ←→ `builtins/app/`)。
+ * 两个顶层工具都由 `makeCommandFacade(makeRouterCommand({ ..., registry }))` 生成
+ * —— 路由 / help / 描述索引逻辑同一份,差异仅在「注册表里装了谁」。
  *
- * 设计纪律:
- *   - 全部 subcommand 支持 `--json`(read-only 的红线)
- *   - **没有** destructive op,**不**需要 `--yes` / `--dry-run`
- *   - `<query>` / `<url>` 既接 positional **也**接 repeatable `--query/--url`,
- *     与 `curl -d k=v` repeatable form 同范式 —— LLM 习惯哪个用哪个
- *   - `--lang`/`--locale` 与 Bing 的 ICU 语言/区域路由一一对应,缺省 `en/us`,
- *     中文 query 自动指引到 `zh/cn`(`_shared.resolveLangLocale` 集中校验)
+ * 成员命令:`search` / `image` / `fetch`(read-only)+ `download`(唯一**产出型**
+ * 命令 —— 写文件,通过 `ctx.addDeliverable` 登记产出)。read-only 三命令无 `--yes`
+ * / `--dry-run`;download 也不需 `--yes`(只创建新文件,非 `remove` 那种 destructive
+ * op)。`--json` 全员遵守。kernel(`kernel/*`)承载业务,本文件只把它们包成
+ * `AppCommand` 装进注册表。
  *
- * 历史:替代旧 `bing_web_search` / `bing_image_search` / `fetch_web_content` /
- * `read_html` 四个独立 LocalTool。kernel 由 `pi/tools/impl/*` 平移而来,
- * body 一字不改;只去掉跨进程的 `@shared/types/toolCallArgs` 依赖(view 已删)。
+ * 填充时机:模块加载期 eager 注册(web 无 feature flag,不需要延迟 / 条件)。
+ * `pi/tools/web.ts` import 本模块即触发,`makeRouterCommand` 在首次被调用时
+ * 读 `webCommands.list()`,此刻已注册完毕。
+ *
+ * 设计文档:[`ai.prompt/tool-system.md`](../../../../ai.prompt/tool-system.md)
  */
 
-import type { AppCommand } from '../../types';
+import { AppCommandRegistry } from '../../registry';
 
-import { runFetch } from './fetch';
-import { runImage } from './image';
-import { runReadHtml } from './read-html';
-import { runSearch } from './search';
+import { downloadCommand } from './download';
+import { fetchCommand } from './fetch';
+import { researchCommand } from './research';
+import { searchCommand } from './search';
 
-const HELP_TOP = `USAGE
-  web <subcommand> [options]
+/** web 域专属注册表 —— 与 `appCommands` 同形,只装 web 的子命令。 */
+export const webCommands = new AppCommandRegistry();
 
-DESCRIPTION
-  Web access — search, image search, content fetch, and safe HTML reading.
-  All subcommands are read-only.
-
-SUBCOMMANDS
-  search <query>     Bing web search (Playwright headless Chromium).
-  image <query>      Bing image search.
-  fetch <url>        Fetch text content from URLs in parallel (max 20).
-  read-html <file>   Safely read a local HTML file (outline / section / selector).
-
-GLOBAL OPTIONS (recognised by every subcommand)
-  --help, -h     Show subcommand help.
-  --json         Output the raw envelope as JSON.
-
-EXAMPLES
-  web search "GitHub Copilot pricing"
-  web search "深圳 天气" --lang zh --locale cn --json
-  web image "studio ghibli concept art" --safe-search Strict
-  web fetch https://example.com/article
-  web fetch https://a.com https://b.com --json
-  web read-html /tmp/page.html
-  web read-html /tmp/page.html --mode section --section main
-`;
-
-export const webCommand: AppCommand = {
-  name: 'web',
-  synopsis: 'Search / image-search the web, fetch URLs, read HTML files',
-  help: HELP_TOP,
-  async run(argv, ctx) {
-    const [sub, ...rest] = argv;
-    if (sub === undefined || sub === '--help' || sub === '-h') {
-      ctx.print(HELP_TOP);
-      return;
-    }
-    switch (sub) {
-      case 'search':
-        await runSearch(rest, ctx);
-        return;
-      case 'image':
-        await runImage(rest, ctx);
-        return;
-      case 'fetch':
-        await runFetch(rest, ctx);
-        return;
-      case 'read-html':
-        await runReadHtml(rest, ctx);
-        return;
-      default:
-        ctx.printErr(`web: unknown subcommand "${sub}". See "web --help".\n`);
-        ctx.setExitCode(2);
-        return;
-    }
-  },
-};
+webCommands.register(searchCommand);
+webCommands.register(researchCommand);
+webCommands.register(fetchCommand);
+webCommands.register(downloadCommand);

@@ -555,6 +555,12 @@ export interface ConfirmationSettings {
   inlineEditRegenerate: InlineEditRegenerateConfirmationSettings;
 }
 
+/** `web search` 配置 —— 当前仅承载 Tavily Search API key。 */
+export interface WebSearchSettings {
+  /** Tavily Search API key（`tvly-...`）。供 `web search` 调用 Tavily REST API；缺省回退环境变量 `TAVILY_API_KEY`。 */
+  tavilyApiKey?: string;
+}
+
 /**
  * Profile configuration interface
  */

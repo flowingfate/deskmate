@@ -94,6 +94,15 @@ export interface AppCmdContext {
    * 命令是否成功 —— 跟 shell 完全一致的心智模型。
    */
   setExitCode(code: number): void;
+
+  /**
+   * 登记本次命令产出 / 修改的用户可见文件 URI(如 `web download` 落盘的
+   * `local://...`)。dispatcher 收集后挂到 `AppCmdInternalResult.deliverables`,
+   * 经 facade → `ToolResult.deliverables` 回流给 sub-agent 审计 —— 与 stdio
+   * 同纪律,run 实现"像写 CLI 一样"显式登记产出,不靠下游解析输出反推。
+   * 产出型命令(download 等)调用;只读命令一律不调。
+   */
+  addDeliverable(uri: string): void;
 }
 
 /**
@@ -115,7 +124,17 @@ export interface AppCommand {
   readonly name: string;
   readonly synopsis: string;
   readonly help: string;
-  run(argv: string[], ctx: AppCmdContext): Promise<void>;
+  run(argv: readonly string[], ctx: AppCmdContext): Promise<void>;
+  /**
+   * 可选:当本命令被 `makeCommandFacade` 包成**顶层 LocalTool** 时,
+   * 用来生成该工具的 `spec.description`。
+   *
+   * 缺省(成员 / leaf 命令)时,facade 用 `synopsis` 合成一段简短描述。
+   * **router 形态**(由 `makeRouterCommand` 生成,即 `app` / `web` 顶层工具)覆写
+   * 它,把所路由注册表里全部成员命令的 synopsis **内嵌**进描述 —— 这是渐进披露
+   * 的"命令索引"。被路由的成员命令(mcp / search / ...)不实现,自然走默认。
+   */
+  toolDescription?(): string;
 }
 
 /**
@@ -129,4 +148,6 @@ export interface AppCmdInternalResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+  /** run 期间通过 `ctx.addDeliverable` 登记的产出文件 URI(去重,登记顺序)。 */
+  deliverables: string[];
 }

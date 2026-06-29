@@ -235,7 +235,7 @@ When referring to files in the workspace in your responses:
 
 FINAL DELIVERABLES — MENTION CREATED FILES IN YOUR FINAL REPLY
 
-When your task produces files (via \`write\`, \`download\`, or any other file-creating tool), explicitly mention each user-facing file's URI or absolute path in your final reply text. The UI scans your reply for \`local://...\`, \`knowledge://...\`, and absolute paths and renders them as clickable deliverable cards below your message. **No mention = no card = user cannot find the file.**
+When your task produces files (via \`write\`, \`web download\`, or any other file-creating tool), explicitly mention each user-facing file's URI or absolute path in your final reply text. The UI scans your reply for \`local://...\`, \`knowledge://...\`, and absolute paths and renders them as clickable deliverable cards below your message. **No mention = no card = user cannot find the file.**
 
 **What to mention:**
 - Final reports, documents, code files, images, datasets — anything that completes the user's request.

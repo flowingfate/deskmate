@@ -1,16 +1,17 @@
 /**
- * AppCommand 中央注册表。模块级单例 `appCommands` 在启动时(由
- * `pi/appcmd/index.ts` 的副作用)填进来。
+ * `AppCommandRegistry` —— AppCommand 容器类。每个顶层 router 工具拥有自己的
+ * 实例,与其成员命令同住一包,eager 注册:
+ *   - `appCommands`(`builtins/app/index.ts`):成员 hello / mcp / agent / skill / ...
+ *   - `webCommands`(`builtins/web/index.ts`):成员 search / image / fetch / download
+ * `pi/tools/{app,web}.ts` import 对应 index 即拿到填充好的实例。
  *
  * 不变量:
- *   - `register` 重名直接 throw —— 与 LocalTool registry 同纪律,杜绝
- *     静默覆盖。
- *   - 命名空间是全局的:LLM 提示 / `app --help` 列表 / 错误回显都按
- *     name 直接拼字面,改名 = 用户可见的破坏性变化。
+ *   - `register` 重名直接 throw —— 与 LocalTool registry 同纪律,杜绝静默覆盖。
+ *   - 命名空间按实例隔离:LLM 提示 / `<tool> --help` 列表 / 错误回显都按 name
+ *     直接拼字面,改名 = 用户可见的破坏性变化。
  *
- * 与 LocalTool registry 的关系:
- *   - 两套独立的容器,无依赖。`app.ts`(LocalTool)只在 handler 内**调用**
- *     `appCommands.get(name)`;反向不允许。
+ * 本文件**只**导出类,不持有任何单例。与 LocalTool registry 是两套独立容器,
+ * 无依赖;facade 只在 handler 内**调用** `registry.get(name)`,反向不允许。
  */
 
 import type { AppCommand } from './types';
@@ -43,6 +44,3 @@ export class AppCommandRegistry {
     return this.list().map((c) => c.name);
   }
 }
-
-/** 生产单例。启动注册由 `pi/appcmd/index.ts` 的副作用完成。 */
-export const appCommands = new AppCommandRegistry();

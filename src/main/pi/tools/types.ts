@@ -25,15 +25,17 @@ import type { ToolCatalog } from '../toolCatalog';
 
 /**
  * Tool 结果。成功时 `content` 是 LLM 可见的字符串(与 MCP tool result 等价
- * 形态);失败统一由 registry 在外层捕获并落成 `{ ok: false }` —— handler
- * 直接 throw 即可,不需要自己包 try/catch。
+ * 的形态),失败时 `error` 给出可读原因(registry 在 handler throw 时收敛
+ * 成这一态)。
  *
- * `images`:可选。工具产出图片时携带(如 `read` 一个图片文件)—— 这些 base64
- * 图片会被透传进 Domain `ToolResult.images`,最终由 messageBridge 拼成 pi
- * `ToolResultMessage` 的 ImageContent 回灌给模型。
+ * - `images`:工具回传的图片(如 `read` 一个图片文件)。仅 local 工具产出。
+ * - `deliverables`:本次调用产出 / 修改的用户可见文件 URI(如 `web download`
+ *   存盘的 `local://...`)。供 sub-agent 的 deliverable 审计**结构化**回收 ——
+ *   与 `images` 同样的回流线路(execute → ToolCallResult → session hook),
+ *   避免下游靠解析 cmdline / 输出文本反推产出。普通 LocalTool 不产出时省略。
  */
 export type ToolResult =
-  | { ok: true; content: string; images?: ToolResultImage[] }
+  | { ok: true; content: string; images?: ToolResultImage[]; deliverables?: readonly string[] }
   | { ok: false; error: string };
 
 /**

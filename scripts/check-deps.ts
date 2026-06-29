@@ -73,6 +73,12 @@ const BUILD_TOOL_PATTERNS: RegExp[] = [
   /^path-browserify$/,
   // native extensions loaded at runtime without import
   /^sqlite-vec$/,
+  // bundled into the extractor injection IIFE at build time
+  // (scripts/vite/extractor-plugin.ts); main runtime never require()s them,
+  // so they legitimately stay in devDependencies.
+  /^@mozilla\/readability$/,
+  /^turndown$/,
+  /^turndown-plugin-gfm$/,
 ];
 
 // packages in dependencies that are used at runtime but not via import

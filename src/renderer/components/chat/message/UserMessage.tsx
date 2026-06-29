@@ -21,8 +21,8 @@ interface UserMessageProps {
 const EditIcon: React.FC = () => (
   <svg
     className="action-icon"
-    width="16"
-    height="16"
+    width="14"
+    height="14"
     fill="none"
     stroke="currentColor"
     strokeWidth="2"

@@ -19,7 +19,6 @@
  */
 
 import type { ToolContext } from '../tools/types';
-import { appCommands } from './registry';
 import type { AppCmdContext, AppCmdInternalResult, AppCommand } from './types';
 
 /** dispatcher 自己用的简单 stdout/stderr accumulator。 */
@@ -47,6 +46,7 @@ function buildAppCmdContext(
   toolCtx: ToolContext,
   buffers: { stdout: ReturnType<typeof makeBuffer>; stderr: ReturnType<typeof makeBuffer> },
   exit: { code: number },
+  deliverables: string[],
 ): AppCmdContext {
   return {
     profileId: toolCtx.profileId,
@@ -72,6 +72,10 @@ function buildAppCmdContext(
     setExitCode(code: number) {
       exit.code = code;
     },
+    addDeliverable(uri: string) {
+      const trimmed = uri.trim();
+      if (trimmed.length > 0 && !deliverables.includes(trimmed)) deliverables.push(trimmed);
+    },
   };
 }
 
@@ -87,10 +91,11 @@ export async function dispatchAppCommand(
   const stdout = makeBuffer();
   const stderr = makeBuffer();
   const exit = { code: 0 };
-  const ctx = buildAppCmdContext(toolCtx, { stdout, stderr }, exit);
+  const deliverables: string[] = [];
+  const ctx = buildAppCmdContext(toolCtx, { stdout, stderr }, exit, deliverables);
 
   try {
-    await cmd.run([...argv], ctx);
+    await cmd.run(argv, ctx);
   } catch (err) {
     // run 抛错 = 命令崩溃,与 shell 进程 abort 同义。语义上不是"工具调用
     // 失败"(那是 LocalTool 层的事),所以这里就地落成 stderr + exit 1,
@@ -104,6 +109,7 @@ export async function dispatchAppCommand(
     stdout: stdout.read(),
     stderr: stderr.read(),
     exitCode: exit.code,
+    deliverables,
   };
 }
 
@@ -133,22 +139,3 @@ export function formatAppCmdContent(result: AppCmdInternalResult): string {
   return parts.join('');
 }
 
-/**
- * 顶层 `app --help` / `app -h` / `app` 空命令的统一应答。caller 用,
- * 内部不缓存(命令列表可能在 dev hot-reload 期变化,渲染开销可以忽略)。
- */
-export function buildTopLevelHelp(): string {
-  const cmds = appCommands.list();
-  if (cmds.length === 0) {
-    return 'app: no commands registered.\n';
-  }
-  const maxName = Math.max(...cmds.map((c) => c.name.length));
-  const lines = ['Run an in-app command. Available commands:', ''];
-  for (const c of cmds) {
-    lines.push(`  ${c.name.padEnd(maxName)}  ${c.synopsis}`);
-  }
-  lines.push('');
-  lines.push('Run "<command> --help" for detailed usage.');
-  lines.push('Add --json to any command for structured JSON output (if supported).');
-  return lines.join('\n') + '\n';
-}
