@@ -35,11 +35,17 @@
 export type FileUri = string & { readonly __brand: 'FileUri' };
 export const asFileUri = (s: string): FileUri => s as FileUri;
 
-/** Token 用量,与 pi-ai Usage 主链路三项对齐。 */
+/**
+ * Token 用量,落盘形态精简以省空间。语义对齐 pi-ai `Usage` 的 prompt 侧拆分:
+ * `in` 仅非缓存输入,缓存命中时 `cache[0]`(read)才是大头;真实 prompt 占用 =
+ * in + cache[0] + cache[1]。total = in + out + cache[0] + cache[1]。
+ */
 export interface TokenUsage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
+  in: number;
+  out: number;
+  /** [read, write] 缓存读/写 token。 */
+  cache: [read: number, write: number];
+  total: number;
 }
 
 /**

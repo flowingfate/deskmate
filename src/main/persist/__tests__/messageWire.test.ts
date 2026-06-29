@@ -176,7 +176,7 @@ describe('messageWire.rehydrate ∘ dehydrate 双向 round-trip', () => {
         ],
         outcome: { kind: 'stop' },
         model: 'pi-1',
-        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+        usage: { in: 10, out: 5, cache: [0, 0], total: 15 },
       }),
       u({ id: 'u2', time: 6, content: 'follow up' }),
     ];

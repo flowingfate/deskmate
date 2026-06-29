@@ -144,14 +144,14 @@ describe('fromPiAssistantMessage 入境', () => {
     expect(out.id).toMatch(/^msg_/);
   });
 
-  it('usage 转 Domain 三项 (promptTokens / completionTokens / totalTokens)', () => {
+  it('usage 转 Domain (in / out / cache / total)', () => {
     const out = fromPiAssistantMessage(
       piAssistant({
         content: [],
-        usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+        usage: { input: 100, output: 50, cacheRead: 30, cacheWrite: 20, totalTokens: 200, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       }),
     );
-    expect(out.usage).toEqual({ promptTokens: 100, completionTokens: 50, totalTokens: 150 });
+    expect(out.usage).toEqual({ in: 100, out: 50, cache: [30, 20], total: 200 });
   });
 });
 

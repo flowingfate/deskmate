@@ -130,11 +130,11 @@ function assistantToPi(msg: AssistantMessage): PiAssistantMessage {
     provider: '',
     model: msg.model ?? '',
     usage: {
-      input: msg.usage?.promptTokens ?? 0,
-      output: msg.usage?.completionTokens ?? 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: msg.usage?.totalTokens ?? 0,
+      input: msg.usage?.in ?? 0,
+      output: msg.usage?.out ?? 0,
+      cacheRead: msg.usage?.cache[0] ?? 0,
+      cacheWrite: msg.usage?.cache[1] ?? 0,
+      totalTokens: msg.usage?.total ?? 0,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     },
     stopReason,
@@ -198,9 +198,10 @@ export function fromPiAssistantMessage(msg: PiAssistantMessage): AssistantMessag
     ...(outcome ? { outcome } : {}),
     ...(msg.model ? { model: msg.model } : {}),
     usage: {
-      promptTokens: msg.usage.input,
-      completionTokens: msg.usage.output,
-      totalTokens: msg.usage.totalTokens,
+      in: msg.usage.input,
+      out: msg.usage.output,
+      cache: [msg.usage.cacheRead, msg.usage.cacheWrite],
+      total: msg.usage.totalTokens,
     },
   };
 }

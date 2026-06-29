@@ -268,7 +268,7 @@ export class SubAgentSession {
       this.contextState = {
         ...this.contextState,
         lastTokenUsage: {
-          tokenCount: final.usage.input,
+          tokenCount: final.usage.totalTokens,
           totalMessages: this.messages.length,
           contextMessages: llmMessages.length + 1,
           compressionRatio: 1.0,
