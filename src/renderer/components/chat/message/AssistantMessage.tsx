@@ -42,30 +42,23 @@ const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
   cachedFilePaths,
   chatStatus,
 }) => {
-  const hasToolCalls = message.tool_calls.length > 0;
   const hasCachedFiles = (cachedFilePaths?.length ?? 0) > 0;
   const hasScheduleCards = scheduleIds.length > 0;
-  const messageClass = hasToolCalls
-    ? 'message assistant-message has-tool-calls'
-    : 'message assistant-message';
+  const showArtifacts = hasCachedFiles || hasScheduleCards;
 
-  // 工具调用阶段的 metadata 与下方 ToolCallsSection 重复 — 只在收尾或仍有产物时显示。
-  const shouldShowMeta = !isStreaming && (!hasToolCalls || hasCachedFiles);
-  const shouldShowArtifacts = hasCachedFiles || hasScheduleCards;
-
-  const generatedFileItems = useMemo<GeneratedFileCardItem[]>(() => {
-    if (!hasCachedFiles) return [];
-    return cachedFilePaths!.map((info) => ({ fileUri: info.path, exists: info.exists }));
-  }, [hasCachedFiles, cachedFilePaths]);
+  const generatedFileItems = useMemo<GeneratedFileCardItem[]>(
+    () => (cachedFilePaths ?? []).map((info) => ({ fileUri: info.path, exists: info.exists })),
+    [cachedFilePaths],
+  );
   // 仅当出现 <IMAGE_REGISTRY> 标记时才走分段渲染路径 — 多数普通消息直接命中下方 fast path。
-  const segments = useMemo<MessageSegment[] | null>(() => {
-    if (!hasNewImageFormat(cleanedText)) return null;
-    return parseNewFormatMessage(cleanedText, message.id || 'unknown', isStreaming);
-  }, [cleanedText, message.id, isStreaming]);
+  const segments = useMemo<MessageSegment[] | null>(
+    () => (hasNewImageFormat(cleanedText) ? parseNewFormatMessage(cleanedText, message.id || 'unknown', isStreaming) : null),
+    [cleanedText, message.id, isStreaming],
+  );
 
-  const metaInner = shouldShowMeta ? (
+  const meta = isStreaming ? null :(
     <>
-      {shouldShowArtifacts && (
+      {showArtifacts && (
         <>
           <GeneratedFileCards items={generatedFileItems} chatStatus={chatStatus} />
           <GeneratedScheduleCards scheduleIds={scheduleIds} />
@@ -75,52 +68,38 @@ const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
         <CopyButton text={cleanedText} />
       </div>
     </>
-  ) : null;
+  );
 
   if (segments) {
     const lastIndex = segments.length - 1;
     return (
-      <div className="segmented-message new-format">
+      <div className="segmented-message">
         {segments.map((segment, index) => {
-          const isLastStreaming = index === lastIndex && isStreaming;
+          const streaming = index === lastIndex && isStreaming;
           return (
             <div
               key={segment.id}
-              className={`segment segment-${segment.type} ${isLastStreaming ? 'streaming' : ''}`}
+              className={`segment segment-${segment.type} message-content markdown-body ${streaming ? 'streaming' : ''}`}
             >
-              <div className={messageClass}>
-                <div className={`message-content markdown-body ${isLastStreaming ? 'streaming' : ''}`}>
-                  <div className="flex w-full min-w-0 max-w-full items-start">
-                    <div className="min-w-0 max-w-full flex-1">
-                      {segment.type === 'text' ? (
-                        <MarkdownView text={segment.content} />
-                      ) : segment.type === 'image-gallery' ? (
-                        <ImageGalleryNew imageRegistry={segment.imageRegistry!} />
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {segment.type === 'image-gallery' && segment.imageRegistry ? (
+                <ImageGalleryNew imageRegistry={segment.imageRegistry} />
+              ) : segment.type === 'text' ? (
+                <MarkdownView text={segment.content} />
+              ) : null}
             </div>
           );
         })}
-        {metaInner && <div className="message-meta">{metaInner}</div>}
+        {meta && <div className="message-meta mb-1">{meta}</div>}
       </div>
     );
   }
 
   return (
     <div className="message-container assistant-message-container">
-      <div className={messageClass}>
-        <div className={`message-content markdown-body ${isStreaming ? 'streaming' : ''}`}>
-          <div className="assistant-message-flow min-w-0 w-full max-w-full">
-            <MarkdownView text={cleanedText} />
-          </div>
-        </div>
+      <div className={`message assistant-message message-content markdown-body ${isStreaming ? 'streaming' : ''}`}>
+        <MarkdownView text={cleanedText} />
       </div>
-      {metaInner && (
-        <div className="message-metadata assistant-message-metadata">{metaInner}</div>
-      )}
+      {meta && <div className="message-metadata mb-2">{meta}</div>}
     </div>
   );
 };

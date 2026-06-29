@@ -7,11 +7,9 @@ import { toImageDisplaySrc } from '@/lib/mediaUrl';
 const logger = log.child({ mod: 'ImageGallery' });
 
 export interface MessageSegment {
-  type: 'text' | 'image' | 'image-placeholder' | 'image-gallery';
+  type: 'text' | 'image-gallery';
   content: string;
   id: string;
-  originalMessageId: string;
-  segmentIndex: number;
   imageRegistry?: Map<string, any>;
 }
 
@@ -38,144 +36,53 @@ export const hasNewImageFormat = (content: string): boolean => {
 };
 
 export const parseNewFormatMessage = (content: string, messageId: string, isStreaming: boolean = false): MessageSegment[] => {
-  logger.debug({ msg: "🎬 START", messageId, isStreaming });
-  logger.debug({ msg: "📝 [parseNewFormatMessage] Content length:", data: content.length });
-
   const segments: MessageSegment[] = [];
-  let segmentIndex = 0;
-  let currentPosition = 0;
+  const pushText = (text: string, id: string) => {
+    const trimmed = text.trim();
+    if (trimmed) segments.push({ type: 'text', content: trimmed, id });
+  };
 
   const registryRegex = /<IMAGE_REGISTRY>\s*([\s\S]*?)\s*<\/IMAGE_REGISTRY>/g;
-  let match;
+  let segmentIndex = 0;
+  let currentPosition = 0;
+  let match: RegExpExecArray | null;
   let foundAnyRegistry = false;
 
   while ((match = registryRegex.exec(content)) !== null) {
     foundAnyRegistry = true;
-    const matchStart = match.index;
-    const matchEnd = match.index + match[0].length;
-    const registryContent = match[1].trim();
-
-    logger.debug({ msg: `🔍 [parseNewFormatMessage] Found IMAGE_REGISTRY at position ${matchStart}-${matchEnd}` });
-
-    if (matchStart > currentPosition) {
-      const beforeText = content.substring(currentPosition, matchStart).trim();
-      if (beforeText) {
-        segments.push({
-          type: 'text',
-          content: beforeText,
-          id: `${messageId}_segment_${segmentIndex++}`,
-          originalMessageId: messageId,
-          segmentIndex: segmentIndex - 1
-        });
-        logger.debug({ msg: `📝 [parseNewFormatMessage] Added text segment before registry: ${beforeText.length} chars` });
-      }
-    }
+    pushText(content.substring(currentPosition, match.index), `${messageId}_segment_${segmentIndex++}`);
 
     const imageRegistry = new Map<string, any>();
-
-    if (registryContent) {
-      const lines = registryContent.split('\n');
-      logger.debug({ msg: "📊 Processing registry lines", lineCount: lines.length });
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-        if (trimmedLine) {
-          try {
-            const imageData = JSON.parse(trimmedLine);
-            if (imageData.id) {
-              imageRegistry.set(imageData.id, imageData);
-              logger.debug({ msg: "🖼️ [parseNewFormatMessage] Registered image:", data: imageData.id });
-            }
-          } catch (error) {
-            logger.debug({ msg: "⚠️ [parseNewFormatMessage] Skipping non-JSON line:", data: trimmedLine.substring(0, 50) });
-          }
-        }
+    for (const line of match[1].trim().split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const image = JSON.parse(line.trim());
+        if (image.id) imageRegistry.set(image.id, image);
+      } catch {
+        // 非 JSON 行(流式半截)直接跳过
       }
     }
-
     if (imageRegistry.size > 0) {
-      segments.push({
-        type: 'image-gallery',
-        content: '',
-        id: `${messageId}_gallery_${segmentIndex++}`,
-        originalMessageId: messageId,
-        segmentIndex: segmentIndex - 1,
-        imageRegistry: imageRegistry
-      });
-      logger.debug({ msg: `🎨 [parseNewFormatMessage] Added gallery segment with ${imageRegistry.size} images` });
+      segments.push({ type: 'image-gallery', content: '', id: `${messageId}_gallery_${segmentIndex++}`, imageRegistry });
     }
-
-    currentPosition = matchEnd;
+    currentPosition = match.index + match[0].length;
   }
 
+  // 没有完整 registry: 要么流式半截,要么纯文本。
   if (!foundAnyRegistry) {
-    logger.debug({ msg: "⚠️ [parseNewFormatMessage] No complete IMAGE_REGISTRY found" });
-
-    const hasRegistryStart = content.includes('<IMAGE_REGISTRY>');
-
-    if (hasRegistryStart) {
-      logger.debug({ msg: "🔄 [parseNewFormatMessage] IMAGE_REGISTRY is still streaming" });
-
-      const registryStartIndex = content.indexOf('<IMAGE_REGISTRY>');
-
-      const beforeRegistry = content.substring(0, registryStartIndex).trim();
-      if (beforeRegistry) {
-        segments.push({
-          type: 'text',
-          content: beforeRegistry,
-          id: `${messageId}_segment_before_registry`,
-          originalMessageId: messageId,
-          segmentIndex: segmentIndex++
-        });
-      }
-
-      if (isStreaming) {
-        const afterRegistryStart = content.substring(registryStartIndex).trim();
-        const contentAfterTag = afterRegistryStart.substring('<IMAGE_REGISTRY>'.length).trim();
-        if (contentAfterTag) {
-          segments.push({
-            type: 'text',
-            content: contentAfterTag,
-            id: `${messageId}_segment_streaming_after_registry`,
-            originalMessageId: messageId,
-            segmentIndex: segmentIndex++
-          });
-        }
-      }
-
-      logger.debug({ msg: "⏳ [parseNewFormatMessage] Waiting for IMAGE_REGISTRY to complete..." });
+    const registryStart = content.indexOf('<IMAGE_REGISTRY>');
+    if (registryStart === -1) {
+      pushText(content, `${messageId}_segment_0`);
       return segments;
     }
-
-    const visibleContent = content.trim();
-    if (visibleContent) {
-      segments.push({
-        type: 'text',
-        content: visibleContent,
-        id: `${messageId}_segment_${segmentIndex++}`,
-        originalMessageId: messageId,
-        segmentIndex: segmentIndex - 1
-      });
+    pushText(content.substring(0, registryStart), `${messageId}_segment_before_registry`);
+    if (isStreaming) {
+      pushText(content.substring(registryStart + '<IMAGE_REGISTRY>'.length), `${messageId}_segment_streaming_after_registry`);
     }
     return segments;
   }
 
-  if (currentPosition < content.length) {
-    const afterLastRegistry = content.substring(currentPosition).trim();
-    if (afterLastRegistry) {
-      segments.push({
-        type: 'text',
-        content: afterLastRegistry,
-        id: `${messageId}_segment_${segmentIndex++}`,
-        originalMessageId: messageId,
-        segmentIndex: segmentIndex - 1
-      });
-      logger.debug({ msg: `📄 [parseNewFormatMessage] Added final text segment: ${afterLastRegistry.length} chars` });
-    }
-  }
-
-  logger.debug({ msg: "✅ [parseNewFormatMessage] END - Total segments:", data: segments.length });
-  logger.debug({ msg: "📊 [parseNewFormatMessage] Segment types:", data: segments.map(s => s.type).join(', ') });
-
+  pushText(content.substring(currentPosition), `${messageId}_segment_${segmentIndex++}`);
   return segments;
 };
 
@@ -246,15 +153,15 @@ export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({
     return null;
   }
 
-  const handleImageClick = (clickedIndex: number) => {
-    const galleryImages = images
-      .filter((imageData) => imageData && imageData.url)
-      .map((imageData) => ({
-        id: imageData.id || `unknown-${Date.now()}`,
-        url: cachedUrls.get(imageData.id) || imageData.url,
-        alt: imageData.alt || `Image ${imageData.id || 'unknown'}`
-      }));
+  const galleryImages = images
+    .filter((imageData) => imageData && imageData.url)
+    .map((imageData) => ({
+      id: imageData.id || `unknown-${Date.now()}`,
+      url: cachedUrls.get(imageData.id) || imageData.url,
+      alt: imageData.alt || `Image ${imageData.id || 'unknown'}`
+    }));
 
+  const handleImageClick = (clickedIndex: number) => {
     if (galleryImages.length === 0) {
       logger.warn({ msg: "🚨 [ImageGallery] No valid images found for viewer" });
       return;
@@ -267,14 +174,6 @@ export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({
       }
     }));
   };
-
-  const galleryImages = images
-    .filter((imageData) => imageData && imageData.url)
-    .map((imageData) => ({
-      id: imageData.id || `unknown-${Date.now()}`,
-      url: cachedUrls.get(imageData.id) || imageData.url,
-      alt: imageData.alt || `Image ${imageData.id || 'unknown'}`
-    }));
 
   return (
     <div className="image-gallery-new">
