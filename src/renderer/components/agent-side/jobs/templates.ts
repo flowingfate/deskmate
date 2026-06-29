@@ -7,7 +7,7 @@
  * truth for the schedule form; templates only seed it.
  */
 
-import type { AddScheduleOverlayInitialValues } from './AddScheduleOverlay'
+import type { AddScheduleOverlayInitialValues } from './overlay'
 
 /** Re-export so callers can refer to the template payload without reaching into the overlay module. */
 export type { AddScheduleOverlayInitialValues as ScheduleTemplateInitialValues }
