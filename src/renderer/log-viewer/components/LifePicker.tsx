@@ -60,8 +60,8 @@ export function LifePicker({ value, onChange }: Props) {
           className={cn(
             'inline-flex h-[28px] shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5',
             'text-[12px] text-slate-800 hover:border-slate-300',
-            'focus-visible:border-blue-400 focus-visible:ring-1 focus-visible:ring-blue-500/25 focus-visible:outline-none',
-            open && 'border-blue-400 ring-1 ring-blue-500/25',
+            'focus-visible:border-neutral-400 focus-visible:ring-1 focus-visible:ring-neutral-500/25 focus-visible:outline-none',
+            open && 'border-neutral-400 ring-1 ring-neutral-500/25',
             value == null && 'text-slate-500',
           )}
           title="Life — limit query to a single app run"
@@ -80,7 +80,7 @@ export function LifePicker({ value, onChange }: Props) {
           className={cn(
             'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-[12px]',
             'hover:bg-slate-100',
-            value == null && 'bg-blue-50 text-blue-700',
+            value == null && 'bg-neutral-50 text-neutral-700',
           )}
         >
           <span>All lives</span>
@@ -110,7 +110,7 @@ export function LifePicker({ value, onChange }: Props) {
                 className={cn(
                   'flex w-full items-start justify-between rounded-sm px-2 py-1.5 text-left',
                   'hover:bg-slate-100',
-                  active && 'bg-blue-50 text-blue-700',
+                  active && 'bg-neutral-50 text-neutral-700',
                 )}
               >
                 <span className="flex flex-col gap-0.5 min-w-0">

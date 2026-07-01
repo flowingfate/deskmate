@@ -26,7 +26,7 @@ function ReportBugItem(props: { onClose: () => void }) {
         actions.show();
       }}
     >
-      <Hospital size={16} strokeWidth={1.5} />
+      <Hospital size={14} strokeWidth={1.5} />
       <span>Report Bug</span>
     </DropdownMenuItem>
   );
@@ -64,20 +64,20 @@ function Menu({ children }: UserMenuProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent side="right" align="end" sideOffset={8}>
         <DropdownMenuItem onClick={onSignIn}>
-          <LogIn size={16} strokeWidth={1.5} />
-          <span>Sign in to GitHub Copilot</span>
+          <LogIn size={14} strokeWidth={1.5} />
+          <span>Sign in</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onOpenSettings}>
-          <Settings size={16} strokeWidth={1.5} />
+          <Settings size={14} strokeWidth={1.5} />
           <span>Settings</span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onCheckForUpdates}>
-          <RotateCw size={16} strokeWidth={1.5} />
+          <RotateCw size={14} strokeWidth={1.5} />
           <span>Check Updates</span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onSendFeedback}>
-          <MessageSquareText size={16} strokeWidth={1.5} />
+          <MessageSquareText size={14} strokeWidth={1.5} />
           <span>Send Feedback</span>
         </DropdownMenuItem>
         <ReportBugItem onClose={() => {}} />

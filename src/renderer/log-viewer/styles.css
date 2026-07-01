@@ -27,7 +27,7 @@
   /* viewer 共用 chrome 色 */
   --color-vw-nav-bg:  #f7f8fa;  /* SideNav + 表头灰底；比 slate-50 更冷一档 */
   --color-vw-divider: #ebedf0;  /* 所有 border 统一；比 slate-200 更柔 */
-  --color-vw-accent:  #2563eb;  /* brand / 选中 / live */
+  --color-vw-accent:  #404040;  /* brand / 选中 / live（中性） */
 }
 
 html, body, #root {

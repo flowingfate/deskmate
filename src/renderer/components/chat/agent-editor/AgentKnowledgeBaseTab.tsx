@@ -814,17 +814,17 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
 
   return (
     <div
-      className={`relative flex h-full min-h-0 flex-col ${isDraggingOver ? 'bg-blue-500/5' : ''}`}
+      className={`relative flex h-full min-h-0 flex-col ${isDraggingOver ? 'bg-neutral-500/5' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Drop Overlay */}
       {isDraggingOver && (
-        <div className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center bg-blue-500/10">
-          <div className="rounded-xl border-2 border-dashed border-blue-500 bg-surface-primary/90 p-8 text-center shadow-lg backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center bg-neutral-500/10">
+          <div className="rounded-xl border-2 border-dashed border-neutral-500 bg-surface-primary/90 p-8 text-center shadow-lg backdrop-blur-sm">
             <div className="mb-4 animate-bounce text-6xl">📁</div>
-            <p className="m-0 text-lg font-medium text-blue-500">Drop files or folders here to add to Knowledge Base</p>
+            <p className="m-0 text-lg font-medium text-neutral-500">Drop files or folders here to add to Knowledge Base</p>
           </div>
         </div>
       )}
@@ -833,7 +833,7 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
       <div className="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-hidden">
         {isValidWorkspacePath(workspacePath) ? (
           <div
-            className={`flex h-full flex-initial flex-col ${isDraggingOver ? 'rounded-xl outline-dashed outline-2 outline-blue-500/50' : ''
+            className={`flex h-full flex-initial flex-col ${isDraggingOver ? 'rounded-xl outline-dashed outline-2 outline-neutral-500/50' : ''
               }`}
           >
             {/* Header */}

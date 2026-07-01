@@ -14,16 +14,16 @@
   }
 
   &::-webkit-scrollbar-track {
-    background: rgba(203, 213, 225, 0.3);
+    background: rgba(214, 214, 214, 0.3);
     border-radius: 3px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(203, 213, 225, 0.6);
+    background: rgba(214, 214, 214, 0.6);
     border-radius: 3px;
 
     &:hover {
-      background: rgba(203, 213, 225, 0.8);
+      background: rgba(214, 214, 214, 0.8);
     }
   }
 }
@@ -184,16 +184,16 @@
   }
 
   &::-webkit-scrollbar-track {
-    background: rgba(203, 213, 225, 0.3);
+    background: rgba(214, 214, 214, 0.3);
     border-radius: 3px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(203, 213, 225, 0.6);
+    background: rgba(214, 214, 214, 0.6);
     border-radius: 3px;
 
     &:hover {
-      background: rgba(203, 213, 225, 0.8);
+      background: rgba(214, 214, 214, 0.8);
     }
   }
 }
@@ -212,7 +212,7 @@
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #374151;
+  color: #444444;
   margin-bottom: 6px;
 
   .required {
@@ -234,7 +234,7 @@
   border-radius: 6px;
   outline: none;
   background-color: white;
-  color: #111827;
+  color: #1c1c1c;
   transition: border-color 0.2s ease;
 
   &:focus {
@@ -268,7 +268,7 @@
 .sub-agent-capabilities-title {
   font-size: 15px;
   font-weight: 600;
-  color: #111827;
+  color: #1c1c1c;
   margin: 0 0 16px 0;
 }
 
@@ -293,7 +293,7 @@
 .sub-agent-capability-label {
   font-size: 13px;
   font-weight: 500;
-  color: #374151;
+  color: #444444;
 }
 
 .sub-agent-inherit-toggle {
@@ -307,7 +307,7 @@
 
 .sub-agent-inherit-hint {
   font-size: 12px;
-  color: #3b82f6;
+  color: #404040;
   margin-bottom: 8px;
   font-style: italic;
 }
@@ -321,12 +321,12 @@
   }
 
   &::-webkit-scrollbar-track {
-    background: rgba(203, 213, 225, 0.3);
+    background: rgba(214, 214, 214, 0.3);
     border-radius: 2px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(203, 213, 225, 0.6);
+    background: rgba(214, 214, 214, 0.6);
     border-radius: 2px;
   }
 }
@@ -337,7 +337,7 @@
   gap: 8px;
   padding: 4px 0;
   font-size: 13px;
-  color: #374151;
+  color: #444444;
   cursor: pointer;
 
   &.inherited {

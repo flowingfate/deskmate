@@ -79,7 +79,7 @@ const FileExplorerSection: React.FC<FileExplorerSectionProps> = ({
     <div
       className={cn(
         'relative flex flex-col gap-0.5 w-full',
-        isDraggingOver && 'rounded-xl bg-blue-500/5 outline outline-dashed outline-blue-500/50 -outline-offset-2',
+        isDraggingOver && 'rounded-xl bg-neutral-500/5 outline outline-dashed outline-neutral-500/50 -outline-offset-2',
         className,
       )}
       onDragOver={handleDragOver}

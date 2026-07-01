@@ -77,7 +77,7 @@ const OutputExecutingBlock: React.FC<ToolSlotProps> = ({ toolCall }) => {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Badge className="self-start bg-blue-50 text-blue-700 text-[11px]">
+      <Badge className="self-start bg-neutral-50 text-neutral-700 text-[11px]">
         {stateMap.size > 0 ? `⏳ ${completedCount}/${tasks.length} done` : '⏳ Starting...'}
       </Badge>
       <div className="flex flex-col gap-1.5">
@@ -89,7 +89,7 @@ const OutputExecutingBlock: React.FC<ToolSlotProps> = ({ toolCall }) => {
           return (
             <div
               key={index}
-              className="px-2 py-1.5 rounded bg-gray-50 border-1 border-black/7 border-l-2 border-l-blue-400 text-[11px]"
+              className="px-2 py-1.5 rounded bg-gray-50 border-1 border-black/7 border-l-2 border-l-neutral-400 text-[11px]"
             >
               <div className="flex items-center gap-1.5">
                 <strong className="font-mono">{task.sub_agent_name}</strong>

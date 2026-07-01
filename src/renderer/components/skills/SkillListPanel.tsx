@@ -54,8 +54,8 @@ const SkillCard: React.FC<SkillCardProps> = ({
         className={cn(
           'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors',
           isSelected
-            ? 'bg-indigo-100 text-indigo-500 dark:bg-indigo-500/25 dark:text-indigo-400'
-            : 'bg-sc-muted text-sc-muted-foreground group-hover:bg-indigo-50 group-hover:text-indigo-500 dark:group-hover:bg-indigo-500/15 dark:group-hover:text-indigo-400',
+            ? 'bg-neutral-100 text-neutral-500 dark:bg-neutral-500/25 dark:text-neutral-400'
+            : 'bg-sc-muted text-sc-muted-foreground group-hover:bg-neutral-50 group-hover:text-neutral-500 dark:group-hover:bg-neutral-500/15 dark:group-hover:text-neutral-400',
         )}
       >
         <BookMarked size={15} />
@@ -65,13 +65,13 @@ const SkillCard: React.FC<SkillCardProps> = ({
           <span
             className={cn(
               'truncate text-sm font-semibold',
-              isSelected && 'text-indigo-500 dark:text-indigo-400',
+              isSelected && 'text-neutral-500 dark:text-neutral-400',
             )}
           >
             {skill.name}
           </span>
           {isBuiltin && (
-            <span className="shrink-0 rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-500 dark:text-indigo-400">
+            <span className="shrink-0 rounded bg-neutral-500/10 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">
               Built-in
             </span>
           )}

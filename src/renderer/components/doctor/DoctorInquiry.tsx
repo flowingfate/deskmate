@@ -105,7 +105,7 @@ function DoctorInquiry() {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) actions.hide(); }}>
       <DialogContent  data-dbg="doctor-inquiry-dialog" className="max-w-xl max-h-[88vh] p-0 flex flex-col overflow-hidden">
-        <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-neutral-100 bg-gradient-to-r from-blue-50 to-violet-50 shrink-0">
+        <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-neutral-100 bg-gradient-to-r from-neutral-50 to-neutral-50 shrink-0">
           {doctor_icon}
           <DialogHeader className="flex-1 min-w-0">
             <DialogTitle className="text-base font-semibold text-neutral-900 mb-0">
@@ -141,7 +141,7 @@ function DoctorInquiry() {
               variant="link"
               size="sm"
               onClick={fillUnsure}
-              className="mt-1.5 h-auto p-0 text-xs text-blue-600 hover:text-blue-700"
+              className="mt-1.5 h-auto p-0 text-xs text-neutral-600 hover:text-neutral-700"
             >
               I'm not sure →
             </Button>
@@ -160,7 +160,7 @@ function DoctorInquiry() {
               variant="link"
               size="sm"
               onClick={fillTimeAgnostic}
-              className="mt-1.5 h-auto p-0 text-xs text-blue-600 hover:text-blue-700"
+              className="mt-1.5 h-auto p-0 text-xs text-neutral-600 hover:text-neutral-700"
             >
               Not time-related →
             </Button>

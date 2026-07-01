@@ -267,14 +267,14 @@ const SkillFolderExplorer: React.FC<SkillFolderExplorerProps> = ({
                   onClick={() => item.isDirectory ? handleDirectoryClick(item) : handleFileClick(item)}
                   className={cn(
                     'group flex w-full items-center gap-3 rounded-lg border border-sc-border bg-sc-card px-3 py-2.5 text-left transition-colors',
-                    'hover:border-indigo-300 hover:bg-sc-accent/60 dark:hover:border-indigo-500/40',
+                    'hover:border-neutral-300 hover:bg-sc-accent/60 dark:hover:border-neutral-500/40',
                   )}
                 >
                   <span
                     className={cn(
                       'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors',
                       item.isDirectory
-                        ? 'bg-indigo-50 text-indigo-500 group-hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-400 dark:group-hover:bg-indigo-500/25'
+                        ? 'bg-neutral-50 text-neutral-500 group-hover:bg-neutral-100 dark:bg-neutral-500/15 dark:text-neutral-400 dark:group-hover:bg-neutral-500/25'
                         : 'bg-sc-muted text-sc-muted-foreground',
                     )}
                   >

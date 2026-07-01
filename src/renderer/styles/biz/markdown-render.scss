@@ -75,7 +75,7 @@
   }
 
   a {
-    color: #0066CC;
+    color: #404040;
     text-decoration: none;
   }
 
@@ -275,9 +275,9 @@ code.inline-code {
   font-size: 0.875em;
   font-weight: 400;
   line-height: 1.4;
-  background-color: rgb(246, 251, 255);
-  outline: 1px solid rgb(225, 238, 255);
-  color: #3e5c8a;
+  background-color: rgb(251, 251, 251);
+  outline: 1px solid rgb(240, 240, 240);
+  color: #646464;
   padding: 2px 4px;
   margin: 0 1px;
   border-radius: 4px;
@@ -332,7 +332,7 @@ code.inline-code {
   ::selection,
   code ::selection,
   span ::selection {
-    background-color: rgba(56, 139, 253, 0.4) !important;
+    background-color: rgba(155, 155, 155, 0.4) !important;
     color: #ffffff !important;
     text-shadow: none !important;
   }
@@ -340,7 +340,7 @@ code.inline-code {
   ::-moz-selection,
   code ::-moz-selection,
   span ::-moz-selection {
-    background-color: rgba(56, 139, 253, 0.4) !important;
+    background-color: rgba(155, 155, 155, 0.4) !important;
     color: #ffffff !important;
     text-shadow: none !important;
   }
@@ -474,13 +474,13 @@ code.inline-code {
 }
 
 .mermaid-toolbar-btn-active {
-  background: #eff6ff;
-  color: #2563eb;
-  border-color: #bfdbfe;
+  background: #f5f5f5;
+  color: #262626;
+  border-color: #e0e0e0;
 
   &:hover {
-    background: #dbeafe;
-    color: #1d4ed8;
+    background: #ededed;
+    color: #1f1f1f;
   }
 }
 
@@ -562,7 +562,7 @@ code.inline-code {
 }
 
 .mermaid-diagram-loading {
-  background: #f9fafb;
+  background: #fafafa;
 }
 
 .mermaid-loading-code {

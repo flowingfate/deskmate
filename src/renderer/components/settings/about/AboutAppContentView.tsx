@@ -88,7 +88,7 @@ const AboutAppContentView: React.FC<AboutAppContentViewProps> = () => {
                 href={brandHomepage}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[13px] no-underline cursor-pointer text-(--smtc-foreground-content-brand-primary,#0067b8) hover:underline"
+                className="text-[13px] no-underline cursor-pointer text-(--smtc-foreground-content-brand-primary,#5c5c5c) hover:underline"
               >
                 Learn more about {brandDisplayName}
               </a>

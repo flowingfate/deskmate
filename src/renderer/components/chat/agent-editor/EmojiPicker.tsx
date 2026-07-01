@@ -127,7 +127,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
               key={category}
               variant="ghost"
               size="icon"
-              className={`flex items-center justify-center w-auto h-auto px-3 py-1.5 rounded-2xl border border-border bg-surface-secondary text-content-secondary text-xs font-medium cursor-pointer transition-all whitespace-nowrap hover:bg-blue-500/10 hover:border-blue-500/30 hover:text-blue-500 ${activeCategory === category ? 'bg-blue-500 border-blue-500 text-white' : ''}`}
+              className={`flex items-center justify-center w-auto h-auto px-3 py-1.5 rounded-2xl border border-border bg-surface-secondary text-content-secondary text-xs font-medium cursor-pointer transition-all whitespace-nowrap hover:bg-neutral-500/10 hover:border-neutral-500/30 hover:text-neutral-500 ${activeCategory === category ? 'bg-neutral-500 border-neutral-500 text-white' : ''}`}
               onClick={() => setActiveCategory(category)}
             >
               {category}
@@ -142,7 +142,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
               key={`${emoji}-${index}`}
               variant="ghost"
               size="icon"
-              className={`flex items-center justify-center size-10 min-w-10 min-h-10 rounded-lg border-2 border-transparent bg-transparent text-xl cursor-pointer transition-all shrink-0 hover:bg-blue-500/10 hover:border-blue-500/30 hover:scale-110 ${selectedEmoji === emoji ? 'bg-blue-500/20 border-blue-500 scale-110' : ''}`}
+              className={`flex items-center justify-center size-10 min-w-10 min-h-10 rounded-lg border-2 border-transparent bg-transparent text-xl cursor-pointer transition-all shrink-0 hover:bg-neutral-500/10 hover:border-neutral-500/30 hover:scale-110 ${selectedEmoji === emoji ? 'bg-neutral-500/20 border-neutral-500 scale-110' : ''}`}
               onClick={() => handleEmojiClick(emoji)}
             >
               {emoji}

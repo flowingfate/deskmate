@@ -203,7 +203,7 @@ const RequestOAuthClientIdDialog: React.FC = () => {
               onChange={(e) => setClientId(e.target.value)}
               placeholder="Paste the Client ID from your OAuth app"
               autoFocus
-              className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-500"
             />
           </div>
 
@@ -218,7 +218,7 @@ const RequestOAuthClientIdDialog: React.FC = () => {
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
               placeholder="Leave empty for PKCE-only public apps"
-              className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-500"
             />
           </div>
         </div>

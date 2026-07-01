@@ -104,7 +104,7 @@ const CollapsedView: React.FC<CollapsedViewProps> = ({
     <>
       <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1 text-[10.5px] font-semibold tracking-[0.09em] uppercase text-gray-400">
-          <Wrench size={11} aria-hidden="true" strokeWidth={2} className="text-sky-500" />
+          <Wrench size={11} aria-hidden="true" strokeWidth={2} className="text-neutral-500" />
           <span>Tool</span>
         </div>
         <div className="flex flex-1 flex-wrap gap-1.5">
@@ -160,7 +160,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({ toolCalls, isLive, onCollap
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-1 px-0.5">
         <div className="flex items-center gap-1 text-[10.5px] font-semibold tracking-[0.09em] uppercase text-gray-400">
-          <Wrench size={11} aria-hidden="true" strokeWidth={2} className="text-sky-500" />
+          <Wrench size={11} aria-hidden="true" strokeWidth={2} className="text-neutral-500" />
           <span>Tool Calls</span>
           <span className="ml-1 text-gray-400/70 tracking-normal normal-case">
             ({toolCalls.length})

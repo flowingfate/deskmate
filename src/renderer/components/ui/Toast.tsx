@@ -96,22 +96,22 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose, index }) => {
         };
       case 'update':
         return {
-          bg: 'bg-violet-50/95',
-          border: 'border-violet-200/50',
-          text: 'text-violet-800',
+          bg: 'bg-neutral-50/95',
+          border: 'border-neutral-200/50',
+          text: 'text-neutral-800',
           icon: Info,
-          iconColor: 'text-violet-600',
-          progressBg: 'bg-violet-500'
+          iconColor: 'text-neutral-600',
+          progressBg: 'bg-neutral-500'
         };
       case 'info':
       default:
         return {
-          bg: 'bg-blue-50/95',
-          border: 'border-blue-200/50',
-          text: 'text-blue-800',
+          bg: 'bg-neutral-50/95',
+          border: 'border-neutral-200/50',
+          text: 'text-neutral-800',
           icon: Info,
-          iconColor: 'text-blue-600',
-          progressBg: 'bg-blue-500'
+          iconColor: 'text-neutral-600',
+          progressBg: 'bg-neutral-500'
         };
     }
   };
@@ -186,7 +186,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose, index }) => {
                 px-3 py-1.5 text-xs font-medium rounded-md
                 transition-colors duration-150
                 ${action.variant === 'primary'
-                  ? `text-white bg-blue-600 hover:bg-blue-700`
+                  ? `text-white bg-neutral-600 hover:bg-neutral-700`
                   : `${styles.text} hover:bg-current/5`
                 }
               `}

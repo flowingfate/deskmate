@@ -188,7 +188,7 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
         <label className="mb-2 block text-sm font-semibold leading-5 text-[#272320]">Agent Avatar</label>
         <div className="flex items-center gap-4">
           <div
-            className="flex size-16 cursor-pointer items-center justify-center rounded-xl border border-black/20 bg-white text-3xl transition-colors hover:border-[#007AFF] hover:bg-[#007AFF]/5"
+            className="flex size-16 cursor-pointer items-center justify-center rounded-xl border border-black/20 bg-white text-3xl transition-colors hover:border-[#404040] hover:bg-[#404040]/5"
             onClick={() => setShowEmojiPicker(true)}
             title="Click to change emoji"
           >
@@ -208,7 +208,7 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
               ? 'border-[#FF3B30] bg-[#FF3B30]/5'
               : nameWarning
                 ? 'border-amber-500 bg-amber-100/10 focus:border-amber-500 focus:shadow-[0_0_0_3px_rgba(245,158,11,0.1)]'
-                : 'border-black/20 focus:border-[#007AFF]'
+                : 'border-black/20 focus:border-[#404040]'
           }`}
           value={formData.name}
           onChange={(e) => handleInputChange('name', e.target.value)}

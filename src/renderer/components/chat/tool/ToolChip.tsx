@@ -50,14 +50,6 @@ const DOT_BY_VISUAL: Record<ChipVisual, string | null> = {
   failed:    'bg-rose-500',
 };
 
-// `namespace:sub` 形态(冒号后紧跟非空白,如 app:subagent / web:search)——
-// 给冒号后的子命令上一档 accent 色,与前缀命名空间拉开层次。shell 用的
-// `shell: cmd`(冒号后有空格)不命中,保持中性。accent 需在浅灰底(未选中)
-// 与 gray-900 深底(选中)两态都可读,故按 selected 切深浅。
-const ACCENT_BY_STATE: Record<'unselected' | 'selected', string> = {
-  unselected: 'text-sky-600',
-  selected:   'text-sky-300',
-};
 
 const renderChipLabel = (text: string, selected: boolean): React.ReactNode => {
   const idx = text.indexOf(':');

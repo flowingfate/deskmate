@@ -1,15 +1,15 @@
 :root {
   /* === 基础色板（不直接在组件中使用） === */
-  --palette-sky-50: #f0f9ff;
-  --palette-sky-100: #e0f2fe;
-  --palette-sky-200: #bae6fd;
-  --palette-sky-300: #7dd3fc;
-  --palette-sky-400: #38bdf8;
-  --palette-sky-500: #0ea5e9;
-  --palette-sky-600: #0284c7;
-  --palette-sky-700: #0369a1;
-  --palette-sky-800: #075985;
-  --palette-sky-900: #0c4a6e;
+  --palette-sky-50: #fafafa;
+  --palette-sky-100: #f5f5f5;
+  --palette-sky-200: #e5e5e5;
+  --palette-sky-300: #d4d4d4;
+  --palette-sky-400: #a3a3a3;
+  --palette-sky-500: #737373;
+  --palette-sky-600: #525252;
+  --palette-sky-700: #404040;
+  --palette-sky-800: #262626;
+  --palette-sky-900: #171717;
 
   --palette-gray-50: #fafafa;
   --palette-gray-100: #f5f5f5;
@@ -29,7 +29,7 @@
   --palette-green-500: #10b981;
   --palette-green-600: #16a34a;
   --palette-green-700: #059669;
-  --palette-blue-500: #3b82f6;
+  --palette-blue-500: #525252;
 
   /* === 语义 token（组件使用这些） === */
 
@@ -52,14 +52,14 @@
 
   /* 边框 */
   --border-default: var(--palette-gray-200);
-  --border-subtle: rgba(203, 213, 225, 0.8);
+  --border-subtle: rgba(212, 212, 212, 0.8);
   --border-strong: var(--palette-gray-400);
 
   /* 强调色 */
-  --accent: var(--palette-sky-500);
-  --accent-hover: var(--palette-sky-600);
-  --accent-subtle: rgba(14, 165, 233, 0.1);
-  --accent-muted: rgba(14, 165, 233, 0.2);
+  --accent: var(--palette-gray-800);
+  --accent-hover: var(--palette-gray-900);
+  --accent-subtle: rgba(0, 0, 0, 0.06);
+  --accent-muted: rgba(0, 0, 0, 0.12);
 
   /* 状态色 */
   --status-error: var(--palette-red-600);
@@ -84,10 +84,10 @@
   /* Glass 效果 */
   --glass-bg: rgba(255, 255, 255, 0.95);
   --glass-bg-heavy: rgba(255, 255, 255, 0.98);
-  --glass-bg-surface: rgba(241, 245, 249, 0.95);
-  --glass-border: rgba(203, 213, 225, 0.8);
-  --glass-border-light: rgba(203, 213, 225, 0.6);
-  --glass-border-medium: rgba(203, 213, 225, 0.7);
+  --glass-bg-surface: rgba(245, 245, 245, 0.95);
+  --glass-border: rgba(212, 212, 212, 0.8);
+  --glass-border-light: rgba(212, 212, 212, 0.6);
+  --glass-border-medium: rgba(212, 212, 212, 0.7);
   --glass-shadow: 0 8px 32px var(--shadow-md);
   --glass-shadow-light: 0 4px 16px var(--shadow-sm);
   --glass-shadow-subtle: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -97,28 +97,28 @@
   --glass-subtle: rgba(255, 255, 255, 0.2);
 
   /* 品牌色系 */
-  --brand-bg: #F1F5F9;
-  --brand-bg-alt: #E2E8F0;
-  --brand-bg-accent: #E0F2FE;
-  --brand-bg-highlight: #DBEAFE;
-  --brand-bg-hover: #BFDBFE;
-  --brand-bg-active: #93C5FD;
-  --brand-bg-overlay: rgba(148, 163, 184, 0.3);
-  --brand-border: #94A3B8;
-  --brand-border-light: #CBD5E1;
-  --brand-text: #1E293B;
-  --brand-text-alt: #334155;
-  --brand-code-bg: #E2E8F0;
+  --brand-bg: #f5f5f5;
+  --brand-bg-alt: #e5e5e5;
+  --brand-bg-accent: #f0f0f0;
+  --brand-bg-highlight: #ededed;
+  --brand-bg-hover: #e0e0e0;
+  --brand-bg-active: #cfcfcf;
+  --brand-bg-overlay: rgba(120, 120, 120, 0.3);
+  --brand-border: #a3a3a3;
+  --brand-border-light: #d4d4d4;
+  --brand-text: #262626;
+  --brand-text-alt: #404040;
+  --brand-code-bg: #e5e5e5;
 
   /* 深色 hover 变体 */
   --text-primary-hover: #3d3935;
 
-  /* 紫色（子 agent 标识） */
-  --palette-purple-500: #8b5cf6;
-  --palette-purple-600: #7c3aed;
+  /* 子 agent 标识（中性灰） */
+  --palette-purple-500: #737373;
+  --palette-purple-600: #525252;
 
   /* 滚动条 */
-  --scrollbar-track: rgba(203, 213, 225, 0.3);
-  --scrollbar-thumb: rgba(203, 213, 225, 0.6);
-  --scrollbar-thumb-hover: rgba(203, 213, 225, 0.8);
+  --scrollbar-track: rgba(212, 212, 212, 0.3);
+  --scrollbar-thumb: rgba(212, 212, 212, 0.6);
+  --scrollbar-thumb-hover: rgba(212, 212, 212, 0.8);
 }

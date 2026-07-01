@@ -108,15 +108,15 @@ const FileTypeIcon: React.FC<FileTypeIconProps> = ({ fileName, size = 20, classN
 function getCategoryColor(category: FileCategory): string {
   switch (category) {
     case 'pdf':        return '#E5252A';
-    case 'word':       return '#2B579A';
+    case 'word':       return '#626262';
     case 'excel':      return '#217346';
     case 'ppt':        return '#D24726';
     case 'archive':    return '#F0A30A';
     case 'executable': return '#6B7280';
-    case 'image':      return '#8B5CF6';
-    case 'video':      return '#EC4899';
-    case 'audio':      return '#06B6D4';
-    case 'code':       return '#3B82F6';
+    case 'image':      return '#a9a9a9';
+    case 'video':      return '#969696';
+    case 'audio':      return '#737373';
+    case 'code':       return '#404040';
     case 'data':       return '#F59E0B';
     case 'text':       return '#6B7280';
     case 'other':      return '#9CA3AF';

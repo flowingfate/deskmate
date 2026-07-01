@@ -97,25 +97,25 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
       switch (icon) {
         case 'settings':
           return state === 'active'
-            ? <Settings className="h-5 w-5 text-blue-600 animate-spin" />
+            ? <Settings className="h-5 w-5 text-neutral-600 animate-spin" />
             : state === 'completed'
             ? <CheckCircle className="h-5 w-5 text-green-600" />
             : <Settings className="h-5 w-5 text-gray-400" />;
         case 'download':
           return state === 'active'
-            ? <Download className="h-5 w-5 text-blue-600 animate-bounce" />
+            ? <Download className="h-5 w-5 text-neutral-600 animate-bounce" />
             : state === 'completed'
             ? <CheckCircle className="h-5 w-5 text-green-600" />
             : <Download className="h-5 w-5 text-gray-400" />;
         case 'search':
           return state === 'active'
-            ? <Search className="h-5 w-5 text-blue-600 animate-pulse" />
+            ? <Search className="h-5 w-5 text-neutral-600 animate-pulse" />
             : state === 'completed'
             ? <CheckCircle className="h-5 w-5 text-green-600" />
             : <Search className="h-5 w-5 text-gray-400" />;
         case 'package':
           return state === 'active'
-            ? <Download className="h-5 w-5 text-blue-600 animate-bounce" />
+            ? <Download className="h-5 w-5 text-neutral-600 animate-bounce" />
             : state === 'completed'
             ? <CheckCircle className="h-5 w-5 text-green-600" />
             : <PackageCheck className="h-5 w-5 text-gray-400" />;
@@ -164,7 +164,7 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
           {state === 'active' && progressInfo ? (
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                className="bg-neutral-600 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${progressInfo.percent}%` }}
               ></div>
             </div>
@@ -326,16 +326,16 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
 
             {/* Show troubleshooting tips if error contains network-related keywords */}
             {error && (error.includes('network') || error.includes('connection') || error.includes('VPN') || error.includes('DNS') || error.includes('SSL')) && (
-              <div className="bg-blue-50 p-3 rounded-lg">
+              <div className="bg-neutral-50 p-3 rounded-lg">
                 <div className="flex items-start">
                   <div className="shrink-0">
-                    <Lightbulb className="h-4 w-4 text-blue-600" />
+                    <Lightbulb className="h-4 w-4 text-neutral-600" />
                   </div>
                   <div className="ml-2">
-                    <h5 className="text-xs font-medium text-blue-800 mb-1">
+                    <h5 className="text-xs font-medium text-neutral-800 mb-1">
                       Troubleshooting Tips
                     </h5>
-                    <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                    <ul className="text-xs text-neutral-700 space-y-1 list-disc list-inside">
                       <li>Check your network connection</li>
                       <li>If on corporate network, ensure MSFT VPN is connected</li>
                       <li>Check if firewall or proxy settings are blocking the connection</li>
@@ -467,7 +467,7 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
       <DialogContent data-dbg="update-dialog" className="w-[480px] max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <RefreshCw className="h-5 w-5 text-blue-600" />
+            <RefreshCw className="h-5 w-5 text-neutral-600" />
             App Update
           </DialogTitle>
         </DialogHeader>

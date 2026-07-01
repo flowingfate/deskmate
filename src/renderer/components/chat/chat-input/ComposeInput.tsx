@@ -181,9 +181,9 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
             margin: '0 4px 10px',
             padding: '10px 12px',
             borderRadius: '12px',
-            border: '1px solid rgba(14, 165, 233, 0.28)',
-            background: 'rgba(14, 165, 233, 0.08)',
-            color: 'rgba(30, 41, 59, 0.92)',
+            border: '1px solid rgba(0,0,0, 0.28)',
+            background: 'rgba(0,0,0, 0.08)',
+            color: 'rgba(45, 45, 45, 0.92)',
             fontSize: '12px',
             lineHeight: 1.4,
           }}

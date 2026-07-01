@@ -94,7 +94,7 @@ const RunRow: React.FC<RunRowProps> = ({ run, isActive, onSelect }) => {
           className={cn(
             'truncate text-[11px] leading-[14px] text-[#6B7280]',
             subtitleError && 'text-[#B91C1C]',
-            isUnread && !subtitleError && 'text-[#374151] font-semibold',
+            isUnread && !subtitleError && 'text-[#444444] font-semibold',
           )}
         >
           {subtitle}

@@ -50,14 +50,14 @@ const McpToolListView: React.FC<McpToolListViewProps> = ({
               onClick={() => onSelectTool(tool)}
               className={cn(
                 'group flex h-full w-full items-start gap-3 rounded-xl border border-sc-border bg-sc-card p-4 text-left transition-colors',
-                'hover:border-indigo-300 hover:bg-sc-accent/60 dark:hover:border-indigo-500/40',
+                'hover:border-neutral-300 hover:bg-sc-accent/60 dark:hover:border-neutral-500/40',
               )}
             >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500 transition-colors group-hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-400 dark:group-hover:bg-indigo-500/25">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-50 text-neutral-500 transition-colors group-hover:bg-neutral-100 dark:bg-neutral-500/15 dark:text-neutral-400 dark:group-hover:bg-neutral-500/25">
                 <Wrench size={16} />
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate text-sm font-semibold text-sc-foreground transition-colors group-hover:text-indigo-500 dark:group-hover:text-indigo-400">{tool.name}</span>
+                <span className="truncate text-sm font-semibold text-sc-foreground transition-colors group-hover:text-neutral-500 dark:group-hover:text-neutral-400">{tool.name}</span>
                 {tool.description && (
                   <span className="line-clamp-2 text-xs leading-relaxed text-sc-muted-foreground">
                     {tool.description}
