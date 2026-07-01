@@ -1,15 +1,13 @@
 /**
  * `app` LocalTool 单测 —— 验证 cmdline → AppCommand 路由的全部分支。
  *
- * 这些测试**依赖**单例 `appCommands` 已注册 `hello`(由 `pi/appcmd/index.ts`
- * 的副作用完成)。测试本身不再额外注册,直接用 `hello` 命令打通端到端。
+ * 这些测试**依赖**单例 `appCommands` 已注册真实命令(由 `appcmd/builtins/app`
+ * 的副作用完成,无 feature flag 的 `mcp` / `agent` / `skill` 恒在)。
  *
  * 测点:
  *   - 空 cmdline / `--help` / `-h` → 顶层帮助
- *   - cmdline 语法错 → exit 2
- *   - 未知命令 → exit 127 + 提示可用命令
- *   - 已知命令 + 已知 subcommand → 输出预期
- *   - exit code 透传(`hello fail` exit 42 → tool content 含 "(exit 42)")
+ *   - cmdline 语法错 → 顶层 help + tip(不附 exit code)
+ *   - 未知命令 → 顶层 help + tip(不附 exit code)
  *   - description getter 内嵌全部命令的 synopsis
  */
 
@@ -41,15 +39,15 @@ async function run(cmdline: string): Promise<string> {
 }
 
 beforeAll(() => {
-  // sanity:确认骨架示范命令 hello 已注册(由 `appcmd/index.ts` 的副作用)
-  expect(appCommands.has('hello')).toBe(true);
+  // sanity:确认真实命令已注册(由 `appcmd/builtins/app` 的副作用)
+  expect(appCommands.has('mcp')).toBe(true);
 });
 
 describe('app LocalTool — 顶层 / 路由', () => {
   it('空 cmdline → 顶层帮助', async () => {
     const out = await run('');
     expect(out).toMatch(/Available commands:/);
-    expect(out).toMatch(/hello/);
+    expect(out).toMatch(/mcp/);
   });
 
   it('`app --help` → 顶层帮助(同空 cmdline)', async () => {
@@ -64,7 +62,7 @@ describe('app LocalTool — 顶层 / 路由', () => {
 
   it('cmdline 语法错(未闭合引号) → 顶层 help + tip,**不**附 exit code', async () => {
     // 设计:顶层入口松散,LLM 一时手抖,我们端 help 到它面前而不是惩罚
-    const out = await run('hello "unterminated');
+    const out = await run('mcp "unterminated');
     expect(out).toMatch(/Available commands:/);
     expect(out).toMatch(/tip: cmdline parse error/);
     // 错误消息来自 vendored args-tokenizer(`Closing quote is missing.`),
@@ -89,75 +87,11 @@ describe('app LocalTool — 顶层 / 路由', () => {
   });
 });
 
-describe('app LocalTool — 路由到 hello 命令', () => {
-  it('`hello` → hello 顶层 help', async () => {
-    const out = await run('hello');
-    expect(out).toMatch(/USAGE\s+hello <subcommand>/);
-  });
-
-  it('`hello say world` → "Hello, world!"', async () => {
-    const out = await run('hello say world');
-    expect(out).toContain('Hello, world!');
-    expect(out).not.toMatch(/\(exit/); // exit 0 不显示
-  });
-
-  it('`hello say world --json` → JSON 格式', async () => {
-    const out = await run('hello say world --json');
-    // 解析回来确认是结构化的
-    const lines = out.split('\n').filter(Boolean);
-    const obj = JSON.parse(lines[0]);
-    expect(obj.greeting).toBe('Hello, world!');
-  });
-
-  it('`hello say` 缺位置参数 → exit 2', async () => {
-    const out = await run('hello say');
-    expect(out).toMatch(/missing required argument: <name>/);
-    expect(out).toMatch(/\(exit 2\)/);
-  });
-
-  it('`hello say world --shout` 缺确认 → exit 1', async () => {
-    const out = await run('hello say world --shout');
-    expect(out).toMatch(/destructive/);
-    expect(out).toMatch(/\(exit 1\)/);
-  });
-
-  it('`hello say world --shout --yes` → 大写输出', async () => {
-    const out = await run('hello say world --shout --yes');
-    expect(out).toContain('HELLO, WORLD!');
-  });
-
-  it('`hello say world --shout --dry-run` → 预览,不需 --yes', async () => {
-    const out = await run('hello say world --shout --dry-run');
-    expect(out).toMatch(/dry-run/);
-    expect(out).toContain('HELLO, WORLD!');
-    expect(out).not.toMatch(/\(exit/);
-  });
-
-  it('`hello say world --tag a --tag b` → 数组型 flag 收集', async () => {
-    const out = await run('hello say world --tag a --tag b');
-    expect(out).toMatch(/Tags: a, b/);
-  });
-
-  it('`hello fail` → exit 42(业务自选非零)', async () => {
-    const out = await run('hello fail');
-    expect(out).toMatch(/this command always fails by design/);
-    expect(out).toMatch(/\(exit 42\)/);
-  });
-
-  it('`hello bogus-sub` → exit 2(边界 A:已知命令内部仍严格报错,不下沉到 help)', async () => {
-    // 一旦 LLM 走进具体命令域,反馈就该精确。顶层 help 的松散兜底**不**渗透
-    // 到子命令层面 —— 否则 LLM 永远只看顶层 help,失去具体命令的引导信号。
-    const out = await run('hello bogus-sub');
-    expect(out).toMatch(/unknown subcommand "bogus-sub"/);
-    expect(out).toMatch(/\(exit 2\)/);
-  });
-});
-
 describe('app LocalTool — description', () => {
   it('description 内嵌全部命令的 synopsis', () => {
     const desc = typeof app.spec.description === 'string' ? app.spec.description : '';
     expect(desc).toMatch(/Available commands:/);
-    expect(desc).toMatch(/hello\s+Skeleton demo/);
+    expect(desc).toMatch(/mcp\s+Manage MCP servers/);
   });
 
   it('description 提示 --help / --json / --dry-run / --yes', () => {

@@ -27,7 +27,6 @@ import type { ToolContext } from '@main/pi/tools/types';
 
 const webMocks = vi.hoisted(() => ({
   tavilyExecute: vi.fn(),
-  bingImageExecute: vi.fn(),
   fetchWebContentExecute: vi.fn(),
   downloadFileInternal: vi.fn(),
 }));
@@ -40,10 +39,6 @@ process.env.TAVILY_API_KEY = 'tvly-test-key';
 
 vi.mock('@main/pi/appcmd/builtins/web/kernel/tavilySearch', () => ({
   TavilySearchTool: { execute: webMocks.tavilyExecute },
-}));
-
-vi.mock('@main/pi/appcmd/builtins/web/kernel/bingImageSearch', () => ({
-  BingImageSearchTool: { execute: webMocks.bingImageExecute },
 }));
 
 vi.mock('@main/pi/appcmd/builtins/web/kernel/fetchWebContent', () => ({
@@ -128,7 +123,6 @@ export function resetWebMocks(): void {
   // 设置 env 让 search.ts 走到(被 mock 的)kernel。
   process.env.TAVILY_API_KEY = 'tvly-test-key';
   webMocks.tavilyExecute.mockReset();
-  webMocks.bingImageExecute.mockReset();
   webMocks.fetchWebContentExecute.mockReset();
   webMocks.downloadFileInternal.mockReset();
 }
@@ -139,9 +133,8 @@ export function resetWebMocks(): void {
 // ---------------------------------------------------------------------------
 import { describe, expect, it } from 'vitest';
 describe('web fixture sanity', () => {
-  it('webMocks exposes all 4 kernel handles', () => {
+  it('webMocks exposes all 3 kernel handles', () => {
     expect(typeof webMocks.tavilyExecute).toBe('function');
-    expect(typeof webMocks.bingImageExecute).toBe('function');
     expect(typeof webMocks.fetchWebContentExecute).toBe('function');
     expect(typeof webMocks.downloadFileInternal).toBe('function');
   });

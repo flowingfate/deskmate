@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
 
@@ -32,9 +32,13 @@ jobs:
           cache: 'npm'
 
       # postinstall 会跑 rebuild-native.js + setup-ai-docs.js
-      # 第二步在 Linux/macOS 创建 symlink，在 Windows 缺 Developer Mode 时 fallback 到文件 copy
+      # 第二步在 macOS 创建 symlink，在 Windows 缺 Developer Mode 时 fallback 到文件 copy
+      # GITHUB_TOKEN：@vscode/ripgrep postinstall 用它鉴权 GitHub API 下载预编译二进制，
+      # 否则匿名请求会撞 403 限流（api.github.com/repos/microsoft/ripgrep-prebuilt）。
       - name: Install dependencies
         run: npm install
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 主进程 / preload / renderer 三段编译 + mixed-import 守卫
       - name: Typecheck

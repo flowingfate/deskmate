@@ -72,7 +72,6 @@ describe('web 顶层路由', () => {
     expect(r.stdout).toContain('USAGE');
     expect(r.stdout).toContain(usage);
     expect(webMocks.tavilyExecute).not.toHaveBeenCalled();
-    expect(webMocks.bingImageExecute).not.toHaveBeenCalled();
     expect(webMocks.fetchWebContentExecute).not.toHaveBeenCalled();
     expect(webMocks.downloadFileInternal).not.toHaveBeenCalled();
   });
