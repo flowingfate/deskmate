@@ -30,11 +30,11 @@ interface AgentPresetsTabProps {
 /**
  * AgentPresetsTab —— 编辑聊天空态的「快捷提示词」（Quick Prompts）。
  *
- * 数据当前只在视图层流转：读写都走 `../zero/presetPrompts` 的模块级 store，
- * 与空态 ZeroState 实时共享。未接持久化 —— 切换 profile / 重启即回到默认播种列表。
+ * 数据读写走 `../zero/presetPrompts`，落 AGENT.md front-matter `zero.preset_prompts`
+ * （cold 字段），经 `agent:updated` 事件与空态 ZeroState 实时同步。CRUD 即时生效。
  *
- * 交互：列表行 + 右上「新建」。每行 hover 露出编辑/删除。编辑/新建走同一个
- * `PresetEditorDialog`；删除走 `AlertDialog` 二次确认（对齐仓库既有模式）。
+ * 交互：2 列网格，首格为「新建」入口卡片（达上限禁用）；每张预设卡片 hover 露出
+ * 编辑/删除。编辑/新建走同一个 `PresetEditorDialog`；删除走 `AlertDialog` 二次确认。
  */
 const AgentPresetsTab: React.FC<AgentPresetsTabProps> = ({ agentId, readOnly = false }) => {
   const prompts = usePresetPrompts(agentId);
@@ -60,47 +60,36 @@ const AgentPresetsTab: React.FC<AgentPresetsTabProps> = ({ agentId, readOnly = f
   return (
     <div className="flex h-full flex-col">
       {/* 头部 */}
-      <div className="flex items-start justify-between gap-4 border-b border-black/7 px-6 py-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-black/85">Quick Prompts</h2>
-            <span className="text-xs font-medium text-black/35 tabular-nums">
-              {prompts.length}/{MAX_PRESET_PROMPTS}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs text-black/45">
-            These cards show on the empty state of a new chat. Clicking one fills the input box — it won't send.
-          </p>
+      <div className="border-b border-black/7 px-6 py-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-black/85">Quick Prompts</h2>
+          <span className="text-xs font-medium text-black/35 tabular-nums">
+            {prompts.length}/{MAX_PRESET_PROMPTS}
+          </span>
         </div>
-        <Button
-          size="sm"
-          className="shrink-0 gap-1.5"
-          disabled={readOnly || atLimit}
-          title={atLimit ? `Up to ${MAX_PRESET_PROMPTS} prompts per agent` : undefined}
-          onClick={() => setEditorState({ editing: null })}
-        >
-          <Plus size={14} strokeWidth={2} />
-          New
-        </Button>
+        <p className="mt-0.5 text-xs text-black/45">
+          These cards show on the empty state of a new chat. Clicking one fills the input box — it won't send.
+        </p>
       </div>
 
-      {/* 列表 */}
+      {/* 网格：首格为「新建」入口，其后为各预设卡片 */}
       <ScrollArea className="flex-1">
-        <div className="px-6 py-4">
-          {prompts.length === 0 ? (
-            <EmptyState onAdd={() => setEditorState({ editing: null })} disabled={readOnly} />
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {prompts.map((prompt) => (
-                <PresetRow
-                  key={prompt.id}
-                  prompt={prompt}
-                  readOnly={readOnly}
-                  onEdit={() => setEditorState({ editing: prompt })}
-                  onDelete={() => setPendingDelete(prompt)}
-                />
-              ))}
-            </ul>
+        <div className="grid grid-cols-2 gap-3 px-6 py-4">
+          {prompts.map((prompt) => (
+            <PresetCard
+              key={prompt.id}
+              prompt={prompt}
+              readOnly={readOnly}
+              onEdit={() => setEditorState({ editing: prompt })}
+              onDelete={() => setPendingDelete(prompt)}
+            />
+          ))}
+          {!readOnly && (
+            <AddPresetCard
+              disabled={atLimit}
+              atLimit={atLimit}
+              onAdd={() => setEditorState({ editing: null })}
+            />
           )}
         </div>
       </ScrollArea>
@@ -142,7 +131,7 @@ const AgentPresetsTab: React.FC<AgentPresetsTabProps> = ({ agentId, readOnly = f
   );
 };
 
-function PresetRow({
+function PresetCard({
   prompt,
   readOnly,
   onEdit,
@@ -155,21 +144,21 @@ function PresetRow({
 }) {
   const Icon = resolvePresetIcon(prompt.iconKey);
   return (
-    <li className="group flex items-start gap-3 rounded-xl border border-black/8 bg-white px-4 py-3 transition-colors hover:border-black/20">
-      <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-black/8 bg-black/3 text-black/70">
-        <Icon size={16} strokeWidth={1.75} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[13.5px] font-semibold text-black/85">{prompt.title}</div>
-        {prompt.description && (
-          <div className="mt-0.5 truncate text-xs text-black/45">{prompt.description}</div>
-        )}
-        <div className="mt-1 line-clamp-2 text-xs whitespace-pre-wrap text-black/35">
-          {prompt.prompt}
+    <div className="group relative flex h-28 flex-col rounded-xl border border-black/8 bg-white px-4 py-3.5 transition-colors hover:border-black/20">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-black/8 bg-black/3 text-black/70">
+          <Icon size={16} strokeWidth={1.75} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13.5px] font-semibold text-black/85">{prompt.title}</div>
+          <div className="truncate text-xs text-black/45">{prompt.description || '～～～'}</div>
         </div>
       </div>
+      <div className="mt-2.5 flex-1 overflow-hidden text-xs whitespace-pre-wrap text-black/35">
+        {prompt.prompt}
+      </div>
       {!readOnly && (
-        <div className="flex flex-none items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute right-2 top-2 flex items-center gap-0.5 rounded-lg bg-white/80 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
           <Button variant="ghost" size="icon-sm" title="Edit" onClick={onEdit}>
             <Pencil size={14} strokeWidth={1.75} />
           </Button>
@@ -184,25 +173,42 @@ function PresetRow({
           </Button>
         </div>
       )}
-    </li>
+    </div>
   );
 }
 
-function EmptyState({ onAdd, disabled }: { onAdd: () => void; disabled: boolean }) {
+/** 网格首格：新建入口。达上限时禁用并提示。 */
+function AddPresetCard({
+  disabled,
+  atLimit,
+  onAdd,
+}: {
+  disabled: boolean;
+  atLimit: boolean;
+  onAdd: () => void;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-dashed border-black/15 text-black/30">
-        <Sparkles size={20} strokeWidth={1.5} />
+    <button
+      type="button"
+      disabled={disabled}
+      title={atLimit ? `Up to ${MAX_PRESET_PROMPTS} prompts per agent` : undefined}
+      onClick={onAdd}
+      className="group flex h-28 flex-col items-center justify-center gap-2.5 overflow-hidden rounded-xl border border-dashed border-black/15 px-4 text-center transition-colors hover:border-black/30 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-black/15"
+    >
+      <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-dashed border-black/15 text-black/30 transition-colors group-hover:border-black/30 group-hover:text-black/50 group-disabled:border-black/15 group-disabled:text-black/30">
+        {atLimit ? <Sparkles size={18} strokeWidth={1.5} /> : <Plus size={18} strokeWidth={1.75} />}
       </span>
       <div>
-        <p className="text-sm font-medium text-black/70">No quick prompts yet</p>
-        <p className="mt-0.5 text-xs text-black/40">Add one and it'll show on the empty state of a new chat</p>
+        <p className="text-[13px] font-medium text-black/70">
+          {atLimit ? 'Prompt limit reached' : 'New quick prompt'}
+        </p>
+        <p className="mt-0.5 text-xs text-black/40">
+          {atLimit
+            ? `Up to ${MAX_PRESET_PROMPTS} per agent — delete one to add more`
+            : "It'll show on the empty state of a new chat"}
+        </p>
       </div>
-      <Button size="sm" variant="outline" className="gap-1.5" disabled={disabled} onClick={onAdd}>
-        <Plus size={14} strokeWidth={2} />
-        New
-      </Button>
-    </div>
+    </button>
   );
 }
 

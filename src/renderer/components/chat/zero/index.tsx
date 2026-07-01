@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, Plus } from 'lucide-react';
 import { composeTextAtom } from '../chat-input/Textarea';
 import { Button } from '@/shadcn/button';
 import { useCurrentAgent } from '@/states/agents.atom';
@@ -35,13 +35,14 @@ function focusComposeInput() {
  * 聊天区空态。展示预设提示词卡片；点击卡片把提示词填入底部 ComposeInput（不发送）。
  * 若输入框已有内容，弹确认框询问是否覆盖。
  *
- * 数据当前来自 `usePresetPrompts` 的视图层 mock（未接持久化）；插图为 `./illustrarion` 的 `ZERO_CHAT`。
+ * 数据经 `usePresetPrompts` 读 AGENT.md `zero.preset_prompts`（agentDetail 后端，未定制回退空数组）；插图为 `./illustrarion` 的 `ZERO_CHAT`。
  */
 export function ZeroState() {
   const agent = useCurrentAgent();
   const navigate = useNavigate();
   const { get, set } = composeTextAtom.useChange();
   const prompts = usePresetPrompts(agent?.id);
+  const hasPrompts = prompts.length > 0;
   // 待覆盖确认的提示词；非 null 时弹出 AlertDialog。
   const [pendingOverwrite, setPendingOverwrite] = useState<PresetPrompt | null>(null);
 
@@ -65,7 +66,7 @@ export function ZeroState() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div data-dbg="chat-zero-state" className="h-full overflow-y-auto">
       <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col items-center justify-center px-6 py-10">
         {/* 空态插图 —— SVG 自带 821×910，用 wrapper 限高等比缩放。 */}
         <div className="mb-6 h-36 select-none [&_svg]:h-full [&_svg]:w-auto">
@@ -75,25 +76,38 @@ export function ZeroState() {
         <h2 className="text-center text-lg font-semibold text-black/85">
           {agent?.name ? `Chat with ${agent.name}` : 'Start a conversation'}
         </h2>
-        <p className="mt-1.5 mb-8 text-center text-sm text-black/45">
-          Pick one to start, or just type your question below
+        <p className="mt-1.5 mb-4 text-center text-sm text-black/45">
+          {hasPrompts
+            ? 'Pick one to start, or just type your question below'
+            : 'Type your question below to start, or add quick prompts for one-tap starters'}
         </p>
 
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-          {prompts.map((prompt) => (
-            <PresetPromptCard key={prompt.id} prompt={prompt} onSelect={onSelect} />
-          ))}
-        </div>
+        {hasPrompts && (
+          <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+            {prompts.map((prompt) => (
+              <PresetPromptCard key={prompt.id} prompt={prompt} onSelect={onSelect} />
+            ))}
+          </div>
+        )}
 
         {agent?.id && (
           <Button
             variant="ghost"
             size="sm"
-            className="mt-5 gap-1.5 text-black/45 hover:text-black/70"
+            className="mt-2 gap-1.5 text-black/45 hover:text-black/70"
             onClick={() => navigate(`/agent/${agent.id}/settings/presets`)}
           >
-            <SlidersHorizontal size={13} strokeWidth={1.75} />
-            Manage prompts
+            {hasPrompts ? (
+              <>
+                <SlidersHorizontal size={13} strokeWidth={1.75} />
+                Manage prompts
+              </>
+            ) : (
+              <>
+                <Plus size={13} strokeWidth={2} />
+                Add quick prompts
+              </>
+            )}
           </Button>
         )}
       </div>

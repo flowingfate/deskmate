@@ -88,7 +88,7 @@ type RenderToMain = {
   /** 列出归档 agent。 */
   listArchivedAgents: { call: []; return: PersistResult<ArchivedAgentEntry[]> };
   /**
-   * 懒读单个 agent 的 cold 字段（systemPrompt + thinkingLevel + knowledge + mcpServers + skills + subAgents）。
+   * 懒读单个 agent 的 cold 字段（systemPrompt + thinkingLevel + knowledge + mcpServers + skills + subAgents + zero）。
    * 从 AGENT.md 解析，按 agentId 单读，不读其它 agent。agent 不存在返 null。
    * 列表层字段（name / version / emoji / avatar / model）已在 AgentRecord 中，不在本响应内重复。
    */

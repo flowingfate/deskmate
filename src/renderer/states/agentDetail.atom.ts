@@ -2,7 +2,7 @@
  * agentDetail 域 atom（lazy cold-fields cache）。
  *
  * 数据形状：`AgentDetail`（AGENT.md cold 字段集合：systemPrompt + thinkingLevel
- *   + knowledge + mcpServers + skills + subAgents）。
+ *   + knowledge + mcpServers + skills + subAgents + zero(空态预设提示词)）。
  *
  * 拉取策略：按 agentId 按需懒读（`useAgentDetail` 命中 cache 同步返；缺 cache 异步
  *   fetch + cache + re-render），并发同 id 合并为同一 Promise（inflight 模式）。

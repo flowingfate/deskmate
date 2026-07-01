@@ -48,9 +48,9 @@
 | `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（基本信息、上下文增强、知识库、MCP 服务器、技能、子 agent、系统提示词） | — |
 | `agent-area/AgentEditingView.tsx` | Agent 设置页外壳：顶栏（返回 / agent 头像 / Save All + 未保存计数）、左侧 `AgentSettingsNav`、按 activeTab 渲染对应 Tab；管理跨 Tab 的 pending changes 缓存与统一保存 | ~770 LOC |
 | `agent-editor/AgentSettingsNav.tsx` | 设置页左侧导航；数据驱动的 `NAV_ITEMS`（key/label/Lucide 图标），每项带未保存改动小圆点。**新增 Tab 时在此加一项** | 小 |
-| `agent-editor/AgentPresetsTab.tsx` + `PresetEditorDialog.tsx` | 「Quick Prompts」标签页：编辑聊天空态的预设提示词（增删改）。**数据当前只在视图层流转** —— 读写走 `zero/presetPrompts.ts` 的模块级 `unit` store，与 `zero/index.tsx` 空态实时共享，未接持久化。新建/编辑走 `PresetEditorDialog`（含图标选择器），删除走 `AlertDialog` 二次确认 | 中 |
+| `agent-editor/AgentPresetsTab.tsx` + `PresetEditorDialog.tsx` | 「Quick Prompts」标签页：编辑聊天空态的预设提示词（增删改）。**已接持久化** —— 读写走 `zero/presetPrompts.ts`，落 AGENT.md front-matter `zero.preset_prompts`（cold 字段，`agentDetail.atom` 后端），与 `zero/index.tsx` 空态经 `agent:updated` 事件实时同步。CRUD 即时生效，不进 Save All 管线。新建/编辑走 `PresetEditorDialog`（含图标选择器），删除走 `AlertDialog` 二次确认 | 中 |
 | `zero/index.tsx` + `zero/PresetPromptCard.tsx` | 聊天空态：渲染预设提示词卡片。点击卡片**不发送**，而是把 `prompt` 写入 `composeTextAtom`（ComposeInput 草稿真值）填入输入框；输入框已有内容时弹 `AlertDialog` 确认覆盖。插图区为占位待填 | 中 |
-| `zero/presetPrompts.ts` + `zero/presetIcons.ts` | 预设提示词的数据层：`PresetPrompt`（`iconKey` 可序列化）+ 按 agentId 隔离的模块级 `unit` store + `usePresetPrompts` / `presetPromptActions`（CRUD）。`presetIcons.ts` 是 iconKey→Lucide 组件的注册表。**接持久化时只替换本文件取数/写入实现，上层不动** | 小 |
+| `zero/presetPrompts.ts` + `zero/presetIcons.ts` | 预设提示词的数据层：类型 `PresetPrompt`（源真值 `@shared/persist/types`，`iconKey` 为 `string`）+ `usePresetPrompts`（订阅 `agentDetail.atom` 的 `zero.preset_prompts`，缺席回退空数组）+ `presetPromptActions`（CRUD → `persistApi.patchAgentFront(agentId, { zero })` 整段覆盖写）+ `MAX_PRESET_PROMPTS`。`presetIcons.ts` 是 iconKey→Lucide 组件的注册表（36 key + 兜底）。**数据链路已收敛到本文件，上层组件只依赖 hook/actions 不感知后端** | 小 |
 | `agent-editor/AddScheduleOverlay.tsx` | 共享的定时任务创建/编辑对话框；由 `components/agent-side/jobs/JobsView` 与 `JobRunsView` 调用 | — |
 | `agent-editor/scheduleTemplates.ts` | 内置定时任务模板，被 `JobHeader` 的"+"下拉消费 | — |
 | `workspace/WorkspaceExplorerSidepane.tsx` | 工作区侧栏容器：Agent Knowledge（`knowledge://`）+ Session Deliverables（`local://`）两个 `FileExplorerSection` | — |

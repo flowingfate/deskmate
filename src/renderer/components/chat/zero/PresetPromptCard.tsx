@@ -26,11 +26,9 @@ export function PresetPromptCard({ prompt, onSelect }: PresetPromptCardProps) {
         <span className="block truncate text-[13.5px] font-semibold text-black/85">
           {prompt.title}
         </span>
-        {prompt.description && (
-          <span className="mt-0.5 block truncate text-xs text-black/45">
-            {prompt.description}
-          </span>
-        )}
+        <span className="mt-0.5 block truncate text-xs text-black/45">
+          {prompt.description || '～～～'}
+        </span>
       </span>
     </button>
   );
