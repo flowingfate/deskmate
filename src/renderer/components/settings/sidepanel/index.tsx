@@ -162,10 +162,10 @@ const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
       <div className="py-2 border-t border-black/5">
         <NavItem
           icon={<ChevronLeft size={16} />}
-          label="Back"
+          label="Go back to agent"
           isActive={false}
           onClick={handleBack}
-          ariaLabel="Go Back"
+          ariaLabel="Go back to agent"
         />
       </div>
     </nav>

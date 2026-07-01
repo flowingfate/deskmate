@@ -1,7 +1,8 @@
 import React from 'react'
-import { User, BookOpen, Cable, Wrench, BookMarked, Bot, FileText, Sparkles, type LucideIcon } from 'lucide-react'
+import { User, BookOpen, Cable, Wrench, BookMarked, Bot, FileText, Sparkles, Loader2, Save, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utilities/utils'
 import { Button } from '@/shadcn/button'
+import { Badge } from '@/shadcn/badge'
 import { AgentEditorTabName } from './types'
 
 interface NavItem {
@@ -29,6 +30,10 @@ interface AgentSettingsNavProps {
   pendingChanges: Record<AgentEditorTabName, boolean>
   subAgentEnabled: boolean
   onSwitch: (tab: AgentEditorTabName) => void
+  onSaveAll: () => void
+  isLoading: boolean
+  canSaveAll: boolean
+  pendingCount: number
 }
 
 /**
@@ -42,36 +47,62 @@ const AgentSettingsNav: React.FC<AgentSettingsNavProps> = ({
   pendingChanges,
   subAgentEnabled,
   onSwitch,
+  onSaveAll,
+  isLoading,
+  canSaveAll,
+  pendingCount,
 }) => {
   return (
-    <nav className="w-47 min-w-47 shrink-0 px-2 py-2.5 border-r border-black/7 flex flex-col gap-0.5 overflow-y-auto box-border" aria-label="Agent settings sections">
-      {NAV_ITEMS.filter(item => !item.flagged || subAgentEnabled).map(({ key, label, icon: Icon }) => {
-        const isActive = activeTab === key
-        return (
-          <Button
-            key={key}
-            variant={isActive ? 'secondary' : 'ghost'}
-            size="sm"
-            className="w-full justify-start gap-2.5 px-2.5 font-normal"
-            aria-current={isActive ? 'page' : undefined}
-            onClick={() => onSwitch(key)}
-          >
-            <Icon
-              size={16}
-              strokeWidth={1.75}
-              className={cn('shrink-0', isActive ? 'text-sc-foreground' : 'text-sc-muted-foreground')}
-              aria-hidden
-            />
-            <span className={cn('flex-1 truncate text-left', isActive ? 'font-medium' : 'text-sc-muted-foreground')}>
-              {label}
-            </span>
-            {pendingChanges[key] && (
-              <span className="size-1.5 shrink-0 rounded-full bg-sc-primary" aria-label="Unsaved changes" />
-            )}
-          </Button>
-        )
-      })}
-    </nav>
+    <div className="w-47 min-w-47 shrink-0 px-2 py-2.5 border-r border-black/7 flex flex-col gap-2 overflow-y-hidden">
+      <nav className="flex-1 flex flex-col gap-0.5 overflow-y-auto box-border" aria-label="Agent settings sections">
+        {NAV_ITEMS.filter(item => !item.flagged || subAgentEnabled).map(({ key, label, icon: Icon }) => {
+          const isActive = activeTab === key
+          return (
+            <Button
+              key={key}
+              variant={isActive ? 'secondary' : 'ghost'}
+              size="sm"
+              className="w-full justify-start gap-2.5 px-2.5 font-normal"
+              aria-current={isActive ? 'page' : undefined}
+              onClick={() => onSwitch(key)}
+            >
+              <Icon
+                size={16}
+                strokeWidth={1.75}
+                className={cn('shrink-0', isActive ? 'text-sc-foreground' : 'text-sc-muted-foreground')}
+                aria-hidden
+              />
+              <span className={cn('flex-1 truncate text-left', isActive ? 'font-medium' : 'text-sc-muted-foreground')}>
+                {label}
+              </span>
+              {pendingChanges[key] && (
+                <span className="size-1.5 shrink-0 rounded-full bg-sc-primary" aria-label="Unsaved changes" />
+              )}
+            </Button>
+          )
+        })}
+      </nav>
+      <div className="shrink-0 pb-1">
+        <Button
+          onClick={onSaveAll}
+          disabled={isLoading || !canSaveAll}
+          title={isLoading ? 'Saving...' : canSaveAll ? 'Save All Changes' : 'No Changes to Save'}
+          size="sm"
+          variant={canSaveAll ? 'default' : 'outline'}
+          className="w-full gap-1.5"
+        >
+          {isLoading
+            ? <Loader2 size={14} className="animate-spin" />
+            : <Save size={14} strokeWidth={1.75} />}
+          {isLoading ? 'Saving...' : 'Save'}
+          {!isLoading && pendingCount > 0 && (
+            <Badge className="ml-0.5 h-4 px-1.5 py-0 text-[11px] font-semibold border-transparent bg-white/25 text-white">
+              {pendingCount}
+            </Badge>
+          )}
+        </Button>
+      </div>
+    </div>
   )
 }
 

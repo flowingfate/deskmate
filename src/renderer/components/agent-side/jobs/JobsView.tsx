@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/shadcn/alert-dialog';
-import { showScheduledRunStartedToast } from '@/lib/scheduler/showScheduledRunStartedToast';
+import { runScheduleNow } from '@/lib/scheduler/showScheduledRunStartedToast';
 import ScheduleOverlay from '@renderer/components/agent-side/jobs/overlay';
 import {
   SCHEDULE_TEMPLATES,
@@ -152,26 +152,8 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
     }
   }, [pendingDelete, showError]);
 
-  const handleRunNow = useCallback(async (job: SchedulerJob) => {
-    try {
-      const res = await schedulerApi.runJobNow(job.id);
-      if (res?.success) {
-        showScheduledRunStartedToast({
-          result: res.data,
-          agentId: job.agentId,
-          jobId: job.id,
-          navigate,
-          showToast,
-          showSuccess,
-        });
-        return;
-      }
-      showError('Failed to run schedule: ' + (res?.error || 'Unknown error'));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      showError('Failed to run schedule: ' + msg);
-      logger.error({ msg: 'runJobNow failed', jobId: job.id, err });
-    }
+  const handleRunNow = useCallback((job: SchedulerJob) => {
+    runScheduleNow(job.agentId, job.id, navigate, showToast, showSuccess, showError);
   }, [navigate, showError, showSuccess, showToast]);
 
   // ─── Render ─────────────────────────────────────────────────────────
