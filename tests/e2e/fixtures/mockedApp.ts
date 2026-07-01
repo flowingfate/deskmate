@@ -527,15 +527,15 @@ export const mockedAuthenticatedTest = base.extend<MockedAuthenticatedFixtures>(
             const profileData = {
               version: 2,
               alias,
-              primaryAgent: 'Kobi',
+              primaryAgent: 'Otto',
               chats: [
                 {
-                  chat_id: 'mock-chat-kobi',
+                  chat_id: 'mock-chat-otto',
                   agent: {
-                    name: 'Kobi',
+                    name: 'Otto',
                     emoji: '🤖',
                     description: 'Your AI Assistant',
-                    system_prompt: 'You are Kobi, an AI assistant.',
+                    system_prompt: 'You are Otto, an AI assistant.',
                   },
                   sessions: [],
                   createdAt: '2025-01-01T00:00:00.000Z',
@@ -544,10 +544,10 @@ export const mockedAuthenticatedTest = base.extend<MockedAuthenticatedFixtures>(
               ],
               agents: [
                 {
-                  name: 'Kobi',
+                  name: 'Otto',
                   emoji: '🤖',
                   description: 'Your AI Assistant',
-                  system_prompt: 'You are Kobi, an AI assistant.',
+                  system_prompt: 'You are Otto, an AI assistant.',
                 },
               ],
               mcp_servers: [],
@@ -755,15 +755,15 @@ export const mockedMultiUserTest = base.extend<MockedMultiUserFixtures>({
           const profileData = {
             version: 2,
             alias,
-            primaryAgent: 'Kobi',
+            primaryAgent: 'Otto',
             chats: [
               {
-                chat_id: 'mock-chat-kobi',
+                chat_id: 'mock-chat-otto',
                 agent: {
-                  name: 'Kobi',
+                  name: 'Otto',
                   emoji: '🤖',
                   description: 'Your AI Assistant',
-                  system_prompt: 'You are Kobi, an AI assistant.',
+                  system_prompt: 'You are Otto, an AI assistant.',
                 },
                 sessions: [],
                 createdAt: '2025-01-01T00:00:00.000Z',
@@ -772,10 +772,10 @@ export const mockedMultiUserTest = base.extend<MockedMultiUserFixtures>({
             ],
             agents: [
               {
-                name: 'Kobi',
+                name: 'Otto',
                 emoji: '🤖',
                 description: 'Your AI Assistant',
-                system_prompt: 'You are Kobi, an AI assistant.',
+                system_prompt: 'You are Otto, an AI assistant.',
               },
             ],
             mcp_servers: [],
@@ -826,7 +826,7 @@ export { expect };
  * Chat-ready Mock Fixture (for Chat E2E tests)
  *
  * Extends mockedAuthenticatedApp:
- * - Pre-seeded auth + profile (with primaryAgent='Kobi', chats containing Kobi)
+ * - Pre-seeded auth + profile (with primaryAgent='Otto', chats containing Otto)
  * - Mocks all agentChat IPC handlers
  * - Mocks startup update → completes immediately
  * - Finally navigates to /agent and shows chat UI
@@ -971,7 +971,7 @@ export const mockedChatReadyTest = base.extend<MockedChatReadyFixtures>({
 
       // ==================== Profile ====================
 
-      const mockChatId = 'mock-chat-kobi';
+      const mockChatId = 'mock-chat-otto';
       const archivedChatSessions = [
         {
           chatSession_id: 'session-history-target',
@@ -1102,15 +1102,15 @@ export const mockedChatReadyTest = base.extend<MockedChatReadyFixtures>({
       const mockProfileData = (alias: string) => ({
         version: 2,
         alias,
-        primaryAgent: 'Kobi',
+        primaryAgent: 'Otto',
         chats: [
           {
             chat_id: mockChatId,
             agent: {
-              name: 'Kobi',
+              name: 'Otto',
               emoji: '🤖',
               description: 'Your AI Assistant',
-              system_prompt: 'You are Kobi, an AI assistant.',
+              system_prompt: 'You are Otto, an AI assistant.',
             },
             sessions: archivedChatSessions,
             chatSessions: archivedChatSessions,
@@ -1120,10 +1120,10 @@ export const mockedChatReadyTest = base.extend<MockedChatReadyFixtures>({
         ],
         agents: [
           {
-            name: 'Kobi',
+            name: 'Otto',
             emoji: '🤖',
             description: 'Your AI Assistant',
-            system_prompt: 'You are Kobi, an AI assistant.',
+            system_prompt: 'You are Otto, an AI assistant.',
           },
         ],
         mcp_servers: [],
@@ -1310,7 +1310,7 @@ export const mockedChatReadyTest = base.extend<MockedChatReadyFixtures>({
             data: {
               chatId,
               chatSessionId: sessionId,
-              agentName: 'Kobi',
+              agentName: 'Otto',
             },
           };
         },
@@ -1324,7 +1324,7 @@ export const mockedChatReadyTest = base.extend<MockedChatReadyFixtures>({
       safeHandle('agentChat:streamMessage', (_event: any, message: any) => {
         const assistantMessageId = `msg_assistant_${Date.now()}`;
         const mockResponse =
-          'Hello! I am Kobi, your AI assistant. How can I help you today?';
+          'Hello! I am Otto, your AI assistant. How can I help you today?';
         (global as any).__e2e_pendingStreamResponse = {
           assistantMessageId,
           mockResponse,
@@ -1347,13 +1347,13 @@ export const mockedChatReadyTest = base.extend<MockedChatReadyFixtures>({
         success: true,
       }));
 
-      // agentChat:getCurrentInstance → return Kobi agent info
+      // agentChat:getCurrentInstance → return Otto agent info
       safeHandle('agentChat:getCurrentInstance', () => ({
         success: true,
         data: {
           chatId: currentChatId || mockChatId,
           chatSessionId: currentChatSessionId,
-          agentName: 'Kobi',
+          agentName: 'Otto',
         },
       }));
 
@@ -1381,7 +1381,7 @@ export const mockedChatReadyTest = base.extend<MockedChatReadyFixtures>({
         data: {
           chatId: currentChatId || mockChatId,
           chatStatus: 'idle',
-          agentName: 'Kobi',
+          agentName: 'Otto',
         },
       }));
 
@@ -1402,7 +1402,7 @@ export const mockedChatReadyTest = base.extend<MockedChatReadyFixtures>({
         data: {
           chatId: currentChatId || mockChatId,
           chatSessionId: currentChatSessionId,
-          agentName: 'Kobi',
+          agentName: 'Otto',
         },
       }));
 

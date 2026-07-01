@@ -74,13 +74,8 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
   const dimStyle = shouldDim ? DIM_STYLE : undefined;
 
   if (item.type === 'tool-calls-section' && item.toolCalls.length > 0) {
-    // tool-section-wrapper 让 .chat-message-flow-reverse 跳过默认水平 padding,
-    // 由 ToolCallsSection 自己根据 collapsed/expanded 状态精确控制 inset。
-    const className = isLast
-      ? 'tool-section-wrapper chat-latest-live-item'
-      : 'tool-section-wrapper';
     return (
-      <div className={className} style={dimStyle}>
+      <div className="px-0!" style={dimStyle}>
         <ToolCallsSection
           toolCalls={item.toolCalls}
           sectionKey={item.sectionKey}

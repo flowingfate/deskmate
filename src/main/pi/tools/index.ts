@@ -12,7 +12,6 @@
 
 import { tools } from './registry';
 
-// 批 A:纯本地轻量。`read` 是统一读入口(取代了 read_file + read_office_file
 // —— office 走 backend 内部 lazy import,首调时才解析 mammoth/jszip/pdfreader)。
 import { read } from './read';
 import { write } from './write';
@@ -23,31 +22,9 @@ import { ask } from './ask';
 // Internal URL router 启动期注册全部 ProtocolHandler(skill / ...)—— 必须
 // 在 `./read` 的 dispatch 真正被调用之前完成。side-effect import 保证。
 import '@main/pi/internal-urls';
-
-// 批 G:`app` shell 风格 facade(详见 ai.prompt/tool-system.md)。
-// `../appcmd` side-effect import 必须在 `./app` 之前 —— `./app` 的
-// `spec.description` getter 在首次被 pi 读取时会列举 `appCommands`,
-// 此刻命令必须全部注册完毕。
-import '../appcmd';
 import { app } from './app';
-
-// 批 B:依赖 main 子系统
+import { web } from './web';
 import { shell } from './shell';
-
-// 批 C:已下线(mcp / agent / skill → app shell)
-// 批 D:已下线(schedule → app shell;feature flag 守卫挪到 `appcmd/index.ts`)
-// 批 E:已下线(spawn / spawn-many → `app subagent` shell;feature flag 守卫挪到 `appcmd/index.ts`)
-// 批 F 中 manage_process / move_file / coding_agent / get_current_datetime
-// 已下线(Phase 8):前两者直接用 shell 自带能力(`&` job control + `mv`),
-// `coding_agent` 整体移除(Phase 8c 把 `deskmateFeatureCodingAgent` flag
-// 本身也从 `featureFlagDefinitions.ts` + `FeatureFlagName` union 一并删除,
-// 不留 dead flag),`get_current_datetime` 改由 system prompt 直接注入当前时间。
-// 批 F 中 read_file / read_office_file 也已下线(合并进 `read`;office impl 仍
-// 是独立 lazy chunk,由 `read/backends/office.ts` 内部 `await
-// import('../../impl/readOfficeFile')` 推迟到首调,bundle 行为完全一致)。
-
-// 批 F:heavy / lazy(剩 download)
-import { downloadFile } from './download';
 
 let registered = false;
 export function registerAllTools(): void {
@@ -56,21 +33,15 @@ export function registerAllTools(): void {
   if (registered) return;
   registered = true;
 
-  // 批 A
   tools.register(read);
   tools.register(write);
   tools.register(find);
   tools.register(search);
   tools.register(ask);
 
-  // 批 G:app shell facade。注册顺序对外部语义无影响,但需在 import 顺序
-  // 之后(`../appcmd` side-effect 已经把 helloCommand 等灌进 appCommands)。
   tools.register(app);
-  // 批 B
+  tools.register(web);
   tools.register(shell);
-
-  // 批 F:heavy / lazy
-  tools.register(downloadFile);
 }
 
 registerAllTools();

@@ -133,7 +133,7 @@ describe('Agent.persist + load round-trip', () => {
     const profile = await reg.active();
 
     const agent = await profile.createAgent({
-      name: 'Kobi',
+      name: 'Otto',
       version: '1.0.0',
       model: 'claude-sonnet-4.6',
       
@@ -148,7 +148,7 @@ describe('Agent.persist + load round-trip', () => {
     const profile2 = await reg2.active();
     const reloaded = await profile2.getAgent(agent.id);
     expect(reloaded).toBeDefined();
-    expect(reloaded?.config.name).toBe('Kobi');
+    expect(reloaded?.config.name).toBe('Otto');
     expect(reloaded?.config.version).toBe('1.0.0');
     expect(reloaded?.systemPrompt).toBe('You are helpful.\n');
   });

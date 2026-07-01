@@ -63,10 +63,11 @@ const SessionsView: React.FC<SessionsViewProps> = ({ agentId, currentChatSession
         />
       </div>
 
-      <div className="shrink-0 pt-2 pb-[14px]">
+      <div className="shrink-0 pt-2 pb-3.75">
         <Button
           variant="outline"
-          className="w-full"
+          size="sm"
+          className="w-full gap-1.5"
           onClick={handleNewConversation}
           title="New Conversation"
         >

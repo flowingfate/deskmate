@@ -78,9 +78,16 @@ export interface SubAgentSessionHooks {
   onToolError?: (toolCallId: string, toolName: string, durationMs: number) => void;
   /**
    * tool 结果后处理：wrapper 可在这里做截断 / 蒸馏。返回值替换原始 content。
-   * 入参 args 已经 parse 过；rawContent 是 executeToolCall 拿到的原始字符串。
+   * 入参 args 已经 parse 过；rawContent 是 executeToolCall 拿到的原始字符串；
+   * deliverables 是工具结构化回传的产出文件 URI(`write` 走 args.fileUri,
+   * `web download` 等 shell 命令走此字段),供 deliverable 审计直接消费。
    */
-  onToolResultPostprocess?: (toolName: string, toolArgs: Record<string, unknown>, rawContent: string) => Promise<string>;
+  onToolResultPostprocess?: (
+    toolName: string,
+    toolArgs: Record<string, unknown>,
+    rawContent: string,
+    deliverables: readonly string[] | undefined,
+  ) => Promise<string>;
 }
 
 export interface RunTurnArgs {
@@ -268,7 +275,7 @@ export class SubAgentSession {
       this.contextState = {
         ...this.contextState,
         lastTokenUsage: {
-          tokenCount: final.usage.input,
+          tokenCount: final.usage.totalTokens,
           totalMessages: this.messages.length,
           contextMessages: llmMessages.length + 1,
           compressionRatio: 1.0,
@@ -422,7 +429,7 @@ export class SubAgentSession {
       let content = result.content;
       if (!result.isError && hooks.onToolResultPostprocess) {
         try {
-          content = await hooks.onToolResultPostprocess(tc.name, tc.arguments, content);
+          content = await hooks.onToolResultPostprocess(tc.name, tc.arguments, content, result.deliverables);
         } catch (err) {
           logger.warn({
             msg: '[SubAgentSession] tool result postprocess failed; using raw content',
@@ -437,6 +444,7 @@ export class SubAgentSession {
         time: Date.now(),
         status: result.isError ? 'fail' : 'success',
         result: content,
+        images: result.images ?? [],
       };
       this.applyToolResponse(call.id, toolResult);
 

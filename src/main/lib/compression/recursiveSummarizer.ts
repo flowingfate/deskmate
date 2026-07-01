@@ -375,7 +375,7 @@ function buildAttachmentSummary(m: UserMessage): string | null {
     { kind: 'images', names: [] },
   ];
   for (const att of m.attachments) {
-    if (att.kind === 'file') groups[0].names.push(att.fileName);
+    if (att.kind === 'text') groups[0].names.push(att.fileName);
     else if (att.kind === 'office') groups[1].names.push(att.fileName);
     else if (att.kind === 'opaque') groups[2].names.push(att.fileName);
     else if (att.kind === 'image') groups[3].names.push(att.fileName);

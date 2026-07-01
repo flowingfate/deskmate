@@ -245,7 +245,7 @@ const ShortcutRecorder: React.FC<ShortcutRecorderProps> = ({
           ref={inputRef}
           tabIndex={0}
           className={`
-            flex-1 px-3 py-2 rounded-lg border transition-all duration-200 focus:outline-hidden
+            flex-1 px-3 py-2 rounded border transition-all duration-200 focus:outline-hidden
             ${
               isRecording
                 ? 'bg-[#272320]/5 border-[#272320] ring-2 ring-[#272320]/20'

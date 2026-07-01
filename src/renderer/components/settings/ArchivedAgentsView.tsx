@@ -101,67 +101,38 @@ const ArchivedAgentsView: React.FC = () => {
   return (
     <SettingsLayout icon={<Archive size={18} />} title="Archived Agents">
       {/* Content */}
-      <div className="runtime-settings-content" style={{ padding: '20px', overflow: 'auto' }}>
+      <div className="p-5 overflow-auto" data-dbg="archived-agents">
         {isLoading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '40px', color: '#6b7280' }}>
+          <div className="flex justify-center p-10 text-gray-500">
             Loading archived agents...
           </div>
         ) : archivedAgents.length === 0 ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '60px 20px',
-            color: '#6b7280',
-            gap: '12px',
-          }}>
-            <Archive size={48} strokeWidth={1} style={{ opacity: 0.4 }} />
-            <p style={{ margin: 0, fontSize: '16px', fontWeight: 500 }}>No archived agents</p>
-            <p style={{ margin: 0, fontSize: '14px', opacity: 0.7 }}>
+          <div className="flex flex-col items-center justify-center px-5 py-15 text-gray-500 gap-3">
+            <Archive size={48} strokeWidth={1} className="opacity-40" />
+            <p className="m-0 text-base font-medium">No archived agents</p>
+            <p className="m-0 text-sm opacity-70">
               Archived agents will appear here. You can archive agents from the agent menu.
             </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="flex flex-col gap-3">
             {archivedAgents.map((agent) => (
               <div
                 key={agent.agent_id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '16px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(0, 0, 0, 0.1)',
-                  backgroundColor: 'var(--color-surface, #ffffff)',
-                }}
+                className="flex items-center justify-between p-4 rounded-md border border-black/10 bg-(--color-surface,#ffffff)"
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      color: 'var(--color-text-primary, #111827)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-(--color-text-primary,#111827) overflow-hidden text-ellipsis whitespace-nowrap">
                       {agent.agent?.name || 'Unknown Agent'}
                     </span>
                   </div>
                   {agent.agent?.description && (
-                    <span style={{
-                      fontSize: '12px',
-                      color: '#6b7280',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
+                    <span className="text-xs text-gray-500 overflow-hidden text-ellipsis whitespace-nowrap">
                       {agent.agent.description}
                     </span>
                   )}
-                  <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                  <span className="text-[11px] text-gray-400">
                     Archived {formatDate(agent.archived_at)}
                   </span>
                 </div>
@@ -170,7 +141,7 @@ const ArchivedAgentsView: React.FC = () => {
                   size="sm"
                   onClick={() => handleRestore(agent.agent_id, agent.agent?.name || 'Unknown Agent')}
                   disabled={restoringId === agent.agent_id}
-                  style={{ marginLeft: '16px' }}
+                  className="gap-1"
                   title="Restore this agent"
                 >
                   <RotateCcw size={14} />

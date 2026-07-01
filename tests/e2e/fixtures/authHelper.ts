@@ -144,16 +144,16 @@ export function getMockProfileData(alias: string): Record<string, unknown> {
   return {
     version: 2,
     alias,
-    primaryAgent: 'Kobi',
+    primaryAgent: 'Otto',
     chatConfigs: [],
     chats: [
       {
-        chat_id: 'mock-chat-kobi',
+        chat_id: 'mock-chat-otto',
         agent: {
-          name: 'Kobi',
+          name: 'Otto',
           emoji: '🤖',
           description: 'Your AI Assistant',
-          system_prompt: 'You are Kobi, an AI assistant.',
+          system_prompt: 'You are Otto, an AI assistant.',
         },
         sessions: [],
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -162,10 +162,10 @@ export function getMockProfileData(alias: string): Record<string, unknown> {
     ],
     agents: [
       {
-        name: 'Kobi',
+        name: 'Otto',
         emoji: '🤖',
         description: 'Your AI Assistant',
-        system_prompt: 'You are Kobi, an AI assistant.',
+        system_prompt: 'You are Otto, an AI assistant.',
       },
     ],
     mcpServers: [],

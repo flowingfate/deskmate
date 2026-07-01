@@ -43,8 +43,8 @@ function makeImageAttachment(input: {
     fileSize: input.fileSize,
     mimeType: input.mimeType,
     source: { kind: 'dataUrl', data: dataUrlToBase64(input.dataUrl) },
-    ...(input.width !== undefined ? { width: input.width } : {}),
-    ...(input.height !== undefined ? { height: input.height } : {}),
+    width: input.width,
+    height: input.height,
     detail: input.detail ?? 'auto',
   };
 }
@@ -60,15 +60,15 @@ function makeFileAttachment(input: {
   detail?: 'auto' | 'low' | 'high';
 }): Attachment {
   return {
-    kind: 'file',
+    kind: 'text',
     fileName: input.fileName,
     fileSize: input.fileSize,
     mimeType: input.mimeType,
     fileUri: input.fileUri,
     detail: input.detail ?? 'auto',
-    ...(input.lastModified !== undefined ? { lastModified: input.lastModified } : {}),
-    ...(input.lines !== undefined ? { lines: input.lines } : {}),
-    ...(input.encoding !== undefined ? { encoding: input.encoding } : {}),
+    lastModified: input.lastModified,
+    lines: input.lines,
+    encoding: input.encoding,
   };
 }
 
@@ -89,9 +89,9 @@ function makeOfficeAttachment(input: {
     mimeType: input.mimeType,
     fileUri: input.fileUri,
     detail: input.detail ?? 'auto',
-    ...(input.lastModified !== undefined ? { lastModified: input.lastModified } : {}),
-    ...(input.pages !== undefined ? { pages: input.pages } : {}),
-    ...(input.lines !== undefined ? { lines: input.lines } : {}),
+    lastModified: input.lastModified,
+    pages: input.pages,
+    lines: input.lines,
   };
 }
 
@@ -109,8 +109,8 @@ function makeOpaqueAttachment(input: {
     fileSize: input.fileSize,
     mimeType: input.mimeType,
     fileUri: input.fileUri,
-    ...(input.fileExtension !== undefined ? { fileExtension: input.fileExtension } : {}),
-    ...(input.description !== undefined ? { description: input.description } : {}),
+    fileExtension: input.fileExtension,
+    description: input.description,
   };
 }
 
@@ -411,35 +411,6 @@ export class FileProcessor {
     return 'text/plain'; // Default
   }
 }
-
-/**
- * Source-of-truth check that a File flowed through {@link useFileHandling}'s
- * `prepareForSandbox` gate before reaching the ContentConverter — i.e. its
- * `fullPath` carries a `local://` / `knowledge://` URI rather than an
- * absolute filesystem path or a folder-drag relative.
- *
- * Throws a loud error when the invariant breaks. The contract is that there
- * is exactly one URI gate (the `prepareForSandbox` call inside
- * `useFileHandling`); any future caller that bypasses it must surface here
- * rather than silently leak an absolute path into `FileContentPart.fileUri`.
- */
-function requireFileUri(file: File, callsite: string): FileUri {
-  const candidate = (file as unknown as { fullPath?: string }).fullPath;
-  if (typeof candidate !== 'string' || candidate.length === 0) {
-    throw new Error(
-      `[${callsite}] file "${file.name}" reached ContentConverter without a sandbox URI. ` +
-        'Ensure the caller routes the File through useFileHandling.prepareForSandbox first.',
-    );
-  }
-  if (!candidate.startsWith('local://') && !candidate.startsWith('knowledge://')) {
-    throw new Error(
-      `[${callsite}] file "${file.name}" carries a non-URI fullPath ("${candidate}"). ` +
-        'Sandbox URI required (local://… or knowledge://…); abs paths and relatives are forbidden.',
-    );
-  }
-  return candidate as FileUri;
-}
-
 // ===== Content Conversion Utilities =====
 
 export class ContentConverter {
@@ -491,15 +462,89 @@ export class ContentConverter {
   }
 
   /**
-   * Create a file attachment from a File. `file.fullPath` MUST be a `local://` /
-   * `knowledge://` URI by the time we reach here(`useFileHandling.prepareForSandbox`
-   * 是唯一闸口);否则 throw,避免绝对路径泄漏到 Attachment.fileUri。
+   * 草稿态图片附件 —— 只持有元数据,`source.data` 留空占位。
+   *
+   * 「内联 vs 落 sandbox」的判别已搬到 main(发送时 `processImage` IPC 算一次),
+   * 所以 attach 阶段不再压缩、不再决定形态,也不读 dataUrl(预览用 objectURL)。
+   * 不做 5MB 大小校验:大图本就该落 sandbox(原图),旧流程的 opaque 路径也从不校验。
    */
-  static async fileToFileContent(file: File): Promise<Attachment> {
+  static imageDraftContent(file: File): Attachment {
+    if (!FileProcessor.isImageFile(file)) {
+      throw new Error(`Unsupported image format: ${file.type}`);
+    }
+    return {
+      kind: 'image',
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: FileProcessor.getMimeType(file),
+      source: { kind: 'dataUrl', data: '' },
+      detail: 'auto',
+    };
+  }
+
+  /**
+   * 由 main `processImage` 的 inline 判别结果重建终态内联图片附件。base64 是原始
+   * 字节(< 256KB 解码,无需压缩);mimeType / width / height 取 main 用 sharp 测得的值。
+   */
+  static imageFromInline(input: {
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    base64: string;
+    width?: number;
+    height?: number;
+  }): Attachment {
+    return {
+      kind: 'image',
+      fileName: input.fileName,
+      fileSize: input.fileSize,
+      mimeType: input.mimeType,
+      source: { kind: 'dataUrl', data: input.base64 },
+      width: input.width,
+      height: input.height,
+      detail: 'auto',
+    };
+  }
+
+  /**
+   * 由 main `processImage` 的 sandbox 判别结果重建终态「落盘图片」附件。
+   * 大图(解码 ≥ 阈值)原图已落 session sandbox,这里**保持 `kind:'image'`**,
+   * 只把 source 设成 `fileRef` 指向 `local://uploads/<name>` —— 不再降级成 opaque。
+   *
+   * egress(messageBridge)对 fileRef image 不内联,改走文件注解让模型按需 `read`;
+   * renderer(AttachmentList)按 fileRef 异步读盘出缩略图。mimeType / width / height
+   * 取 main 用 sharp 测得的值。
+   */
+  static imageFromFileRef(input: {
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    uri: FileUri;
+    width?: number;
+    height?: number;
+  }): Attachment {
+    return {
+      kind: 'image',
+      fileName: input.fileName,
+      fileSize: input.fileSize,
+      mimeType: input.mimeType,
+      source: { kind: 'fileRef', uri: input.uri },
+      width: input.width,
+      height: input.height,
+      detail: 'auto',
+    };
+  }
+
+  /**
+   * Build a text-file attachment. `fileUri` 必须是已物化进 sandbox 的
+   * `local://` / `knowledge://` URI;物化时机由调用方掌控
+   * (现行流程:`Attachments` atom 的 `createMessage` 在发送时才物化)。
+   * 草稿态(尚未物化)传空串占位,渲染层据此禁用预览,发送时再以真 URI 重建。
+   */
+  static async fileToFileContent(file: File, fileUri: FileUri): Promise<Attachment> {
     if (!FileProcessor.isTextFile(file)) {
       throw new Error(`Unsupported file format: ${file.type}`);
     }
-    const fileUri = requireFileUri(file, 'fileToFileContent');
     return makeFileAttachment({
       fileName: file.name,
       fileUri,
@@ -510,9 +555,8 @@ export class ContentConverter {
     });
   }
 
-  static async fileToOthersContent(file: File): Promise<Attachment> {
+  static async fileToOthersContent(file: File, fileUri: FileUri): Promise<Attachment> {
     const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
-    const fileUri = requireFileUri(file, 'fileToOthersContent');
     return makeOpaqueAttachment({
       fileName: file.name,
       fileUri,
@@ -523,11 +567,10 @@ export class ContentConverter {
     });
   }
 
-  static async fileToOfficeContent(file: File): Promise<Attachment> {
+  static async fileToOfficeContent(file: File, fileUri: FileUri): Promise<Attachment> {
     if (!FileProcessor.isOfficeFile(file)) {
       throw new Error(`Unsupported Office file format: ${file.type || file.name}`);
     }
-    const fileUri = requireFileUri(file, 'fileToOfficeContent');
     return makeOfficeAttachment({
       fileName: file.name,
       fileUri,
@@ -567,7 +610,7 @@ export class ContentAnalyzer {
         case 'image':
           imageCount++;
           break;
-        case 'file':
+        case 'text':
           fileCount++;
           break;
         case 'office':

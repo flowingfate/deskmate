@@ -90,7 +90,7 @@ interface SubAgentChatInternal {
     consecutiveTextOnlyRounds: number,
     hasTools: boolean,
   ): boolean;
-  trackDeliverables(toolName: string, toolArgs: Record<string, unknown>): void;
+  trackDeliverables(toolName: string, toolArgs: Record<string, unknown>, deliverables?: readonly string[]): void;
   formatDeliverablesSection(): string;
   extractFinalResult(): string;
   summarizeToolArgs(toolName: string, toolArgs: Record<string, unknown>): string;
@@ -355,34 +355,23 @@ describe('trackDeliverables', () => {
   // 名字落到 default 分支而失败,且对真实行为零覆盖。
 
 
-  it('tracks download from saveDirectory + filename', () => {
+  it('tracks structured deliverables (web download) regardless of toolName', () => {
     const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download', { saveDirectory: '/d', filename: 'a.png' });
-    expect(inner(chat).deliverables).toEqual(['/d/a.png']);
-  });
-
-  it('tracks download with local:// (default sandbox) → URI-form deliverable', () => {
-    const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download', { saveDirectory: 'local://', filename: 'a.png' });
+    inner(chat).trackDeliverables('web', { cmd: 'download https://x/a.png a.png' }, ['local://a.png']);
     expect(inner(chat).deliverables).toEqual(['local://a.png']);
   });
 
-  it('tracks download with local:// sub-path → URI sub-path/filename', () => {
+  it('tracks multiple structured deliverables in one call', () => {
     const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download', { saveDirectory: 'local://reports', filename: 'q3.json' });
-    expect(inner(chat).deliverables).toEqual(['local://reports/q3.json']);
+    inner(chat).trackDeliverables('web', { cmd: 'download ...' }, ['local://a.png', 'knowledge://b.pdf']);
+    expect(inner(chat).deliverables).toEqual(['local://a.png', 'knowledge://b.pdf']);
   });
 
-  it('tracks download with knowledge:// → URI form', () => {
+  it('structured deliverables + write fileUri both register', () => {
     const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download', { saveDirectory: 'knowledge://', filename: 'manual.pdf' });
-    expect(inner(chat).deliverables).toEqual(['knowledge://manual.pdf']);
-  });
-
-  it('tracks download with omitted saveDirectory → defaults to local:// URI', () => {
-    const chat = new SubAgentChat(makeOptions());
-    inner(chat).trackDeliverables('download', { filename: 'fallback.png' });
-    expect(inner(chat).deliverables).toEqual(['local://fallback.png']);
+    inner(chat).trackDeliverables('web', {}, ['local://dl.png']);
+    inner(chat).trackDeliverables('write', { fileUri: '/report.md' });
+    expect(inner(chat).deliverables).toEqual(['local://dl.png', '/report.md']);
   });
 
   it('ignores non-file tools', () => {

@@ -11,26 +11,18 @@ export type { ScreenshotSettings };
 // ─── Runtime Environment ──────────────────────────────────────────────────────
 
 /**
- * Runtime environment mode
- * - `system`: use Python / bun / uv already installed on the system
- * - `internal`: use Deskmate built-in bun / uv / Python
- */
-export type RuntimeMode = 'system' | 'internal';
-
-/**
  * Runtime environment configuration
  * Corresponds to the `runtimeEnvironment` field in app.json.
+ * App-managed only — bun / uv / Python are always provided by the app.
  * Legacy configuration was stored in {userData}/runtimeConfig.json and is auto-migrated on read.
  */
 export interface RuntimeEnvironment {
-  /** Runtime mode */
-  mode: RuntimeMode;
   /** Built-in bun version number, e.g., "1.3.6" */
   bunVersion: string;
   /** Built-in uv version number, e.g., "0.6.17" */
   uvVersion: string;
   /**
-   * Pinned Python version (only meaningful in internal mode)
+   * Pinned Python version
    * Supports two formats:
    * - Short version: "3.10.12"
    * - Full platform identifier: "cpython-3.10.12-macos-aarch64-none"
@@ -43,7 +35,6 @@ export interface RuntimeEnvironment {
  * Default Runtime Environment configuration
  */
 export const DEFAULT_RUNTIME_ENVIRONMENT: RuntimeEnvironment = {
-  mode: 'internal',
   bunVersion: '1.3.6',
   uvVersion: '0.6.17',
   pinnedPythonVersion: '3.10.12',
@@ -141,25 +132,17 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
 // ─── Type Guards ──────────────────────────────────────────────────────────────
 
 /**
- * Determine whether a value is a valid RuntimeMode
- */
-export function isRuntimeMode(value: any): value is RuntimeMode {
-  return value === 'system' || value === 'internal';
-}
-
-/**
  * Determine whether an object is a valid RuntimeEnvironment
  */
-export function isRuntimeEnvironment(obj: any): obj is RuntimeEnvironment {
+export function isRuntimeEnvironment(obj: unknown): obj is RuntimeEnvironment {
+  if (obj === null || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
   return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    isRuntimeMode(obj.mode) &&
-    typeof obj.bunVersion === 'string' &&
-    typeof obj.uvVersion === 'string' &&
-    (obj.pinnedPythonVersion === undefined ||
-      obj.pinnedPythonVersion === null ||
-      typeof obj.pinnedPythonVersion === 'string')
+    typeof o.bunVersion === 'string' &&
+    typeof o.uvVersion === 'string' &&
+    (o.pinnedPythonVersion === undefined ||
+      o.pinnedPythonVersion === null ||
+      typeof o.pinnedPythonVersion === 'string')
   );
 }
 

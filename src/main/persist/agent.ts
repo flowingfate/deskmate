@@ -56,6 +56,8 @@ class AgentConfig {
   public skills?: string[];
   public subAgents?: string[];
   public zeroStates?: AgentMarkdownFront['zeroStates'];
+  /** 受保护标记;见 `AgentMarkdownFrontBase.locked`。 */
+  public locked?: boolean;
 
 
 
@@ -72,6 +74,7 @@ class AgentConfig {
     this.skills = fm.skills;
     this.subAgents = fm.subAgents;
     this.zeroStates = fm.zeroStates;
+    this.locked = fm.locked;
   }
 
   /** 导出为可序列化的 front-matter 对象(仅写出非 undefined 字段)。 */
@@ -90,6 +93,7 @@ class AgentConfig {
     if (this.skills !== undefined)          opt.skills = this.skills;
     if (this.subAgents !== undefined)       opt.subAgents = this.subAgents;
     if (this.zeroStates !== undefined)      opt.zeroStates = this.zeroStates;
+    if (this.locked !== undefined)          opt.locked = this.locked;
 
     return { ...base, ...opt };
   }
@@ -207,6 +211,7 @@ export class Agent extends PersistBase {
       emoji: this.config.emoji,
       avatar: this.config.avatar,
       model: this.config.model,
+      locked: this.config.locked,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
@@ -289,6 +294,7 @@ export class Agent extends PersistBase {
     if (partial.skills !== undefined)          c.skills = partial.skills;
     if (partial.subAgents !== undefined)       c.subAgents = partial.subAgents;
     if (partial.zeroStates !== undefined)      c.zeroStates = partial.zeroStates;
+    if (partial.locked !== undefined)          c.locked = partial.locked;
 
     this.updatedAt = new Date().toISOString();
     await this.persist();

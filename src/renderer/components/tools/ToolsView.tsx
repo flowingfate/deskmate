@@ -12,6 +12,15 @@ import ToolDetailView from './ToolDetailView';
 import ListSearchBox from '../ui/ListSearchBox';
 import { useLocalTools, useLocalToolsLoading } from '@/states/tools.atom';
 import type { LocalToolInfo } from '@shared/types/toolsTypes';
+import { WebSearchConfig } from './web-search';
+
+function renderToolConfig(tool: LocalToolInfo | null) {
+  if (!tool) return null;
+  if (tool.name === 'web') {
+    return <WebSearchConfig />;
+  }
+  return null;
+}
 
 /**
  * `/settings/tools` 全局视图:展示 deskmate 原生本地工具清单。
@@ -80,8 +89,11 @@ const ToolsView: React.FC = () => {
           </ScrollArea>
         </div>
 
-        <div className="p-3 flex min-w-0 flex-1 flex-col overflow-hidden">
-          <ToolDetailView tool={selectedTool} />
+        <div className="p-3 flex min-w-0 flex-1 flex-col overflow-y-auto">
+          <div className="min-h-0 flex-1">
+            <ToolDetailView tool={selectedTool} />
+          </div>
+          <div className="shrink-0">{renderToolConfig(selectedTool)}</div>
         </div>
       </div>
     </SettingsLayout>

@@ -4,7 +4,7 @@ import { deleteAgentConfig } from '@renderer/lib/chat/agentOps';
 import { deleteChatSession } from '@renderer/lib/chat/chatSessionOps';
 import { startNewSessionFor } from '@renderer/lib/chat/startNewSessionFor';
 import { getProfileId } from '@/states/profile.atom';
-import { getAgents, getPrimaryAgentName } from '@/states/agents.atom';
+import { getAgents, getPrimaryAgentId } from '@/states/agents.atom';
 import { log } from '@/log';
 import { agentChatApi } from '@/ipc/agentChat';
 import {
@@ -87,30 +87,30 @@ export const DeleteConfirmAtom = atom(zeroState, (get, set) => {
         if (result.success) {
           // Step 3: If switch needed, switch to Primary Agent
           if (needsSwitch) {
-            // Get Primary Agent (from profile atom)
-            const primaryAgentName = getPrimaryAgentName() || 'Kobi';
+            // 切到 primary agent（不存在则退到任意其它 agent）
+            const agents = getAgents();
+            const primaryId = getPrimaryAgentId();
+            const targetAgent =
+              (primaryId ? agents.find((a) => a.id === primaryId && a.id !== id) : undefined)
+              ?? agents.find((a) => a.id !== id);
+            const targetAgentId = targetAgent?.id;
 
-            const primaryAgent = getAgents().find((a) => a.name === primaryAgentName);
-            const primaryAgentId = primaryAgent?.id;
+            logger.debug({ msg: "Delete agent - switching to fallback agent:", deletedAgentId: id, targetAgentId, agentsCount: agents.length });
 
-            logger.debug({ msg: "Delete agent - switching to Primary Agent:", deletedAgentId: id, primaryAgentName, primaryAgentId, agentsCount: getAgents().length });
-
-            if (primaryAgentId) {
-              // Fix: use startNewSessionFor to switch to Primary Agent (unified API)
+            if (targetAgentId) {
               const result = await startNewSessionFor(
-                primaryAgentId,
+                targetAgentId,
               );
               logger.debug({ msg: "startNewSessionFor result:", data: result });
 
               if (result.success && result.chatSessionId) {
-                // Fix: use the returned chatSessionId directly, no waiting needed
-                logger.debug({ msg: "Navigating to new agent route:", primaryAgentId, newChatSessionId: result.chatSessionId });
-                navigate(`/agent/${primaryAgentId}/${result.chatSessionId}`, { replace: true });
+                logger.debug({ msg: "Navigating to new agent route:", targetAgentId, newChatSessionId: result.chatSessionId });
+                navigate(`/agent/${targetAgentId}/${result.chatSessionId}`, { replace: true });
               } else {
-                logger.error({ msg: "Failed to start new chat for Primary Agent:", err: result?.error, result });
+                logger.error({ msg: "Failed to start new chat for fallback agent:", err: result?.error, result });
               }
             } else {
-              logger.error({ msg: "Primary Agent not found:", primaryAgentName, availableAgents: getAgents().map((a) => a.name) });
+              logger.error({ msg: "No fallback agent found after deletion", availableAgents: agents.map((a) => a.id) });
             }
           }
           // Fix: show success message after deletion

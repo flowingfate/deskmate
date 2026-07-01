@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 
-export type WindowRole = 'main' | 'log' | 'screenshot';
+export type WindowRole = 'main' | 'log' | 'screenshot' | 'research';
 
 export interface BrowserWindowMeta {
   role: WindowRole;
@@ -13,6 +13,7 @@ const metas = new WeakMap<BrowserWindow, BrowserWindowMeta>();
 const __windows__ = {
   main: null as BrowserWindow | null,
   log: null as BrowserWindow | null,
+  research: null as BrowserWindow | null,
 };
 const __screenshots__ = new Set<BrowserWindow>();
 
@@ -75,6 +76,10 @@ export function logWindow() {
   return __windows__.log;
 }
 
+export function researchWindow() {
+  return __windows__.research;
+}
+
 export function windowByRole(role: Exclude<WindowRole, 'screenshot'>): BrowserWindow | null {
   return __windows__[role];
 }
@@ -84,6 +89,7 @@ export function windowByRole(role: Exclude<WindowRole, 'screenshot'>): BrowserWi
 export function anyVisibleWindow(): BrowserWindow | null {
   const candidates: Array<BrowserWindow | null> = [
     __windows__.main,
+    __windows__.research,
     __windows__.log,
   ];
   for (const w of candidates) {

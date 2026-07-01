@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-04-09 -->
+<!-- Last verified: 2026-06-27 -->
 # Screenshot Module
 
 > 先截图再选区的截屏系统：为每个显示器生成覆盖窗口、捕获原生图像，并在用户完成或取消时 resolve 一个 promise。
@@ -23,6 +23,10 @@
 
 ### 自定义协议
 `screenshot://image/<displayId>` 向覆盖层渲染进程提供预缓存的 JPEG。必须在 `main.ts` 中 `app.ready` **之前**通过 `protocol.registerSchemesAsPrivileged` 注册 scheme（不在本模块中）。
+
+⚠️ scheme privileges 必须含 `corsEnabled: true`。覆盖层用 `image.crossOrigin = 'anonymous'`（`renderer/screenshot/core/common/utils/bg.ts`）加载该图以便后续 canvas `getImageData` 不被污染；dev 下页面源是 `http://localhost:39017`，对 `screenshot://` 是跨源请求，缺 `corsEnabled` 会被 CORS 拦截、图加载失败。
+
+⚠️ 截图窗口的 preload（`src/preload/screenshot.ts`）必须暴露 `electronAPI.log`（`write`/`writeBatch`）。`screenshot.tsx` import 了 `@/log` 与 `installGlobalErrorHandlers`，二者依赖 `window.electronAPI.log`；缺失时任意 `log.error`（如全局异常处理器）会因 `undefined` 再次抛错、连锁崩溃。
 
 ### IPC 契约
 所有通道通过 `src/shared/ipc/screenshot.ts` 中的 `connectRenderToMain('screenshot')` 命名空间在 `screenshot:*` 下。类型：`CaptureResult`、`SaveToFileResult`、`DisplayInfo`、`WindowFrame`、`ScreenshotSettings`。

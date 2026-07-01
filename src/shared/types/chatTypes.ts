@@ -92,6 +92,17 @@ export const SUPPORTED_TEXT_TYPES = [
 // File attachment limits
 export const FILE_ATTACHMENT_LIMITS = {
   MAX_FILE_SIZE_BYTES: 5 * 1024 * 1024, // 5MB
+  /**
+   * 图片内联阈值,比较对象是【解码后像素大小】(width×height×4),不是编码字节 ——
+   * PNG 对 UI 截图压得极好,编码字节是糟糕的代理(1064×768 截图编码仅 ~119KB)。
+   * 解码大小 < 此值的小图(≈256×256)以 base64 dataUrl 随消息内联;≥ 此值的图改存进
+   * session sandbox(opaque 附件),由 LLM 按需 `read` 查看(read backend 按 OpenAI
+   * vision 指南压缩后回 base64),避免大图全尺寸 base64 每轮占满上下文。
+   *
+   * 判别点在 **main 进程**(`startup/ipc/attachment.ts` 的 `processImageAttachment`,
+   * sharp 读尺寸),由 renderer 在发送时经 `processImage` IPC 触发、只算一次。
+   */
+  IMAGE_INLINE_MAX_BYTES: 256 * 1024, // 256KB
   MAX_TEXT_LINES: 2000,
   MAX_TOKEN_BUDGET: 600,
   SUPPORTED_TEXT_EXTENSIONS: [

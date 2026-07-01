@@ -207,8 +207,9 @@ describe('attachment 名字 sanitize —— path traversal 防御', () => {
     expect(outcome.fileName).toBe('passwd');
     expect(outcome.uri).toBe('local://uploads/passwd');
     expect(outcome.destPath).toBe(path.join(sessionFilesDir, 'uploads', 'passwd'));
-    // 没写到 /etc 下(显然,但断言一遍)
-    expect(outcome.destPath.startsWith(sessionFilesDir)).toBe(true);
+    // 没写到 /etc 下。destPath 走 path.join(原生分隔符);sessionFilesDir 是 PERSIST_PATH
+    // 正斜杠拼接,Windows 上分隔符不同,故比较前统一 resolve。
+    expect(path.resolve(outcome.destPath).startsWith(path.resolve(sessionFilesDir))).toBe(true);
   });
 
   it('originalName 是 windows 风格 `..\\\\escape.txt` → 收敛为 `escape.txt`', async () => {

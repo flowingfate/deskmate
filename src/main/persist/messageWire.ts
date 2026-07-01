@@ -85,7 +85,12 @@ export function rehydrate(lines: readonly PersistedJsonLine[]): {
       orphans.push(line);
       continue;
     }
-    target.response = { time: line.time, status: line.status, result: line.result };
+    target.response = {
+      time: line.time,
+      status: line.status,
+      result: line.result,
+      images: line.images ?? [],   // Domain 必填,空缺回填空数组
+    };
   }
 
   return { messages, orphanResponses: orphans };
@@ -140,6 +145,7 @@ export function dehydrate(messages: readonly Message[]): PersistedJsonLine[] {
         time: tc.response.time,
         status: tc.response.status,
         result: tc.response.result,
+        images: tc.response.images.length > 0 ? tc.response.images : undefined,
       });
     }
   }

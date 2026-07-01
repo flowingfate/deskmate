@@ -40,6 +40,12 @@ export function ejsTemplatePlugin({ appConfig, isDev }: EjsTemplatePluginConfig)
       connectSrcExtra: isDev ? ' ws: wss:' : '',
       entryScript: '<script type="module" src="./log-viewer.tsx"></script>',
     },
+    'research.html': {
+      title: `${appConfig.productName} - Research`,
+      productName: appConfig.productName,
+      connectSrcExtra: isDev ? ' ws: wss:' : '',
+      entryScript: '<script type="module" src="./research.tsx"></script>',
+    },
   }
 
   const fallback: PageOptions = {

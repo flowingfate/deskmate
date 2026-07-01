@@ -21,6 +21,7 @@ export interface AgentConfig {
   systemPrompt: string
   skills?: string[] // List of Skill names used by this Agent
   subAgents?: string[] // List of Sub-Agent names used by this Agent
+  locked?: boolean // 受保护标记:true ⇒ 身份/系统提示词/内置skill 不可改、不可删
   createdAt: Date
   updatedAt: Date
 }

@@ -15,7 +15,7 @@
 import { unit } from '@/atom/unit';
 import { persistEvents } from '@/ipc/persist';
 import { getInitialSnapshot } from '@/states/_snapshot';
-import type { SettingsFile, ConfirmationSettings } from '@shared/persist/types';
+import type { SettingsFile, ConfirmationSettings, WebSearchSettings } from '@shared/persist/types';
 import { log } from '@/log';
 
 const logger = log.child({ mod: 'settings.atom' });
@@ -68,6 +68,14 @@ export function getConfirmationSettings(): ConfirmationSettings | undefined {
 
 export function useConfirmationSettings(): ConfirmationSettings | undefined {
   return use().settings.confirmation;
+}
+
+export function getWebSearchSettings(): WebSearchSettings | undefined {
+  return get().settings.webSearch;
+}
+
+export function useWebSearchSettings(): WebSearchSettings | undefined {
+  return use().settings.webSearch;
 }
 
 export function listenSettings(cb: (state: SettingsState) => void): VoidFunction {

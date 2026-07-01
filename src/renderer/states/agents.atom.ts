@@ -165,13 +165,6 @@ export function usePrimaryAgentId(): string | null {
   return use().primaryAgentId ?? null;
 }
 
-/** primary agent 名称（用户偏好；不存在返回 'Kobi' 兜底）。 */
-export function getPrimaryAgentName(): string {
-  const s = get();
-  const id = s.primaryAgentId;
-  if (!id) return 'Kobi';
-  return s.byId[id]?.name ?? 'Kobi';
-}
 
 /** 非 React 代码订阅 agents 列表变化。 */
 export function listenAgents(cb: (agents: AgentRecord[]) => void): VoidFunction {

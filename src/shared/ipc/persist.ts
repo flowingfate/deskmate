@@ -24,6 +24,7 @@ import type {
   SettingsFile,
   SkillRecord,
   StarredSessionEntry,
+  WebSearchSettings,
 } from '../persist/types';
 import type { ChatHistoryItem } from '../persist/types';
 import type { SubAgentConfig } from '../types/profileTypes';
@@ -104,6 +105,7 @@ type RenderToMain = {
 
   // ─────────── Settings ───────────
   updateConfirmationSettings: { call: [settings: ConfirmationSettings]; return: PersistResult };
+  updateWebSearchSettings: { call: [settings: WebSearchSettings]; return: PersistResult };
 };
 
 // ──────────────────────────────────────────────

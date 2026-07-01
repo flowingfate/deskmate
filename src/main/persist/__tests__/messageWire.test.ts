@@ -84,9 +84,9 @@ describe('messageWire.dehydrate', () => {
     const lines = dehydrate([
       a({
         tool_calls: [
-          { id: 't1', name: 'read', time: 2001, args: { path: 'x' }, response: { time: 2010, status: 'success', result: 'ok' } },
+          { id: 't1', name: 'read', time: 2001, args: { path: 'x' }, response: { time: 2010, status: 'success', result: 'ok', images: [] } },
           { id: 't2', name: 'bash', time: 2002, args: { cmd: 'ls' } },          // 无 response：不产 tool_res 行
-          { id: 't3', name: 'write', time: 2003, args: {}, response: { time: 2020, status: 'fail', result: 'oops' } },
+          { id: 't3', name: 'write', time: 2003, args: {}, response: { time: 2020, status: 'fail', result: 'oops', images: [] } },
         ],
       }),
     ]);
@@ -129,8 +129,8 @@ describe('messageWire.rehydrate', () => {
     const { messages, orphanResponses } = rehydrate(lines);
     expect(orphanResponses).toEqual([]);
     const am = messages[0] as AssistantMessage;
-    expect(am.tool_calls[0].response).toEqual({ time: 3, status: 'success', result: 'A' });
-    expect(am.tool_calls[1].response).toEqual({ time: 4, status: 'fail', result: 'E' });
+    expect(am.tool_calls[0].response).toEqual({ time: 3, status: 'success', result: 'A', images: [] });
+    expect(am.tool_calls[1].response).toEqual({ time: 4, status: 'fail', result: 'E', images: [] });
   });
 
   it('同 id 多条 tool_res，最新一条胜出 (重试历史不入 Domain)', () => {
@@ -144,7 +144,7 @@ describe('messageWire.rehydrate', () => {
     ];
     const { messages } = rehydrate(lines);
     const am = messages[0] as AssistantMessage;
-    expect(am.tool_calls[0].response).toEqual({ time: 4, status: 'success', result: 'retry-ok' });
+    expect(am.tool_calls[0].response).toEqual({ time: 4, status: 'success', result: 'retry-ok', images: [] });
   });
 
   it('找不到匹配 ToolCall 的 tool_res 进 orphan 而不抛错', () => {
@@ -171,12 +171,12 @@ describe('messageWire.rehydrate ∘ dehydrate 双向 round-trip', () => {
       a({
         id: 'a1', time: 2, think: 'reasoning', content: 'response',
         tool_calls: [
-          { id: 't1', name: 'read', time: 3, args: { path: '/x' }, response: { time: 4, status: 'success', result: 'data' } },
-          { id: 't2', name: 'bash', time: 3, args: { cmd: 'ls' }, response: { time: 5, status: 'fail', result: 'denied' } },
+          { id: 't1', name: 'read', time: 3, args: { path: '/x' }, response: { time: 4, status: 'success', result: 'data', images: [] } },
+          { id: 't2', name: 'bash', time: 3, args: { cmd: 'ls' }, response: { time: 5, status: 'fail', result: 'denied', images: [] } },
         ],
         outcome: { kind: 'stop' },
         model: 'pi-1',
-        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+        usage: { in: 10, out: 5, cache: [0, 0], total: 15 },
       }),
       u({ id: 'u2', time: 6, content: 'follow up' }),
     ];
@@ -190,6 +190,27 @@ describe('messageWire.rehydrate ∘ dehydrate 双向 round-trip', () => {
 
   it('user 无 attachments / assistant 无 tool_calls 的极简形态也正确 round-trip', () => {
     const original: Message[] = [u({ content: 'hi' }), a({ content: 'yo' })];
+    const lines = dehydrate(original);
+    const { messages: restored } = rehydrate(lines);
+    expect(restored).toEqual(original);
+  });
+
+  it('tool response 的 images 字段双向 round-trip(被读取的图片随 tool_res 落盘)', () => {
+    const original: Message[] = [
+      a({
+        id: 'a1', time: 2, content: '',
+        tool_calls: [
+          {
+            id: 't1', name: 'read', time: 3, args: { path: 'local://uploads/shot.png' },
+            response: {
+              time: 4, status: 'success', result: '{"url":"local://uploads/shot.png"}',
+              images: [{ data: 'QkFTRTY0', mimeType: 'image/png' }],
+            },
+          },
+        ],
+        outcome: { kind: 'stop' },
+      }),
+    ];
     const lines = dehydrate(original);
     const { messages: restored } = rehydrate(lines);
     expect(restored).toEqual(original);

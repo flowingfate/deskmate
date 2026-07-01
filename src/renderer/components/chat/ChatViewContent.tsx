@@ -10,8 +10,9 @@ import { editMessageAtom } from './message/edit-message.atom';
 import ChatInlinePreviewOverlay from './ChatInlinePreviewOverlay';
 import { InlinePreviewAtom, WorkspaceExplorerAtom } from './chat-side.atom';
 import WorkspaceExplorerSidepane from './workspace/WorkspaceExplorerSidepane';
-import InteractiveAuthCard from './message/InteractiveAuthCard';
-import InteractiveRequestCard from './message/InteractiveRequestCard';
+import InteractiveAuthCard from './interactive/AuthCard';
+import InteractiveRequestCard from './interactive/RequestCard';
+import InteractiveSearchCard from './interactive/SearchCard';
 
 const logger = log.child({ mod: 'ChatViewContent' });
 
@@ -39,10 +40,12 @@ function WithInteractive(props: {
   const pending = list[0];
   const card = pending.type === 'device-auth'
       ? <InteractiveAuthCard data={pending} />
-      : <InteractiveRequestCard data={pending} />;
+      : pending.type === 'interactive-search'
+        ? <InteractiveSearchCard data={pending} />
+        : <InteractiveRequestCard data={pending} />;
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 max-h-[70%] overflow-y-auto border-t border-black/7 bg-[var(--bg-primary)] shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">
+    <div className={'absolute bottom-0 left-0 right-0 max-h-[70%] overflow-y-auto border-t border-black/7 bg-(--bg-primary) shadow-[0_-8px_24px_rgba(0,0,0,0.06)]'}>
       {card}
     </div>
   );
@@ -53,7 +56,7 @@ function ChatWorkspaceSideOverlay() {
   const [{ visible }] = WorkspaceExplorerAtom.use();
   if (!visible) return null;
   return (
-    <div className="absolute top-0 right-0 h-full w-[380px] flex flex-col bg-white border-l border-black/[0.07] shadow-[-8px_0_24px_-12px_rgba(15,23,42,0.18)]">
+    <div className="absolute top-0 right-0 h-full w-95 flex flex-col bg-white border-l border-black/[0.07] shadow-[-8px_0_24px_-12px_rgba(15,23,42,0.18)]">
       <WorkspaceExplorerSidepane />
     </div>
   );

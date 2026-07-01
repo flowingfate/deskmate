@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, Sparkles } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import ListSearchBox from '@/components/ui/ListSearchBox';
-import { SCHEDULE_TEMPLATES } from '@/components/chat/agent-editor/scheduleTemplates';
+import { SCHEDULE_TEMPLATES } from '@renderer/components/agent-side/jobs/templates';
 
 interface JobHeaderProps {
   searchQuery: string;

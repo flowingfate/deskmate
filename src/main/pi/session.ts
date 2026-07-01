@@ -341,8 +341,9 @@ abstract class BaseSession {
         this.lastUsage = final.usage;
         this.contextState = {
           ...this.contextState,
+          // badge 显示历史总量(含 output);下一轮 prompt 基线 = 本轮 total + 新消息
           lastTokenUsage: {
-            tokenCount: final.usage.input,
+            tokenCount: final.usage.totalTokens,
             totalMessages: this.messages.length,
             contextMessages: llmMessages.length + 1,
             compressionRatio: 1.0,
@@ -868,6 +869,7 @@ export class RegularSession extends BaseSession {
         time: Date.now(),
         status: result.isError ? 'fail' : 'success',
         result: result.content,
+        images: result.images ?? [],
       };
       this.applyToolResponse(result.toolCallId, toolResult);
       stream.send({
@@ -1150,6 +1152,7 @@ export class JobRun extends BaseSession {
         time: Date.now(),
         status: result.isError ? 'fail' : 'success',
         result: result.content,
+        images: result.images ?? [],
       });
     }
     if (settled.length > 0) await this.persistSession.flushMessages();

@@ -4,7 +4,7 @@
  * 对外契约与 `FullModeCompressor` 内部都直接吃 Domain `Message[]`,无翻译层。
  *
  * 与旧 core/utils/compression.ts 的本质区别:
- * - 不再做本地 token 估算;token 数直接来自 pi 上一轮返回的 `usage.input`
+ * - 不再做本地 token 估算;token 数直接来自 pi 上一轮返回的 `usage.totalTokens`(含 output,与 badge 同口径)
  * - 首请求或上一轮失败导致 `lastUsage` 为空时,用 `roughEstimate` 做保护性兜底
  */
 
@@ -59,7 +59,8 @@ export async function checkAndCompress(args: CheckAndCompressArgs): Promise<Chec
     const contextHistory: Message[] = buildLlmContext(messages, contextState);
     const rawTotalMessages = messages.length;
 
-    const estimatedTokens = lastUsage?.input ?? roughEstimate(contextHistory, systemPrompt, toolsForEstimate);
+    // 含 output 的历史总量;与 badge 同口径。下一轮 prompt ≈ 上轮 total + 新消息。
+    const estimatedTokens = lastUsage ? lastUsage.totalTokens : roughEstimate(contextHistory, systemPrompt, toolsForEstimate);
     const baseUsage = makeUsage(estimatedTokens, rawTotalMessages, contextHistory.length);
 
     if (!force) {

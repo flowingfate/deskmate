@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { safeConsole } from '../utilities/safeConsole';
 import { getCrashesDir, getStateDir, getLogsDir } from '@main/persist/lib/path';
+import { APP_VERSION } from '@shared/constants/branding';
 
 interface CrashBreadcrumb {
   timestamp: string;
@@ -542,11 +543,7 @@ class CrashCaptureManager {
   }
 
   private getAppVersionSafe(): string {
-    try {
-      return app.getVersion();
-    } catch {
-      return 'unknown';
-    }
+    return APP_VERSION;
   }
 
   private getRecentMainLogTailSync(maxLines: number = 200): string {

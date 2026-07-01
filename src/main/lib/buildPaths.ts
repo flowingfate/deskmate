@@ -2,7 +2,7 @@
 //
 // 构建布局（dev 与 prod 一致）：
 //   out/main/        main / bootstrap / chunks / sqlite-transport.cjs
-//   out/preload/     preload.js / preload.screenshot.js / preload.log-viewer.js
+//   out/preload/     preload.js / preload.screenshot.js / preload.log-viewer.js / preload.research.js
 //   out/renderer/    React SPA
 //
 // 打包时 scripts/vite/pack.ts 把整个 out/ 复制为 vite-pack/out/，
@@ -21,4 +21,10 @@ export const PRELOAD_PATH = {
   main: path.join(PRELOAD_DIR, 'preload.js'),
   screenshot: path.join(PRELOAD_DIR, 'preload.screenshot.js'),
   logViewer: path.join(PRELOAD_DIR, 'preload.log-viewer.js'),
+  research: path.join(PRELOAD_DIR, 'preload.research.js'),
+} as const;
+
+// 注入脚本产物（extractor IIFE 子构建落在 preload 目录）。
+export const INJECT_PATH = {
+  extractor: path.join(PRELOAD_DIR, 'extractor.js'),
 } as const;

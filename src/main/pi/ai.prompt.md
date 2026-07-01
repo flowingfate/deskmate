@@ -16,7 +16,7 @@
 | `tool.ts` | `executeToolCall(call, catalog, ctx)`:按 `route.kind` 分发到本地 registry 或 `executeMcpToolOnServer`;`ask` follow-up;tracer 起 `chat.tool` span | 中 |
 | `tools/` | **本地工具子系统** —— `LocalTool` registry + `ToolContext` + `lazy(spec, loader)` + 所有具体工具文件。**chat 主链路直接调 `tools.execute(name, args, ctx)`,不再绕 MCP 假 server**。详见 [`tools/ai.prompt.md`](./tools/ai.prompt.md) | 见子目录 |
 | `auth.ts` | PiAuthManager:OAuth + apiKey 存取 + expires-based refresh + inflight dedup | 中 |
-| `compression.ts` | 压缩决策(usage 来自 pi.usage.input)+ 内置 compressWithFullMode 调用 | 小 |
+| `compression.ts` | 压缩决策(usage = pi.usage.totalTokens,含 output,与 badge 同口径)+ 内置 compressWithFullMode 调用 | 小 |
 | `errors.ts` | classifyError + overflow / network / rate / auth 分类 | 小 |
 | `utility.ts` | 非 streaming 后台调用 `runUtilityCompletion`(doctor / eval / 后台 LLM utility 共用入口) | 小 |
 | `mcp.ts` | external MCP 工具薄包装:`listAllMcpTools()`(给 catalog 列举外部工具)/ `executeMcpToolOnServer(serverName, toolName, args, signal)`(server-scoped 执行,**不再**有按裸 toolName 查全局 map 的路径) | 小 |

@@ -6,7 +6,9 @@ import { execSync } from 'child_process';
 import JSZip from 'jszip';
 
 
-// 🔥 Must be called before app.ready - register custom protocol for screenshot feature
+// 🔥 Must be called before app.ready - register custom privileged schemes.
+// - screenshot: 截图功能字节直供
+// - media: renderer <img>/<video> 直供 session sandbox / knowledge 字节(见 lib/media/mediaProtocol.ts)
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'screenshot',
@@ -15,6 +17,17 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       bypassCSP: true,
       supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    }
+  },
+  {
+    scheme: 'media',
+    privileges: {
+      secure: true,
+      standard: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
       stream: true,
     }
   },
@@ -44,11 +57,12 @@ import { startEvalMode } from './startup/evalMode';
 import { ghcModelsManager } from "./pi/providers/ghc";
 import { schedulerManager } from "./lib/scheduler/SchedulerManager";
 import { mcpClientManager } from "./lib/mcpRuntime/mcpClientManager";
+import { registerMediaProtocol } from './lib/media/mediaProtocol';
 import { getAppDataPath, getLogsDir, getProfileDirectoryPath } from "@main/persist/lib/path";
 
 import { mainToRender as appMainToRender } from '@shared/ipc/app';
 import { mainToRender as windowMainToRender } from '@shared/ipc/window';
-import { APP_NAME } from '@shared/constants/branding';
+import { APP_NAME, APP_VERSION } from '@shared/constants/branding';
 
 
 console.timeEnd('[Startup] Module imports');
@@ -339,6 +353,9 @@ class ElectronApp {
       }
 
       crashCaptureManager.recordBreadcrumb('lifecycle', 'app-ready');
+
+      // media:// 字节直供 protocol —— MUST 在 app ready 后注册(protocol.handle 前置条件)。
+      registerMediaProtocol();
 
       const crashStatus = crashCaptureManager.getStatus();
       log.info({ msg: 'scheduler.lifecycle.startup-recovery-context', mod: 'main:onReady', previousSessionId: crashStatus.recoveredCrash?.previousSessionId ?? null, currentSessionId: crashStatus.currentSessionId, recoveredCrashDetected: crashStatus.hasRecoveredCrash, alias: Profiles.get().activeProfileId || null, schedulerWillInit: isFeatureEnabled('deskmateFeatureScheduler') });
@@ -1015,7 +1032,7 @@ class ElectronApp {
 
       const manifestJson = JSON.stringify(buildDebugInfoManifest({
         appName: app.getName(),
-        appVersion: app.getVersion(),
+        appVersion: APP_VERSION,
         exportedAt,
         platform: process.platform,
         arch: process.arch,

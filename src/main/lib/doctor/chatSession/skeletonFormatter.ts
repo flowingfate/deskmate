@@ -26,8 +26,10 @@ const MESSAGE_COLS = [
   'tool_calls',
   'outcome',
   'model',
-  'usage.prompt',
-  'usage.completion',
+  'usage.input',
+  'usage.output',
+  'usage.cacheR',
+  'usage.cacheW',
   'usage.total',
 ] as const;
 
@@ -174,8 +176,10 @@ function formatMessageRow(msg: Message, idx: number): string[] {
   let toolCalls = '';
   let outcome = '';
   let model = '';
-  let usagePrompt = '';
-  let usageCompletion = '';
+  let usageInput = '';
+  let usageOutput = '';
+  let usageCacheR = '';
+  let usageCacheW = '';
   let usageTotal = '';
 
   if (msg.role === 'user') {
@@ -187,9 +191,11 @@ function formatMessageRow(msg: Message, idx: number): string[] {
     toolCalls = calls.length === 0 ? '' : `${calls.length}:${calls.map((c) => c.name).join(',')}`;
     outcome = msg.outcome ? msg.outcome.kind : '';
     model = msg.model ?? '';
-    usagePrompt = strOrEmpty(msg.usage?.promptTokens);
-    usageCompletion = strOrEmpty(msg.usage?.completionTokens);
-    usageTotal = strOrEmpty(msg.usage?.totalTokens);
+    usageInput = strOrEmpty(msg.usage?.in);
+    usageOutput = strOrEmpty(msg.usage?.out);
+    usageCacheR = strOrEmpty(msg.usage?.cache[0]);
+    usageCacheW = strOrEmpty(msg.usage?.cache[1]);
+    usageTotal = strOrEmpty(msg.usage?.total);
   }
 
   return [
@@ -203,8 +209,10 @@ function formatMessageRow(msg: Message, idx: number): string[] {
     toolCalls,
     outcome,
     model,
-    usagePrompt,
-    usageCompletion,
+    usageInput,
+    usageOutput,
+    usageCacheR,
+    usageCacheW,
     usageTotal,
   ];
 }
@@ -229,7 +237,7 @@ function formatAttachmentRow(att: Attachment, msgIdx: number, attIdx: number): s
       row['image.detail'] = strOrEmpty(att.detail);
       break;
     }
-    case 'file':
+    case 'text':
     case 'office': {
       row['file.fileUri'] = att.fileUri;
       row['file.lines'] = strOrEmpty(att.lines);

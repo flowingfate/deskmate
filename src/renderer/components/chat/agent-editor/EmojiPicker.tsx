@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react'
 
 import { Button } from '@/shadcn/button'
 import { EmojiPickerProps } from './types'
+import { X } from 'lucide-react'
 
 // Emoji category data
 const EMOJI_CATEGORIES: Record<string, string[]> = {
@@ -103,16 +104,18 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center p-8 z-[1100] bg-black/30 animate-[fadeIn_0.2s_ease-out]" onClick={handleOverlayClick}>
+    <div data-dbg="EmojiPicker" className="fixed inset-0 flex items-center justify-center p-8 z-1100 bg-black/30 animate-[fadeIn_0.2s_ease-out]" onClick={handleOverlayClick}>
       <div className="w-[min(400px,90vw)] bg-white rounded-2xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.3)] animate-[slideIn_0.3s_ease-out]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-slate-50">
+        <div className="flex items-center justify-between px-6 py-2 border-b border-border bg-slate-50">
           <h3 className="m-0 text-lg font-semibold text-content-strong">Choose Agent Avatar</h3>
-          <Button variant="ghost" size="icon" onClick={onClose}>×</Button>
+          <Button variant="ghost" size="icon-sm" onClick={onClose}>
+            <X size={14} />
+          </Button>
         </div>
 
         {/* Selected Display */}
-        <div className="px-6 py-6 text-center bg-slate-50 border-b border-border">
+        <div className="px-6 py-3 text-center bg-slate-50 border-b border-border">
           <div className="text-5xl mb-2 leading-none">{selectedEmoji}</div>
           <span className="text-content-secondary text-sm font-medium">Selected</span>
         </div>
@@ -133,7 +136,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
         </div>
 
         {/* Emoji Grid */}
-        <div className="grid grid-cols-8 gap-1.5 px-5 py-4 h-[184px] min-h-[184px] max-h-[184px] overflow-y-auto overflow-x-hidden custom-scrollbar">
+        <div className="grid grid-cols-8 gap-1.5 px-5 py-4 overflow-y-auto overflow-x-hidden custom-scrollbar">
           {(EMOJI_CATEGORIES[activeCategory] || []).map((emoji, index) => (
             <Button
               key={`${emoji}-${index}`}
@@ -148,11 +151,11 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-border bg-slate-50">
-          <Button variant="secondary" onClick={onClose}>
+        <div className="flex items-center justify-end gap-3 px-6 py-2 border-t border-border bg-slate-50">
+          <Button variant="secondary" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleConfirm}>
+          <Button size="sm" onClick={handleConfirm}>
             Confirm
           </Button>
         </div>

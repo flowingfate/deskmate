@@ -59,11 +59,18 @@ export function toPiContext(
     // 1→N 展开: 紧跟其有 response 的 ToolCall
     for (const tc of m.tool_calls) {
       if (!tc.response) continue;
+      const content: (PiTextContent | PiImageContent)[] = [
+        { type: 'text', text: tc.response.result },
+      ];
+      // 工具回传的图片(如 read 一个图片附件)→ ImageContent,模型据此"看到"图。
+      for (const img of tc.response.images) {
+        content.push({ type: 'image', data: img.data, mimeType: img.mimeType });
+      }
       piMessages.push({
         role: 'toolResult',
         toolCallId: tc.id,
         toolName: tc.name,
-        content: [{ type: 'text', text: tc.response.result }],
+        content,
         isError: tc.response.status === 'fail',
         timestamp: tc.response.time,
       } satisfies PiToolResultMessage);
@@ -85,8 +92,10 @@ function userToPi(msg: UserMessage): PiUserMessage {
   if (mergedText) content.push({ type: 'text', text: mergedText });
 
   for (const att of msg.attachments) {
-    if (att.kind !== 'image') continue;
-    content.push(attachmentImageToPi(att));
+    // 只内联 image+dataUrl(小图)。image+fileRef(大图)已由 buildFileAnnotationText
+    // 注入为可读文件,模型按需 read —— 不在此内联,避免把整张大图灌进上下文。
+    if (att.kind !== 'image' || att.source.kind !== 'dataUrl') continue;
+    content.push(attachmentImageToPi(att.mimeType, att.source.data));
   }
 
   return {
@@ -121,11 +130,11 @@ function assistantToPi(msg: AssistantMessage): PiAssistantMessage {
     provider: '',
     model: msg.model ?? '',
     usage: {
-      input: msg.usage?.promptTokens ?? 0,
-      output: msg.usage?.completionTokens ?? 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: msg.usage?.totalTokens ?? 0,
+      input: msg.usage?.in ?? 0,
+      output: msg.usage?.out ?? 0,
+      cacheRead: msg.usage?.cache[0] ?? 0,
+      cacheWrite: msg.usage?.cache[1] ?? 0,
+      totalTokens: msg.usage?.total ?? 0,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     },
     stopReason,
@@ -134,23 +143,13 @@ function assistantToPi(msg: AssistantMessage): PiAssistantMessage {
   };
 }
 
-function attachmentImageToPi(att: Extract<Attachment, { kind: 'image' }>): PiImageContent {
-  // pi.ImageContent.data 是 base64 字符串;只有 dataUrl source 能直接喂。
-  // fileRef source(`local://...` / `knowledge://...`)需要先把 URI 解析成字节再
-  // base64 —— 现行 renderer 端 `ContentConverter.fileToImageContent` 只产 dataUrl,
-  // 没有 fileRef 写入路径,但 Domain schema 显式允许 fileRef。这里 fail-fast,
-  // 把"将来某条路径开始写 fileRef"这个事件变成立即可见的崩溃,而不是悄悄把
-  // URI 当 base64 送给 provider 拿一堆乱码。
-  if (att.source.kind === 'fileRef') {
-    throw new Error(
-      `[messageBridge] fileRef image attachments are not yet resolvable to bytes (uri=${att.source.uri}). ` +
-      `Resolve the URI to a base64 dataUrl before reaching toPiContext.`,
-    );
-  }
+function attachmentImageToPi(mimeType: string, dataUrlBase64: string): PiImageContent {
+  // 只内联 image+dataUrl(调用方 userToPi 已按 kind/source.kind 过滤)。
+  // image+fileRef 大图不走这里 —— 它经 buildFileAnnotationText 注入,模型按需 read。
   return {
     type: 'image',
-    data: att.source.data,
-    mimeType: att.mimeType,
+    data: dataUrlBase64,
+    mimeType,
   };
 }
 
@@ -199,9 +198,10 @@ export function fromPiAssistantMessage(msg: PiAssistantMessage): AssistantMessag
     ...(outcome ? { outcome } : {}),
     ...(msg.model ? { model: msg.model } : {}),
     usage: {
-      promptTokens: msg.usage.input,
-      completionTokens: msg.usage.output,
-      totalTokens: msg.usage.totalTokens,
+      in: msg.usage.input,
+      out: msg.usage.output,
+      cache: [msg.usage.cacheRead, msg.usage.cacheWrite],
+      total: msg.usage.totalTokens,
     },
   };
 }

@@ -19,13 +19,13 @@ const CodeBlockCopyButton: React.FC<CodeBlockCopyButtonProps> = ({ code }) => {
   return (
     <Button
       variant="ghost"
-      size="icon"
+      size="icon-xs"
       className="code-block-copy-btn"
       onClick={handleCopy}
       title="Copy code"
       aria-label="Copy code"
     >
-      {copied ? <Check size={14} /> : <Copy size={14} />}
+      {copied ? <Check size={12} /> : <Copy size={12} />}
     </Button>
   );
 };

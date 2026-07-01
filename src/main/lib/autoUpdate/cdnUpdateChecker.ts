@@ -1,7 +1,7 @@
 import * as https from 'https';
 import * as http from 'http';
 import * as path from 'path';
-import { app } from 'electron';
+import { APP_VERSION } from '@shared/constants/branding';
 import { log } from '@main/log';
 import { appendCacheBustingTimestamp } from '../utilities/urlUtils';
 
@@ -30,7 +30,7 @@ export class CdnUpdateChecker {
 
   constructor(cdnBaseUrl: string) {
     this.cdnBaseUrl = cdnBaseUrl.replace(/\/$/, ''); // remove trailing slash
-    this.currentVersion = app.getVersion();
+    this.currentVersion = APP_VERSION;
   }
 
   /**

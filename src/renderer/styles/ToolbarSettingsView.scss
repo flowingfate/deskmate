@@ -7,38 +7,6 @@
   width: 100%;
 }
 
-.toolbar-settings-error {
-  margin-bottom: 1rem;
-  padding: 1rem;
-  border: 1px solid #fecaca;
-  border-radius: 0.75rem;
-  color: #b91c1c;
-
-  .message-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .message-indicator {
-    width: 1rem;
-    height: 1rem;
-    border-radius: 9999px;
-    background-color: var(--status-error-light);
-    flex-shrink: 0;
-  }
-
-  .message-label {
-    font-weight: 500;
-  }
-
-  .message-text {
-    margin-top: 0.25rem;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-}
-
 .toolbar-settings-form {
   transition: all 0.3s ease-in-out;
   max-height: 2000px;
@@ -104,14 +72,6 @@
     border-color: var(--text-primary);
     box-shadow: 0 0 0 1px var(--text-primary);
   }
-}
-
-.toolbar-shortcut-section .shortcut-label {
-  display: block;
-  color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: 400;
-  padding: 10px 4px;
 }
 
 .toolbar-agent-visibility-header {

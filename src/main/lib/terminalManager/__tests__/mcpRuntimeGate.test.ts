@@ -88,8 +88,8 @@ describe('TerminalInstance prepareEnvironment lazy-runtime gate', () => {
     vi.clearAllMocks();
   });
 
-  it('triggers ensureRuntimeForCommand for mcp_transport in internal mode', async () => {
-    mockGetRunTimeConfig.mockReturnValue({ mode: 'internal' });
+  it('triggers ensureRuntimeForCommand for mcp_transport (app-managed runtime)', async () => {
+    mockGetRunTimeConfig.mockReturnValue({});
     const instance = new TerminalInstance(createMcpConfig());
     const env = await (instance as unknown as PreparableTerminal).prepareEnvironment();
 
@@ -99,39 +99,21 @@ describe('TerminalInstance prepareEnvironment lazy-runtime gate', () => {
   });
 
   it('does NOT trigger ensureRuntimeForCommand for command type (non-mcp)', async () => {
-    mockGetRunTimeConfig.mockReturnValue({ mode: 'internal' });
+    mockGetRunTimeConfig.mockReturnValue({});
     const instance = new TerminalInstance(createCommandConfig());
     await (instance as unknown as PreparableTerminal).prepareEnvironment();
 
     expect(mockEnsureRuntimeForCommand).not.toHaveBeenCalled();
   });
 
-  it('does NOT trigger ensureRuntimeForCommand in system mode', async () => {
-    mockGetRunTimeConfig.mockReturnValue({ mode: 'system' });
-    const instance = new TerminalInstance(createMcpConfig());
-    await (instance as unknown as PreparableTerminal).prepareEnvironment();
-
-    expect(mockEnsureRuntimeForCommand).not.toHaveBeenCalled();
-  });
-
   it('proceeds when ensureRuntimeForCommand rejects (install failure)', async () => {
-    mockGetRunTimeConfig.mockReturnValue({ mode: 'internal' });
+    mockGetRunTimeConfig.mockReturnValue({});
     mockEnsureRuntimeForCommand.mockRejectedValueOnce(new Error('install failed'));
     const instance = new TerminalInstance(createMcpConfig());
 
     // Should not throw — the catch in prepareEnvironment swallows the error
     // so a botched install does not strand the whole MCP connect.
     const env = await (instance as unknown as PreparableTerminal).prepareEnvironment();
-    expect(env).toBeDefined();
-  });
-
-  it('proceeds when RuntimeManager.getInstance() throws', async () => {
-    mockGetRunTimeConfig.mockImplementation(() => { throw new Error('not initialized'); });
-    const instance = new TerminalInstance(createMcpConfig());
-
-    // isInternalMode() returns false → no install attempt.
-    const env = await (instance as unknown as PreparableTerminal).prepareEnvironment();
-    expect(mockEnsureRuntimeForCommand).not.toHaveBeenCalled();
     expect(env).toBeDefined();
   });
 });

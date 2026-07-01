@@ -87,9 +87,9 @@ class SessionConfig {
       title: this.title,
       readStatus: this.readStatus,
       contextState: this.contextState,
-      ...(this.star !== undefined ? { star: this.star } : {}),
-      ...(this.overrides !== undefined ? { overrides: this.overrides } : {}),
-      ...(this.turn !== undefined ? { turn: this.turn } : {}),
+      star: this.star,
+      overrides: this.overrides,
+      turn: this.turn,
     };
     if (this.state.kind === 'schedule_run') {
       const data: ScheduleRunSessionDataFile = {
@@ -348,6 +348,7 @@ export abstract class Session extends PersistBase {
       time: result.time,
       status: result.status,
       result: result.result,
+      images: result.images.length > 0 ? result.images : undefined,
     };
     this.pendingMessages.push(line);
   }

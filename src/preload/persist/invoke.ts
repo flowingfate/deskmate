@@ -22,6 +22,7 @@ const invoke = renderToMain.provideInvokeForPreload(ipcRenderer, [
   'getSessionMessages',
   'getUnreadSummary',
   'updateConfirmationSettings',
+  'updateWebSearchSettings',
 ]);
 
 export default invoke;

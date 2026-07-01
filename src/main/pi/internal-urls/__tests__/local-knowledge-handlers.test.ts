@@ -394,10 +394,13 @@ describe('LocalProtocolHandler × JobRun', () => {
 
     const { runId, runFilesDir } = await seedJobRun();
     const dir = await router.resolveToPath('local://', ctxFor(runId));
-    // 实际路径必须落在 schedules/{j}/runs/{ym}/{s}/ 树下,不在 sessions/ 树下
-    expect(dir).toBe(runFilesDir);
-    expect(dir).toContain('/schedules/');
-    expect(dir).not.toContain('/sessions/');
+    // 实际路径必须落在 schedules/{j}/runs/{ym}/{s}/ 树下,不在 sessions/ 树下。
+    // resolveToPath 走 nodePath.resolve → 原生分隔符;filesDir() 是 PERSIST_PATH 正斜杠
+    // 拼接,Windows 上两者分隔符不同(但指向同一目录),故比较前统一 resolve。
+    expect(path.resolve(dir)).toBe(path.resolve(runFilesDir));
+    const normDir = dir.split(path.sep).join('/');
+    expect(normDir).toContain('/schedules/');
+    expect(normDir).not.toContain('/sessions/');
   });
 
   it('沙盒边界:JobRun ctx 下 `..` 越界仍拒绝', async () => {

@@ -67,10 +67,11 @@ export class TokenCounter {
     totalTokens += this.textCalculator.countTokens(message.content);
 
     if (message.role === 'user') {
-      // 图片附件:仅 image kind 计入视觉 token;file/office/opaque 走 LLM 文本路径,
-      // 已经在生成 prompt 时被序列化进 content,这里不再重复计费。
+      // 视觉 token 只计内联图片(image+dataUrl)。image+fileRef 大图不内联(走文件注解
+      // 让模型按需 read),read 命中时由 tool-result image 计费,这里不预扣。
+      // file/office/opaque 走文本路径,已在 prompt 序列化进 content,不在此重复计费。
       for (const att of message.attachments) {
-        if (att.kind === 'image') {
+        if (att.kind === 'image' && att.source.kind === 'dataUrl') {
           const result = this.imageCalculator.calculateFromAttachment({
             detail: att.detail,
             width: att.width,

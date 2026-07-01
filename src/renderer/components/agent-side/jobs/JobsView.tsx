@@ -5,7 +5,7 @@ import { Button } from '@/shadcn/button';
 import { schedulerApi } from '@/ipc/scheduler';
 import { useSchedulesByAgentId } from '@/states/schedules.atom';
 import { useAgentScheduleRuns } from '@/states/scheduleRuns.atom';
-import { getAgents, useAgentById } from '@/states/agents.atom';
+import { useAgentById } from '@/states/agents.atom';
 import { useToast } from '@/components/ui/ToastProvider';
 import { TooltipProvider } from '@/shadcn/tooltip';
 import {
@@ -19,13 +19,11 @@ import {
   AlertDialogTitle,
 } from '@/shadcn/alert-dialog';
 import { showScheduledRunStartedToast } from '@/lib/scheduler/showScheduledRunStartedToast';
-import AddScheduleOverlay, {
-  type AddScheduleOverlayAgentOption,
-} from '@/components/chat/agent-editor/AddScheduleOverlay';
+import ScheduleOverlay from '@renderer/components/agent-side/jobs/overlay';
 import {
   SCHEDULE_TEMPLATES,
   type ScheduleTemplateInitialValues,
-} from '@/components/chat/agent-editor/scheduleTemplates';
+} from '@renderer/components/agent-side/jobs/templates';
 import type { JobRunRow } from '@shared/persist/types';
 import type { SchedulerJob } from '@shared/ipc/scheduler';
 import { log } from '@/log';
@@ -59,13 +57,6 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
   // calls `schedulerApi.deleteJob`. Centralized here (vs. per-row dialogs) so a
   // single AlertDialog instance handles every JobRow's delete action.
   const [pendingDelete, setPendingDelete] = useState<SchedulerJob | null>(null);
-
-  // The overlay needs the full agent roster so users can still re-target the job
-  // to another agent (we just lock the picker to the current one for new schedules).
-  const overlayAgents = useMemo<AddScheduleOverlayAgentOption[]>(
-    () => getAgents().map(a => ({ id: a.id, name: a.name })),
-    [],
-  );
 
   const templateContext = useMemo(() => ({ agentName: agent?.name }), [agent?.name]);
 
@@ -205,7 +196,7 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
               className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center"
             >
               <p className="m-0 text-sm font-medium text-content">No schedules yet</p>
-              <small className="text-[11px] leading-[1.5] text-[#6C6C70] max-w-[280px]">
+              <small className="text-[11px] leading-normal text-[#6C6C70] max-w-70">
                 Add a schedule to send a prompt to this agent on a recurring or one-time basis.
                 Scheduled runs require the app and machine to stay awake.
               </small>
@@ -227,7 +218,7 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
           )}
 
           {filteredJobs.length > 0 && (
-            <div className="flex flex-col gap-[2px] py-1">
+            <div className="flex flex-col gap-0.5 py-1">
               {filteredJobs.map(job => (
                 <JobRow
                   key={job.id}
@@ -244,7 +235,7 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
           )}
         </div>
 
-        <AddScheduleOverlay
+        <ScheduleOverlay
           open={overlayOpen}
           onOpenChange={(open) => {
             setOverlayOpen(open);
@@ -254,8 +245,6 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
             }
           }}
           defaultAgentId={agentId}
-          lockAgent
-          agents={overlayAgents}
           editingJob={editingJob}
           initialValues={templateValues}
         />

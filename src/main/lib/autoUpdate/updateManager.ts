@@ -9,7 +9,7 @@ import { log } from '@main/log';
 import { mainWindow } from '@main/startup/wins';
 import { CdnUpdateChecker } from './cdnUpdateChecker';
 import { UpdaterFetcher } from './updaterFetcher';
-import { BRAND_CONFIG, BRAND_NAME } from '../../../shared/constants/branding';
+import { BRAND_CONFIG, BRAND_NAME, APP_VERSION } from '../../../shared/constants/branding';
 import { BASE_CDN_URL } from '@shared/constants/endpoints';
 import { getUpdatesCacheDir as resolveUpdatesCacheDir, getUpdaterDir as resolveUpdaterDir, getUpdatePreferencesPath } from '@main/persist/lib/path';
 
@@ -155,8 +155,8 @@ export class UpdateManager {
     });
     this.sendToRenderer('checkingForUpdate');
     this.sendToRenderer('updateNotAvailable', {
-      version: app.getVersion(),
-      latestVersion: app.getVersion(),
+      version: APP_VERSION,
+      latestVersion: APP_VERSION,
       reason: 'dev-mock',
     });
   }
@@ -320,7 +320,7 @@ export class UpdateManager {
           this.lastCheckState.lastCheckResult = UpdateCheckResult.UpToDate;
 
           this.sendToRenderer('updateNotAvailable', {
-            version: app.getVersion(),
+            version: APP_VERSION,
             reason: 'skipped',
             platform: this.cdnUpdateChecker.getCurrentPlatformKey(),
           });
@@ -430,7 +430,7 @@ export class UpdateManager {
         this.lastCheckState.lastCheckResult = UpdateCheckResult.UpToDate;
 
         this.sendToRenderer('updateNotAvailable', {
-          version: app.getVersion(),
+          version: APP_VERSION,
           platform: this.cdnUpdateChecker.getCurrentPlatformKey(),
           latestVersion: result.updateInfo?.latest,
         });

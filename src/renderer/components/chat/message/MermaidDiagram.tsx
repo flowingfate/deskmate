@@ -111,12 +111,12 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ definition }) => {
       >
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-sm"
           className="mermaid-fullscreen-btn"
           onClick={openFullscreen}
           title="Fullscreen"
         >
-          <Maximize2 size={8} />
+          <Maximize2 size={12} />
         </Button>
         <div dangerouslySetInnerHTML={{ __html: svg }} />
       </div>

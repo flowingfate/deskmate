@@ -14,18 +14,18 @@ const RuntimeSystemDependenciesCard: React.FC<RuntimeSystemDependenciesCardProps
     return null;
   }
   return (
-    <div className="toolbar-settings-card">
-      <div className="toolbar-setting-item" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '10px', marginBottom: '4px' }}>
-        <div className="setting-label-container">
-          <label className="setting-label" style={{ fontWeight: 500 }}>System Dependencies</label>
-          <p className="runtime-card-desc">System-wide tools used by command-line workflows.</p>
+    <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
+      <div className="flex items-center justify-between px-1 pb-2.5 border-b border-black/6 mb-1">
+        <div className="flex-1">
+          <label className="block text-(--text-primary) text-base font-medium">System Dependencies</label>
+          <p className="text-xs text-(--text-secondary) mt-0.5 leading-normal">System-wide tools used by command-line workflows.</p>
         </div>
       </div>
 
-      <div className="runtime-component-row toolbar-setting-item">
-        <div className="runtime-component-meta">
-          <span className="setting-label">Git <span className="runtime-component-tag">VCS</span></span>
-          <span className={`runtime-status-dot ${gitVersion?.installed ? 'runtime-status-dot--ok' : 'runtime-status-dot--off'}`}>
+      <div className="flex items-center justify-between px-1 py-2.5">
+        <div className="flex flex-col gap-0.75 flex-1">
+          <span className="block text-(--text-primary) text-base font-normal">Git <span className="text-xs font-normal text-(--text-tertiary) ml-1.5">VCS</span></span>
+          <span className={`text-xs leading-snug ${gitVersion?.installed ? 'text-[#059669]' : 'text-(--status-error)'}`}>
             {gitVersion?.installed
               ? <span title={gitVersion.path ?? undefined}>{gitVersion.version ? `v${gitVersion.version}` : 'Installed'}</span>
               : 'Not installed'}
@@ -34,7 +34,7 @@ const RuntimeSystemDependenciesCard: React.FC<RuntimeSystemDependenciesCardProps
       </div>
 
       {!gitVersion?.installed && (
-        <div className="runtime-empty-hint" style={{ padding: '12px', backgroundColor: 'rgba(251, 191, 36, 0.1)', borderRadius: '6px', marginTop: '8px' }}>
+        <div className="text-sm text-(--text-tertiary) text-center p-3 bg-amber-400/10 rounded-md mt-2">
           Install Git for your platform to enable Git-backed workflows.
         </div>
       )}

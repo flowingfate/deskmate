@@ -20,6 +20,8 @@ import { Button } from '@/shadcn/button';
 import { useChatInputState } from './shared/useChatInputState';
 import { useFileHandling } from './shared/useFileHandling';
 import { transformMentions } from './shared/transformMentions';
+import type { AttachContext } from '@/lib/attachment/copyToSandbox';
+import { useSupportsImages } from '@/lib/models/useSupportsImages';
 
 const logger = log.child({ mod: 'ComposeInput' });
 
@@ -43,8 +45,7 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
   const errorMessage = CurrentSessionError.use();
   const editAgentMenuActions = EditAgentMenuAtom.useChange();
   const attachMenuActions = AttachMenuAtom.useChange();
-  const { textareaStateAtom, attachmentsStateAtom, textareaManager, attachmentManager, hasValidInput } = useChatInputState();
-  const [supportsImages, setSupportsImages] = useState(false);
+  const { textareaStateAtom, attachmentsStateAtom, textareaManager, attachmentManager, hasValidInput } = useChatInputState('compose');
   const { showToast } = useToast();
 
   const chatInputShortcutHint = getChatInputShortcutHint(
@@ -56,6 +57,14 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(
     agentSessionCacheManager.getCurrentAgentId()
   );
+
+  const supportsImages = useSupportsImages(currentAgentId);
+
+  const getAttachContext = (): AttachContext | null => {
+    const agentId = agentSessionCacheManager.getCurrentAgentId();
+    const sessionId = agentSessionCacheManager.getCurrentChatSessionId();
+    return agentId && sessionId ? { agentId, sessionId } : null;
+  };
 
   const {
     isProcessing,
@@ -70,11 +79,6 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
     attachmentManager,
     supportsImages,
     disabled: isInputLocked,
-    getAttachContext: () => {
-      const agentId = agentSessionCacheManager.getCurrentAgentId();
-      const sessionId = agentSessionCacheManager.getCurrentChatSessionId();
-      return agentId && sessionId ? { agentId, sessionId } : null;
-    },
   });
 
   useEffect(() => {
@@ -119,7 +123,20 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
   const handleSend = async () => {
     if (isInputLocked) return;
     if (isIdle && hasValidInput && !isProcessing) {
-      const messageToSend = attachmentManager.createMessage(textareaManager.get());
+      const ctx = getAttachContext();
+      if (!ctx) {
+        showToast('No active chat session. Open a chat before sending.', 'error');
+        return;
+      }
+      // 附件在此刻才物化进 session files —— 发送 = 落盘。失败则保留输入与附件。
+      let messageToSend: UserMessage;
+      try {
+        messageToSend = await attachmentManager.createMessage(textareaManager.get(), ctx);
+      } catch (error) {
+        logger.error({ msg: 'Failed to materialize attachments on send', err: error });
+        showToast('Failed to attach files. Please try again.', 'error');
+        return;
+      }
       messageToSend.content = transformMentions(messageToSend.content);
 
       const message = textareaManager.get().trim();
@@ -194,17 +211,17 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
         <div className="button-area">
           <Button
             variant="outline"
-            size="icon"
+            size="icon-sm"
             onClick={(e) => attachMenuActions.toggle(e.currentTarget)}
             disabled={isProcessing || isInputLocked}
             title="Attach"
           >
-            <Plus size={18} />
+            <Plus size={14} />
           </Button>
 
           <Button
             variant="outline"
-            size="icon"
+            size="icon-sm"
             onClick={(e) => {
               if (isInputLocked) return;
               editAgentMenuActions.toggle(e.currentTarget);
@@ -212,7 +229,7 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
             disabled={isInputLocked}
             title="Edit Agent (MCP Tools, System Prompt & Context Enhancement)"
           >
-            <SlidersHorizontal size={18} />
+            <SlidersHorizontal size={14} />
           </Button>
 
           <input
@@ -228,7 +245,6 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
             <ModelSelector
               currentAgentId={currentAgentId}
               shouldLockComposeUi={isInputLocked}
-              setSupportsImages={setSupportsImages}
             />
 
             <ThinkingLevelSelector
@@ -238,26 +254,26 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
 
             {isIdle ? (
               <Button
-                size="icon"
+                size="icon-sm"
                 onClick={handleSend}
                 disabled={!hasValidInput || isProcessing || isInputLocked}
                 title={chatInputShortcutHint}
               >
-                {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <ArrowUp size={18} />}
+                {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={14} />}
               </Button>
             ) : chatStatus ? (
               <Button
                 variant="destructive"
-                size="icon"
+                size="icon-sm"
                 onClick={onCancelChat}
                 disabled={isInputLocked}
                 title="Cancel Chat"
               >
-                <X size={18} />
+                <X size={14} />
               </Button>
             ) : (
-              <Button size="icon" disabled title="Waiting for chat status" type="button">
-                <ArrowUp size={18} />
+              <Button size="icon-sm" disabled title="Waiting for chat status" type="button">
+                <ArrowUp size={14} />
               </Button>
             )}
           </div>

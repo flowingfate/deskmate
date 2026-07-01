@@ -11,6 +11,8 @@ import { useToast } from '../../ui/ToastProvider';
 import { addFileToKnowledgeBase, shouldShowAddToKnowledgeBaseOption } from '../../../lib/chat/addToKnowledgeBase';
 import { tryResolveUriToPath } from '@/lib/internalUrls';
 import { ChatStatus, useCurrentAgentId } from '../../../lib/chat/agentSessionCacheManager';
+import { useCurrentSession } from '@/states/currentSession.atom';
+import { toImageDisplaySrc, type MediaUrlContext } from '@/lib/mediaUrl';
 import { isInstallableSkillArtifact } from '../../../lib/skills/installableSkillArtifacts';
 import { log } from '@/log';
 import { ApplySkillDialogAtom } from '../../skills/ApplySkillToAgentsDialog';
@@ -45,13 +47,15 @@ function isImageFile(filePath: string): boolean {
   return IMAGE_EXTENSIONS.has(ext);
 }
 
-function previewGeneratedFile(filePath: string): void {
+function previewGeneratedFile(filePath: string, ctx: MediaUrlContext): void {
   const fileName = getFileName(filePath);
   if (isImageFile(filePath)) {
+    // `local://` / `knowledge://` → `media://`(同步直供);裸绝对路径 → `file://`。
+    const src = toImageDisplaySrc(filePath, ctx);
     window.dispatchEvent(
       new CustomEvent('imageViewer:open', {
         detail: {
-          images: [{ id: `generated-file-${filePath}`, url: filePath, alt: fileName }],
+          images: [{ id: `generated-file-${filePath}`, url: src, alt: fileName }],
           initialIndex: 0,
         },
       }),
@@ -92,6 +96,9 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
   // `useAgentDetail(...).knowledge.knowledgeBase` —— URI 抽象掉了
   // "调用方该问谁要 KB 路径"。
   const currentAgentId = useCurrentAgentId();
+  // 图片预览 media:// 直供的 ctx(agent + session)。
+  const { chatSessionId } = useCurrentSession();
+  const mediaCtx: MediaUrlContext = { agentId: currentAgentId, sessionId: chatSessionId };
   const allFilePaths = useMemo(() => items.map(item => item.fileUri), [items]);
   const allFilePathsKey = useMemo(() => allFilePaths.join('\0'), [allFilePaths]);
   const installSkillActions = ApplySkillDialogAtom.useChange();
@@ -342,7 +349,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
       <div
         key={`${filePath}-${index}`}
         className={`file-attachment-item ${isAvailable ? 'clickable' : 'deleted'}`}
-        onClick={() => isAvailable && previewGeneratedFile(filePath)}
+        onClick={() => isAvailable && previewGeneratedFile(filePath, mediaCtx)}
         title={!fileExists ? `File deleted: ${filePath}` : `Click to open: ${filePath}`}
         style={
           !isAvailable
@@ -409,7 +416,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
               className="file-attachment-menu-item"
               onClick={() => {
                 setFileMenuOpen({});
-                previewGeneratedFile(filePath);
+                previewGeneratedFile(filePath, mediaCtx);
               }}
             >
               <span className="file-attachment-menu-item-icon">

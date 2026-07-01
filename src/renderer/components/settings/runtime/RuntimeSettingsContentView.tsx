@@ -4,7 +4,6 @@ import { Button } from '@/shadcn/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/shadcn/select';
 import { BUN_VERSIONS, UV_VERSIONS, PYTHON_VERSIONS } from '../../../lib/runtime/runtimeVersions';
 import type { RuntimeEnvironment } from '../../../lib/userData/types';
-import type { SystemRuntimeStatus } from '@shared/types/runtimeTypes';
 import RuntimeSystemDependenciesCard from './RuntimeSystemDependenciesCard';
 
 export interface RuntimeStatus {
@@ -30,14 +29,12 @@ export interface PythonVersion {
 interface RuntimeSettingsContentViewProps {
   config: RuntimeEnvironment;
   status: RuntimeStatus;
-  systemStatus: SystemRuntimeStatus | null;
   gitVersion: GitVersion | null;
   pythonVersions: PythonVersion[];
   isLoading: boolean;
   isPythonLoading: boolean;
   showGitVersion: boolean;
   newPythonVersion: string;
-  onModeChange: (mode: 'system' | 'internal') => Promise<void>;
   onInstall: (tool: 'bun' | 'uv') => Promise<void>;
   onVersionChange: (tool: 'bun' | 'uv', value: string) => void;
   onNewPythonVersionChange: (value: string) => void;
@@ -66,14 +63,12 @@ function truncatePath(path: string | null, maxLen = 48): string {
 const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
   config,
   status,
-  systemStatus,
   gitVersion,
   pythonVersions,
   isLoading,
   isPythonLoading,
   showGitVersion,
   newPythonVersion,
-  onModeChange,
   onInstall,
   onVersionChange,
   onNewPythonVersionChange,
@@ -83,279 +78,189 @@ const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
   onCleanUvCache,
 }) => {
   return (
-    <div className="content-view-container">
-      <div className="toolbar-settings-content">
-        <div className="toolbar-settings-form">
-          <div className="toolbar-settings-form-inner">
-
-            {/* ── Card 1: Runtime Mode ── */}
-            <div className="toolbar-settings-card">
-              {/* Card header row */}
-              <div className="toolbar-setting-item" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '10px', marginBottom: '4px' }}>
-                <div className="setting-label-container">
-                  <label className="setting-label" style={{ fontWeight: 500 }}>Runtime Mode</label>
-                  <p className="runtime-card-desc">
-                    Select the runtime environment for command-line tools and MCP servers.
-                  </p>
-                </div>
+    <div className="flex flex-col p-6 bg-surface-primary h-full overflow-auto" data-dbg="runtime-settings">
+      <div className="max-w-4xl mx-auto w-full transition-all duration-300 max-h-500 opacity-100 px-6 pb-6 space-y-6">
+        {/* ── Card 2: App-managed Environment Components ── */}
+          <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
+            {/* Card header */}
+            <div className="flex items-center justify-between px-1 pb-2.5 border-b border-black/6 mb-1">
+              <div className="flex-1">
+                <label className="block text-content text-base font-medium">App-managed Bun &amp; uv</label>
+                <p className="text-xs text-content-secondary mt-0.5 leading-normal">Bun handles npm, npx, and node. uv handles uvx and python. Both are managed by the app.</p>
               </div>
-
-              {/* System option */}
-              <label
-                className={`runtime-mode-row toolbar-setting-item ${config.mode === 'system' ? 'runtime-mode-row--active' : ''}`}
-                onClick={() => onModeChange('system')}
-              >
-                <div className="setting-label-container">
-                  <span className="setting-label">Use User System Environment</span>
-                  <span className="runtime-card-desc">Uses commands from your system PATH. Not all required commands may be available — you are responsible for managing your environment and ensuring the necessary commands are accessible.</span>
-                </div>
-                <input
-                  type="radio"
-                  name="runtimeMode"
-                  checked={config.mode === 'system'}
-                  onChange={() => onModeChange('system')}
-                  className="runtime-radio"
-                />
-              </label>
-
-              {/* Internal option */}
-              <label
-                className={`runtime-mode-row toolbar-setting-item ${config.mode === 'internal' ? 'runtime-mode-row--active' : ''}`}
-                onClick={() => onModeChange('internal')}
-              >
-                <div className="setting-label-container">
-                  <span className="setting-label">Use App-managed Environment</span>
-                  <span className="runtime-card-desc">Uses the app-managed runtime with bun (npm, npx, node) and uv (uvx, python) pre-installed — works out of the box, no setup required.</span>
-                </div>
-                <input
-                  type="radio"
-                  name="runtimeMode"
-                  checked={config.mode === 'internal'}
-                  onChange={() => onModeChange('internal')}
-                  className="runtime-radio"
-                />
-              </label>
             </div>
 
-            {config.mode === 'system' && (
-              <div className="toolbar-settings-card">
-                <div className="toolbar-setting-item" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '10px', marginBottom: '4px' }}>
-                  <div className="setting-label-container">
-                    <label className="setting-label" style={{ fontWeight: 500 }}>System Runtimes Detected on PATH</label>
-                    <p className="runtime-card-desc">
-                      The app will invoke whatever your shell PATH resolves these to. Missing or version-mismatched
-                      tools may break specific MCP servers.
-                    </p>
-                  </div>
-                </div>
-                {systemStatus === null ? (
-                  <div className="toolbar-setting-item" style={{ paddingTop: '8px' }}>
-                    <span className="runtime-card-desc">Probing system PATH…</span>
-                  </div>
-                ) : (
-                  (['node', 'npm', 'python', 'pip', 'uv'] as const).map((cmd) => {
-                    const probe = systemStatus[cmd];
-                    return (
-                      <div key={cmd} className="runtime-component-row toolbar-setting-item">
-                        <div className="runtime-component-meta">
-                          <span className="setting-label">{cmd}</span>
-                          <span className={`runtime-status-dot ${probe.installed ? 'runtime-status-dot--ok' : 'runtime-status-dot--off'}`}>
-                            {probe.installed
-                              ? <span title={probe.path ?? undefined}>{probe.version ?? 'installed'}{probe.path ? ` · ${truncatePath(probe.path)}` : ''}</span>
-                              : 'Not found on PATH'}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+            {/* Bun row */}
+            <div className="flex items-center justify-between px-1 py-2.5">
+              <div className="flex flex-col gap-0.75 flex-1">
+                <span className="block text-content text-base font-normal">Bun <span className="text-xs font-normal text-content-tertiary ml-1.5">Node.js / npx</span></span>
+                <span className={`text-xs leading-snug ${status.bun ? 'text-[#059669]' : 'text-status-error'}`}>
+                  {status.bun ? (
+                    <span title={status.bunPath}>{truncatePath(status.bunPath)}</span>
+                  ) : 'Not installed'}
+                </span>
               </div>
-            )}
-
-            {config.mode === 'internal' && (<>
-            {/* ── Card 2: Environment Components ── */}
-            <div className="toolbar-settings-card">
-              {/* Card header */}
-              <div className="toolbar-setting-item" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '10px', marginBottom: '4px' }}>
-                <div className="setting-label-container">
-                  <label className="setting-label" style={{ fontWeight: 500 }}>App-managed Bun &amp; uv</label>
-                  <p className="runtime-card-desc">Bun handles npm, npx, and node. uv handles uvx and python. Both are managed by the app.</p>
-                </div>
-              </div>
-
-              {/* Bun row */}
-              <div className="runtime-component-row toolbar-setting-item">
-                <div className="runtime-component-meta">
-                  <span className="setting-label">Bun <span className="runtime-component-tag">Node.js / npx</span></span>
-                  <span className={`runtime-status-dot ${status.bun ? 'runtime-status-dot--ok' : 'runtime-status-dot--off'}`}>
-                    {status.bun ? (
-                      <span title={status.bunPath}>{truncatePath(status.bunPath)}</span>
-                    ) : 'Not installed'}
-                  </span>
-                </div>
-                <div className="runtime-component-actions">
-                  <div className="runtime-version-field">
-                    <Select value={config.bunVersion} onValueChange={(v) => onVersionChange('bun', v)}>
-                      <SelectTrigger className="runtime-version-input-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {BUN_VERSIONS.map((entry) => (
-                          <SelectItem key={entry.version} value={entry.version}>{entry.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    disabled={isLoading}
-                    onClick={() => onInstall('bun')}
-                  >
-                    {status.bun ? 'Update' : 'Install'}
-                  </Button>
-                </div>
-              </div>
-
-              {/* uv row */}
-              <div className="runtime-component-row toolbar-setting-item">
-                <div className="runtime-component-meta">
-                  <span className="setting-label">uv <span className="runtime-component-tag">Python Manager</span></span>
-                  <span className={`runtime-status-dot ${status.uv ? 'runtime-status-dot--ok' : 'runtime-status-dot--off'}`}>
-                    {status.uv ? (
-                      <span title={status.uvPath}>{truncatePath(status.uvPath)}</span>
-                    ) : 'Not installed'}
-                  </span>
-                </div>
-                <div className="runtime-component-actions">
-                  <div className="runtime-version-field">
-                    <Select value={config.uvVersion} onValueChange={(v) => onVersionChange('uv', v)}>
-                      <SelectTrigger className="runtime-version-input-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {UV_VERSIONS.map((entry) => (
-                          <SelectItem key={entry.version} value={entry.version}>{entry.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    disabled={isLoading}
-                    onClick={() => onInstall('uv')}
-                  >
-                    {status.uv ? 'Update' : 'Install'}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Loading indicator */}
-              {isLoading && (
-                <div className="runtime-loading-bar">
-                  Installing… This may take a moment depending on your connection.
-                </div>
-              )}
-            </div>
-
-            {/* ── Card 3: Python Versions (only when uv is installed) ── */}
-            {status.uv && (
-              <div className="toolbar-settings-card">
-                {/* Card header */}
-                <div className="toolbar-setting-item" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '10px', marginBottom: '4px' }}>
-                  <div className="setting-label-container">
-                    <label className="setting-label" style={{ fontWeight: 500 }}>App-managed Python</label>
-                    <p className="runtime-card-desc">Install a Python version and set it as the default for command-line tools and MCP servers.</p>
-                  </div>
-                  {process.env.NODE_ENV === 'development' && (
-                    <Button
-                      variant="link"
-                      size="sm"
-                      onClick={onCleanUvCache}
-                      disabled={isLoading}
-                    >
-                      Clean Cache
-                    </Button>
-                  )}
-                </div>
-
-                {/* Install Python row */}
-                <div className="toolbar-setting-item" style={{ gap: '8px' }}>
-                  <Select value={newPythonVersion} onValueChange={(v) => onNewPythonVersionChange(v)}>
-                    <SelectTrigger className="runtime-python-input"><SelectValue /></SelectTrigger>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-0.5 bg-surface-secondary border border-border rounded-md px-2 h-8">
+                  <Select value={config.bunVersion} onValueChange={(v) => onVersionChange('bun', v)}>
+                    <SelectTrigger className="w-16 bg-transparent border-none outline-none text-sm text-content"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {PYTHON_VERSIONS.map((entry) => (
+                      {BUN_VERSIONS.map((entry) => (
                         <SelectItem key={entry.version} value={entry.version}>{entry.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    disabled={isPythonLoading}
-                    onClick={onInstallPython}
-                  >
-                    {isPythonLoading ? 'Installing…' : 'Install Python'}
-                  </Button>
                 </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={() => onInstall('bun')}
+                >
+                  {status.bun ? 'Update' : 'Install'}
+                </Button>
+              </div>
+            </div>
 
-                {/* Installed Python list */}
-                {pythonVersions.length === 0 ? (
-                  <div className="runtime-empty-hint">No Python versions installed</div>
-                ) : (
-                  pythonVersions.map((py, idx) => (
-                    <div key={idx} className="runtime-python-row toolbar-setting-item">
-                      <div className="runtime-component-meta">
-                        <span className="setting-label">
-                          {py.semver || py.version}
-                          {config.pinnedPythonVersion === py.semver && (
-                            <span className="runtime-component-tag" style={{ marginLeft: '6px' }}>default</span>
-                          )}
-                        </span>
-                        <span className={`runtime-status-dot ${py.status === 'installed' ? 'runtime-status-dot--ok' : 'runtime-status-dot--off'}`}>
-                          {py.status === 'installed' && py.path ? (
-                            <span title={py.path}>{truncatePath(py.path)}</span>
-                          ) : 'Not installed'}
-                        </span>
-                      </div>
+            {/* uv row */}
+            <div className="flex items-center justify-between px-1 py-2.5">
+              <div className="flex flex-col gap-0.75 flex-1">
+                <span className="block text-content text-base font-normal">uv <span className="text-xs font-normal text-content-tertiary ml-1.5">Python Manager</span></span>
+                <span className={`text-xs leading-snug ${status.uv ? 'text-[#059669]' : 'text-status-error'}`}>
+                  {status.uv ? (
+                    <span title={status.uvPath}>{truncatePath(status.uvPath)}</span>
+                  ) : 'Not installed'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-0.5 bg-surface-secondary border border-border rounded-md px-2 h-8">
+                  <Select value={config.uvVersion} onValueChange={(v) => onVersionChange('uv', v)}>
+                    <SelectTrigger className="w-16 bg-transparent border-none outline-none text-sm text-content"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {UV_VERSIONS.map((entry) => (
+                        <SelectItem key={entry.version} value={entry.version}>{entry.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={() => onInstall('uv')}
+                >
+                  {status.uv ? 'Update' : 'Install'}
+                </Button>
+              </div>
+            </div>
 
-                      <div className="runtime-component-actions">
-                        {/* Pin/Set Default */}
-                        {py.status === 'installed' && config.pinnedPythonVersion !== py.semver && (
-                          <Button
-                            onClick={() => onPinPythonVersion(py.semver || py.version)}
-                            variant="ghost"
-                            size="sm"
-                            disabled={isPythonLoading}
-                          >
-                            Set Default
-                          </Button>
-                        )}
-
-                        {/* Uninstall */}
-                        {py.status === 'installed' && (
-                          <Button
-                            onClick={() => onUninstallPython(py.version)}
-                            variant="ghost"
-                            size="icon"
-                            disabled={isPythonLoading}
-                            title="Uninstall"
-                          >
-                            <Trash2 size={14} />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
+            {/* Loading indicator */}
+            {isLoading && (
+              <div className="px-3 py-2.5 text-sm text-[#1d4ed8] bg-[#eff6ff] border border-[#bfdbfe] rounded-lg mt-1">
+                Installing… This may take a moment depending on your connection.
               </div>
             )}
-            </>)}
-
-            <RuntimeSystemDependenciesCard
-              gitVersion={gitVersion}
-              showGitVersion={showGitVersion}
-            />
-
           </div>
-        </div>
+
+          {/* ── Card 3: Python Versions (only when uv is installed) ── */}
+          {status.uv && (
+            <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
+              {/* Card header */}
+              <div className="flex items-center justify-between px-1 pb-2.5 border-b border-black/6 mb-1">
+                <div className="flex-1">
+                  <label className="block text-content text-base font-medium">App-managed Python</label>
+                  <p className="text-xs text-content-secondary mt-0.5 leading-normal">Install a Python version and set it as the default for command-line tools and MCP servers.</p>
+                </div>
+                {process.env.NODE_ENV === 'development' && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    onClick={onCleanUvCache}
+                    disabled={isLoading}
+                  >
+                    Clean Cache
+                  </Button>
+                )}
+              </div>
+
+              {/* Install Python row */}
+              <div className="flex items-center justify-between px-1 py-2.5 gap-2">
+                <Select value={newPythonVersion} onValueChange={(v) => onNewPythonVersionChange(v)}>
+                  <SelectTrigger className="flex-1 max-w-40 px-3 h-8 text-base bg-surface-secondary border border-border rounded-lg text-content"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PYTHON_VERSIONS.map((entry) => (
+                      <SelectItem key={entry.version} value={entry.version}>{entry.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={isPythonLoading}
+                  onClick={onInstallPython}
+                >
+                  {isPythonLoading ? 'Installing…' : 'Install Python'}
+                </Button>
+              </div>
+
+              {/* Installed Python list */}
+              {pythonVersions.length === 0 ? (
+                <div className="px-1 py-3 text-sm text-content-tertiary text-center">No Python versions installed</div>
+              ) : (
+                pythonVersions.map((py, idx) => (
+                  <div key={idx} className="flex items-center justify-between px-1 py-2.5 gap-2.5">
+                    <div className="flex flex-col gap-0.75 flex-1">
+                      <span className="block text-content text-base font-normal">
+                        {py.semver || py.version}
+                        {config.pinnedPythonVersion === py.semver && (
+                          <span className="text-xs font-normal text-content-tertiary ml-1.5">default</span>
+                        )}
+                      </span>
+                      <span className={`text-xs leading-snug ${py.status === 'installed' ? 'text-[#059669]' : 'text-status-error'}`}>
+                        {py.status === 'installed' && py.path ? (
+                          <span title={py.path}>{truncatePath(py.path)}</span>
+                        ) : 'Not installed'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Pin/Set Default */}
+                      {py.status === 'installed' && config.pinnedPythonVersion !== py.semver && (
+                        <Button
+                          onClick={() => onPinPythonVersion(py.semver || py.version)}
+                          variant="ghost"
+                          size="sm"
+                          disabled={isPythonLoading}
+                        >
+                          Set Default
+                        </Button>
+                      )}
+
+                      {/* Uninstall */}
+                      {py.status === 'installed' && (
+                        <Button
+                          onClick={() => onUninstallPython(py.version)}
+                          variant="ghost"
+                          size="icon"
+                          disabled={isPythonLoading}
+                          title="Uninstall"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+
+        <RuntimeSystemDependenciesCard
+          gitVersion={gitVersion}
+          showGitVersion={showGitVersion}
+        />
+
       </div>
     </div>
   );

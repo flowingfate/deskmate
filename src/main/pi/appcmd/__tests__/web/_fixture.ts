@@ -5,7 +5,7 @@
  * - 4 个 kernel mock 全部 hoisted —— `BingWebSearchTool.execute` /
  *   `BingImageSearchTool.execute` / `FetchWebContentTool.execute` 是 class
  *   static method,mock 时把整个 class 替换成 `{ execute: vi.fn() }`;
- *   `readHtmlInternal` 是 module-level function,mock 直接给 fn。
+ *   `downloadFileInternal` 是 module-level function,mock 直接给 fn。
  * - dispatcher 走真路径 —— 不 mock parseCmdline / dispatcher / app.ts,只在
  *   kernel 边界 mock。这样测试覆盖了"cmdline → tokenize → flags → runXxx →
  *   kernel call" 全链路。
@@ -26,40 +26,48 @@ import type { ToolContext } from '@main/pi/tools/types';
 // ---------------------------------------------------------------------------
 
 const webMocks = vi.hoisted(() => ({
-  bingWebExecute: vi.fn(),
-  bingImageExecute: vi.fn(),
+  tavilyExecute: vi.fn(),
   fetchWebContentExecute: vi.fn(),
-  readHtmlInternal: vi.fn(),
+  downloadFileInternal: vi.fn(),
 }));
 
 export { webMocks };
 
-vi.mock('@main/pi/appcmd/builtins/web/kernel/bingWebSearch', () => ({
-  BingWebSearchTool: { execute: webMocks.bingWebExecute },
-}));
+// `web search` 从 settings / env 解析 Tavily key。测试无 active profile,
+// 模块加载即兜底设置环境变量,覆盖没有 `resetWebMocks` beforeEach 的套件。
+process.env.TAVILY_API_KEY = 'tvly-test-key';
 
-vi.mock('@main/pi/appcmd/builtins/web/kernel/bingImageSearch', () => ({
-  BingImageSearchTool: { execute: webMocks.bingImageExecute },
+vi.mock('@main/pi/appcmd/builtins/web/kernel/tavilySearch', () => ({
+  TavilySearchTool: { execute: webMocks.tavilyExecute },
 }));
 
 vi.mock('@main/pi/appcmd/builtins/web/kernel/fetchWebContent', () => ({
   FetchWebContentTool: { execute: webMocks.fetchWebContentExecute },
 }));
 
-vi.mock('@main/pi/appcmd/builtins/web/kernel/readHtml', () => ({
-  readHtmlInternal: webMocks.readHtmlInternal,
+vi.mock('@main/pi/appcmd/builtins/web/kernel/download', () => ({
+  downloadFileInternal: webMocks.downloadFileInternal,
 }));
 
 // ---------------------------------------------------------------------------
 // 被测对象 —— 必须在 vi.mock 之后再 import
 // ---------------------------------------------------------------------------
 import { dispatchAppCommand, formatAppCmdContent } from '@main/pi/appcmd/dispatcher';
-// side-effect import:把 webCommand 等全部注册进单例 appCommands。
-// 这样 `router.test.ts` 可以对 `appCommands.has('web')` 做断言。
-import '@main/pi/appcmd';
-import { webCommand } from '@main/pi/appcmd/builtins/web';
+import { makeRouterCommand } from '@main/pi/appcmd/router';
+// side-effect import:把 hello / mcp / ... 注册进全局 appCommands(其它 test
+// 可能依赖)。`web` 自己不再进 appCommands —— 它有独立的 `webCommands` 注册表。
+import '@main/pi/appcmd/builtins/app';
+import { webCommands } from '@main/pi/appcmd/builtins/web';
 
-function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
+// 与 `pi/tools/web.ts` 完全同构的 router —— 测试通过它跑 `web <sub> ...`,
+// 走的就是生产路径(makeRouterCommand 路由 webCommands)。
+const webRouter = makeRouterCommand({
+  name: 'web',
+  synopsis: 'Search / image-search the web, fetch URLs, download files',
+  registry: webCommands,
+});
+
+export function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   const base: ToolContext = {
     profileId: 'profile-1',
     agentId: 'agent-1',
@@ -80,6 +88,8 @@ export interface RunResult {
   exitCode: number;
   /** dispatcher 合成的最终 LLM 可见字符串 */
   content: string;
+  /** run 期间通过 `ctx.addDeliverable` 登记的产出文件 URI。 */
+  deliverables: string[];
 }
 
 /**
@@ -97,21 +107,24 @@ export async function runWeb(
     ? argvOrCmdline.split(/\s+/).filter((t) => t.length > 0)
     : Array.from(argvOrCmdline);
   const ctx = makeCtx(overrides);
-  const result = await dispatchAppCommand(webCommand, argv, ctx);
+  const result = await dispatchAppCommand(webRouter, argv, ctx);
   return {
     stdout: result.stdout,
     stderr: result.stderr,
     exitCode: result.exitCode,
     content: formatAppCmdContent(result),
+    deliverables: result.deliverables,
   };
 }
 
 /** beforeEach 默认:所有 mock reset 到 undefined return。test 自己 set return value。 */
 export function resetWebMocks(): void {
-  webMocks.bingWebExecute.mockReset();
-  webMocks.bingImageExecute.mockReset();
+  // `web search` 从 settings / env 解析 Tavily key;测试无 active profile,
+  // 设置 env 让 search.ts 走到(被 mock 的)kernel。
+  process.env.TAVILY_API_KEY = 'tvly-test-key';
+  webMocks.tavilyExecute.mockReset();
   webMocks.fetchWebContentExecute.mockReset();
-  webMocks.readHtmlInternal.mockReset();
+  webMocks.downloadFileInternal.mockReset();
 }
 
 // ---------------------------------------------------------------------------
@@ -120,14 +133,13 @@ export function resetWebMocks(): void {
 // ---------------------------------------------------------------------------
 import { describe, expect, it } from 'vitest';
 describe('web fixture sanity', () => {
-  it('webMocks exposes all 4 kernel handles', () => {
-    expect(typeof webMocks.bingWebExecute).toBe('function');
-    expect(typeof webMocks.bingImageExecute).toBe('function');
+  it('webMocks exposes all 3 kernel handles', () => {
+    expect(typeof webMocks.tavilyExecute).toBe('function');
     expect(typeof webMocks.fetchWebContentExecute).toBe('function');
-    expect(typeof webMocks.readHtmlInternal).toBe('function');
+    expect(typeof webMocks.downloadFileInternal).toBe('function');
   });
   it('runWeb resolves with dispatcher-shaped result', async () => {
-    webMocks.bingWebExecute.mockResolvedValueOnce({
+    webMocks.tavilyExecute.mockResolvedValueOnce({
       success: true,
       totalQueries: 1,
       totalResults: 0,

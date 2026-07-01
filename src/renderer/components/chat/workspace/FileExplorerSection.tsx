@@ -79,7 +79,7 @@ const FileExplorerSection: React.FC<FileExplorerSectionProps> = ({
     <div
       className={cn(
         'relative flex flex-col gap-0.5 w-full',
-        isDraggingOver && 'rounded-xl bg-blue-500/5 outline outline-2 outline-dashed outline-blue-500/50 -outline-offset-2',
+        isDraggingOver && 'rounded-xl bg-blue-500/5 outline outline-dashed outline-blue-500/50 -outline-offset-2',
         className,
       )}
       onDragOver={handleDragOver}
@@ -88,7 +88,7 @@ const FileExplorerSection: React.FC<FileExplorerSectionProps> = ({
     >
       {/* Section Header */}
       <div
-        className="group/header box-border flex justify-between items-center self-stretch flex-none h-11 px-3 gap-2 border-b border-border-subtle cursor-pointer select-none transition-colors hover:bg-surface-subtle/70"
+        className="group/header box-border flex justify-between items-center self-stretch flex-none h-11 px-3 gap-2 cursor-pointer select-none transition-colors bg-surface-subtle"
         onClick={handleToggleCollapse}
       >
         <div className="flex items-center gap-1.5 flex-1 min-w-0">

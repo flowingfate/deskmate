@@ -11,7 +11,6 @@ import { DEFAULT_PYTHON_VERSION } from '../../../lib/runtime/runtimeVersions';
 import { appDataManager } from '../../../lib/userData/appDataManager';
 import { useFeatureFlag } from '../../../lib/featureFlags';
 import type { RuntimeEnvironment } from '../../../lib/userData/types';
-import type { SystemRuntimeStatus } from '@shared/types/runtimeTypes';
 import { runtimeApi } from '@/ipc/runtime';
 import { log } from '@/log';
 const logger = log.child({ mod: 'RuntimeSettingsView' });
@@ -27,7 +26,6 @@ const RuntimeSettingsView: React.FC = () => {
   const [pythonVersions, setPythonVersions] = useState<PythonVersion[]>([]);
   const [newPythonVersion, setNewPythonVersion] = useState<string>(DEFAULT_PYTHON_VERSION);
   const [isPythonLoading, setIsPythonLoading] = useState(false);
-  const [systemStatus, setSystemStatus] = useState<SystemRuntimeStatus | null>(null);
   const { showSuccess, showError } = useToast();
   const isGitEnabled = useFeatureFlag('deskmateUseGit');
 
@@ -62,28 +60,14 @@ const RuntimeSettingsView: React.FC = () => {
   }, []);
 
   // loadData only loads status and python version list (these don't go through AppDataManager).
-  // System PATH probe is gated by mode: spawning ~10 system commands in internal mode would
-  // add hundreds of ms to the panel-mount with nothing to show for it (the system card is
-  // hidden). Pass `modeOverride` from `handleModeChange` so the post-switch refresh uses the
-  // newly-selected mode instead of the stale React state.
-  const loadData = useCallback(async (modeOverride?: 'system' | 'internal') => {
+  const loadData = useCallback(async () => {
     try {
       const sts = await runtimeApi.checkStatus();
       setStatus(sts);
 
-      const effectiveMode = modeOverride ?? appDataManager.getRuntimeEnvironment()?.mode ?? 'internal';
-
       if (isGitEnabled) {
         const gitSts = await runtimeApi.checkGitVersion();
         setGitVersion(gitSts);
-      }
-
-      if (effectiveMode === 'system') {
-        const sysSts = await runtimeApi.checkSystemStatus();
-        setSystemStatus(sysSts);
-      } else {
-        // No card to render in internal mode — clear so a later switch starts fresh.
-        setSystemStatus(null);
       }
 
       if (sts.uv) {
@@ -109,29 +93,6 @@ const RuntimeSettingsView: React.FC = () => {
       setIsRefreshing(false);
     }
   }, [loadData, showSuccess, showError]);
-
-  const handleModeChange = useCallback(async (mode: 'system' | 'internal') => {
-    if (runtimeEnv?.mode === mode) return;
-    if (mode === 'system') {
-      const ok = window.confirm(
-        'Switch to "Use User System Environment"?\n\n'
-        + 'The app will stop managing Node.js / Python and rely on whatever is on your PATH.\n'
-        + 'Some MCP servers may fail to start if their required versions are missing or '
-        + 'incompatible. You can switch back at any time.'
-      );
-      if (!ok) return;
-    }
-    try {
-      await runtimeApi.setMode(mode);
-      // AppCacheManager will push update → AppDataManager → setRuntimeEnv auto-refresh.
-      // Re-detect now so the new mode's status (system PATH probes / internal bin) is
-      // fresh in the view; pass the new mode explicitly because React state hasn't caught up yet.
-      await loadData(mode);
-      showSuccess(`Switched to ${mode} mode`);
-    } catch (e) {
-      showError('Failed to switch mode');
-    }
-  }, [runtimeEnv?.mode, loadData, showSuccess, showError]);
 
   const handleInstall = useCallback(async (tool: 'bun' | 'uv') => {
     setIsLoading(true);
@@ -223,7 +184,6 @@ const RuntimeSettingsView: React.FC = () => {
       title="Runtime Environment"
       badges={
         <>
-          <Badge variant="secondary" className="text-xs">mode: {configForView.mode}</Badge>
           <Badge variant={status.bun ? "default" : "secondary"} className="text-xs">
             bun: {status.bun ? 'installed' : 'not installed'}
           </Badge>
@@ -235,26 +195,24 @@ const RuntimeSettingsView: React.FC = () => {
       actions={
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-sm"
           onClick={handleRefresh}
           disabled={isRefreshing}
           title="Refresh runtime status"
         >
-          <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
         </Button>
       }
     >
       <RuntimeSettingsContentView
         config={configForView}
         status={status}
-        systemStatus={systemStatus}
         gitVersion={gitVersion}
         pythonVersions={pythonVersions}
         isLoading={isLoading}
         isPythonLoading={isPythonLoading}
         showGitVersion={isGitEnabled}
         newPythonVersion={newPythonVersion}
-        onModeChange={handleModeChange}
         onInstall={handleInstall}
         onVersionChange={handleVersionChange}
         onNewPythonVersionChange={setNewPythonVersion}

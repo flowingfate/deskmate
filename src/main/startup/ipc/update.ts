@@ -6,6 +6,7 @@ import { schedulerManager } from '../../lib/scheduler/SchedulerManager';
 import { log } from '@main/log';
 import { safeConsole } from '../../lib/utilities/safeConsole';
 import type { Context } from './shared';
+import { APP_VERSION } from '@shared/constants/branding';
 
 const logger = log;
 
@@ -94,7 +95,7 @@ export default function handleUpdateIPC(ctx: Context) {
   });
 
   handle.getVersion(() => {
-    return app.getVersion();
+    return APP_VERSION;
   });
 
   handle.skipVersion(async (_event, version) => {

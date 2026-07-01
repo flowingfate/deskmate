@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { log } from '@main/log';
 import { renderToMain } from '@shared/ipc/runtime';
-import { checkGitVersion, checkSystemRuntimeStatus } from './systemProbe';
+import { checkGitVersion } from './systemProbe';
 import type { RuntimeManager } from './RuntimeManager';
 
 const logger = log;
@@ -18,11 +18,6 @@ export function registerRuntimeIpcHandlers(manager: RuntimeManager): void {
 
   const handle = renderToMain.bindMain(ipcMain);
 
-  handle.setMode(async (_event, mode) => {
-    logger.info({ msg: `[FRE] IPC: runtime:set-mode called`, mod: 'RuntimeManager', mode });
-    await manager.setRuntimeMode(mode);
-    return manager.getRunTimeConfig();
-  });
 
   handle.installComponent(async (_event, tool, version) => {
     logger.info({ msg: `[FRE] IPC: runtime:install-component called`, mod: 'RuntimeManager', tool, version });
@@ -58,12 +53,6 @@ export function registerRuntimeIpcHandlers(manager: RuntimeManager): void {
     return status;
   });
 
-  handle.checkSystemStatus(async () => {
-    logger.debug({ msg: '[Runtime] IPC: runtime:check-system-status called', mod: 'RuntimeManager' });
-    const result = await checkSystemRuntimeStatus();
-    logger.debug({ msg: '[Runtime] IPC: runtime:check-system-status result', mod: 'RuntimeManager', result });
-    return result;
-  });
 
   handle.listPythonVersions(async () => {
     logger.debug({ msg: '[FRE] IPC: runtime:list-python-versions called', mod: 'RuntimeManager' });

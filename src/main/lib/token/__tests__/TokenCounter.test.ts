@@ -117,7 +117,7 @@ describe('TokenCounter', () => {
     it('skips non-image attachments for user role (file/office/opaque are inlined into content)', () => {
       // file attachment must NOT add image tokens; total = 3 + 2 (= "ok")
       const file: Attachment = {
-        kind: 'file',
+        kind: 'text',
         fileName: 'a.txt',
         fileSize: 10,
         mimeType: 'text/plain',

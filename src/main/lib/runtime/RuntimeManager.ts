@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { log } from '@main/log';
 import { LocalPythonMirror } from './LocalPythonMirror';
 import { appCacheManager } from '../appCache';
-import type { RuntimeEnvironment, RuntimeMode } from '@shared/types/appConfig';
+import type { RuntimeEnvironment } from '@shared/types/appConfig';
 import { DEFAULT_RUNTIME_ENVIRONMENT } from '@shared/types/appConfig';
 import { getTerminalManager } from '../terminalManager';
 import { ensureShims } from './shim';
@@ -41,8 +41,7 @@ export class RuntimeManager {
     this.binPath = getBinDir();
     this.venvPath = getPythonVenvDir();
 
-    const mode = appCacheManager.getConfig().runtimeEnvironment?.mode ?? DEFAULT_RUNTIME_ENVIRONMENT.mode;
-    logger.info({ msg: `Initialized. Bin path: ${this.binPath}, Venv path: ${this.venvPath}, Mode: ${mode}` });
+    logger.info({ msg: `Initialized. Bin path: ${this.binPath}, Venv path: ${this.venvPath}` });
 
     // Register IPC handlers
     registerRuntimeIpcHandlers(this);
@@ -84,10 +83,6 @@ export class RuntimeManager {
    * be attempted on the next spawn.
    */
   public async ensureRuntimeForCommand(command: string, args: readonly string[] = []): Promise<void> {
-    const mode = appCacheManager.getConfig().runtimeEnvironment?.mode ?? DEFAULT_RUNTIME_ENVIRONMENT.mode;
-    if (mode !== 'internal') {
-      return;
-    }
 
     const need = this.detectRuntimeNeed(command, args);
     if (!need) {
@@ -172,19 +167,6 @@ export class RuntimeManager {
     return promise;
   }
 
-  public async setRuntimeMode(mode: RuntimeMode): Promise<void> {
-    logger.info({ msg: `Switching runtime mode to: ${mode}` });
-    const current = appCacheManager.getConfig();
-    await appCacheManager.updateConfig({
-      runtimeEnvironment: {
-        ...(current.runtimeEnvironment ?? DEFAULT_RUNTIME_ENVIRONMENT),
-        mode,
-      },
-    });
-    if (mode === 'internal') {
-      this.initializeInternalMode();
-    }
-  }
 
   public async setVersion(tool: InternalToolType, version: string): Promise<void> {
     const current = appCacheManager.getConfig();
@@ -289,12 +271,6 @@ export class RuntimeManager {
    * want to pre-install before using MCPs.
    */
   public initializeInternalMode() {
-    const mode = appCacheManager.getConfig().runtimeEnvironment?.mode ?? DEFAULT_RUNTIME_ENVIRONMENT.mode;
-    if (mode !== 'internal') {
-      logger.debug({ msg: 'Skipping internal mode initialization (mode is system)', mod: 'RuntimeManager' });
-      return;
-    }
-
     logger.info({ msg: 'Initializing internal mode (lazy install)', mod: 'RuntimeManager' });
 
     if (!fs.existsSync(this.binPath)) {

@@ -35,11 +35,17 @@
 export type FileUri = string & { readonly __brand: 'FileUri' };
 export const asFileUri = (s: string): FileUri => s as FileUri;
 
-/** Token 用量,与 pi-ai Usage 主链路三项对齐。 */
+/**
+ * Token 用量,落盘形态精简以省空间。语义对齐 pi-ai `Usage` 的 prompt 侧拆分:
+ * `in` 仅非缓存输入,缓存命中时 `cache[0]`(read)才是大头;真实 prompt 占用 =
+ * in + cache[0] + cache[1]。total = in + out + cache[0] + cache[1]。
+ */
 export interface TokenUsage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
+  in: number;
+  out: number;
+  /** [read, write] 缓存读/写 token。 */
+  cache: [read: number, write: number];
+  total: number;
 }
 
 /**
@@ -47,7 +53,7 @@ export interface TokenUsage {
  * `OthersContentPart` 三个 99% 字段重复的 part 类型合一,用 `kind` 区分:
  *
  *   - `image`   内嵌 base64 或外链/文件引用的图片
- *   - `file`    普通文本/读得动的文件 (read 工具走通用后端)
+ *   - `text`    普通文本/读得动的文件 (read 工具走通用后端)
  *   - `office`  pdf / docx / pptx 等 (read 工具走 office 后端)
  *   - `opaque`  仅元数据,内容未读;UI 显示卡片不进 LLM 上下文
  */
@@ -64,7 +70,7 @@ export type Attachment =
       detail?: 'auto' | 'low' | 'high';
     }
   | {
-      kind: 'file';
+      kind: 'text';
       fileName: string;
       fileSize: number;
       mimeType: string;
@@ -113,12 +119,25 @@ export type AssistantOutcome =
 
 export type ErrorCategory = 'overflow' | 'auth' | 'rateLimit' | 'network' | 'other';
 
+/** 工具回传的图片内容(如 `read` 一个图片文件)。base64 不含 `data:` 前缀。 */
+export interface ToolResultImage {
+  data: string;
+  mimeType: string;
+}
+
 /** Tool 执行结果。`fail` 包括工具抛错、tool 不存在、被 abort 等所有非 success。 */
 export interface ToolResult {
   time: number;
   status: 'success' | 'fail';
   /** 文本结果 (内置 / MCP 工具产出统一为 string)。fail 时存错误描述。 */
   result: string;
+  /**
+   * 工具回传的图片(如 read 一个图片附件)。**Domain 内存态必填,默认空数组**
+   * (消费方不写 `?? []`);Persisted 落盘态 optional,空数组不写盘、rehydrate 回填 `[]`。
+   * 出境时由 messageBridge 拼成 pi `ToolResultMessage` 的 ImageContent。base64 只在
+   * LLM 真正读取该图片时才随 `tool_res` 行进 jsonl。
+   */
+  images: ToolResultImage[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

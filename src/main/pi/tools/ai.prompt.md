@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-16 -->
+<!-- Last verified: 2026-06-30 -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -10,10 +10,12 @@
 |------|------|------|
 | `types.ts` | `LocalTool` / `ToolContext` / `ToolResult` / `LazyHandlerLoader` 契约 | 小 |
 | `registry.ts` | `ToolsRegistry` 类 + 模块级单例 `tools`;`register / has / get / list / listSpecs / listNames / execute`;`ensureToolsRegistered()` 触发首次注册 | 小 |
-| `index.ts` | 启动期把所有工具 register 进 `tools`;无侧效仅副作用;按"批"分组(轻量 / main 子系统 / heavy lazy)。**mcp / agent / skill / schedule / web / subagent 域已全部下线为 `app <domain> ...` AppCommand**,业务内核与 CLI 分别同住 `appcmd/builtins/<domain>/`。**已下线** `manage_process` / `move_file` / `coding_agent` / `get_current_datetime` 四个工具:前两者 LLM 直接走 `shell` 原生能力,`coding_agent` 整体移除,`get_current_datetime` 改成 system prompt 注入。**已下线** `read_file` / `read_office_file`,合并进新 `read` 工具(单一 `path` string 入口,通过 `:<sel>` selector 承载行号/页码/raw,通过 `scheme://` 前缀承载 internal URI 如 `skill://`)| 小 |
+| `index.ts` | 启动期把所有工具 register 进 `tools`;无侧效仅副作用;按"批"分组(轻量 / main 子系统 / heavy lazy)。**mcp / agent / skill / schedule / subagent 域已全部下线为 `app <domain> ...` AppCommand**,业务内核与 CLI 分别同住 `appcmd/builtins/app/<domain>/`;**`web` 域已升为顶层一等工具**(`web.ts`,见批 G),与 `app` 同级。**已下线** `manage_process` / `move_file` / `coding_agent` / `get_current_datetime` 四个工具:前两者 LLM 直接走 `shell` 原生能力,`coding_agent` 整体移除,`get_current_datetime` 改成 system prompt 注入。**已下线** `read_file` / `read_office_file`,合并进新 `read` 工具(单一 `path` string 入口,通过 `:<sel>` selector 承载行号/页码/raw,通过 `scheme://` 前缀承载 internal URI 如 `skill://`)| 小 |
 | `lazy.ts` | `lazy(spec, loader)` 工厂:spec 立刻可见(LLM 列表/IPC `getAll` 不阻塞),handler 首调时 `await loader()` 动态 import 真实实现。并发首调共享同一 inflight promise | 小 |
 | `schema.ts` | `jsonSchema(literal)`:把 plain JSON Schema 字面量装成 pi-ai `TSchema`(pi-ai provider 全部按裸 JSON Schema 读 `tool.parameters`)。spec 模块加载期同步构造,无法 dynamic-import typebox | 小 |
 | `impl/` | 重模块的实现仓库 —— 目前仅剩 `readOfficeFile.ts`(被 `read/backends/office.ts` 通过 `await import('../../impl/readOfficeFile')` 推迟到首调,与旧 `lazy(...)` wrapper 同语义、同性能、同 chunk-split 行为)| ~660 LOC |
+| `app.ts` | `app = makeCommandFacade(makeRouterCommand({ name:'app', registry: appCommands }))` —— 应用内能力总入口。`appCommands`(mcp / agent / skill / ...)在 `appcmd/builtins/app/`,**与 `web` 逐字对等**,仅注册表不同。facade 与 router 工厂都在 `appcmd/`(`_facade.ts` / `makeRouterCommand.ts`)| 极小 |
+| `web.ts` | `web = makeCommandFacade(makeRouterCommand({ name:'web', registry: webCommands }))` —— Web 抓取/搜索的一等工具(`web("search ...")`),**与 `app` 逐字对等**,仅注册表不同(`webCommands` 在 `appcmd/builtins/web/`)。不进 `appCommands`,`app web ...` 已废弃 | 极小 |
 | `*.ts`(具体工具) | 每个工具一个文件:`spec` literal + `handler(args, ctx)`。所有工具都是 native inline 形态(无 wrapper / 无桥接) | 各 ~10–600 LOC |
 
 ## 架构
@@ -30,8 +32,11 @@ interface LocalTool<TParams extends TSchema = TSchema> {
 - `spec` 直接喂给 `pi.streamSimple({ tools })`,不再经 `toPiTools` 翻译。
 - `args` 在 handler 入口由 caller 一次性 cast 成具体 args interface;
   pi-ai `validateToolCall` 已在外层校验,handler 只负责执行。
-- `ToolResult` = `{ ok: true; content: string } | { ok: false; error: string }`;
+- `ToolResult` = `{ ok: true; content: string; images?: ToolResultImage[] } | { ok: false; error: string }`;
   失败直接 `throw`,registry `execute` 在外层捕获并落成 `{ ok: false }`。
+  `images`(可选)让工具把图片回灌给模型:`read` 一个图片文件时填充,经
+  `executeToolCall → session.ts → Domain ToolResult.images → messageBridge` 拼成 pi
+  `ToolResultMessage` 的 ImageContent。base64 随 `tool_res` 行落盘(仅被读取时)。
 
 ### ToolContext —— 显式上下文
 
@@ -122,13 +127,13 @@ async function loadImpl() {
 `index.ts::registerAllTools()`:
 
 ```
-批 A:纯本地轻量(`read` / `write` / `find` / `search` / `ask`)。`read` 是统一读入口 —— 取代了 `read_file` / `read_office_file`,内部按"scheme/extension"两级分发到 `read/backends/{filesystem,internal-url,office}.ts`(office backend 自带 lazy import,首调时才解析 mammoth/jszip/pdfreader)。`present_deliverables` 已下线 —— LLM 在最终消息文字里直接提到产出 URI,renderer 端通过 `extractFilePathsFromText` 抽取路径渲染卡片。
-批 G:`app` shell facade(LocalTool 总入口;`appcmd/index.ts` 已先 side-effect import 完所有 AppCommand)
+批 A:纯本地轻量(`read` / `write` / `find` / `search` / `ask`)。`read` 是统一读入口 —— 取代了 `read_file` / `read_office_file`,内部按"scheme/extension"两级分发到 `read/backends/{filesystem,internal-url,office,image,html}.ts`(office backend 自带 lazy import,首调时才解析 mammoth/jszip/pdfreader;html backend `read/backends/html.ts` + `htmlReader.ts` 接管 `.html`/`.htm`,走 `?mode=...` query 轴,结构化阅读不 dump 原始 HTML)。`present_deliverables` 已下线 —— LLM 在最终消息文字里直接提到产出 URI,renderer 端通过 `extractFilePathsFromText` 抽取路径渲染卡片。
+批 G:shell facade。`app` 与 `web` **完全对等** —— 都是 `makeCommandFacade(makeRouterCommand({ name, synopsis, registry }))`(facade + router 工厂在 `appcmd/_facade.ts` / `appcmd/makeRouterCommand.ts`)。`app` 路由 `appCommands`,`web` 路由 `webCommands`。两个注册表各自与成员同住一包(`appcmd/builtins/app/index.ts` / `appcmd/builtins/web/index.ts`)并在模块加载期 eager 注册;`app.ts` / `web.ts` import 对应 index 即触发注册(不再有 `tools/index.ts` 的 `import '../appcmd'` 副作用)。两者互不相干,各管各的注册表
 批 B:依赖 main 子系统 —— 仅 `executeCommand`(LLM 看到名为 `shell`)。`manageProcess` 已下线
-批 C:已下线(mcp / agent / skill → `app` shell facade,详见 `appcmd/builtins/`)
-批 D:已下线(schedule → `app` shell facade;feature flag 守卫挪到 `appcmd/index.ts`)
-批 E:已下线(spawn / spawn-many → `app subagent` shell facade;feature flag 守卫挪到 `appcmd/index.ts`)
-批 F:heavy / lazy(`downloadFile.ts`,LLM-visible 名为 `download`)。web 域已下线到 `app web ...`,业务内核在 `appcmd/builtins/web/kernel/`;`read_office_file` 一并下线 —— office 现在是 `read` 工具的内部 backend,通过 `read/backends/office.ts::loadImpl()` 推迟加载 `impl/readOfficeFile.ts`(独立 lazy chunk 输出,bundle 体积不变)
+批 C:已下线(mcp / agent / skill → `app` shell facade,详见 `appcmd/builtins/app/`)
+批 D:已下线(schedule → `app` shell facade;feature flag 守卫挪到 `appcmd/builtins/app/index.ts`)
+批 E:已下线(spawn / spawn-many → `app subagent` shell facade;feature flag 守卫挪到 `appcmd/builtins/app/index.ts`)
+批 F:已下线为子命令(`download` 顶层工具 → `web download`,见批 G)。下载内核搬到 `appcmd/builtins/web/kernel/download.ts`,CLI 在 `appcmd/builtins/web/download.ts`;`web` 域**已升为顶层一等工具 `web`**(`pi/tools/web.ts`)。`read_office_file` 一并下线 —— office 现在是 `read` 工具的内部 backend,通过 `read/backends/office.ts::loadImpl()` 推迟加载 `impl/readOfficeFile.ts`(独立 lazy chunk 输出,bundle 体积不变)
 
 注册顺序对 LLM 看到的工具列表顺序没有语义,但保持稳定有助于 prompt cache 命中率;
 新加工具往对应组里塞,**不要散落**。
@@ -140,7 +145,7 @@ async function loadImpl() {
 | 新增纯本地工具(无 ctx 依赖) | 新建 `pi/tools/<name>.ts`(spec + handler);`index.ts` 加 register | spec 用 `jsonSchema({ ... })`;args interface 在文件内声明 + handler 入口 cast |
 | 新增需要 ctx 的工具 | 同上;handler 直接读 `ctx.chunkStream / ctx.callId / ctx.eventSender / ctx.tracer / ctx.signal` | `ctx.chunkStream` null 走早返;**不要**回到任何静态字段 |
 | 新增重依赖工具 | 用 `lazy(spec, () => import('./impl/<name>').then((m) => m.handler))`;impl 文件放 `pi/tools/impl/` | spec 必须模块加载期就有,**不能**进 loader 内 |
-| 新增 spawn 类(派生子 agent)能力 | **不要**写 LocalTool;走 `appcmd/builtins/subagent/` AppCommand,新 subcommand 落 `subagent <verb>` namespace,kernel 放 `appcmd/builtins/subagent/kernel/` | `_shared.ensureSpawnPrerequisites(ctx)` 同时拦截 `ctx.isSubAgent` / 校验 spawn 字段;调 `SubAgentManager` 时必透 `ctx.signal` |
+| 新增 spawn 类(派生子 agent)能力 | **不要**写 LocalTool;走 `appcmd/builtins/app/subagent/` AppCommand,新 subcommand 落 `subagent <verb>` namespace,kernel 放 `appcmd/builtins/app/subagent/kernel/` | `_shared.ensureSpawnPrerequisites(ctx)` 同时拦截 `ctx.isSubAgent` / 校验 spawn 字段;调 `SubAgentManager` 时必透 `ctx.signal` |
 | 改 tool spec / description | 直接改 `pi/tools/<name>.ts`,无需碰别处 | LLM cache 会被打穿,刻意 stable |
 
 ## 注意事项
@@ -150,7 +155,7 @@ async function loadImpl() {
 - **registry 重名 throw,不静默覆盖。** 模块加载期 register 时若名字冲突,
   立即抛 —— 与 catalog 构建时的"local∩mcp 同名冲突"一致,杜绝隐式覆盖。
 - **spawn 命令缺失 ctx 必抛。** `getParentContextSummary` / `getSubAgentConfig`
-  任一缺失,`appcmd/builtins/subagent/_shared.ensureSpawnPrerequisites` 必须显式拒绝
+  任一缺失,`appcmd/builtins/app/subagent/_shared.ensureSpawnPrerequisites` 必须显式拒绝
   —— 不允许静默 no-op 让 LLM 以为"成功调用了空 spawn"。`ctx.catalog` 不是 spawn
   的依赖(sub-agent 在 SubAgentChat 内自己 `buildToolCatalogForSubAgent`)。
   注意 spawn 入口已经从 LocalTool(`spawn_subagent` / `spawn_subagents`)迁到
@@ -184,13 +189,14 @@ async function loadImpl() {
   **不**依赖 MCPClientManager 的任何"内置"分支。
 - 依赖:[Terminal Manager](../../lib/terminalManager/) —— `shell` 工具用。
 - 依赖:[Playwright Manager](../../lib/playwright/) —— `appcmd/builtins/web/kernel/`
-  的 `BingWebSearchTool` / `BingImageSearchTool` 通过 `PlaywrightManager.getInstance()`
-  拉 headless Chromium 跑搜索;`appcmd/builtins/web/kernel/fetchWebContent.ts` /
-  `readHtml.ts` 走 node-only 路径,不碰浏览器。
-- 依赖:[Scheduler](../../lib/scheduler/) —— `appcmd/builtins/schedule/kernel/` 的
+  的 `BingImageSearchTool`(`web image`)通过 `PlaywrightManager.getInstance()`
+  拉 headless Chromium 跑图片搜索。`web search` 已改走 Tavily REST API
+  (`kernel/tavilySearch.ts`,纯 `fetch`,不碰浏览器);`fetchWebContent.ts` /
+  `readHtml.ts` 同样走 node-only 路径。
+- 依赖:[Scheduler](../../lib/scheduler/) —— `appcmd/builtins/app/schedule/kernel/` 的
   `createJobInternal` / `listJobsInternal` / `updateJobInternal` / `deleteJobInternal`
   / `runJobNowInternal` 业务内核调 `schedulerManager` 底层 helper。
-- 依赖:[Skills](../../lib/skill/) —— `appcmd/builtins/skill/kernel/` 的
+- 依赖:[Skills](../../lib/skill/) —— `appcmd/builtins/app/skill/kernel/` 的
   `installSkill` / `uninstallSkill` / `bindSkill` / `unbindSkill` /
   `listSkills` / `getSkillStatus` / `searchLibrary` 业务内核调底层 helper
   (`installAndActivateSkill` / `deleteInstalledSkill` / `applySkillToAgents`

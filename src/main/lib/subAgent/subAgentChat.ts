@@ -81,13 +81,13 @@ const INTENT_PATTERNS: ReadonlyArray<RegExp> = [
 ];
 
 /**
- * 产生 file output 的内置工具名(用于自动 deliverables 跟踪)。
- * 只列实际注册的工具名 —— `create_file` / `append_to_file` 历史 wrapper 早已
- * 下线,Phase 8a 顺手清理。
+ * 从 **args** 直接取产出文件 URI 的顶层 file-output 工具(`toolArgs.fileUri`)。
+ * 目前仅 `write` —— 它是顶层 LocalTool,不走 shell 信封,产出靠 args 取。
+ * `web download` 等 shell 命令的产出改走结构化 `ToolResult.deliverables` 回流
+ * (见 `trackDeliverables`),不在此表。
  */
 const FILE_OUTPUT_TOOLS: Record<string, true> = {
   write: true,
-  download: true,
 };
 
 /** summarizeToolArgs 优先匹配的参数名。 */
@@ -312,8 +312,8 @@ export class SubAgentChat {
           durationMs,
         });
       },
-      onToolResultPostprocess: async (toolName, toolArgs, rawContent) => {
-        this.trackDeliverables(toolName, toolArgs);
+      onToolResultPostprocess: async (toolName, toolArgs, rawContent, deliverables) => {
+        this.trackDeliverables(toolName, toolArgs, deliverables);
         return this.maybeCompressToolResult(toolName, rawContent);
       },
     };
@@ -707,37 +707,31 @@ export class SubAgentChat {
   // deliverables 跟踪
   // -------------------------------------------------------------------------
 
-  private trackDeliverables(toolName: string, toolArgs: Record<string, unknown>): void {
+  private trackDeliverables(
+    toolName: string,
+    toolArgs: Record<string, unknown>,
+    deliverables?: readonly string[],
+  ): void {
     try {
-      if (!FILE_OUTPUT_TOOLS[toolName]) return;
-
-      const fp = readStringArg(toolArgs, 'fileUri') ?? readStringArg(toolArgs, 'file_uri');
-      if (fp && !this.deliverables.includes(fp)) this.deliverables.push(fp);
-
-      if (toolName === 'download') {
-        // saveDirectory 同时接受 URI(`local://`/`knowledge://...`)与绝对路径。
-        // URI 形态:scheme:// 后的 path 才能 strip 尾 slash,scheme 自身不能动。
-        // abs 形态:Windows 下 `\\` 兼容。
-        const dir = readStringArg(toolArgs, 'saveDirectory') ?? readStringArg(toolArgs, 'save_directory') ?? 'local://';
-        const filename = readStringArg(toolArgs, 'filename');
-        if (filename) {
-          const uriMatch = dir.match(/^([a-z][a-z0-9+.-]*:\/\/)(.*)$/i);
-          let fullPath: string;
-          if (uriMatch) {
-            const cleanPath = uriMatch[2].replace(/\/+$/, '');
-            fullPath = cleanPath ? `${uriMatch[1]}${cleanPath}/${filename}` : `${uriMatch[1]}${filename}`;
-          } else {
-            const sep = dir.includes('\\') ? '\\' : '/';
-            const trimmedDir = dir.replace(/[\\/]+$/, '');
-            fullPath = `${trimmedDir}${sep}${filename}`;
-          }
-          if (!this.deliverables.includes(fullPath)) this.deliverables.push(fullPath);
+      // 1. 结构化回流:shell 命令(`web download` 等)经 `ToolResult.deliverables`
+      //    显式登记产出 —— toolName 无关,直接入册。这是产出型 shell 命令的
+      //    唯一可靠来源(cmd 字符串是黑盒,不解析)。
+      if (deliverables) {
+        for (const uri of deliverables) {
+          if (uri && !this.deliverables.includes(uri)) this.deliverables.push(uri);
         }
       }
-      // `present_deliverables` 工具已下线 —— 现在的兜底是 LLM 在最终回复文字里
+
+      // 2. 顶层 file-output 工具(目前仅 `write`):从 args 直接取 fileUri。
+      //    它不走 shell 信封,没有结构化 deliverables 回流。
+      if (FILE_OUTPUT_TOOLS[toolName]) {
+        const fp = readStringArg(toolArgs, 'fileUri') ?? readStringArg(toolArgs, 'file_uri');
+        if (fp && !this.deliverables.includes(fp)) this.deliverables.push(fp);
+      }
+
+      // `present_deliverables` 工具已下线 —— UI 兜底是 LLM 在最终回复文字里
       // 直接提到产出的 URI,renderer 端通过 `extractFilePathsFromText` 抽取。
-      // 后台审计仍依赖上面的 `write` / `download` 自动跟踪,父 agent 拿到的
-      // `Deliverables` 段不变。
+      // 后台审计仍依赖上面两条自动跟踪,父 agent 拿到的 `Deliverables` 段不变。
     } catch {
       // 非致命:跟踪失败不影响主流程
     }

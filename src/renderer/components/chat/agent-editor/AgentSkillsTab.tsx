@@ -9,7 +9,6 @@ import { cn } from '@/lib/utilities/utils';
 import { TabComponentProps } from './types';
 import { useSkills } from '../../userData/userDataProvider';
 import { isBuiltinSkill } from '../../../../shared/constants/builtinSkills';
-import { isBuiltinAgent } from '../../../lib/userData/types';
 import ListSearchBox from '../../ui/ListSearchBox';
 import { markSettingsCameFromApp } from '@/lib/navigation/settingsBackSentinel';
 import { log } from '@/log';
@@ -104,8 +103,8 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
   const handleSkillToggle = useCallback((skillName: string) => {
     if (readOnly) return; // Toggle not allowed in read-only mode
 
-    // Built-in skills cannot be unchecked for builtin agents
-    if (isBuiltinSkill(skillName) && isBuiltinAgent(agentData?.name)) return;
+    // Built-in skills cannot be unchecked for locked agents
+    if (isBuiltinSkill(skillName) && agentData?.locked === true) return;
 
     setSelectedSkills((prev) => {
       const newSelections = new Set(prev);
@@ -220,7 +219,7 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
               .map((skill) => {
                 const isSelected = selectedSkills.has(skill.name);
                 const isSkillBuiltin = isBuiltinSkill(skill.name);
-                const isSkillLocked = isSkillBuiltin && isBuiltinAgent(agentData?.name);
+                const isSkillLocked = isSkillBuiltin && agentData?.locked === true;
 
                 return (
                   <div
