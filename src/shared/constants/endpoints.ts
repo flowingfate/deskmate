@@ -27,7 +27,3 @@ export const RELAY_SERVICE_URL: string = isDev
   ? 'https://relay-test.deskmate.top'
   : 'https://relay.deskmate.top';
 
-/**
- * Default quick-start image shown in chat zero state.
- */
-export const QUICK_START_IMAGE_URL: string = `${BASE_CDN_URL}/images/deskmate-quick-start-default-image.png`;

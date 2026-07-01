@@ -55,7 +55,6 @@ class AgentConfig {
   public mcpServers?: AgentMarkdownFront['mcpServers'];
   public skills?: string[];
   public subAgents?: string[];
-  public zeroStates?: AgentMarkdownFront['zeroStates'];
   /** 受保护标记;见 `AgentMarkdownFrontBase.locked`。 */
   public locked?: boolean;
 
@@ -73,7 +72,6 @@ class AgentConfig {
     this.mcpServers = fm.mcpServers;
     this.skills = fm.skills;
     this.subAgents = fm.subAgents;
-    this.zeroStates = fm.zeroStates;
     this.locked = fm.locked;
   }
 
@@ -92,7 +90,6 @@ class AgentConfig {
     if (this.mcpServers !== undefined)      opt.mcpServers = this.mcpServers;
     if (this.skills !== undefined)          opt.skills = this.skills;
     if (this.subAgents !== undefined)       opt.subAgents = this.subAgents;
-    if (this.zeroStates !== undefined)      opt.zeroStates = this.zeroStates;
     if (this.locked !== undefined)          opt.locked = this.locked;
 
     return { ...base, ...opt };
@@ -232,7 +229,6 @@ export class Agent extends PersistBase {
       mcpServers: c.mcpServers,
       skills: c.skills,
       subAgents: c.subAgents,
-      zeroStates: c.zeroStates,
     };
   }
 
@@ -293,7 +289,6 @@ export class Agent extends PersistBase {
     if (partial.mcpServers !== undefined)      c.mcpServers = partial.mcpServers;
     if (partial.skills !== undefined)          c.skills = partial.skills;
     if (partial.subAgents !== undefined)       c.subAgents = partial.subAgents;
-    if (partial.zeroStates !== undefined)      c.zeroStates = partial.zeroStates;
     if (partial.locked !== undefined)          c.locked = partial.locked;
 
     this.updatedAt = new Date().toISOString();

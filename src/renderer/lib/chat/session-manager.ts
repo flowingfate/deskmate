@@ -76,8 +76,6 @@ export interface ChatSessionCache {
   pendingInteractiveRequests: PendingInteractiveRequest[];
   /** 显示在 ErrorBar 的错误。 */
   errorMessage?: string | null;
-  /** Assistant Say-Hi greeting markdown(纯 UI 状态,不进 message 流)。 */
-  greetingContent?: string | null;
 }
 
 interface Sessions {
@@ -233,7 +231,6 @@ export class SessionManager {
         initialData?.pendingInteractiveRequests ?? existing?.pendingInteractiveRequests ?? [],
       errorMessage:
         initialData?.errorMessage !== undefined ? initialData.errorMessage : existing?.errorMessage,
-      greetingContent: existing?.greetingContent ?? null,
       lastUpdated: Date.now(),
     };
 
@@ -363,7 +360,6 @@ export class SessionManager {
       (session) => {
         this.markMessage(userMessage, 'add');
         session.messages.push(userMessage);
-        session.greetingContent = null;
         session.lastUpdated = Date.now();
       },
       'addUserMessage',
@@ -558,22 +554,6 @@ export class SessionManager {
         session.lastUpdated = Date.now();
       },
       'replaceMessages',
-    );
-    return result === 'updated';
-  }
-
-  /**
-   * Set the Assistant Say Hi message. Used for frontend rendering only;
-   * not included in the chat context and never sent to the backend.
-   */
-  setGreetingContent(chatSessionId: string, markdownContent: string | null) {
-    const result = this.updateSession(
-      chatSessionId,
-      (session) => {
-        session.greetingContent = markdownContent?.trim() || null;
-        session.lastUpdated = Date.now();
-      },
-      'setGreetingContent',
     );
     return result === 'updated';
   }

@@ -22,7 +22,6 @@ import invokeTools from './tools/invoke';
 import { invokeSubAgent } from './subAgent/invoke';
 import invokeRuntime from './runtime/invoke';
 import invokeUpdate from './update/invoke';
-import invokeQuickStartImageCache from './quickStartImageCache/invoke';
 import invokeAttachment from './attachment/invoke';
 import invokeInternalUrls from './internalUrls/invoke';
 import invokeResearch from './research/invoke';
@@ -157,12 +156,6 @@ export interface ElectronAPI {
   };
 
 
-
-
-  // Quick Start Image Cache APIs (typed IPC)
-  quickStartImageCache: {
-    invoke: InvokeFn;
-  };
 
   // Screenshot APIs
   screenshot: {
@@ -300,11 +293,6 @@ export const electronAPI: ElectronAPI = {
     invoke: invokeWorkspace,
     on: ipcOn,
     off: ipcOff,
-  },
-
-  // Quick Start Image Cache management
-  quickStartImageCache: {
-    invoke: invokeQuickStartImageCache,
   },
 
   // Screenshot functionality

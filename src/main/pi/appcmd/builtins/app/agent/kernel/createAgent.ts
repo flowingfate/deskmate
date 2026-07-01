@@ -1,6 +1,6 @@
 /**
  * Agent "create" 内核 —— by-config 落到 `Profiles.active().createAgent` + `agent.patchFront`,
- * 把 front-matter 字段(mcpServers / skills / zeroStates)一次性写进 AGENT.md。
+ * 把 front-matter 字段(mcpServers / skills)一次性写进 AGENT.md。
  *
  * 角色:被 `appcmd/builtins/app/agent/add.ts` 调用,业务逻辑的真家。与
  * `mcp/kernel/createServer.ts` 完全对称。
@@ -31,14 +31,6 @@ export interface CreateAgentArgs {
   /** `workspace` 已在 persist 重构中移除(见 overview.md §3.5)。入参忽略。 */
   workspace?: string;
   version?: string;
-  zero_states?: {
-    greeting?: string;
-    quick_starts?: {
-      title: string;
-      description: string;
-      prompt: string;
-    }[];
-  };
 }
 
 export interface CreateAgentResult {
@@ -101,9 +93,6 @@ export async function createAgentInternal(
     await agent.patchFront({
       mcpServers,
       skills: args.skills,
-      zeroStates: args.zero_states
-        ? { greeting: args.zero_states.greeting, quickStarts: args.zero_states.quick_starts }
-        : undefined,
     });
 
     return {

@@ -164,20 +164,13 @@ interface AgentMarkdownFrontBase {
   mcpServers?: AgentMcpServer[];
   skills?: string[];
   subAgents?: string[];
-  zeroStates?: ZeroStates;
 }
 
 export type AgentMarkdownFront = AgentMarkdownFrontBase;
 
 export type AgentMcpServer = import('../types/profileTypes').AgentMcpServer;
 
-export interface ZeroStates {
-  greeting?: string;
-  quickStarts?: QuickStartItem[];
-}
-
-export type { QuickStartItem, ModelConfig } from '../types/profileTypes';
-import type { QuickStartItem, ModelConfig } from '../types/profileTypes';
+import type { ModelConfig } from '../types/profileTypes';
 
 export interface AgentMarkdownFile {
   frontMatter: AgentMarkdownFront;
@@ -194,7 +187,7 @@ export interface AgentMarkdownFile {
  */
 export type AgentFrontPatch =
   & Partial<Pick<AgentRecordBase, 'name' | 'version' | 'model' | 'emoji' | 'avatar' | 'locked'>>
-  & Partial<Pick<AgentDetail, 'tools' | 'mcpServers' | 'skills' | 'subAgents' | 'zeroStates'>>
+  & Partial<Pick<AgentDetail, 'tools' | 'mcpServers' | 'skills' | 'subAgents'>>
   & {
     /**
      * thinkingLevel 在 patch 里是三态：
@@ -242,7 +235,6 @@ export interface AgentDetail {
   mcpServers?: AgentMcpServer[];
   skills?: string[];
   subAgents?: string[];
-  zeroStates?: ZeroStates;
 }
 
 // ---------------------------------------------------------------------------

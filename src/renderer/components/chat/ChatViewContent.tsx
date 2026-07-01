@@ -1,11 +1,8 @@
-import React, { memo, useEffect, useMemo } from 'react';
+import React, { memo, useEffect } from 'react';
 import ChatContainer from './ChatContainer';
 import { ComposeInput } from './chat-input';
-import ChatZeroStates from './ChatZeroStates';
-import { ZeroStates } from '../../lib/userData/types';
-import { CurrentSessionGreeting, useCurrentChatSessionId, useMessagesWithStream, ChatStatus, CurrentSessionInteractiveRequests } from '../../lib/chat/agentSessionCacheManager';
-import { log } from '@/log';
-import { sendUserMessage, sendUserPrompt } from '@renderer/lib/chat/sendUserMessageOptimistically';
+import { useCurrentChatSessionId, useMessagesWithStream, ChatStatus, CurrentSessionInteractiveRequests } from '../../lib/chat/agentSessionCacheManager';
+import { sendUserMessage } from '@renderer/lib/chat/sendUserMessageOptimistically';
 import { editMessageAtom } from './message/edit-message.atom';
 import ChatInlinePreviewOverlay from './ChatInlinePreviewOverlay';
 import { InlinePreviewAtom, WorkspaceExplorerAtom } from './chat-side.atom';
@@ -13,8 +10,6 @@ import WorkspaceExplorerSidepane from './workspace/WorkspaceExplorerSidepane';
 import InteractiveAuthCard from './interactive/AuthCard';
 import InteractiveRequestCard from './interactive/RequestCard';
 import InteractiveSearchCard from './interactive/SearchCard';
-
-const logger = log.child({ mod: 'ChatViewContent' });
 
 interface ChatViewContentProps {
   // ChatContainer props
@@ -24,9 +19,6 @@ interface ChatViewContentProps {
   agentId?: string;
   chatStatus?: ChatStatus;
 
-  // Zero States props
-  zeroStates?: ZeroStates;
-  agentName?: string; // Agent name, used for avatar image caching
 
   isReadOnly?: boolean;
 }
@@ -66,40 +58,10 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
   isSessionSwitching = false,
   agentId,
   chatStatus,
-  zeroStates,
-  agentName,
   isReadOnly
 }) => {
   const { messages, streamingMessageId } = useMessagesWithStream();
   const [editingMessageState, editMessageActions] = editMessageAtom.use();
-  /**
-   * ========== isEmpty Decision Logic ==========
-   *
-   * Purpose: determines the layout mode of the chat area.
-   *
-   * Scenario vs. UI behaviour table:
-   * ┌─────────────────────────────────────────┬──────────┬─────────────────────────────────────┐
-   * │ Scenario                                │ isEmpty  │ UI behaviour                        │
-   * ├─────────────────────────────────────────┼──────────┼─────────────────────────────────────┤
-   * │ 1. No messages, no Zero States          │ true     │ Input centred                        │
-   * │ 2. No messages, with Zero States        │ true     │ Input at bottom + Zero States above  │
-   * │ 3. Only greetingContent                 │ false    │ Normal layout, renders greeting msg  │
-   * │ 4. Has user/assistant/tool messages     │ false    │ Normal layout                        │
-   * └─────────────────────────────────────────┴──────────┴─────────────────────────────────────┘
-   */
-  const hasGreeting = !!CurrentSessionGreeting.use();
-  const hasRealSessionMessages = useMemo(
-    () => messages.length > 0,
-    [messages],
-  );
-
-  const isEmpty = !isSessionSwitching && !hasRealSessionMessages && !hasGreeting;
-
-  // Determine whether to show Zero States (quick-start cards when the chat is empty)
-  const hasValidZeroStates = zeroStates && (
-    (zeroStates.quick_starts && zeroStates.quick_starts.length > 0)
-  );
-  const showZeroStates = !isSessionSwitching && isEmpty && hasValidZeroStates;
 
   const currentChatSessionId = useCurrentChatSessionId();
   const InlinePreviewActions = InlinePreviewAtom.useChange();
@@ -119,18 +81,6 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
         </div>
       );
     }
-    if (showZeroStates) {
-      return (
-        <>
-          <div className="flex-1" />
-          <ChatZeroStates
-            zeroStates={zeroStates!}
-            agentName={agentName || 'default'}
-            onQuickStartClick={sendUserPrompt}
-          />
-        </>
-      )
-    }
     return (
       <ChatContainer
         messages={messages}
@@ -146,9 +96,7 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
 
   return (
     <div className="chat-content relative flex flex-col flex-1 h-full overflow-hidden">
-      <div
-        className="relative flex flex-col flex-1 overflow-hidden"
-      >
+      <div className="relative flex flex-col flex-1 overflow-hidden">
         {renderContent()}
         <ChatWorkspaceSideOverlay />
       </div>

@@ -88,15 +88,3 @@ export async function sendUserMessage(message: UserMessage) {
     logger.warn(tracer.fields({ msg: 'enqueue failed', err: error }, 'self'));
   }
 }
-
-export async function sendUserPrompt(prompt: string) {
-  const id = `msg_user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-  const message: UserMessage = {
-    role: 'user',
-    id,
-    time: Date.now(),
-    content: prompt,
-    attachments: [],
-  };
-  return sendUserMessage(message);
-}

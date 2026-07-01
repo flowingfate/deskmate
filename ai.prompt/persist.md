@@ -206,7 +206,7 @@ AGENT.md 是源真值;`AgentRecord` 是其同名字段的派生缓存。
 | 视图 | 类型 | 字段 | renderer 用法 |
 |---|---|---|---|
 | Hot | `AgentRecord`(`agents.json#items` 行) | `id / name / version / model / emoji? / avatar? / locked? / createdAt / updatedAt` | sidebar / chat header / model selector 直接持 `agents.atom`;`locked?` 驱动受保护 agent 的只读/不可删 UI(取代旧 `isBuiltinAgent` 名字硬编码) | 
-| Cold | `AgentDetail`(AGENT.md 解析) | `agentId / systemPrompt / thinkingLevel? / knowledge? / mcpServers? / skills? / subAgents? / zeroStates?` | agent editor / apply-to-dialog / context-menu skill list / zeroStates 按 agentId lazy fetch(`getAgentDetail` IPC,命中 `agentDetail.atom` cache 同步返) |
+| Cold | `AgentDetail`(AGENT.md 解析) | `agentId / systemPrompt / thinkingLevel? / knowledge? / mcpServers? / skills? / subAgents?` | agent editor / apply-to-dialog / context-menu skill list 按 agentId lazy fetch(`getAgentDetail` IPC,命中 `agentDetail.atom` cache 同步返) |
 
 ### 唯一写入口
 

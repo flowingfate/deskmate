@@ -6,7 +6,6 @@ import './ChatContainer.scss';
 import { useToast } from '../ui/ToastProvider';
 import { EditingMessageState, editMessageAtom } from './message/edit-message.atom';
 import { getChatRenderItemStableKey, isVisibleChatRenderItem, ChatRenderItemComponent, type ChatRenderItem, hasTextContent } from './ChatRenderItem';
-import { GreetingMessage } from './message/GreetingMessage';
 import { Button } from '@/shadcn/button';
 import { CHAT_SCROLL_BOX_CLS } from './tool/AnimatedHeight';
 
@@ -574,7 +573,6 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
             return (acc.push(rendered), acc);
           }, [] as React.ReactNode[])}
 
-          <GreetingMessage />
         </div>
       </div>
       {showJumpToLatest && (

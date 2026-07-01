@@ -21,10 +21,8 @@ import type { AppCmdContext } from '../../../types';
 
 import {
   buildMcpServersArray,
-  buildZeroStates,
   parseMcpServerFlag,
   parseMcpToolFlag,
-  parseQuickStartFlag,
   parseSkillFlag,
   validateName,
 } from './_shared';
@@ -43,15 +41,12 @@ OPTIONS
   --mcp-server <name>    Bind an MCP server. Repeatable. Replaces current list.
   --mcp-tool <s:t>       Restrict a server's tools (e.g. "git:status"). Repeatable.
   --skill <name>         Attach a skill. Repeatable. Replaces current list.
-  --greeting <text>      Welcome message shown at chat start.
-  --quick-start <q>      Quick-start card: "title|description|prompt". Repeatable.
   --json                 Output the result as JSON.
   --help, -h             Show this help.
 
 EXAMPLES
   agent update my-bot --model gpt-4o
   agent update "Research Agent" --skill arxiv --skill web-search
-  agent update my-bot --greeting "Welcome back!"
 `;
 
 const FLAGS: FlagSpec[] = [
@@ -62,8 +57,6 @@ const FLAGS: FlagSpec[] = [
   { name: 'mcp-server', type: 'array' },
   { name: 'mcp-tool', type: 'array' },
   { name: 'skill', type: 'array' },
-  { name: 'greeting', type: 'string' },
-  { name: 'quick-start', type: 'array' },
 ];
 
 export async function runUpdate(argv: string[], ctx: AppCmdContext): Promise<void> {
@@ -102,12 +95,6 @@ export async function runUpdate(argv: string[], ctx: AppCmdContext): Promise<voi
     return;
   }
   const skills = parseSkillFlag(parsed.flags.skill);
-  const quickStartResult = parseQuickStartFlag(parsed.flags['quick-start']);
-  if (!quickStartResult.ok) {
-    ctx.printErr(`agent update: ${quickStartResult.error}\n`);
-    ctx.setExitCode(2);
-    return;
-  }
 
   try {
     const profile = await Profiles.get().active();
@@ -143,13 +130,6 @@ export async function runUpdate(argv: string[], ctx: AppCmdContext): Promise<voi
   }
   if (skills.length > 0) {
     agentConfig.skills = skills;
-  }
-
-  const greetingGiven = typeof parsed.flags.greeting === 'string';
-  const quickStartsGiven = quickStartResult.quickStarts !== undefined;
-  if (greetingGiven || quickStartsGiven) {
-    const greeting = greetingGiven ? (parsed.flags.greeting as string) : undefined;
-    agentConfig.zero_states = buildZeroStates(greeting, quickStartResult.quickStarts);
   }
 
   const result: UpdateAgentResult = await updateAgentInternal(

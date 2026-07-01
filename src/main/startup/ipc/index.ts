@@ -25,7 +25,6 @@ import { registerLogViewerIPC } from '../../log/viewer-window';
 import handleDoctorIPC from './doctor';
 import handleFeatureFlagsIPC from './featureFlags';
 import setUpToolsIPC from './tools';
-import handleQuickStartImageCacheIPC from './quick-start-image-cache';
 import handleUpdateIPC from './update';
 import handleAttachmentIPC from './attachment';
 import handleInternalUrlsIPC from './internal-urls';
@@ -63,7 +62,6 @@ export function setUpIPC(ctx: Context) {
 
   setUpToolsIPC(ctx);
   handleUpdateIPC(ctx);
-  handleQuickStartImageCacheIPC();
 
   // Scheduler Management - IPC handlers are always registered;
   // UI visibility is controlled by feature flag on the renderer side.

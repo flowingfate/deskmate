@@ -77,11 +77,6 @@ export function getAssetsDir(): string {
   return path.join(getAppDataPath(), 'assets');
 }
 
-
-export function getQuickStartImageCacheDir(): string {
-  return path.join(getAppDataPath(), 'cache', 'quick_start_images');
-}
-
 export function getGithubSkillReposDir(): string {
   return path.join(getAppDataPath(), 'github-skill-repos');
 }

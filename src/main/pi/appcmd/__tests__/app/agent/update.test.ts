@@ -51,18 +51,6 @@ describe('agent update', () => {
     expect(cfg.mcp_servers).toBeUndefined();
   });
 
-  it('zero_states:仅 greeting 给 → quickStarts 为 undefined', async () => {
-    agentMocks.profileListAgents.mockReturnValue([{ id: 'cid', name: 'bot' }]);
-    agentMocks.profileGetAgent.mockResolvedValue({
-      config: {},
-    });
-    agentMocks.updateAgentInternal.mockResolvedValue({ success: true, message: 'ok' });
-
-    await runAgent(['update', 'bot', '--greeting', 'Hello']);
-    const cfg = agentMocks.updateAgentInternal.mock.calls[0][0].agent_config;
-    expect(cfg.zero_states).toEqual({ greeting: 'Hello' });
-  });
-
   it('kernel update 失败 → exit 1 + 透传 message', async () => {
     agentMocks.profileListAgents.mockReturnValue([{ id: 'cid', name: 'bot' }]);
     agentMocks.profileGetAgent.mockResolvedValue({

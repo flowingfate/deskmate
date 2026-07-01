@@ -23,10 +23,8 @@ import type { AppCmdContext } from '../../../types';
 
 import {
   buildMcpServersArray,
-  buildZeroStates,
   parseMcpServerFlag,
   parseMcpToolFlag,
-  parseQuickStartFlag,
   parseSkillFlag,
   validateName,
 } from './_shared';
@@ -44,8 +42,6 @@ OPTIONS
   --mcp-server <name>    Bind an MCP server. Repeatable.
   --mcp-tool <s:t>       Restrict a server's tools (e.g. "git:status"). Repeatable.
   --skill <name>         Attach a skill. Repeatable.
-  --greeting <text>      Welcome message shown at chat start.
-  --quick-start <q>      Quick-start card: "title|description|prompt". Repeatable.
   --dry-run              Show the would-be config without writing.
   --json                 Output the final config as JSON instead of a summary.
   --help, -h             Show this help.
@@ -53,7 +49,6 @@ OPTIONS
 EXAMPLES
   agent add my-bot --model gpt-4o-mini --system-prompt "Be concise."
   agent add my-coder --skill linting --mcp-server git --mcp-tool git:status
-  agent add my-bot --quick-start "Brainstorm|Get ideas|Help me brainstorm X."
 `;
 
 const FLAGS: FlagSpec[] = [
@@ -64,8 +59,6 @@ const FLAGS: FlagSpec[] = [
   { name: 'mcp-server', type: 'array' },
   { name: 'mcp-tool', type: 'array' },
   { name: 'skill', type: 'array' },
-  { name: 'greeting', type: 'string' },
-  { name: 'quick-start', type: 'array' },
 ];
 
 export async function runAdd(argv: string[], ctx: AppCmdContext): Promise<void> {
@@ -109,14 +102,7 @@ export async function runAdd(argv: string[], ctx: AppCmdContext): Promise<void> 
     return;
   }
   const skills = parseSkillFlag(parsed.flags.skill);
-  const quickStartResult = parseQuickStartFlag(parsed.flags['quick-start']);
-  if (!quickStartResult.ok) {
-    ctx.printErr(`agent add: ${quickStartResult.error}\n`);
-    ctx.setExitCode(2);
-    return;
-  }
 
-  const greetingOverride = typeof parsed.flags.greeting === 'string' ? parsed.flags.greeting : undefined;
   const modelOverride = typeof parsed.flags.model === 'string' ? parsed.flags.model : undefined;
   const emojiOverride = typeof parsed.flags.emoji === 'string' ? parsed.flags.emoji : undefined;
   const systemPromptOverride =
@@ -134,11 +120,6 @@ export async function runAdd(argv: string[], ctx: AppCmdContext): Promise<void> 
   if (mcpServers.length > 0) {
     createArgs.mcp_servers = buildMcpServersArray(mcpServers, mcpToolResult.filter);
   }
-  const userZeroStates = buildZeroStates(greetingOverride, quickStartResult.quickStarts);
-  if (userZeroStates) {
-    createArgs.zero_states = userZeroStates;
-  }
-
   if (isDryRun(parsed.flags)) {
     if (isJson(parsed.flags)) {
       ctx.print(

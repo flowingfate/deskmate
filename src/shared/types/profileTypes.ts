@@ -439,30 +439,6 @@ export interface AgentMcpServer {
 }
 
 /**
- * Quick Start configuration item
- */
-export interface QuickStartItem {
-  /** Quick start title */
-  title: string;
-  /** Image URL (optional) */
-  image?: string;
-  /** Description */
-  description: string;
-  /** Triggered prompt */
-  prompt: string;
-}
-
-/**
- * Zero States configuration - Agent initial state display
- */
-export interface ZeroStates {
-  /** Welcome message */
-  greeting?: string;
-  /** Quick start items list */
-  quick_starts?: QuickStartItem[];
-}
-
-/**
  * Agent persona shape (snake_case，落盘形态由 AGENT.md front-matter 反序列化得到)。
  * V2 重构后真值是 AgentRecord+AgentDetail，AgentPersona 仅为 renderer 兼容层
  * （`agentOps.ts`、AgentEditingView 的 patch 形状）使用。新代码请直接消费
@@ -518,8 +494,6 @@ export interface AgentPersona {
   skills?: string[];
   /** Sub-agent name list referenced by the Agent */
   sub_agents?: string[];
-  /** Zero States configuration - Agent initial state display */
-  zero_states?: ZeroStates;
 }
 
 /**
@@ -626,14 +600,6 @@ export const SUB_AGENT_LIMITS = {
 } as const;
 
 /**
- * Default Zero States configuration
- */
-export const DEFAULT_ZERO_STATES: ZeroStates = {
-  greeting: "",
-  quick_starts: []
-};
-
-/**
  * Default Agent persona configuration
  */
 export const DEFAULT_AGENT_PERSONA: AgentPersona = {
@@ -648,7 +614,6 @@ export const DEFAULT_AGENT_PERSONA: AgentPersona = {
   tools: [],
   system_prompt: "You are a highly capable AI assistant designed to help users with a wide variety of tasks. Your core capabilities include:\n\n**Communication & Analysis:**\n- Provide clear, accurate, and helpful responses to questions\n- Analyze complex problems and break them down into manageable parts\n- Adapt your communication style to match the user's needs and expertise level\n\n**Technical Assistance:**\n- Help with programming, debugging, and code review across multiple languages\n- Assist with data analysis, research, and information synthesis\n- Provide guidance on best practices and technical decision-making\n\n**Creative & Productive Support:**\n- Generate creative content including writing, brainstorming, and ideation\n- Help with planning, organization, and project management\n- Assist with document creation, editing, and formatting\n\n**Interaction Guidelines:**\n- Always strive for accuracy and cite sources when appropriate\n- Ask clarifying questions when requirements are unclear\n- Provide step-by-step explanations for complex procedures\n- Respect user privacy and maintain confidentiality\n- Be honest about limitations and uncertainties\n\n**Tools & Integration:**\n- Leverage available MCP servers and tools to enhance capabilities\n- Use web browsing, file operations, and data processing tools when beneficial\n- Integrate multiple information sources to provide comprehensive responses\n\nYour goal is to be a reliable, knowledgeable, and adaptable assistant that helps users accomplish their objectives efficiently and effectively.",
   skills: ['skill-creator'],
-  zero_states: DEFAULT_ZERO_STATES
 };
 
 /**

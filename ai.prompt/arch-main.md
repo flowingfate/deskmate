@@ -129,7 +129,6 @@
 │       ├── sub-agents/   skills/   mcp/   models/
 │       └── archive/                               # 软删归档
 ├── bin/                                            # bun, uv + shim
-├── cache/quick_start_images/
 ├── logs/{dev,app}.db                               # pino + sqlite
 └── installation-device-id
 ```

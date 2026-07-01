@@ -281,7 +281,6 @@ describe('Agent rename via patchFront', () => {
       subAgents: ['sa1'],
       tools: ['read', 'write'],
       mcpServers: [{ name: 'mcp1', tools: ['t1'] }],
-      zeroStates: { greeting: 'hi' },
     });
     const d = agent.toDetail();
     expect(d).toEqual({
@@ -292,7 +291,6 @@ describe('Agent rename via patchFront', () => {
       mcpServers: [{ name: 'mcp1', tools: ['t1'] }],
       skills: ['s1'],
       subAgents: ['sa1'],
-      zeroStates: { greeting: 'hi' },
     });
     // 不带 record 字段（避免回归：列表展示 stale 时不该用 detail 兜底）
     expect((d as unknown as Record<string, unknown>).name).toBeUndefined();
