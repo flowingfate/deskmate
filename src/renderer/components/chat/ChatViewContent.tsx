@@ -10,6 +10,7 @@ import WorkspaceExplorerSidepane from './workspace/WorkspaceExplorerSidepane';
 import InteractiveAuthCard from './interactive/AuthCard';
 import InteractiveRequestCard from './interactive/RequestCard';
 import InteractiveSearchCard from './interactive/SearchCard';
+import { ZeroState } from './zero';
 
 interface ChatViewContentProps {
   // ChatContainer props
@@ -80,6 +81,9 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
           </div>
         </div>
       );
+    }
+    if (messages.length === 0) {
+      return <ZeroState />;
     }
     return (
       <ChatContainer

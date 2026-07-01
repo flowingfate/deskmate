@@ -26,7 +26,7 @@ export interface AgentConfig {
   updatedAt: Date
 }
 
-export type AgentEditorTabName = 'basic' | 'knowledge' | 'mcp' | 'tools' | 'skills' | 'sub_agents' | 'prompt'
+export type AgentEditorTabName = 'basic' | 'knowledge' | 'mcp' | 'tools' | 'skills' | 'sub_agents' | 'prompt' | 'presets'
 
 export interface TabComponentProps {
   mode: 'add' | 'update'
@@ -50,6 +50,7 @@ export interface TabState {
     skills: boolean
     sub_agents: boolean
     prompt: boolean
+    presets: boolean
   }
   agentCreated: boolean // Flag indicating whether the agent has been created in Add mode
 }
