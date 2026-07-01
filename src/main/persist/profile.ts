@@ -383,7 +383,7 @@ export class Profile {
       systemPrompt: src.systemPrompt,
       nowIso: ts,
     });
-    // patchFront 复制其余 front-matter 字段（thinkingLevel/mcpServers/skills/subAgents/zeroStates）
+    // patchFront 复制其余 front-matter 字段（thinkingLevel/mcpServers/skills/subAgents）
     // 写盘在 patchFront 内一并完成；此时 dst 还没进 agentRegistry.items，agentRegistry.syncRecord
     // 会找不到 id 而 no-op，下面 push 仍由 agentRegistry.persist 统一发 registry 事件。
     await dst.patchFront({
@@ -391,7 +391,6 @@ export class Profile {
       mcpServers: src.config.mcpServers,
       skills: src.config.skills,
       subAgents: src.config.subAgents,
-      zeroStates: src.config.zeroStates,
     });
 
     // 写顺序：AGENT.md（patchFront 已写）→ knowledge cp → agents.json

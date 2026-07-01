@@ -29,10 +29,6 @@ export interface UpdateAgentArgs {
     system_prompt?: string;
     mcp_servers?: AgentMcpServerInput[];
     skills?: string[];
-    zero_states?: {
-      greeting?: string;
-      quick_starts?: { title: string; description: string; prompt: string }[];
-    };
   };
 }
 
@@ -127,10 +123,6 @@ export async function updateAgentInternal(
       model: config.model !== undefined ? config.model : agent.config.model,
       mcpServers: finalMcpServers,
       skills: finalSkills,
-      zeroStates:
-        config.zero_states !== undefined
-          ? { greeting: config.zero_states.greeting, quickStarts: config.zero_states.quick_starts }
-          : undefined,
     });
 
     return {

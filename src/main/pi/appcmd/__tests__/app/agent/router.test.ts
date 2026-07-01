@@ -266,8 +266,6 @@ describe('agent add', () => {
       'git',
       '--mcp-tool',
       'git:status',
-      '--greeting',
-      'Hi',
     ]);
     expect(r.exitCode).toBe(0);
     const callArgs = agentMocks.createAgentInternal.mock.calls[0][0];
@@ -276,7 +274,6 @@ describe('agent add', () => {
     expect(callArgs.system_prompt).toBe('Be concise.');
     expect(callArgs.skills).toEqual(['foo', 'bar']);
     expect(callArgs.mcp_servers).toEqual([{ name: 'git', tools: ['status'] }]);
-    expect(callArgs.zero_states?.greeting).toBe('Hi');
   });
 
   it('--mcp-tool 缺 `:` → exit 2 + 不调 create', async () => {
@@ -284,12 +281,6 @@ describe('agent add', () => {
     expect(r.exitCode).toBe(2);
     expect(r.stderr).toContain('invalid --mcp-tool');
     expect(agentMocks.createAgentInternal).not.toHaveBeenCalled();
-  });
-
-  it('--quick-start 缺段 → exit 2', async () => {
-    const r = await runAgent(['add', 'bot', '--quick-start', 'only-title']);
-    expect(r.exitCode).toBe(2);
-    expect(r.stderr).toContain('--quick-start');
   });
 
   it('--dry-run 不调 create', async () => {

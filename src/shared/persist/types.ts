@@ -164,20 +164,39 @@ interface AgentMarkdownFrontBase {
   mcpServers?: AgentMcpServer[];
   skills?: string[];
   subAgents?: string[];
-  zeroStates?: ZeroStates;
+  zero?: AgentZeroState;
+}
+
+/**
+ * 单条预设提示词（Quick Prompt）—— 聊天空态里可点击的引导卡片。
+ * 点击卡片不发送，而是把 `prompt` 填入 ComposeInput 草稿，交给用户确认后再发。
+ * 落 AGENT.md front-matter `zero.preset_prompts`；跨进程共享此 wire 形态。
+ */
+export interface PresetPrompt {
+  /** 稳定标识，React key + 持久化行主键。 */
+  id: string;
+  /** 卡片标题：一句话概括这条提示词做什么。 */
+  title: string;
+  /** 可选次级说明，展示在标题下方。 */
+  description?: string;
+  /** 点击后填入 ComposeInput 的完整提示词文本。 */
+  prompt: string;
+  /**
+   * 图标 key（语义概念词，如 `write`/`search`/`code`）。renderer 经 `resolvePresetIcon`
+   * 解析成 Lucide 组件并带兜底；wire 层用 `string`（shared 不依赖 renderer 的 key 集）。
+   */
+  iconKey: string;
+}
+
+export interface AgentZeroState {
+  preset_prompts: PresetPrompt[];
 }
 
 export type AgentMarkdownFront = AgentMarkdownFrontBase;
 
 export type AgentMcpServer = import('../types/profileTypes').AgentMcpServer;
 
-export interface ZeroStates {
-  greeting?: string;
-  quickStarts?: QuickStartItem[];
-}
-
-export type { QuickStartItem, ModelConfig } from '../types/profileTypes';
-import type { QuickStartItem, ModelConfig } from '../types/profileTypes';
+import type { ModelConfig } from '../types/profileTypes';
 
 export interface AgentMarkdownFile {
   frontMatter: AgentMarkdownFront;
@@ -194,7 +213,7 @@ export interface AgentMarkdownFile {
  */
 export type AgentFrontPatch =
   & Partial<Pick<AgentRecordBase, 'name' | 'version' | 'model' | 'emoji' | 'avatar' | 'locked'>>
-  & Partial<Pick<AgentDetail, 'tools' | 'mcpServers' | 'skills' | 'subAgents' | 'zeroStates'>>
+  & Partial<Pick<AgentDetail, 'tools' | 'mcpServers' | 'skills' | 'subAgents' | 'zero'>>
   & {
     /**
      * thinkingLevel 在 patch 里是三态：
@@ -242,7 +261,8 @@ export interface AgentDetail {
   mcpServers?: AgentMcpServer[];
   skills?: string[];
   subAgents?: string[];
-  zeroStates?: ZeroStates;
+  /** 聊天空态的预设提示词（Quick Prompts）。缺席 ⇒ 未定制，renderer 回退默认播种列表。 */
+  zero?: AgentZeroState;
 }
 
 // ---------------------------------------------------------------------------

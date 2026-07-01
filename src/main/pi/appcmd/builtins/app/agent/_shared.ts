@@ -10,7 +10,6 @@
  * 偷偷做副作用"的陷阱。
  */
 
-import type { CreateAgentArgs } from './kernel/createAgent';
 
 /**
  * 校验 agent name。subcommand 拿到 positional[0] 后立即调本函数 ——
@@ -102,46 +101,6 @@ export function parseSkillFlag(raw: FlagRaw): string[] {
 }
 
 /**
- * 解析 `--quick-start "title|description|prompt"` × N。
- *
- * 形态:title / description / prompt 用 `|` 分隔,LLM 在 quote 内自己负责
- * 转义。失败给精确 hint —— quick start 是 prompt 字段最容易出错的部分。
- */
-export function parseQuickStartFlag(
-  raw: FlagRaw,
-): {
-  ok: true;
-  quickStarts?: Array<{ title: string; description: string; prompt: string }>;
-} | {
-  ok: false;
-  error: string;
-} {
-  const entries = normalizeArrayFlag(raw);
-  if (entries.length === 0) return { ok: true, quickStarts: undefined };
-  const quickStarts: Array<{ title: string; description: string; prompt: string }> = [];
-  for (const entry of entries) {
-    const parts = entry.split('|');
-    if (parts.length < 3) {
-      return {
-        ok: false,
-        error: `invalid --quick-start "${entry}". Expected "title|description|prompt" (3 segments separated by "|"). Use a quoted argument so shell preserves spaces.`,
-      };
-    }
-    const title = parts[0].trim();
-    const description = parts[1].trim();
-    const prompt = parts.slice(2).join('|').trim(); // prompt 可能含 `|`,把后面段重新拼起来
-    if (!title || !description || !prompt) {
-      return {
-        ok: false,
-        error: `invalid --quick-start "${entry}". title / description / prompt 都必须非空。`,
-      };
-    }
-    quickStarts.push({ title, description, prompt });
-  }
-  return { ok: true, quickStarts };
-}
-
-/**
  * 把 string[] server name + 可选 tool filter 转成
  * `[{ name, tools }, ...]` 形态(persist + UI 接受的形态)。
  *
@@ -155,25 +114,4 @@ export function buildMcpServersArray(
     name: serverName,
     tools: toolFilter?.[serverName] || [],
   }));
-}
-
-/**
- * 把 greeting + quick_starts(扁平来源)+ 可选 template 兜底,合并成
- * `CreateAgentArgs.zero_states` 形态。
- *
- * - greeting / quick_starts 任一为 undefined 时,从 template 取其值(若有)。
- * - 都没给 + template 也没给 → 返回 undefined(caller 不要写 zero_states)。
- */
-export function buildZeroStates(
-  greeting: string | undefined,
-  quickStarts: Array<{ title: string; description: string; prompt: string }> | undefined,
-  templateZeroStates?: NonNullable<CreateAgentArgs['zero_states']>,
-): NonNullable<CreateAgentArgs['zero_states']> | undefined {
-  if (greeting === undefined && quickStarts === undefined && !templateZeroStates) {
-    return undefined;
-  }
-  const result: NonNullable<CreateAgentArgs['zero_states']> = { ...(templateZeroStates || {}) };
-  if (greeting !== undefined) result.greeting = greeting;
-  if (quickStarts !== undefined) result.quick_starts = quickStarts;
-  return result;
 }

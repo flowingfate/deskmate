@@ -17,9 +17,7 @@ export type {
   StarredChatSessionIndexItem,
   SkillConfig,
   SubAgentConfig,
-  SubAgentContextAccess,
-  ZeroStates,
-  QuickStartItem
+  SubAgentContextAccess
 } from '@shared/types/profileTypes'
 export type { SchedulerJob } from '../../../../main/lib/scheduler/types'
 

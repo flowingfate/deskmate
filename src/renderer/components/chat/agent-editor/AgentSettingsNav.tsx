@@ -1,5 +1,5 @@
 import React from 'react'
-import { User, BookOpen, Cable, Wrench, BookMarked, Bot, FileText, type LucideIcon } from 'lucide-react'
+import { User, BookOpen, Cable, Wrench, BookMarked, Bot, FileText, Sparkles, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utilities/utils'
 import { Button } from '@/shadcn/button'
 import { AgentEditorTabName } from './types'
@@ -21,6 +21,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { key: 'skills', label: 'Skills', icon: BookMarked },
   { key: 'sub_agents', label: 'Sub-Agents', icon: Bot, flagged: true },
   { key: 'prompt', label: 'System Prompt', icon: FileText },
+  { key: 'presets', label: 'Quick Prompts', icon: Sparkles },
 ]
 
 interface AgentSettingsNavProps {

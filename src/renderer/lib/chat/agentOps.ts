@@ -37,12 +37,6 @@ function agentPersonaToPatch(partial: Partial<AgentPersona>): { patch: AgentFron
   if (partial.mcp_servers !== undefined)     patch.mcpServers = partial.mcp_servers;
   if (partial.skills !== undefined)          patch.skills = partial.skills;
   if (partial.sub_agents !== undefined)      patch.subAgents = partial.sub_agents;
-  if (partial.zero_states !== undefined) {
-    patch.zeroStates = {
-      greeting: partial.zero_states.greeting,
-      quickStarts: partial.zero_states.quick_starts,
-    };
-  }
   return {
     patch,
     systemPrompt: partial.system_prompt,
@@ -52,7 +46,7 @@ function agentPersonaToPatch(partial: Partial<AgentPersona>): { patch: AgentFron
 /**
  * `(AgentRecord, AgentDetail|null) → AgentEnvelope`。detail===null 时只能填
  * record 字段；cold 字段（systemPrompt / mcpServers / skills / subAgents /
- * knowledge / zeroStates / thinkingLevel）退化为空/缺席。caller 若需要完整
+ * knowledge / thinkingLevel）退化为空/缺席。caller 若需要完整
  * envelope，请先 `await persistApi.getAgentDetail(record.id)` 再传 detail。
  */
 function agentRecordToConfig(record: AgentRecord, detail: AgentDetail | null): AgentEnvelope {
@@ -70,12 +64,6 @@ function agentRecordToConfig(record: AgentRecord, detail: AgentDetail | null): A
   if (detail?.tools !== undefined)                                          agent.tools = detail.tools;
   if (detail?.skills !== undefined)                                         agent.skills = detail.skills;
   if (detail?.subAgents !== undefined)                                      agent.sub_agents = detail.subAgents;
-  if (detail?.zeroStates !== undefined) {
-    agent.zero_states = {
-      greeting: detail.zeroStates.greeting,
-      quick_starts: detail.zeroStates.quickStarts,
-    };
-  }
   return { agent_id: record.id, agent };
 }
 

@@ -276,16 +276,6 @@ export class AgentSessionCacheManager {
     this.sessions.replaceMessages(chatSessionId, messages, updates);
   }
 
-  /**
-   * Set the Assistant Say Hi message.
-   * Used for frontend rendering only; not included in the chat context and never sent to the backend.
-   * @param chatSessionId - ChatSession ID
-   * @param markdownContent - Markdown greeting text; pass null or an empty string to clear it
-   */
-  setGreetingContent(chatSessionId: string, markdownContent: string | null) {
-    return this.sessions.setGreetingContent(chatSessionId, markdownContent);
-  }
-
   addInteractiveRequest(chatSessionId: string, request: PendingInteractiveRequest) {
     this.sessions.handleInteractiveRequest(chatSessionId, request);
   }
@@ -490,11 +480,6 @@ export const CurrentSessionTokenUsage = SubCurrentSession(() => {
   const cache = agentSessionCacheManager.getCurrentChatSessionCache();
   return cache?.contextTokenUsage ?? EMPTY_TOKEN_USAGE;
 }, (prev, next) => prev.tokenCount === next.tokenCount);
-
-export const CurrentSessionGreeting = SubCurrentSid(() => {
-  const cache = agentSessionCacheManager.getCurrentChatSessionCache();
-  return cache?.greetingContent || null;
-});
 
 export const { useMessages, useMessagesWithStream } = (() => {
   const EMPTY_MESSAGES: RenderMessage[] = [];

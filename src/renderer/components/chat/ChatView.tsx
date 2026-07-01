@@ -8,8 +8,6 @@ import {
 import ChatViewHeader from './ChatViewHeader';
 import ChatViewContent from './ChatViewContent';
 import { ContextMenu } from './chat-input/ContextMenu';
-import { useCurrentAgent } from '@/states/agents.atom';
-import { useAgentDetail } from '@/states/agentDetail.atom';
 import { useToast } from '../ui/ToastProvider';
 import { CurrentSessionStatus, useHasChatSessionCache, agentSessionCacheManager } from '../../lib/chat/agentSessionCacheManager';
 import { currentSessionStore } from '@/states/currentSession.atom';
@@ -136,23 +134,12 @@ const ChatView: React.FC<ChatViewProps> = memo(({ kind = 'regular' }) => {
   );
 
   const { showSuccess, showError } = useToast();
-  const currentAgent = useCurrentAgent();
-  // zeroStates 是 cold 字段，按 agentId (== agentId) 懒读 detail；未到位时
-  // zeroStates===undefined，ChatViewContent 渲染 default 兜底（无 greeting）。
-  const currentAgentDetail = useAgentDetail(agentId);
 
 
   const isSessionSwitching = Boolean(
     routeSessionId && (chatSessionId !== routeSessionId || !hasRouteSessionCache)
   );
 
-  // Get the current Agent's Zero States configuration（来源：detail，懒加载）
-  const zeroStates = currentAgentDetail?.zeroStates
-    ? {
-        greeting: currentAgentDetail.zeroStates.greeting,
-        quick_starts: currentAgentDetail.zeroStates.quickStarts,
-      }
-    : undefined;
 
   // MCP Tools handler - must be defined after agentId
   const handleOpenMcpTools = useCallback(() => {
@@ -247,8 +234,6 @@ const ChatView: React.FC<ChatViewProps> = memo(({ kind = 'regular' }) => {
             isSessionSwitching={isSessionSwitching}
             agentId={agentId}
             chatStatus={chatStatus}
-            zeroStates={zeroStates}
-            agentName={currentAgent?.name}
             isReadOnly={false}
           />
         </AgentPane.Body>

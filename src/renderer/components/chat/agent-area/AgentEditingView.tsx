@@ -7,6 +7,7 @@ import AgentToolsTab from '../agent-editor/AgentToolsTab'
 import AgentSkillsTab from '../agent-editor/AgentSkillsTab'
 import AgentSubAgentsTab from '../agent-editor/AgentSubAgentsTab'
 import AgentSystemPromptTab from '../agent-editor/AgentSystemPromptTab'
+import AgentPresetsTab from '../agent-editor/AgentPresetsTab'
 import ErrorHandler from '../agent-editor/ErrorHandler'
 import { TabState, AgentConfig, AgentEditorTabName } from '../agent-editor/types'
 import { useAgentById, useAgents } from '@/states/agents.atom'
@@ -65,6 +66,7 @@ const AgentEditingView: React.FC = () => {
     'skills': 'skills',
     'sub_agents': 'sub_agents',
     'system_prompt': 'prompt',
+    'presets': 'presets',
   } as const
 
   // Reverse mapping - from internal tab name to route
@@ -76,6 +78,7 @@ const AgentEditingView: React.FC = () => {
     'skills': 'skills',
     'sub_agents': 'sub_agents',
     'prompt': 'system_prompt',
+    'presets': 'presets',
   } as const
 
   // Get current tab from URL, default to basic
@@ -96,6 +99,7 @@ const AgentEditingView: React.FC = () => {
       skills: true,
       sub_agents: true,
       prompt: true,
+      presets: true,
     },
     agentCreated: true // Agent already exists in edit mode
   })
@@ -124,6 +128,7 @@ const AgentEditingView: React.FC = () => {
     skills: false,
     sub_agents: false,
     prompt: false,
+    presets: false,
   }
 
   // Change tracking state - records whether each Tab has unsaved changes
@@ -135,6 +140,7 @@ const AgentEditingView: React.FC = () => {
     skills: boolean
     sub_agents: boolean
     prompt: boolean
+    presets: boolean
   }>({
     basic: false,
     knowledge: false,
@@ -143,6 +149,7 @@ const AgentEditingView: React.FC = () => {
     skills: false,
     sub_agents: false,
     prompt: false,
+    presets: false,
   })
 
   // Cache modified data for each Tab
@@ -154,6 +161,7 @@ const AgentEditingView: React.FC = () => {
     skills: Partial<AgentConfig> | null
     sub_agents: Partial<AgentConfig> | null
     prompt: Partial<AgentConfig> | null
+    presets: Partial<AgentConfig> | null
   }>({
     basic: null,
     knowledge: null,
@@ -162,6 +170,7 @@ const AgentEditingView: React.FC = () => {
     skills: null,
     sub_agents: null,
     prompt: null,
+    presets: null,
   })
 
   // URL route sync - watch URL param changes and update activeTab
@@ -482,6 +491,7 @@ const AgentEditingView: React.FC = () => {
         skills: false,
         sub_agents: false,
         prompt: false,
+        presets: false,
       })
       setTabChangesCache({
         basic: null,
@@ -491,6 +501,7 @@ const AgentEditingView: React.FC = () => {
         skills: null,
         sub_agents: null,
         prompt: null,
+        presets: null,
       })
 
       // Force remount all Tab components
@@ -733,6 +744,10 @@ const AgentEditingView: React.FC = () => {
               fieldErrors={fieldErrors}
               readOnly={readOnlyFlags.prompt}
             />
+          )}
+
+          {tabState.activeTab === 'presets' && tabState.tabsEnabled.presets && (
+            <AgentPresetsTab agentId={agentId} readOnly={readOnlyFlags.presets} />
           )}
 
         </div>
