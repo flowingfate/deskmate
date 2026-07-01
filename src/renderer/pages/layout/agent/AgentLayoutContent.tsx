@@ -55,7 +55,7 @@ export const AgentLayoutContent: React.FC<AgentLayoutContentProps> = ({
 
         {/* SessionPanel — agent header + session list */}
         <div
-          className={`session-panel-wrapper ${isSessionPanelVisible ? '' : 'collapsed'}`}
+          className={`session-panel-wrapper ${isSessionPanelVisible ? '' : 'collapsed'} relative`}
           style={{
             width: isSessionPanelVisible ? leftNavWidth : 0,
             flexShrink: 0,

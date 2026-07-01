@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-14 -->
+<!-- Last verified: 2026-07-01 -->
 # Agent Side Panel
 
 > 中间列（左 nav 与右侧 ChatView 之间）的整块 UI：agent header + sessions / jobs 双模式切换。
@@ -12,8 +12,8 @@
 | `header/AlarmToggleButton.tsx` | alarm 图标 + scheduled-unread badge；点击在 sessions ↔ jobs URL 间切换；jobs → sessions 时优先恢复之前选中的 sessionId | ~65 LOC |
 | `sessions/SessionsView.tsx` | sessions 子屏：search box + SessionList + New Conversation 按钮 | ~80 LOC |
 | `sessions/SessionList.tsx` | 单 agent 的 regular session 列表：starred 分组、未读高亮、滚动定位、ChatSessionMenuAtom 触发 | ~290 LOC |
-| `jobs/JobsView.tsx` | jobs 子屏：JobHeader + 紧凑 JobRow 列表 + AddScheduleOverlay + 删除确认 AlertDialog；CRUD / toggle / run-now 全部在此完成 | ~280 LOC |
-| `jobs/JobHeader.tsx` | jobs 顶部：独立的 ListSearchBox + "+" 按钮（含模板下拉，模板列表来自 `agent-editor/scheduleTemplates.ts`） | ~110 LOC |
+| `jobs/JobsView.tsx` | jobs 子屏：内联 ListSearchBox + 紧凑 JobRow 列表 + 底部 NewScheduleButton + AddScheduleOverlay + 删除确认 AlertDialog；CRUD / toggle / run-now 全部在此完成 | ~275 LOC |
+| `jobs/NewScheduleButton.tsx` | jobs 底部常驻的 `w-full` "New schedule" 按钮（对齐 sessions 的 New Conversation），含**向上**弹出的模板下拉，模板列表来自 `agent-editor/scheduleTemplates.ts` | ~100 LOC |
 | `jobs/JobRow.tsx` | 紧凑行：状态点 (toggle, 富 tooltip) + 标题/描述 (body, 派发 onActivate) + 右侧 chevron-down (展开/收起内联面板) | ~165 LOC |
 | `jobs/JobRunsView.tsx` | runs 子屏：RunsHeader + RunRow 列表；job 失效时 3s 后自动回退到 jobs 子屏；订阅 `useAgentScheduleRuns` | ~115 LOC |
 | `jobs/RunsHeader.tsx` | runs 顶部：返回箭头 + job 名 (无菜单) | ~50 LOC |
@@ -82,7 +82,7 @@ const JobRunChatView = () => (<><JobRunBanner /><ChatView kind="job-run" /></>);
 | 修改 alarm icon 行为 / 样式 | `header/AlarmToggleButton.tsx` | mode 由父组件传入，不要在内部读 URL；badge 绝对定位、`relative` 锚点都在该文件内 Tailwind class 里 |
 | 修改 jobs 列表行外观 | `jobs/JobRow.tsx` | 行高 ~56px；展开动画走 grid-rows `0fr↔1fr`，chevron `[&_svg]:rotate-180`；状态点用 `group/dot` + `group-hover/dot:scale-150`；tooltip 用 shadcn，JobsView 顶层挂 `TooltipProvider` |
 | 修改 runs 列表行外观 | `jobs/RunRow.tsx` + `jobs/runStatusIcons.tsx` | 状态判断走 `getScheduledSessionDisplayState`，**不要**直接读 `runStatus`；row 用 `group/row` 控制 More 按钮淡入 |
-| 加 schedule 模板 | `agent-editor/scheduleTemplates.ts` | JobHeader 自动展示;不需要改 agent-side |
+| 加 schedule 模板 | `agent-editor/scheduleTemplates.ts` | NewScheduleButton 自动展示;不需要改 agent-side |
 | 修改 JobRow body click 路由策略 (once vs cron 派发) | `JobsView.tsx#handleActivate` | 决策放在父组件,JobRow 只负责 `onActivate`;`runsByJob` map 同时供 once-job 直跳 latest run 用 |
 | 修改菜单动作 (Edit / Run / Delete) | `jobs/JobRow.tsx` (展开面板内的 Edit/Run now/Delete 按钮) | 唯一入口;RunsHeader 不再承载 |
 | 改 schedule run 菜单（Download / Delete only） | `menu/ChatSessionDropdownMenu.tsx`（按 `source === 'schedule'` 分支） | 触发方在 `RunRow.tsx` 上设 `data-chat-session-menu-source="schedule"` |
@@ -120,7 +120,7 @@ const JobRunChatView = () => (<><JobRunBanner /><ChatView kind="job-run" /></>);
 ## 注意事项
 - `SessionPanel` 在 URL 缺 agentId（`/agent` 根）时，header 仍渲染 `agentSessionCacheManager.getCurrentAgentId()` 的兜底名；body 显式不渲染。
 - `AddScheduleOverlay` 同时挂在 JobsView 和 JobRunsView。两个 view 不会同时挂载（URL 互斥），所以两个 overlay 实例不会同时存在。
-- `JobHeader` 的搜索框是独立 `useState`，**不**与 `SessionsView` 的 search 共享 —— 这是有意为之，jobs 搜索语义与 sessions 搜索完全不同。
+- `JobsView` 的搜索框是独立 `useState`，**不**与 `SessionsView` 的 search 共享 —— 这是有意为之，jobs 搜索语义与 sessions 搜索完全不同。
 - `ChatSessionMenuAtom.toggle(agentId, sessionId, title, trigger)` 通过读取 `trigger.dataset.chatSessionMenuSource` 决定渲染哪一套菜单项。`RunRow` 必须在调用前 `trigger.dataset.chatSessionMenuSource = 'schedule'`，否则会落到 default 菜单。
 - 新增 schedule run 状态（如 `cancelled`）时，`runStatusIcons.tsx` 与 `utils.ts#getScheduledSessionDisplayState` 一并扩。
 
@@ -138,8 +138,8 @@ const JobRunChatView = () => (<><JobRunBanner /><ChatView kind="job-run" /></>);
 
 ### 体验/可读性
 1. **`describeSchedule` 不识别 monthly cron**：`0 9 1 * *` 在 `cronDescriptions.ts#describeCronExpression` 走 fallthrough，直接渲染原始 cron 串到 `JobRow` 副标题。weekly / weekdays / weekends 已支持，补 monthly（"每月 1 日 09:00" / "1st of each month 09:00"）即可。改动点：`src/renderer/lib/scheduler/cronDescriptions.ts`。
-2. **`JobsView` 没有 wake-time 警告横幅**：老 `SchedulesContentView` 顶部有黄底"On-time runs require the app and machine to stay awake."提示，只在空态用 `<small>` 留了一句，有 jobs 的用户看不到。可在 `JobToolbar`/`JobHeader` 上方加紧凑可关闭信息条（关闭状态进 settings 或 localStorage）。
-3. **`ScheduleTemplate` 加 per-template `icon`**：现 5 个模板下拉项都用 `Sparkles`，无视觉区分。建议 Daily Briefing→`Sun`、Weekly Standup→`CalendarDays`、Friday Retro→`Coffee`、Inbox Triage→`Mail`、Monthly Report→`FileText`。改动：`scheduleTemplates.ts` 类型加 `icon: LucideIcon` + `JobHeader` 渲染。
+2. **`JobsView` 没有 wake-time 警告横幅**：老 `SchedulesContentView` 顶部有黄底"On-time runs require the app and machine to stay awake."提示，只在空态用 `<small>` 留了一句，有 jobs 的用户看不到。可在 `JobsView` 列表上方加紧凑可关闭信息条（关闭状态进 settings 或 localStorage）。
+3. **`ScheduleTemplate` 加 per-template `icon`**：现 5 个模板下拉项都用 `Sparkles`，无视觉区分。建议 Daily Briefing→`Sun`、Weekly Standup→`CalendarDays`、Friday Retro→`Coffee`、Inbox Triage→`Mail`、Monthly Report→`FileText`。改动：`scheduleTemplates.ts` 类型加 `icon: LucideIcon` + `NewScheduleButton` 渲染。
 
 ### 接口/可读性（中成本）
 4. **`AddScheduleOverlay` 935 行**：拆 `RecurringPresetEditor` / `OneTimeEditor` / `AgentPicker` 三个子组件；`buildCronExpression` / `parseCronExpression` 移到 `lib/scheduler/`。一次性投入 ~1h，后续改 schedule UI 都更省力。

@@ -30,14 +30,14 @@ export const SidebarTop: React.FC = () => {
   const handleAgentClick = useCallback(async (agentId: string) => {
     // 冷启动后首次点击：sessionIndex atom 未 hydrate，必须 await 拉一次；
     // 否则同步读会返回空 → 错跳 new-chat 而非该 agent 已有的最新 session。
-    const sessions = await ensureAgentSessionsLoaded(agentId);
-    const latest = sessions[0];
-    if (latest) {
-      navigate(`/agent/${agentId}/${latest.id}`, {
-        state: { source: 'sidebar' },
-      });
-      return;
-    }
+    // const sessions = await ensureAgentSessionsLoaded(agentId);
+    // const latest = sessions[0];
+    // if (latest) {
+    //   navigate(`/agent/${agentId}/${latest.id}`, {
+    //     state: { source: 'sidebar' },
+    //   });
+    //   return;
+    // }
     navigate(`/agent/${agentId}`, {
       state: { intent: 'new-chat', source: 'sidebar' },
     });

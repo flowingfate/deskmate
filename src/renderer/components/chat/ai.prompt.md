@@ -52,7 +52,7 @@
 | `zero/index.tsx` + `zero/PresetPromptCard.tsx` | 聊天空态：渲染预设提示词卡片。点击卡片**不发送**，而是把 `prompt` 写入 `composeTextAtom`（ComposeInput 草稿真值）填入输入框；输入框已有内容时弹 `AlertDialog` 确认覆盖。插图区为占位待填 | 中 |
 | `zero/presetPrompts.ts` + `zero/presetIcons.ts` | 预设提示词的数据层：类型 `PresetPrompt`（源真值 `@shared/persist/types`，`iconKey` 为 `string`）+ `usePresetPrompts`（订阅 `agentDetail.atom` 的 `zero.preset_prompts`，缺席回退空数组）+ `presetPromptActions`（CRUD → `persistApi.patchAgentFront(agentId, { zero })` 整段覆盖写）+ `MAX_PRESET_PROMPTS`。`presetIcons.ts` 是 iconKey→Lucide 组件的注册表（36 key + 兜底）。**数据链路已收敛到本文件，上层组件只依赖 hook/actions 不感知后端** | 小 |
 | `agent-editor/AddScheduleOverlay.tsx` | 共享的定时任务创建/编辑对话框；由 `components/agent-side/jobs/JobsView` 与 `JobRunsView` 调用 | — |
-| `agent-editor/scheduleTemplates.ts` | 内置定时任务模板，被 `JobHeader` 的"+"下拉消费 | — |
+| `agent-editor/scheduleTemplates.ts` | 内置定时任务模板，被 `NewJob` 的下拉消费 | — |
 | `workspace/WorkspaceExplorerSidepane.tsx` | 工作区侧栏容器：Agent Knowledge（`knowledge://`）+ Session Deliverables（`local://`）两个 `FileExplorerSection` | — |
 | `workspace/FileExplorerSection.tsx` | 单个文件根的展示外壳（折叠态 / 头部 / body 分发）；全部逻辑下沉到 `useFileExplorerSection`，状态视图在 `FileExplorerSectionStates.tsx`。纯 Tailwind，无 scss | — |
 | `workspace/useFileExplorerSection.ts` | FileExplorerSection 的数据/副作用 hook：URI→路径解析、文件树加载与懒加载、文件监听、拖拽复制、菜单动作 | — |

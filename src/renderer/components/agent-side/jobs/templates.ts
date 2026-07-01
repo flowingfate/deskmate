@@ -1,7 +1,7 @@
 /**
  * Schedule Templates
  *
- * Predefined schedules that appear in `JobHeader`'s "+" dropdown.
+ * Predefined schedules that appear in `NewScheduleButton`'s dropdown.
  * Each template hands the overlay a pre-filled `AddScheduleOverlayInitialValues`
  * built from the current agent's name. The overlay remains the single source of
  * truth for the schedule form; templates only seed it.
