@@ -292,7 +292,7 @@ function ApprovalRequestContent(props: {
                     className={cn(
                       'inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[13px] font-semibold transition',
                       decision === true
-                        ? 'border-teal-600/55 bg-teal-50/90 shadow-[0_10px_20px_rgba(13,148,136,0.12)]'
+                        ? 'border-neutral-600/55 bg-neutral-50/90 shadow-[0_10px_20px_rgba(13,148,136,0.12)]'
                         : 'border-slate-900/12 bg-white text-slate-900 hover:border-slate-900/25',
                     )}
                     onClick={() => setDecisions((prev) => ({ ...prev, [item.itemId]: true }))}
@@ -385,7 +385,7 @@ function ChoiceRequestContent(props: {
                 className={cn(
                   'w-full cursor-pointer rounded-2xl border bg-white/90 p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-55',
                   selected
-                    ? 'border-teal-600/55 bg-teal-50/90 shadow-[0_10px_20px_rgba(13,148,136,0.12)]'
+                    ? 'border-neutral-600/55 bg-neutral-50/90 shadow-[0_10px_20px_rgba(13,148,136,0.12)]'
                     : 'border-slate-300/50 hover:border-slate-400/60',
                 )}
                 disabled={option.disabled}
@@ -407,7 +407,7 @@ function ChoiceRequestContent(props: {
             className={cn(
               'w-full cursor-pointer rounded-2xl border bg-white/90 p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-55',
               customSelected
-                ? 'border-teal-600/55 bg-teal-50/90 shadow-[0_10px_20px_rgba(13,148,136,0.12)]'
+                ? 'border-neutral-600/55 bg-neutral-50/90 shadow-[0_10px_20px_rgba(13,148,136,0.12)]'
                 : 'border-slate-300/50 hover:border-slate-400/60',
             )}
             aria-pressed={customSelected}
@@ -687,7 +687,7 @@ function FormRequestContent(props: {
                         className={cn(
                           'flex min-h-14 w-full cursor-pointer flex-col items-start justify-start rounded-xl border bg-white/90 px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55',
                           isSelected
-                            ? 'border-teal-600/55 bg-teal-50/90 shadow-[0_8px_18px_rgba(13,148,136,0.12)]'
+                            ? 'border-neutral-600/55 bg-neutral-50/90 shadow-[0_8px_18px_rgba(13,148,136,0.12)]'
                             : 'border-slate-300/55 hover:border-slate-400/60',
                         )}
                         disabled={option.disabled}
@@ -707,7 +707,7 @@ function FormRequestContent(props: {
                       className={cn(
                         'flex min-h-14 w-full cursor-pointer flex-col items-start justify-start rounded-xl border bg-white/90 px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55',
                         customSelectEnabled[field.key]
-                          ? 'border-teal-600/55 bg-teal-50/90 shadow-[0_8px_18px_rgba(13,148,136,0.12)]'
+                          ? 'border-neutral-600/55 bg-neutral-50/90 shadow-[0_8px_18px_rgba(13,148,136,0.12)]'
                           : 'border-slate-300/55 hover:border-slate-400/60',
                       )}
                       aria-pressed={customSelectEnabled[field.key] === true}
@@ -808,7 +808,7 @@ const InteractiveRequestCard = (props: {
     <div className="p-4">
       <div className="flex items-start justify-between gap-3 max-[720px]:flex-col">
         <div className="flex items-start gap-2.5">
-          <Icon size={18} className="mt-0.5 shrink-0 text-teal-700" />
+          <Icon size={18} className="mt-0.5 shrink-0 text-neutral-700" />
           <div>
             <div className="text-[15px] font-semibold text-slate-900">{data.request.title}</div>
             {renderHtmlDescription(data.request.description)}

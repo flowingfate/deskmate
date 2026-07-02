@@ -206,7 +206,6 @@ const AgentLayout: React.FC = () => {
               actions: [
                 {
                   label: 'Open Folder',
-                  variant: 'primary' as const,
                   onClick: () => {
                     workspaceApi.showInFolder(result.filePath);
                   }
@@ -248,7 +247,6 @@ const AgentLayout: React.FC = () => {
             actions: [
               {
                 label: 'Open Folder',
-                variant: 'primary' as const,
                 onClick: () => {
                   workspaceApi.showInFolder(result.filePath!);
                 }

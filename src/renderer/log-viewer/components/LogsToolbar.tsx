@@ -40,7 +40,7 @@ const DEBOUNCE_MS = 250;
 const ctl =
   '!h-[28px] !py-0 !px-2.5 !text-[12px] !leading-[28px] !rounded-md !shadow-none ' +
   '!border !border-slate-200 !bg-white !text-slate-800 placeholder:!text-slate-400 ' +
-  'focus-visible:!border-blue-400 focus-visible:!ring-1 focus-visible:!ring-blue-500/25 ' +
+  'focus-visible:!border-neutral-400 focus-visible:!ring-1 focus-visible:!ring-neutral-500/25 ' +
   'focus-visible:!ring-offset-0 focus:!ring-offset-0';
 
 const btn =

@@ -37,7 +37,7 @@ type RenderToMain = {
     return: { success: boolean; error?: string };
   };
   runJobNow: {
-    call: [jobId: string];
+    call: [jobId: string, force?: boolean];
     return: { success: boolean; data?: SchedulerManualRunResult; error?: string };
   };
   getJobSessions: {

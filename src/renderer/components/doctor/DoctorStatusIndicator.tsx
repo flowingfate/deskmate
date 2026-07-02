@@ -66,7 +66,7 @@ const DoctorStatusIndicator: React.FC = () => {
         clickable ? 'cursor-pointer' : 'cursor-default'
       }`}
     >
-      {isLoading && <><Loader2 size={12} className="animate-spin text-blue-500" /><span className="text-blue-500">doctor: running</span></>}
+      {isLoading && <><Loader2 size={12} className="animate-spin text-neutral-500" /><span className="text-neutral-500">doctor: running</span></>}
       {isDone && <><CheckCircle2 size={12} className="text-emerald-500" strokeWidth={2.25} /><span className="text-emerald-500">doctor: done</span></>}
       {isError && <><AlertTriangle size={12} className="text-red-500" strokeWidth={2.25} /><span className="text-red-500">doctor: error</span></>}
     </span>

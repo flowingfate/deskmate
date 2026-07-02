@@ -4,10 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import type { SchedulerJob } from '@shared/ipc/scheduler';
 import { Button } from '@/shadcn/button';
 
-import { schedulerApi } from '../../../ipc/scheduler';
 import { useCurrentAgentId } from '../../../lib/chat/agentSessionCacheManager';
 import { describeCronExpression } from '../../../lib/scheduler/cronDescriptions';
-import { showScheduledRunStartedToast } from '../../../lib/scheduler/showScheduledRunStartedToast';
+import { runScheduleNow } from '../../../lib/scheduler/showScheduledRunStartedToast';
 import { useToast } from '../../ui/ToastProvider';
 
 import { useSchedules, useSchedulesHydrated } from '@/states/schedules.atom';
@@ -63,28 +62,11 @@ export const GeneratedScheduleCards: React.FC<GeneratedScheduleCardsProps> = ({ 
   }, [allJobs, normalizedScheduleIds]);
 
   const handleRunNow = useCallback(async (jobId: string) => {
-    try {
-      setRunningJobId(jobId);
-      const job = jobsById[jobId];
-      const response = await schedulerApi.runJobNow(jobId);
-      if (response?.success) {
-        showScheduledRunStartedToast({
-          result: response.data,
-          agentId: job?.agentId,
-          jobId,
-          navigate,
-          showToast,
-          showSuccess,
-        });
-        return;
-      }
-
-      showError('Failed to run schedule: ' + (response?.error || 'Unknown error'));
-    } catch (error) {
-      showError('Failed to run schedule: ' + (error instanceof Error ? error.message : String(error)));
-    } finally {
-      setRunningJobId((current) => (current === jobId ? null : current));
-    }
+    const job = jobsById[jobId];
+    if (!job) return;
+    setRunningJobId(jobId);
+    await runScheduleNow(job.agentId, jobId, navigate, showToast, showSuccess, showError);
+    setRunningJobId((current) => (current === jobId ? null : current));
   }, [jobsById, navigate, showError, showSuccess, showToast]);
 
   const handleManage = useCallback((jobId: string) => {

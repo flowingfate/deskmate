@@ -1,10 +1,10 @@
 /**
  * DeskmateTokenCache
  *
- * Browser auth token cache with an in-memory mirror plus profile-scoped
- * persistence. The cache is written under the active Deskmate profile so the
- * next app launch can reuse access tokens and refresh metadata before
- * re-entering browser auth.
+ * Per-server MCP OAuth credential cache with an in-memory mirror plus
+ * profile-scoped persistence. The cache is written under the active Deskmate
+ * profile so the next app launch can reuse access/refresh tokens and DCR
+ * client information before re-entering the interactive OAuth flow.
  */
 
 import * as fs from 'fs';
@@ -26,35 +26,6 @@ type SafeStorageLike = {
   encryptString(value: string): Buffer;
   decryptString(value: Buffer): string;
 };
-
-export type TokenCacheResource = 'graph' | 'chatsvc' | 'skypeApi' | 'substrate';
-
-export interface PersistedTokenInfo {
-  accessToken: string;
-  expiresAt: number;
-}
-
-export interface PersistedRefreshInfo {
-  refreshToken: string;
-  clientId: string;
-  homeAccountId: string;
-  tenantId: string;
-  environment?: string;
-  refreshTokenKey?: string;
-}
-
-export interface PersistedAccountInfo {
-  upn?: string | null;
-  tenantId?: string | null;
-  userMri?: string | null;
-}
-
-export interface PersistedRegionInfo {
-  region?: string;
-  chatServiceUrl?: string;
-  csaServiceUrl?: string;
-  teamsBaseUrl?: string;
-}
 
 /**
  * OAuth credential record for a single MCP server.
@@ -90,32 +61,12 @@ export interface PersistedMcpOAuthEntry {
 
 export interface DeskmateTokenCacheData {
   version: typeof CACHE_VERSION;
-  account?: PersistedAccountInfo;
-  graph?: PersistedTokenInfo;
-  chatsvc?: PersistedTokenInfo;
-  skypeApi?: PersistedTokenInfo;
-  substrate?: PersistedTokenInfo;
-  azureDevOps?: PersistedTokenInfo;
-  refresh?: PersistedRefreshInfo;
-  region?: PersistedRegionInfo;
   /**
-   * OAuth credentials for non-Microsoft MCP servers. Keyed by
-   * `getMcpOAuthServerKey()`. Profile-scoped by way of the cache file's
-   * profile-scoped path.
+   * OAuth credentials for MCP servers. Keyed by `getMcpOAuthServerKey()`.
+   * Profile-scoped by way of the cache file's profile-scoped path.
    */
   mcpOAuth?: Record<string, PersistedMcpOAuthEntry>;
   updatedAt: number;
-}
-
-export interface TokenCacheSnapshotInput {
-  account?: PersistedAccountInfo | null;
-  graph?: PersistedTokenInfo | null;
-  chatsvc?: PersistedTokenInfo | null;
-  skypeApi?: PersistedTokenInfo | null;
-  substrate?: PersistedTokenInfo | null;
-  azureDevOps?: PersistedTokenInfo | null;
-  refresh?: PersistedRefreshInfo | null;
-  region?: PersistedRegionInfo | null;
 }
 
 function resolveSafeStorage(): SafeStorageLike | null {
@@ -142,24 +93,7 @@ function normalizeCacheData(value: unknown): DeskmateTokenCacheData | null {
     updatedAt: raw.updatedAt,
   };
 
-  const account = normalizeAccount(raw.account);
-  const graph = normalizeToken(raw.graph);
-  const chatsvc = normalizeToken(raw.chatsvc);
-  const skypeApi = normalizeToken(raw.skypeApi);
-  const substrate = normalizeToken(raw.substrate);
-  const azureDevOps = normalizeToken(raw.azureDevOps);
-  const refresh = normalizeRefresh(raw.refresh);
-  const region = normalizeRegion(raw.region);
   const mcpOAuth = normalizeMcpOAuthMap(raw.mcpOAuth);
-
-  if (account) normalized.account = account;
-  if (graph) normalized.graph = graph;
-  if (chatsvc) normalized.chatsvc = chatsvc;
-  if (skypeApi) normalized.skypeApi = skypeApi;
-  if (substrate) normalized.substrate = substrate;
-  if (azureDevOps) normalized.azureDevOps = azureDevOps;
-  if (refresh) normalized.refresh = refresh;
-  if (region) normalized.region = region;
   if (mcpOAuth) normalized.mcpOAuth = mcpOAuth;
 
   return normalized;
@@ -167,69 +101,6 @@ function normalizeCacheData(value: unknown): DeskmateTokenCacheData | null {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function normalizeToken(value: unknown): PersistedTokenInfo | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const token = value as PersistedTokenInfo;
-  if (!isNonEmptyString(token.accessToken) || typeof token.expiresAt !== 'number' || !Number.isFinite(token.expiresAt)) {
-    return undefined;
-  }
-  return {
-    accessToken: token.accessToken,
-    expiresAt: token.expiresAt,
-  };
-}
-
-function normalizeRefresh(value: unknown): PersistedRefreshInfo | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const refresh = value as PersistedRefreshInfo;
-  if (
-    !isNonEmptyString(refresh.refreshToken) ||
-    !isNonEmptyString(refresh.clientId) ||
-    !isNonEmptyString(refresh.homeAccountId) ||
-    !isNonEmptyString(refresh.tenantId)
-  ) {
-    return undefined;
-  }
-
-  return {
-    refreshToken: refresh.refreshToken,
-    clientId: refresh.clientId,
-    homeAccountId: refresh.homeAccountId,
-    tenantId: refresh.tenantId,
-    environment: isNonEmptyString(refresh.environment) ? refresh.environment : undefined,
-    refreshTokenKey: isNonEmptyString(refresh.refreshTokenKey) ? refresh.refreshTokenKey : undefined,
-  };
-}
-
-function normalizeAccount(value: unknown): PersistedAccountInfo | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const account = value as PersistedAccountInfo;
-  const normalized: PersistedAccountInfo = {
-    upn: isNonEmptyString(account.upn) ? account.upn : null,
-    tenantId: isNonEmptyString(account.tenantId) ? account.tenantId : null,
-    userMri: isNonEmptyString(account.userMri) ? account.userMri : null,
-  };
-
-  if (!normalized.upn && !normalized.tenantId && !normalized.userMri) {
-    return undefined;
-  }
-
-  return normalized;
-}
-
-function normalizeRegion(value: unknown): PersistedRegionInfo | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const region = value as PersistedRegionInfo;
-  const normalized: PersistedRegionInfo = {};
-
-  if (isNonEmptyString(region.region)) normalized.region = region.region;
-  if (isNonEmptyString(region.chatServiceUrl)) normalized.chatServiceUrl = region.chatServiceUrl;
-  if (isNonEmptyString(region.csaServiceUrl)) normalized.csaServiceUrl = region.csaServiceUrl;
-  if (isNonEmptyString(region.teamsBaseUrl)) normalized.teamsBaseUrl = region.teamsBaseUrl;
-
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 function normalizeMcpOAuthEntry(value: unknown): PersistedMcpOAuthEntry | undefined {
@@ -337,7 +208,7 @@ export class DeskmateTokenCache {
   }
 
   private logMissingAlias(operation: 'load' | 'save' | 'clear'): void {
-    logger.warn({ msg: '[DeskmateTokenCache] Skipping persisted browser auth cache operation because no active profile is available', mod: operation });
+    logger.warn({ msg: '[DeskmateTokenCache] Skipping persisted MCP OAuth cache operation because no active profile is available', mod: operation });
   }
 
   private async readPersistedCache(): Promise<DeskmateTokenCacheData | null> {
@@ -371,7 +242,7 @@ export class DeskmateTokenCache {
         return parsed;
       }
     } catch (error) {
-      logger.warn({ msg: '[DeskmateTokenCache] Failed to read persisted browser auth cache', mod: 'readPersistedCache', err: error });
+      logger.warn({ msg: '[DeskmateTokenCache] Failed to read persisted MCP OAuth cache', mod: 'readPersistedCache', err: error });
     }
 
     this.loadedCachePath = null;
@@ -435,7 +306,7 @@ export class DeskmateTokenCache {
     return this.runSerialized(async () => {
       const normalized = normalizeCacheData({ ...data, version: CACHE_VERSION, updatedAt: Date.now() });
       if (!normalized) {
-        throw new Error('Invalid browser auth cache payload');
+        throw new Error('Invalid MCP OAuth cache payload');
       }
 
       this.cache = cloneCache(normalized);
@@ -452,30 +323,11 @@ export class DeskmateTokenCache {
     });
   }
 
-  async getValidToken(resource: TokenCacheResource, minValiditySec: number = 300): Promise<PersistedTokenInfo | null> {
-    const cache = await this.load();
-    if (!cache) return null;
-
-    const token = cache[resource];
-    if (!token) return null;
-
-    const now = Math.floor(Date.now() / 1000);
-    if (token.expiresAt <= now + minValiditySec) {
-      return null;
-    }
-
-    return token;
-  }
-
-  async getRefreshInfo(): Promise<PersistedRefreshInfo | null> {
-    return (await this.load())?.refresh || null;
-  }
-
   async getCache(): Promise<DeskmateTokenCacheData | null> {
     return await this.load();
   }
 
-  // ────────────────── MCP OAuth (non-Microsoft) ──────────────────
+  // ────────────────── MCP OAuth ──────────────────
 
   /**
    * Read the OAuth credential entry for a single MCP server.
@@ -547,102 +399,6 @@ export class DeskmateTokenCache {
   private runSerialized<T>(op: () => Promise<T>): Promise<T> {
     const next = this.writeChain.then(() => op(), () => op());
     this.writeChain = next.catch(() => undefined);
-    return next;
-  }
-
-  async hasAnyUsableAuth(): Promise<boolean> {
-    const cache = await this.load();
-    if (!cache) return false;
-
-    return Boolean(
-      cache.graph ||
-      cache.chatsvc ||
-      cache.skypeApi ||
-      cache.substrate ||
-      cache.azureDevOps ||
-      cache.refresh
-    );
-  }
-
-  async updateFromSnapshot(snapshot: TokenCacheSnapshotInput): Promise<DeskmateTokenCacheData> {
-    const existing = (await this.load()) || { version: CACHE_VERSION, updatedAt: Date.now() };
-    const next: DeskmateTokenCacheData = {
-      ...existing,
-      version: CACHE_VERSION,
-      updatedAt: Date.now(),
-    };
-
-    if (snapshot.account !== undefined) {
-      const normalized = normalizeAccount(snapshot.account);
-      if (normalized) next.account = normalized;
-    }
-    if (snapshot.graph !== undefined) {
-      const normalized = normalizeToken(snapshot.graph);
-      if (normalized) next.graph = normalized;
-    }
-    if (snapshot.chatsvc !== undefined) {
-      const normalized = normalizeToken(snapshot.chatsvc);
-      if (normalized) next.chatsvc = normalized;
-    }
-    if (snapshot.skypeApi !== undefined) {
-      const normalized = normalizeToken(snapshot.skypeApi);
-      if (normalized) next.skypeApi = normalized;
-    }
-    if (snapshot.substrate !== undefined) {
-      const normalized = normalizeToken(snapshot.substrate);
-      if (normalized) next.substrate = normalized;
-    }
-    if (snapshot.azureDevOps !== undefined) {
-      const normalized = normalizeToken(snapshot.azureDevOps);
-      if (normalized) next.azureDevOps = normalized;
-    }
-    if (snapshot.refresh !== undefined) {
-      const normalized = normalizeRefresh(snapshot.refresh);
-      if (normalized) next.refresh = normalized;
-    }
-    if (snapshot.region !== undefined) {
-      const normalized = normalizeRegion(snapshot.region);
-      if (normalized) next.region = normalized;
-    }
-
-    await this.save(next);
-    return next;
-  }
-
-  async updateFromRefreshResult(
-    resource: TokenCacheResource,
-    result: { accessToken: string; expiresAt: number; refreshToken?: string },
-    metadata?: {
-      refresh?: PersistedRefreshInfo | null;
-      account?: PersistedAccountInfo | null;
-      region?: PersistedRegionInfo | null;
-    },
-  ): Promise<DeskmateTokenCacheData> {
-    const existing = (await this.load()) || { version: CACHE_VERSION, updatedAt: Date.now() };
-    const next: DeskmateTokenCacheData = {
-      ...existing,
-      version: CACHE_VERSION,
-      updatedAt: Date.now(),
-      [resource]: {
-        accessToken: result.accessToken,
-        expiresAt: result.expiresAt,
-      },
-    };
-
-    const refreshBase = metadata?.refresh || existing.refresh;
-    if (refreshBase) {
-      next.refresh = {
-        ...refreshBase,
-        refreshToken: isNonEmptyString(result.refreshToken) ? result.refreshToken : refreshBase.refreshToken,
-      };
-    }
-
-    const account = normalizeAccount(metadata?.account);
-    const region = normalizeRegion(metadata?.region);
-    if (account) next.account = account;
-    if (region) next.region = region;
-
-    await this.save(next);
     return next;
   }
 }

@@ -27,10 +27,6 @@
     "diagnose": "./scripts/diagnose-sandbox.sh",
     "debug:update": "node scripts/debug-update-check.js",
     "debug:update-verbose": "DEBUG=* node scripts/debug-update-check.js",
-    "prepare:release": "node scripts/prepare-release.js",
-    "prepare:release:patch": "node scripts/prepare-release.js patch",
-    "prepare:release:minor": "node scripts/prepare-release.js minor",
-    "prepare:release:major": "node scripts/prepare-release.js major",
     "rebuild": "node scripts/rebuild-native.js",
     "postinstall": "node scripts/rebuild-native.js && node scripts/setup-ai-docs.js",
     "generate-mac-icons-with-padding": "node scripts/generate-mac-icons-with-padding.js",
@@ -43,7 +39,6 @@
     "pretest:e2e": "npm run build"
   },
   "dependencies": {
-    "@azure/msal-node": "^5.0.5",
     "@earendil-works/pi-ai": "^0.79.10",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@vscode/ripgrep": "^1.15.14",
@@ -104,7 +99,6 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/stylis": "^4.2.7",
     "@types/turndown": "^5.0.6",
-    "@vanilla-extract/css": "^1.20.1",
     "@vitejs/plugin-react-swc": "^4.3.0",
     "@vitest/coverage-v8": "^4.1.5",
     "buffer": "^6.0.3",

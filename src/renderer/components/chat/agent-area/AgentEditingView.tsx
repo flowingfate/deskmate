@@ -17,9 +17,8 @@ import { updateAgent } from '../../../lib/chat/agentOps'
 import { AgentPersona } from '../../../lib/userData/types'
 import { useToast } from '../../ui/ToastProvider'
 import { useFeatureFlag } from '../../../lib/featureFlags'
-import { ArrowLeft, Loader2, Save } from 'lucide-react'
+import { ArrowLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/shadcn/button'
-import { Badge } from '@/shadcn/badge'
 import AgentPane from '@/pages/layout/agent/agent-pane'
 import { AgentAvatar } from '../../common/AgentAvatar'
 import AgentSettingsNav from '../agent-editor/AgentSettingsNav'
@@ -589,172 +588,153 @@ const AgentEditingView: React.FC = () => {
             <span className="text-xs opacity-50 shrink-0">Settings</span>
           </div>
         </div>
-        <Button
-          onClick={handleSaveAll}
-          disabled={isLoading || !canSaveAll}
-          title={
-            isLoading
-              ? 'Saving...'
-              : canSaveAll
-                ? 'Save All Changes'
-                : 'No Changes to Save'
-          }
-          size="sm"
-          className="gap-1.5 shrink-0"
-        >
-          {isLoading
-            ? <Loader2 size={15} className="animate-spin" />
-            : <Save size={15} strokeWidth={1.75} />}
-          {isLoading ? 'Saving...' : 'Save'}
-          {!isLoading && pendingCount > 0 && (
-            <Badge className="ml-0.5 h-4 px-1.5 py-0 text-[11px] font-semibold border-transparent bg-white/25 text-white">
-              {pendingCount}
-            </Badge>
-          )}
-        </Button>
       </AgentPane.Head>
 
       <AgentPane.Body>
 
-     {/* Content */}
-     <div className="flex flex-1 min-h-0 overflow-hidden h-full">
-       {/* Error Display */}
-       {error && (
-          <div className="px-6 shrink-0">
-            <ErrorHandler
-              error={error}
-              onDismiss={handleClearError}
-            />
-          </div>
-        )}
-
-        {/* Left Navigation */}
-        <AgentSettingsNav
-          activeTab={tabState.activeTab}
-          pendingChanges={pendingChanges}
-          subAgentEnabled={subAgentEnabled}
-          onSwitch={handleTabSwitch}
-        />
-
-        {/* Right Content Area */}
-        <div className="flex-1 min-w-0 overflow-hidden relative bg-white/95 box-border">
-          {/* Loading Overlay */}
-          {isLoading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-[100] bg-white/70 backdrop-blur-[2px]">
-              <Loader2 className="text-accent animate-spin" size={20} strokeWidth={2} />
-              <span className="text-sm text-content-secondary font-medium">Saving...</span>
+        {/* Content */}
+        <div className="flex flex-1 min-h-0 overflow-hidden h-full">
+          {/* Error Display */}
+          {error && (
+            <div className="px-6 shrink-0">
+              <ErrorHandler
+                error={error}
+                onDismiss={handleClearError}
+              />
             </div>
           )}
 
-          {/* Render only the selected Tab content based on active state */}
-          {tabState.activeTab === 'basic' && (
-            <AgentBasicTab
-              key={`basic-${tabResetKey}`}
-              mode="update"
-              agentId={agentId}
-              agentData={agentData}
-              onSave={handleSave}
-              onDataChange={handleTabDataChange}
-              cachedData={tabChangesCache.basic}
-              fieldErrors={fieldErrors}
-              readOnly={readOnlyFlags.basic}
-            />
-          )}
+          {/* Left Navigation */}
+          <AgentSettingsNav
+            activeTab={tabState.activeTab}
+            pendingChanges={pendingChanges}
+            subAgentEnabled={subAgentEnabled}
+            onSwitch={handleTabSwitch}
+            onSaveAll={handleSaveAll}
+            isLoading={isLoading}
+            canSaveAll={canSaveAll}
+            pendingCount={pendingCount}
+          />
 
-          {tabState.activeTab === 'knowledge' && tabState.tabsEnabled.knowledge && (
-            <AgentKnowledgeBaseTab
-              key={`knowledge-${tabResetKey}`}
-              mode="update"
-              agentId={agentId}
-              agentData={agentData}
-              onSave={handleSave}
-              onDataChange={handleTabDataChange}
-              cachedData={tabChangesCache.knowledge}
-              fieldErrors={fieldErrors}
-              readOnly={readOnlyFlags.knowledge}
-            />
-          )}
+          {/* Right Content Area */}
+          <div className="flex-1 min-w-0 overflow-hidden relative bg-white/95 box-border">
+            {/* Loading Overlay */}
+            {isLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-[100] bg-white/70 backdrop-blur-[2px]">
+                <Loader2 className="text-accent animate-spin" size={20} strokeWidth={2} />
+                <span className="text-sm text-content-secondary font-medium">Saving...</span>
+              </div>
+            )}
 
-          {tabState.activeTab === 'mcp' && tabState.tabsEnabled.mcp && (
-            <AgentMcpServersTab
-              key={`mcp-${tabResetKey}`}
-              mode="update"
-              agentId={agentId}
-              agentData={agentData}
-              onSave={handleSave}
-              onDataChange={handleTabDataChange}
-              cachedData={tabChangesCache.mcp}
-              fieldErrors={fieldErrors}
-              readOnly={readOnlyFlags.mcp}
-            />
-          )}
+            {/* Render only the selected Tab content based on active state */}
+            {tabState.activeTab === 'basic' && (
+              <AgentBasicTab
+                key={`basic-${tabResetKey}`}
+                mode="update"
+                agentId={agentId}
+                agentData={agentData}
+                onSave={handleSave}
+                onDataChange={handleTabDataChange}
+                cachedData={tabChangesCache.basic}
+                fieldErrors={fieldErrors}
+                readOnly={readOnlyFlags.basic}
+              />
+            )}
 
-          {tabState.activeTab === 'tools' && tabState.tabsEnabled.tools && (
-            <AgentToolsTab
-              key={`tools-${tabResetKey}`}
-              mode="update"
-              agentId={agentId}
-              agentData={agentData}
-              onSave={handleSave}
-              onDataChange={handleTabDataChange}
-              cachedData={tabChangesCache.tools}
-              fieldErrors={fieldErrors}
-              readOnly={readOnlyFlags.tools}
-            />
-          )}
+            {tabState.activeTab === 'knowledge' && tabState.tabsEnabled.knowledge && (
+              <AgentKnowledgeBaseTab
+                key={`knowledge-${tabResetKey}`}
+                mode="update"
+                agentId={agentId}
+                agentData={agentData}
+                onSave={handleSave}
+                onDataChange={handleTabDataChange}
+                cachedData={tabChangesCache.knowledge}
+                fieldErrors={fieldErrors}
+                readOnly={readOnlyFlags.knowledge}
+              />
+            )}
 
-          {tabState.activeTab === 'skills' && tabState.tabsEnabled.skills && (
-            <AgentSkillsTab
-              key={`skills-${tabResetKey}`}
-              mode="update"
-              agentId={agentId}
-              agentData={agentData}
-              onSave={handleSave}
-              onDataChange={handleTabDataChange}
-              cachedData={tabChangesCache.skills}
-              fieldErrors={fieldErrors}
-              readOnly={readOnlyFlags.skills}
-            />
-          )}
+            {tabState.activeTab === 'mcp' && tabState.tabsEnabled.mcp && (
+              <AgentMcpServersTab
+                key={`mcp-${tabResetKey}`}
+                mode="update"
+                agentId={agentId}
+                agentData={agentData}
+                onSave={handleSave}
+                onDataChange={handleTabDataChange}
+                cachedData={tabChangesCache.mcp}
+                fieldErrors={fieldErrors}
+                readOnly={readOnlyFlags.mcp}
+              />
+            )}
+
+            {tabState.activeTab === 'tools' && tabState.tabsEnabled.tools && (
+              <AgentToolsTab
+                key={`tools-${tabResetKey}`}
+                mode="update"
+                agentId={agentId}
+                agentData={agentData}
+                onSave={handleSave}
+                onDataChange={handleTabDataChange}
+                cachedData={tabChangesCache.tools}
+                fieldErrors={fieldErrors}
+                readOnly={readOnlyFlags.tools}
+              />
+            )}
+
+            {tabState.activeTab === 'skills' && tabState.tabsEnabled.skills && (
+              <AgentSkillsTab
+                key={`skills-${tabResetKey}`}
+                mode="update"
+                agentId={agentId}
+                agentData={agentData}
+                onSave={handleSave}
+                onDataChange={handleTabDataChange}
+                cachedData={tabChangesCache.skills}
+                fieldErrors={fieldErrors}
+                readOnly={readOnlyFlags.skills}
+              />
+            )}
 
 
-          {subAgentEnabled && tabState.activeTab === 'sub_agents' && tabState.tabsEnabled.sub_agents && (
-            <AgentSubAgentsTab
-              key={`sub_agents-${tabResetKey}`}
-              mode="update"
-              agentId={agentId}
-              agentData={agentData}
-              onSave={handleSave}
-              onDataChange={handleTabDataChange}
-              cachedData={tabChangesCache.sub_agents}
-              fieldErrors={fieldErrors}
-              readOnly={readOnlyFlags.sub_agents}
-            />
-          )}
+            {subAgentEnabled && tabState.activeTab === 'sub_agents' && tabState.tabsEnabled.sub_agents && (
+              <AgentSubAgentsTab
+                key={`sub_agents-${tabResetKey}`}
+                mode="update"
+                agentId={agentId}
+                agentData={agentData}
+                onSave={handleSave}
+                onDataChange={handleTabDataChange}
+                cachedData={tabChangesCache.sub_agents}
+                fieldErrors={fieldErrors}
+                readOnly={readOnlyFlags.sub_agents}
+              />
+            )}
 
-          {tabState.activeTab === 'prompt' && tabState.tabsEnabled.prompt && (
-            <AgentSystemPromptTab
-              key={`prompt-${tabResetKey}`}
-              mode="update"
-              agentId={agentId}
-              agentData={agentData}
-              onSave={handleSave}
-              onDataChange={handleTabDataChange}
-              cachedData={tabChangesCache.prompt}
-              fieldErrors={fieldErrors}
-              readOnly={readOnlyFlags.prompt}
-            />
-          )}
+            {tabState.activeTab === 'prompt' && tabState.tabsEnabled.prompt && (
+              <AgentSystemPromptTab
+                key={`prompt-${tabResetKey}`}
+                mode="update"
+                agentId={agentId}
+                agentData={agentData}
+                onSave={handleSave}
+                onDataChange={handleTabDataChange}
+                cachedData={tabChangesCache.prompt}
+                fieldErrors={fieldErrors}
+                readOnly={readOnlyFlags.prompt}
+              />
+            )}
 
-          {tabState.activeTab === 'presets' && tabState.tabsEnabled.presets && (
-            <AgentPresetsTab agentId={agentId} readOnly={readOnlyFlags.presets} />
-          )}
+            {tabState.activeTab === 'presets' && tabState.tabsEnabled.presets && (
+              <AgentPresetsTab agentId={agentId} readOnly={readOnlyFlags.presets} />
+            )}
 
+          </div>
         </div>
-      </div>
       </AgentPane.Body>
     </AgentPane>
-  )
+  );
 }
 
 export default AgentEditingView

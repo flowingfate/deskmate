@@ -77,7 +77,7 @@ export const AppRoutes: React.FC = () => {
 
         {/* Settings Routes - separate from agent */}
         <Route path="/settings" element={<SettingsPage />}>
-          <Route index element={<Navigate to="mcp" replace />} />
+          <Route index element={<Navigate to="tools" replace />} />
           <Route path="screenshot" element={<ScreenshotSettingsView />} />
           <Route path="mcp" element={<McpView />} />
           <Route path="mcp/new" element={<AddNewMcpServerView />} />

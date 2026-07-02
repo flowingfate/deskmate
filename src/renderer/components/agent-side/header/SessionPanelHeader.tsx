@@ -33,7 +33,7 @@ const SessionPanelHeader: React.FC<SessionPanelHeaderProps> = ({ agentId, agent,
   return (
     <div
       data-dbg="session-panel-header"
-      className="flex items-center h-11 pl-[6px] mt-[2px] shrink-0 border-b border-black/[0.06] mb-1"
+      className="flex items-center h-11 pl-1.5 mt-0.5 shrink-0 border-b border-black/6 mb-1"
     >
       <span
         data-dbg="session-panel-agent-name"
@@ -42,14 +42,14 @@ const SessionPanelHeader: React.FC<SessionPanelHeaderProps> = ({ agentId, agent,
       >
         {agentName}
         {isBuiltin && (
-          <Badge className="bg-gradient-to-br from-purple-300 to-purple-400 text-white border-0 px-1.5 py-0 text-[0.55rem] rounded align-super relative -top-1">
+          <Badge className="bg-linear-to-br from-neutral-300 to-neutral-400 text-white border-0 px-1.5 py-0 text-[0.55rem] rounded align-super relative -top-1">
             Built-in
           </Badge>
         )}
       </span>
       <div
         data-dbg="session-panel-header-actions"
-        className="flex items-center gap-[2px] shrink-0"
+        className="flex items-center gap-0.5 shrink-0"
       >
         <AlarmToggleButton agentId={agentId} mode={mode} sessionId={sessionId} />
         <Button

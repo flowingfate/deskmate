@@ -62,7 +62,7 @@ const ApiKeyForm: React.FC<Props> = ({ providers, onSaved, onCancel }) => {
           {providers.map((p) => (
             <label
               key={p.id}
-              className="flex items-center gap-2 cursor-pointer rounded-md border border-black/7 px-3 py-2 hover:bg-gray-50 has-[[data-state=checked]]:border-blue-500 has-[[data-state=checked]]:bg-blue-50/50"
+              className="flex items-center gap-2 cursor-pointer rounded-md border border-black/7 px-3 py-2 hover:bg-gray-50 has-[[data-state=checked]]:border-neutral-500 has-[[data-state=checked]]:bg-neutral-50/50"
             >
               <RadioGroupItem value={p.id} />
               <span className="text-sm">{p.name}</span>

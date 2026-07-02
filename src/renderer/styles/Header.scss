@@ -127,8 +127,8 @@
   font-weight: 600;
   letter-spacing: 0.5px;
   color: var(--palette-purple-500);
-  background: rgba(139, 92, 246, 0.08);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  background: rgba(115, 115, 115, 0.08);
+  border: 1px solid rgba(115, 115, 115, 0.2);
   border-radius: var(--radius-sm);
   padding: 2px 6px;
   cursor: pointer;
@@ -139,8 +139,8 @@
 
   &:hover,
   &--active {
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.4);
+    background: rgba(115, 115, 115, 0.15);
+    border-color: rgba(115, 115, 115, 0.4);
   }
 }
 
@@ -167,7 +167,7 @@
   transition: background 0.1s ease;
 
   &:hover {
-    background: #f9fafb;
+    background: #fafafa;
   }
 
   & + & {

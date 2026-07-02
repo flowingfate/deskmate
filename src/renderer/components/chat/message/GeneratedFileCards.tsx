@@ -287,7 +287,6 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
                   showToast('Unable to open knowledge base', 'error');
                 }
               },
-              variant: 'primary',
             },
           ],
         });

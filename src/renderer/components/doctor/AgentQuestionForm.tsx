@@ -66,7 +66,7 @@ const AgentQuestionForm: React.FC<Props> = ({ payload }) => {
       className="w-[340px] rounded-xl border border-neutral-200 bg-white shadow-2xl shadow-black/15 overflow-hidden"
       data-dbg="doctor-question-form"
     >
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-100 bg-gradient-to-r from-blue-50 to-violet-50">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-100 bg-gradient-to-r from-neutral-50 to-neutral-50">
         {doctor_icon}
         <div className="text-sm font-semibold text-neutral-900">Doctor needs your input</div>
       </div>

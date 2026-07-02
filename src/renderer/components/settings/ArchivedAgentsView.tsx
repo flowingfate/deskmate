@@ -123,7 +123,7 @@ const ArchivedAgentsView: React.FC = () => {
               >
                 <div className="flex flex-col gap-1 flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-(--color-text-primary,#111827) overflow-hidden text-ellipsis whitespace-nowrap">
+                    <span className="text-sm font-semibold text-(--color-text-primary,#1c1c1c) overflow-hidden text-ellipsis whitespace-nowrap">
                       {agent.agent?.name || 'Unknown Agent'}
                     </span>
                   </div>

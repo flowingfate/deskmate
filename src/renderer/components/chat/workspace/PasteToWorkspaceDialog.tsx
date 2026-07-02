@@ -218,7 +218,7 @@ const PasteToWorkspaceDialog: React.FC<PasteToWorkspaceDialogProps> = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 rounded-md transition-colors hover:bg-indigo-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-neutral-500 bg-neutral-500/10 border border-neutral-500/20 rounded-md transition-colors hover:bg-neutral-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleRegenerateFileName}
                   disabled={isGeneratingName || isSaving}
                   title="Regenerate file name with AI"
@@ -238,7 +238,7 @@ const PasteToWorkspaceDialog: React.FC<PasteToWorkspaceDialogProps> = ({
                 disabled={isSaving}
               />
               {isGeneratingName && (
-                <div className="absolute right-3 flex items-center justify-center text-indigo-500">
+                <div className="absolute right-3 flex items-center justify-center text-neutral-500">
                   <Loader2 size={16} className="animate-spin" />
                 </div>
               )}

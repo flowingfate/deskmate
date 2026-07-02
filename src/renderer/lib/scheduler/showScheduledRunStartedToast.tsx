@@ -1,8 +1,9 @@
 import React from 'react'
 
 import type { SchedulerManualRunResult } from '@shared/ipc/scheduler'
-
+import { log } from '@/log';
 import type { ToastMessage } from '../../components/ui/Toast'
+import { schedulerApi } from '@renderer/ipc/scheduler';
 
 type NavigateFn = (to: string) => void
 
@@ -26,55 +27,46 @@ type ShowToastFn = (
 
 type ShowSuccessFn = (message: string | React.ReactNode, duration?: number) => void
 
-interface ShowScheduledRunStartedToastParams {
-  result?: SchedulerManualRunResult
-  /** Owning agent id. Required to build the URL; omit only on legacy callers. */
-  agentId?: string
-  /** Owning schedule job id; required so the toast deep-links into the job-runs sub-screen. */
-  jobId: string
-  navigate: NavigateWithOptionsFn
-  showToast: ShowToastFn
-  showSuccess: ShowSuccessFn
-}
-
-/**
- * Persistent toast shown when the user manually triggers a schedule run.
- * The "Open schedule run" action navigates to
- * `/agent/:agentId/job/:jobId/:sessionId`, which lands the user inside the
- * job-runs sub-screen of `SessionPanel` with the new run highlighted.
- */
-export function showScheduledRunStartedToast({
-  result,
-  agentId,
-  jobId,
-  navigate,
-  showToast,
-  showSuccess,
-}: ShowScheduledRunStartedToastParams): void {
-  if (agentId && result?.chatSessionId) {
-    showToast('Scheduled run started.', 'success', undefined, {
-      persistent: true,
-      actions: [
-        {
-          label: 'Open schedule run',
-          variant: 'primary',
-          onClick: () => {
-            navigate(`/agent/${agentId}/job/${jobId}/${result.chatSessionId}`, {
-              state: {
-                intent: 'open-session',
-                source: 'schedule-run-toast',
-                targetAgentId: agentId,
-                targetSessionId: result.chatSessionId,
+export async function runScheduleNow(
+  agentId: string,
+  jobId: string,
+  navigate: NavigateWithOptionsFn,
+  showToast: ShowToastFn,
+  showSuccess: ShowSuccessFn,
+  showError: ShowSuccessFn,
+) {
+  try {
+    const res = await schedulerApi.runJobNow(jobId, true);
+    if (res.success && res.data) {
+      const { chatSessionId } = res.data;
+      if (chatSessionId) {
+        showToast('Scheduled run started.', 'success', undefined, {
+          persistent: true,
+          actions: [
+            {
+              label: 'Open schedule run',
+              onClick: () => {
+                navigate(`/agent/${agentId}/job/${jobId}/${chatSessionId}`, {
+                  state: {
+                    intent: 'open-session',
+                    source: 'schedule-run-toast',
+                    targetAgentId: agentId,
+                    targetSessionId: chatSessionId,
+                  },
+                })
               },
-            })
-          },
-        },
-      ],
-    })
-    return
+            },
+          ],
+        });
+        return;
+      }
+      showSuccess('Scheduled run started.')
+      return;
+    }
+    showError('Failed to run schedule: ' + (res?.error || 'Unknown error'));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    showError('Failed to run schedule: ' + msg);
+    log.error({ msg: 'runJobNow failed', jobId: jobId, err });
   }
-
-  showSuccess('Scheduled run started.')
 }
-
-export default showScheduledRunStartedToast

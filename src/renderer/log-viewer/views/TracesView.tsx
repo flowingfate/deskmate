@@ -222,10 +222,10 @@ function SpanTimeline({ forest, selectedRow, onPick }: SpanTimelineProps) {
       {/* 顶部 axis：用 absolute 定位与下面的 SVG 共享坐标系 */}
       <svg width={width} height={AXIS_HEIGHT} className="block">
         {/* 通道分隔（左侧 tree 与右侧 timeline） */}
-        <line x1={timelineX - 1} y1={0} x2={timelineX - 1} y2={AXIS_HEIGHT} stroke="#e2e8f0" />
+        <line x1={timelineX - 1} y1={0} x2={timelineX - 1} y2={AXIS_HEIGHT} stroke="#e9e9e9" />
         {ticks.map((t, i) => (
           <g key={i}>
-            <line x1={t.x} y1={AXIS_HEIGHT - 8} x2={t.x} y2={AXIS_HEIGHT} stroke="#cbd5e1" />
+            <line x1={t.x} y1={AXIS_HEIGHT - 8} x2={t.x} y2={AXIS_HEIGHT} stroke="#d6d6d6" />
             <text
               x={t.x}
               y={AXIS_HEIGHT - 12}
@@ -238,7 +238,7 @@ function SpanTimeline({ forest, selectedRow, onPick }: SpanTimelineProps) {
             </text>
           </g>
         ))}
-        <text x={12} y={AXIS_HEIGHT - 12} fontSize={10} fontFamily="ui-monospace, monospace" fill="#475569" fontWeight={500}>
+        <text x={12} y={AXIS_HEIGHT - 12} fontSize={10} fontFamily="ui-monospace, monospace" fill="#585858" fontWeight={500}>
           Span tree
         </text>
       </svg>
@@ -257,7 +257,7 @@ function SpanTimeline({ forest, selectedRow, onPick }: SpanTimelineProps) {
             y1={0}
             x2={timelineX - 1}
             y2={totalHeight - AXIS_HEIGHT}
-            stroke="#e2e8f0"
+            stroke="#e9e9e9"
           />
           {/* hover 全宽虚线 */}
           {hoverY != null && (
@@ -266,7 +266,7 @@ function SpanTimeline({ forest, selectedRow, onPick }: SpanTimelineProps) {
               y1={hoverY}
               x2={width - TIMELINE_PADDING_X}
               y2={hoverY}
-              stroke="#94a3b8"
+              stroke="#a6a6a6"
               strokeDasharray="3 4"
               strokeWidth={1}
             />
@@ -398,7 +398,7 @@ function SpanRow({ node, top, selected, onHover, onLeave, onClick }: SpanRowProp
       className={cn(
         'absolute left-0 flex cursor-pointer items-center gap-1 px-2 transition-colors',
         selected
-          ? 'bg-blue-50 shadow-[inset_2px_0_0] shadow-vw-accent'
+          ? 'bg-neutral-50 shadow-[inset_2px_0_0] shadow-vw-accent'
           : 'hover:bg-slate-50',
       )}
     >
@@ -440,7 +440,7 @@ function OrphanRowView({ row, top, selected, onClick }: OrphanRowProps) {
       className={cn(
         'absolute left-0 flex cursor-pointer items-center gap-2 px-3 transition-colors',
         selected
-          ? 'bg-blue-50 shadow-[inset_2px_0_0] shadow-vw-accent'
+          ? 'bg-neutral-50 shadow-[inset_2px_0_0] shadow-vw-accent'
           : 'hover:bg-slate-50',
       )}
     >

@@ -62,7 +62,7 @@ const InteractiveAuthCard = (props: {
     <div className="mt-2 p-4">
       <div className="flex items-start justify-between gap-3 max-[720px]:flex-col">
         <div className="flex items-start gap-2.5">
-          <ShieldAlert size={18} className="mt-0.5 shrink-0 text-teal-700" />
+          <ShieldAlert size={18} className="mt-0.5 shrink-0 text-neutral-700" />
           <div>
             <div className="text-[15px] font-semibold text-slate-900">{request.title}</div>
             <div className="mt-1.5 text-[13px] leading-relaxed text-slate-600">
@@ -70,7 +70,7 @@ const InteractiveAuthCard = (props: {
             </div>
           </div>
         </div>
-        <div className="whitespace-nowrap text-xs font-semibold text-teal-700">
+        <div className="whitespace-nowrap text-xs font-semibold text-neutral-700">
           Timeout in {formatRemainingTime(remainingMs)}
         </div>
       </div>
@@ -88,7 +88,7 @@ const InteractiveAuthCard = (props: {
         {request.deviceCode ? (
           <div className="rounded-2xl border border-slate-300/50 bg-white/90 p-3">
             <div className="text-sm font-semibold text-slate-900">Device code</div>
-            <div className="mt-2 rounded-lg border border-teal-600/20 bg-teal-50/90 px-3 py-2.5 font-mono text-lg font-bold tracking-[0.08em] text-teal-900">
+            <div className="mt-2 rounded-lg border border-neutral-600/20 bg-neutral-50/90 px-3 py-2.5 font-mono text-lg font-bold tracking-[0.08em] text-neutral-900">
               {request.deviceCode}
             </div>
           </div>

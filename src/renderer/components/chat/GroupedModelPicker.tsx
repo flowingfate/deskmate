@@ -70,7 +70,7 @@ export const GroupedModelPicker: React.FC<Props> = ({ value, onChange, variant =
                   <span className="truncate text-sm">{model.name}</span>
                   <div className="flex gap-1 flex-wrap">
                     {model.reasoning && (
-                      <Badge className="border-0 px-1.5 py-0.5 text-xs font-medium bg-purple-500/10 text-purple-600">Reasoning</Badge>
+                      <Badge className="border-0 px-1.5 py-0.5 text-xs font-medium bg-neutral-500/10 text-neutral-600">Reasoning</Badge>
                     )}
                     {model.toolCalls && (
                       <Badge className="border-0 px-1.5 py-0.5 text-xs font-medium bg-green-500/10 text-green-600">Tools</Badge>

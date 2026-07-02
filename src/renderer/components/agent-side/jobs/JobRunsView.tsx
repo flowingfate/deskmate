@@ -8,7 +8,9 @@ import type { JobRunRow } from '@shared/persist/types';
 import type { SchedulerJob } from '@shared/ipc/scheduler';
 import RunsHeader from './RunsHeader';
 import RunRow from './RunRow';
-
+import { Button } from '@renderer/shadcn/button';
+import { useToast } from '@renderer/components/ui/ToastProvider';
+import { runScheduleNow } from '@renderer/lib/scheduler/showScheduledRunStartedToast';
 interface JobRunsViewProps {
   agentId: string;
   jobId: string;
@@ -31,6 +33,7 @@ const HINT_CLASS = 'flex items-center justify-center p-2 text-[#9E9E9E] text-[12
  */
 const JobRunsView: React.FC<JobRunsViewProps> = ({ agentId, jobId, activeSessionId }) => {
   const navigate = useNavigate();
+  const { showToast, showSuccess, showError, showInfo } = useToast();
   const allRuns = useAgentScheduleRuns(agentId);
   const hydrated = useAgentScheduleRunsHydrated(agentId);
   const allJobs = useSchedulesByAgentId(agentId);
@@ -70,6 +73,10 @@ const JobRunsView: React.FC<JobRunsViewProps> = ({ agentId, jobId, activeSession
     navigate(`/agent/${agentId}/job/${jobId}/${sessionId}`);
   }, [agentId, jobId, navigate]);
 
+  function runNow() {
+    runScheduleNow(agentId, jobId, navigate, showToast, showSuccess, showError);
+  }
+
   return (
     <div data-dbg="job-runs-view" className="contents">
       <RunsHeader
@@ -99,7 +106,7 @@ const JobRunsView: React.FC<JobRunsViewProps> = ({ agentId, jobId, activeSession
             type="scroll"
             className="h-full"
           >
-            <div className="flex flex-col gap-[2px] py-1">
+            <div className="flex flex-col gap-0.5 py-1">
               {runs.map(run => (
                 <RunRow
                   key={run.id}
@@ -111,6 +118,12 @@ const JobRunsView: React.FC<JobRunsViewProps> = ({ agentId, jobId, activeSession
             </div>
           </ScrollArea>
         )}
+      </div>
+
+      <div className="relative shrink-0 pt-2 pb-3.75 flex items-center gap-1.5">
+        <Button variant="outline" size="sm" className="w-full" onClick={runNow} title="New schedule">
+          <span>Run now</span>
+        </Button>
       </div>
     </div>
   );

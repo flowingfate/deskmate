@@ -249,7 +249,7 @@ function Row({ row, top, selected, zebra, onClick }: RowProps) {
       className={cn(
         'absolute inset-x-0 grid cursor-pointer items-center px-4 transition-colors hover:bg-slate-100/70',
         selected
-          ? 'bg-blue-50 shadow-[inset_2px_0_0] shadow-vw-accent'
+          ? 'bg-neutral-50 shadow-[inset_2px_0_0] shadow-vw-accent'
           : isError
             ? 'shadow-[inset_2px_0_0] shadow-lvl-error/70'
             : zebra

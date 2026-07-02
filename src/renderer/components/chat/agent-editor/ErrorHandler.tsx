@@ -23,9 +23,9 @@ const VARIANT_STYLES: Record<ErrorHandlerVariant, { container: string; text: str
     dismiss: 'text-amber-800 hover:bg-amber-400/10 hover:text-slate-700',
   },
   info: {
-    container: 'border-sky-500/80 bg-sky-50/95 shadow-[0_2px_8px_rgba(14,165,233,0.1)]',
-    text: 'text-sky-900',
-    dismiss: 'text-sky-900 hover:bg-sky-500/15 hover:text-sky-950',
+    container: 'border-neutral-500/80 bg-neutral-50/95 shadow-[0_2px_8px_rgba(0,0,0,0.1)]',
+    text: 'text-neutral-900',
+    dismiss: 'text-neutral-900 hover:bg-neutral-500/15 hover:text-neutral-950',
   },
   success: {
     container: 'border-green-500/80 bg-[#DCFCE7] shadow-[0_2px_8px_rgba(34,197,94,0.1)]',

@@ -156,7 +156,7 @@ const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
 
             {/* Loading indicator */}
             {isLoading && (
-              <div className="px-3 py-2.5 text-sm text-[#1d4ed8] bg-[#eff6ff] border border-[#bfdbfe] rounded-lg mt-1">
+              <div className="px-3 py-2.5 text-sm text-[#1f1f1f] bg-[#f5f5f5] border border-[#e0e0e0] rounded-lg mt-1">
                 Installing… This may take a moment depending on your connection.
               </div>
             )}

@@ -136,7 +136,7 @@ export const ToolDetailView: React.FC<ToolDetailViewProps> = ({
     <div className="flex flex-col gap-2">
       <section className="flex flex-col">
         <header className={CAPTION_CLS}>
-          <ArrowDownRight size={10} aria-hidden="true" strokeWidth={2} className="text-sky-600/70" />
+          <ArrowDownRight size={10} aria-hidden="true" strokeWidth={2} className="text-neutral-600/70" />
           <span>input</span>
         </header>
         <InputSlot

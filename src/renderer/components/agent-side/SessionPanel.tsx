@@ -6,6 +6,7 @@ import SessionPanelHeader from './header/SessionPanelHeader';
 import SessionsView from './sessions/SessionsView';
 import JobsView from './jobs/JobsView';
 import JobRunsView from './jobs/JobRunsView';
+import { BACKDROP } from './backdrop';
 
 /**
  * Left-pane orchestrator. Mode (sessions vs jobs) and selection are derived
@@ -48,8 +49,11 @@ const SessionPanel: React.FC = () => {
   return (
     <div
       data-dbg="session-panel"
-      className="flex flex-col h-full min-w-66 max-w-100 px-2"
+      className="relative isolate flex flex-col h-full min-w-66 max-w-100 px-2"
     >
+      <div aria-hidden className="pointer-events-none absolute bottom-0 left-0 -z-10 h-100 w-full flex justify-center items-end">
+        {BACKDROP}
+      </div>
       <SessionPanelHeader
         agentId={displayAgentId}
         agent={currentAgent}

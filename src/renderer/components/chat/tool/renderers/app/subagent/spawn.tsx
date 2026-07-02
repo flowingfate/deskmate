@@ -54,7 +54,7 @@ const InputBlock: React.FC<ToolSlotProps> = ({ toolCall }) => {
         {task || 'No task description'}
       </div>
       {share_context && (
-        <Badge className="self-start bg-blue-50 text-blue-800 text-[10px]">
+        <Badge className="self-start bg-neutral-50 text-neutral-800 text-[10px]">
           📋 Context shared
         </Badge>
       )}
@@ -70,9 +70,9 @@ const OutputExecutingBlock: React.FC<ToolSlotProps> = ({ toolCall, executionStat
   const isStreaming = !!runtimeState?.streamingText;
 
   return (
-    <div className="px-2.5 py-2 rounded-[4px] bg-gray-50 border-1 border-black/7 border-l-2 border-l-blue-400">
+    <div className="px-2.5 py-2 rounded-[4px] bg-gray-50 border-1 border-black/7 border-l-2 border-l-neutral-400">
       <div className="flex items-center gap-2 text-[11px]">
-        <Badge className="bg-blue-50 text-blue-700">
+        <Badge className="bg-neutral-50 text-neutral-700">
           {runtimeState
             ? `⏳ Turn ${runtimeState.currentTurn}/${runtimeState.maxTurns}`
             : '⏳ Starting...'}

@@ -82,7 +82,7 @@ const InteractiveSearchCard = (props: {
     <div className="mt-2 p-4">
       <div className="flex items-start justify-between gap-3 max-[720px]:flex-col">
         <div className="flex items-start gap-2.5">
-          <Search size={18} className="mt-0.5 shrink-0 text-teal-700" />
+          <Search size={18} className="mt-0.5 shrink-0 text-neutral-700" />
           <div>
             <div className="text-[15px] font-semibold text-slate-900">Agent needs source selection</div>
             <div className="mt-1.5 text-[13px] leading-relaxed text-slate-600">
@@ -92,7 +92,7 @@ const InteractiveSearchCard = (props: {
             </div>
           </div>
         </div>
-        <div className="whitespace-nowrap text-xs font-semibold text-teal-700">
+        <div className="whitespace-nowrap text-xs font-semibold text-neutral-700">
           {request.engine} · {sourceCount}/{request.maxSources}
         </div>
       </div>

@@ -1,7 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
-import { Button } from '@/shadcn/button';
 import { schedulerApi } from '@/ipc/scheduler';
 import { useSchedulesByAgentId } from '@/states/schedules.atom';
 import { useAgentScheduleRuns } from '@/states/scheduleRuns.atom';
@@ -18,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/shadcn/alert-dialog';
-import { showScheduledRunStartedToast } from '@/lib/scheduler/showScheduledRunStartedToast';
+import { runScheduleNow } from '@/lib/scheduler/showScheduledRunStartedToast';
 import ScheduleOverlay from '@renderer/components/agent-side/jobs/overlay';
 import {
   SCHEDULE_TEMPLATES,
@@ -27,7 +25,8 @@ import {
 import type { JobRunRow } from '@shared/persist/types';
 import type { SchedulerJob } from '@shared/ipc/scheduler';
 import { log } from '@/log';
-import JobHeader from './JobHeader';
+import ListSearchBox from '@/components/ui/ListSearchBox';
+import NewJob from './NewJob';
 import JobRow from './JobRow';
 
 const logger = log.child({ mod: 'JobsView' });
@@ -153,26 +152,8 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
     }
   }, [pendingDelete, showError]);
 
-  const handleRunNow = useCallback(async (job: SchedulerJob) => {
-    try {
-      const res = await schedulerApi.runJobNow(job.id);
-      if (res?.success) {
-        showScheduledRunStartedToast({
-          result: res.data,
-          agentId: job.agentId,
-          jobId: job.id,
-          navigate,
-          showToast,
-          showSuccess,
-        });
-        return;
-      }
-      showError('Failed to run schedule: ' + (res?.error || 'Unknown error'));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      showError('Failed to run schedule: ' + msg);
-      logger.error({ msg: 'runJobNow failed', jobId: job.id, err });
-    }
+  const handleRunNow = useCallback((job: SchedulerJob) => {
+    runScheduleNow(job.agentId, job.id, navigate, showToast, showSuccess, showError);
   }, [navigate, showError, showSuccess, showToast]);
 
   // ─── Render ─────────────────────────────────────────────────────────
@@ -182,11 +163,11 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
   return (
     <TooltipProvider delayDuration={300}>
       <div data-dbg="jobs-view" className="contents">
-        <JobHeader
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          onOpenBlankSchedule={handleOpenBlank}
-          onOpenTemplate={handleOpenTemplate}
+        <ListSearchBox
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search schedules"
+          className="my-1 shadow-none"
         />
 
         <div data-dbg="jobs-view-list" className="flex-1 min-h-0 overflow-hidden">
@@ -200,14 +181,6 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
                 Add a schedule to send a prompt to this agent on a recurring or one-time basis.
                 Scheduled runs require the app and machine to stay awake.
               </small>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenBlank}
-              >
-                <Plus size={14} />
-                <span>New schedule</span>
-              </Button>
             </div>
           )}
 
@@ -234,6 +207,11 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
             </div>
           )}
         </div>
+
+        <NewJob
+          onOpenBlankSchedule={handleOpenBlank}
+          onOpenTemplate={handleOpenTemplate}
+        />
 
         <ScheduleOverlay
           open={overlayOpen}

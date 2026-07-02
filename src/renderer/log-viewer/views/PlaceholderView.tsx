@@ -21,8 +21,8 @@ export function PlaceholderView({ title, icon: Icon, description }: Props) {
 
       <div className="flex flex-1 items-center justify-center px-8">
         <div className="flex max-w-md flex-col items-center text-center">
-          <div className="relative mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 ring-1 ring-blue-200/50">
-            <Icon className="h-6 w-6 text-blue-600" />
+          <div className="relative mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-neutral-50 to-neutral-100 ring-1 ring-neutral-200/50">
+            <Icon className="h-6 w-6 text-neutral-600" />
             <Sparkles className="absolute -right-1 -top-1 h-3.5 w-3.5 text-amber-500" />
           </div>
           <h2 className="text-[16px] font-semibold tracking-tight text-slate-900">

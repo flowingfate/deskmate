@@ -390,7 +390,7 @@ export class SchedulerManager {
     }
   }
 
-  async runJobNow(jobId: string): Promise<SchedulerExecutionResult> {
+  async runJobNow(jobId: string, force?: boolean): Promise<SchedulerExecutionResult> {
     if (!this.currentProfileId) {
       return {
         success: false,
@@ -406,10 +406,10 @@ export class SchedulerManager {
       };
     }
 
-    if (!job.enabled) {
+    if (!force && !job.enabled) {
       return {
         success: false,
-        error: 'Only enabled schedules can be run manually.',
+        error: 'Only enabled schedules can be triggered by the agent.',
       };
     }
 

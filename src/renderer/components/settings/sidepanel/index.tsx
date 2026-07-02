@@ -17,6 +17,7 @@ import NavItem from './NavItem';
 import { APP_NAME, BRAND_CONFIG } from '@shared/constants/branding';
 import { useFeatureFlag } from '../../../lib/featureFlags';
 import { LeftNavSizeAtom } from '@renderer/states/left-nav.atom';
+import { BACKDROP } from './backdrop';
 
 interface SettingsNavigationProps {
   onBack?: () => void;
@@ -61,13 +62,16 @@ const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
 
   return (
     <nav
-      className="flex flex-col h-full w-full px-2"
+      className="flex flex-col h-full w-full px-2 relative"
       role="navigation"
       aria-label="Settings navigation"
       data-dbg="settings-sidepanel"
       style={{ width }}
     >
-      <div className="flex items-center h-[44px] pl-1.5 mt-0.5 mb-1 shrink-0 border-b border-black/5">
+      <div aria-hidden className="pointer-events-none absolute bottom-0 left-0 -z-10 h-100 w-full flex justify-center items-end">
+        {BACKDROP}
+      </div>
+      <div className="flex items-center h-11 pl-1.5 mt-0.5 mb-1 shrink-0 border-b border-black/5">
         <h2 className="flex-1 text-base font-semibold text-black/80 m-0">
           Settings
         </h2>
@@ -158,10 +162,10 @@ const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
       <div className="py-2 border-t border-black/5">
         <NavItem
           icon={<ChevronLeft size={16} />}
-          label="Back"
+          label="Go back to agent"
           isActive={false}
           onClick={handleBack}
-          ariaLabel="Go Back"
+          ariaLabel="Go back to agent"
         />
       </div>
     </nav>

@@ -94,7 +94,7 @@ export function HintInput({
                     onClick={() => setDraft(ex.template)}
                     className="group flex w-full items-center justify-between gap-3 rounded-sm px-1.5 py-1 text-left hover:bg-slate-100"
                   >
-                    <code className="font-mono text-[11px] text-slate-800 group-hover:text-blue-700">
+                    <code className="font-mono text-[11px] text-slate-800 group-hover:text-neutral-700">
                       {ex.template}
                     </code>
                     <span className="truncate text-[10px] text-slate-400">{ex.description}</span>
@@ -119,7 +119,7 @@ export function HintInput({
                   }
                 }}
                 placeholder={placeholder}
-                className="h-7 flex-1 rounded-md border border-slate-200 bg-white px-2 font-mono text-[12px] text-slate-800 placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500/25"
+                className="h-7 flex-1 rounded-md border border-slate-200 bg-white px-2 font-mono text-[12px] text-slate-800 placeholder:text-slate-400 focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-500/25"
               />
               <button
                 type="button"
@@ -128,7 +128,7 @@ export function HintInput({
                 className={cn(
                   'h-7 rounded-md px-3 text-[12px] font-medium transition-colors',
                   draft !== value
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    ? 'bg-neutral-600 text-white hover:bg-neutral-700'
                     : 'cursor-not-allowed bg-slate-100 text-slate-400',
                 )}
               >

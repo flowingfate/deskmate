@@ -42,7 +42,7 @@ export const TurnProgressBar: React.FC<{ current: number; max: number }> = ({
     <div className="flex items-center gap-2 mt-1.5">
       <div className="flex-1 h-1 rounded-full bg-zinc-700/40 overflow-hidden">
         <div
-          className="h-full rounded-full bg-blue-400 transition-all duration-500 ease-out"
+          className="h-full rounded-full bg-neutral-400 transition-all duration-500 ease-out"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -67,7 +67,7 @@ export const StreamingTextDisplay: React.FC<{ text: string; label?: string }> = 
   return (
     <div className="mt-1.5 rounded overflow-hidden">
       <div className="flex items-center gap-1.5 px-2 py-1 bg-white/2">
-        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+        <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse" />
         <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">
           {label}
         </span>
@@ -77,7 +77,7 @@ export const StreamingTextDisplay: React.FC<{ text: string; label?: string }> = 
         className="px-2.5 py-1.5 max-h-[120px] overflow-y-auto text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap scrollbar-thin"
       >
         {text}
-        <span className="inline-block w-[2px] h-3.5 bg-blue-400 animate-pulse ml-0.5 align-text-bottom" />
+        <span className="inline-block w-[2px] h-3.5 bg-neutral-400 animate-pulse ml-0.5 align-text-bottom" />
       </div>
     </div>
   );
@@ -116,7 +116,7 @@ export const SubAgentStepsList: React.FC<{ steps: SubAgentStep[]; compact?: bool
         >
           <span className="w-4 text-center shrink-0 pt-px">
             {step.type === 'tool_start' && (
-              <span className="inline-block w-2.5 h-2.5 border-[1.5px] border-blue-400 border-t-transparent rounded-full animate-spin" />
+              <span className="inline-block w-2.5 h-2.5 border-[1.5px] border-neutral-400 border-t-transparent rounded-full animate-spin" />
             )}
             {step.type === 'tool_done' && (
               <span className="text-emerald-500 text-[11px]">✓</span>

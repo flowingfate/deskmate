@@ -82,7 +82,6 @@ export class CdnUpdateChecker {
         if (errorCode === 'ENOTFOUND' || errorCode === 'ECONNREFUSED' || errorCode === 'ETIMEDOUT') {
           const enhancedError = new Error(
             'Unable to connect to update server. Please check your network connection.\n\n' +
-            'If you are on a corporate network, you may need to connect to MSFT VPN to access the update server.\n\n' +
             `Detailed error: ${error.message}`
           );
           (enhancedError as any).code = errorCode;
@@ -94,7 +93,6 @@ export class CdnUpdateChecker {
         if (errorCode === 'EAI_AGAIN') {
           const enhancedError = new Error(
             'DNS resolution failed, unable to access update server. Please check network connection and DNS settings.\n\n' +
-            'If you are on a corporate network, you may need to connect to MSFT VPN.\n\n' +
             `Detailed error: ${error.message}`
           );
           (enhancedError as any).code = errorCode;
@@ -108,8 +106,7 @@ export class CdnUpdateChecker {
             'SSL certificate verification failed. This may be a network configuration issue.\n\n' +
             'Suggestions:\n' +
             '1. Check if system time is correct\n' +
-            '2. If on corporate network, please connect to MSFT VPN\n' +
-            '3. Check firewall or proxy settings\n\n' +
+            '2. Check firewall or proxy settings\n\n' +
             `Detailed error: ${error.message}`
           );
           (enhancedError as any).code = 'SSL_ERROR';

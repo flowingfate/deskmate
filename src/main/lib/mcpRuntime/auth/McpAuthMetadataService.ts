@@ -98,9 +98,6 @@ async function fetchJson<T>(url: string, headers?: Record<string, string>): Prom
 
 function inferProviderLabel(metadataUrl: string, metadata?: OAuthAuthorizationServerMetadata): string {
   const url = `${metadata?.issuer || ''} ${metadataUrl}`.toLowerCase();
-  if (url.includes('login.microsoftonline.com') || url.includes('microsoftonline.com') || url.includes('login.windows.net') || url.includes('microsoft.com')) {
-    return 'Microsoft';
-  }
   if (url.includes('github.com')) {
     return 'GitHub';
   }

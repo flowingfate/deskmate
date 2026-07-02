@@ -234,7 +234,7 @@ export const ContextMenu: React.FC = () => {
     zIndex: 10000,
     backgroundColor: 'rgba(255, 255, 255, 0.98)', // Solid background
     backdropFilter: 'blur(12px)',
-    border: '1px solid rgba(203, 213, 225, 0.8)',
+    border: '1px solid rgba(214, 214, 214, 0.8)',
     borderRadius: '8px',
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
     maxHeight: '300px',
@@ -273,7 +273,7 @@ export const ContextMenu: React.FC = () => {
                 position: 'relative',
                 transition: 'background-color 0.1s ease',
                 backgroundColor: isSelected
-                  ? 'rgba(0, 120, 212, 0.15)' // Blue background when selected
+                  ? 'rgba(106, 106, 106, 0.15)' // Blue background when selected
                   : 'transparent',
               }}>
               <div

@@ -106,7 +106,7 @@ export function DetailDrawer({ row, onClose, onPickTraceId }: Props) {
                   onPickTraceId ? (
                     <button
                       onClick={() => onPickTraceId(row.trace_id!)}
-                      className="group inline-flex items-center gap-1 font-mono text-slate-800 hover:text-blue-600"
+                      className="group inline-flex items-center gap-1 font-mono text-slate-800 hover:text-neutral-600"
                       title="Filter by this traceId"
                     >
                       <span className="underline-offset-2 group-hover:underline">{row.trace_id}</span>
@@ -223,7 +223,7 @@ function renderValue(v: unknown): React.ReactNode {
   if (typeof v === 'string')
     return <span className="break-all text-amber-700">"{v}"</span>;
   if (typeof v === 'number' || typeof v === 'boolean')
-    return <span className="text-blue-700">{String(v)}</span>;
+    return <span className="text-neutral-700">{String(v)}</span>;
   return (
     <pre className="thin-scroll overflow-auto whitespace-pre rounded-md bg-white p-2 font-mono text-[11px] leading-relaxed text-slate-700 ring-1 ring-slate-200">
       {JSON.stringify(v, null, 2)}

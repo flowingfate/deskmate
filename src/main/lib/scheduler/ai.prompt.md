@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-07 (id.ts / 月文件残留删除；createJob 返回 ULID) -->
+<!-- Last verified: 2026-07-02 (runJobNow force 参数：UI 手动运行可强制跑禁用 job) -->
 # Scheduler
 
 > 注册并触发基于时间的任务（cron 或一次性）。每次触发由 `ScheduleJob.startRun` 在 persist 内开一个独立的 schedule_run session，`pi.JobRun` 跑静默 turn loop，跑完 `finishRun` 落 runState 并发系统通知。
@@ -114,6 +114,7 @@ pending → running → completed | failed
 - ⚠️ **once 任务执行后 enabled=false**：`toggleJob` 重新 enable 会注册新 timeout——确认 runAt 仍在未来。
 - ⚠️ **`MAX_TIMEOUT_MS`（≈24.8 天）**：超出此窗口的 once 任务 setTimeout 永不触发；UI 警告。
 - ⚠️ **`schedulerGeneration`** 在每次 `initialize` 递增（切 profile / 重登）。旧代里持有的 SchedulerJob 引用陈旧；需要最新状态时 cron 回调内重取。
+- ⚠️ **`runJobNow(jobId, force?)` 的 enabled 门控双语义**：UI 三个"立即运行"入口（`JobsView` / `JobRunsView` / `GeneratedScheduleCards` → `runScheduleNow` → `schedulerApi.runJobNow(jobId, true)`）传 `force=true`，**允许手动强制运行已禁用的 schedule**；LLM/appcmd 路径（`runJobNowInternal` → `runJobNow(jobId)`）不传 force，仍被 `!job.enabled` 拦截并返回 `'Only enabled schedules can be triggered by the agent.'`。`force` 只跳过 enabled 检查，`executeJob` 不注册 cron/timer、不改 `enabled`，强制运行禁用 job 无残留副作用（仅产生一次 run session + 完成通知）。
 
 ## Related
 

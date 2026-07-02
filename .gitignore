@@ -307,5 +307,3 @@ tests/e2e/report/
 tests/e2e/test-results/
 pr648-*.json
 
-# Internal docs (not tracked)
-docs/

@@ -83,7 +83,7 @@ const App: React.FC = () => {
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#1c1c1c] text-white gap-6 select-none app-drag-region">
         {/* Logo/Icon Area */}
         <div className="relative">
-          <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-blue-500 to-purple-600 animate-pulse flex items-center justify-center shadow-lg shadow-purple-500/20">
+          <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-neutral-500 to-neutral-600 animate-pulse flex items-center justify-center shadow-lg shadow-neutral-500/20">
              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
              </svg>

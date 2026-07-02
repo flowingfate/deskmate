@@ -62,7 +62,7 @@ const ToolListView: React.FC<ToolListViewProps> = ({
                 className={cn(
                   'mt-0.5 size-4 shrink-0 transition-colors',
                   isSelected
-                    ? 'text-indigo-500 dark:text-indigo-400'
+                    ? 'text-neutral-500 dark:text-neutral-400'
                     : 'text-sc-muted-foreground',
                 )}
               />
@@ -70,7 +70,7 @@ const ToolListView: React.FC<ToolListViewProps> = ({
                 <span
                   className={cn(
                     'truncate font-medium',
-                    isSelected && 'text-indigo-500 dark:text-indigo-400',
+                    isSelected && 'text-neutral-500 dark:text-neutral-400',
                   )}
                 >
                   {tool.name}
