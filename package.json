@@ -104,7 +104,6 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/stylis": "^4.2.7",
     "@types/turndown": "^5.0.6",
-    "@vanilla-extract/css": "^1.20.1",
     "@vitejs/plugin-react-swc": "^4.3.0",
     "@vitest/coverage-v8": "^4.1.5",
     "buffer": "^6.0.3",
