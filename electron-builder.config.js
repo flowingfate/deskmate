@@ -21,16 +21,16 @@ const paths = {
  */
 module.exports = {
   appId: config.appId,
-  
+
   // extraMetadata.name determines Windows NSIS install directory
   // → %LOCALAPPDATA%\Programs\<name>
   extraMetadata: {
     name: brandName,
   },
-  
+
   // productName is the app display name and macOS .app bundle name
   productName: config.productName,
-  
+
   // artifactName is the downloaded installer/archive filename
   artifactName: (config.filenamePrefix || '${productName}') + '-${version}-${os}-${arch}.${ext}',
   directories: {
@@ -128,7 +128,7 @@ module.exports = {
   generateUpdatesFilesForAllChannels: false,
   afterPack: 'scripts/verify-sharp-runtime-packaging.js',
   afterSign: 'scripts/notarize.js',
-  
+
   // ==========================================================================
   // macOS Configuration
   // ==========================================================================
@@ -158,7 +158,7 @@ module.exports = {
     target: ['dmg', 'zip'],
     notarize: false,
   },
-  
+
   // ==========================================================================
   // Windows Configuration
   // ==========================================================================
@@ -175,7 +175,10 @@ module.exports = {
     // build only the current runner architecture unless an explicit CLI arch
     // flag (for example `--x64` or `--arm64`) is provided.
     artifactName: `${config.filenamePrefix}-\${version}-win-\${arch}.\${ext}`,
-    target: ['nsis', 'zip'],
+    // 只出 nsis(.exe)：Windows 的电子自更新走"下载新 exe 静默重跑安装器"(配合
+    // latest.yml + .blockmap 增量),不需要 zip —— nsis 安装包同时承担手动安装 + 自更新。
+    // (mac 不同:Squirrel.Mac 自更新必须吃 zip,故 mac 保留 ['dmg','zip']。)
+    target: ['nsis'],
     forceCodeSigning: false,
     extraResources: [
       {
@@ -185,7 +188,7 @@ module.exports = {
       },
     ],
   },
-  
+
   // ==========================================================================
   // NSIS Installer Configuration (Windows)
   // ==========================================================================

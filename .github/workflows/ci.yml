@@ -23,10 +23,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
+      # ⚠️ CI 用 node 20.19（npm 10），不能升 node 24。
+      # 单测 `npm test` 用 electron 作 ABI 对齐的 node 运行（ELECTRON_RUN_AS_NODE=1），
+      # 依赖 node_modules/electron 的二进制装好；而 node 24 自带的 npm 11 会让 electron
+      # 的 postinstall 二进制下载不完整、不写 path.txt → electron 启动报
+      # "failed to install correctly"，单测直接崩。release.yml 需要 node 24 跑 pack.mts
+      # 的类型擦除，但它不跑 electron-as-node，故两个 workflow node 版本可以不同。
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '20.19'
           cache: 'npm'

@@ -1,24 +1,26 @@
 /**
  * Vite pack orchestration script.
- * Builds Vite output, creates a staging directory (vite-pack/), installs
- * production dependencies, and runs electron-builder.
+ * Builds Vite output, creates a staging directory (vite-pack/), copies the
+ * production dependency closure (already built for the Electron ABI) from the
+ * root node_modules, and runs electron-builder.
  *
- * Usage:
- *   bun scripts/vite/pack.ts                          # full build + package for current platform
- *   bun scripts/vite/pack.ts --dir                    # unpacked output (for testing)
- *   bun scripts/vite/pack.ts --skip-build             # skip vite build step
- *   bun scripts/vite/pack.ts --skip-clean             # keep vite-pack/ for inspection
- *   bun scripts/vite/pack.ts --mac --arm64            # target platform/arch
- *   bun scripts/vite/pack.ts --win --x64 --publish=never
- *   bun scripts/vite/pack.ts -- --config.mac.identity=null   # extra args forwarded to electron-builder
+ * Usage (Node 24+ 直接跑 .mts，无需 bun；也兼容 `bun scripts/vite/pack.mts`)：
+ *   node scripts/vite/pack.mts                          # full build + package for current platform
+ *   node scripts/vite/pack.mts --dir                    # unpacked output (for testing)
+ *   node scripts/vite/pack.mts --skip-build             # skip vite build step
+ *   node scripts/vite/pack.mts --skip-clean             # keep vite-pack/ for inspection
+ *   node scripts/vite/pack.mts --mac --arm64            # target platform/arch
+ *   node scripts/vite/pack.mts --win --x64 --publish=never
+ *   node scripts/vite/pack.mts -- --config.mac.identity=null   # extra args forwarded to electron-builder
  *
  * Any flags not recognized below (or anything after `--`) are forwarded
  * verbatim to electron-builder.
  */
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-const ROOT = path.resolve(import.meta.dir, '../..');
+const ROOT = path.resolve(import.meta.dirname, '../..');
 const VITE_PACK = path.join(ROOT, 'vite-pack');
 const OUT_DIR = path.join(ROOT, 'out');
 
@@ -45,14 +47,57 @@ export function parseArgs(argv: string[]) {
 
 function run(cmd: string, opts?: { cwd?: string; env?: Record<string, string> }): void {
   console.log(`\n> ${cmd}`);
-  const result = Bun.spawnSync(['sh', '-c', cmd], {
+  const result = spawnSync('sh', ['-c', cmd], {
     cwd: opts?.cwd ?? ROOT,
     env: { ...process.env, ...opts?.env },
     stdio: ['inherit', 'inherit', 'inherit'],
   });
-  if (result.exitCode !== 0) {
-    throw new Error(`Command failed with exit code ${result.exitCode}: ${cmd}`);
+  if (result.status !== 0) {
+    throw new Error(`Command failed with exit code ${result.status}: ${cmd}`);
   }
+}
+
+// ─── Production Dependency Closure ───────────────────────────────
+
+/**
+ * 用 `npm ls` 枚举生产依赖闭包（含 optionalDependencies），返回每个包在
+ * 根 node_modules 下的相对路径（保留 npm 提升后的真实布局）。
+ * 首行是项目根自身，跳过。
+ */
+export function listProdDepPaths(rootDir: string): string[] {
+  const result = spawnSync('sh', ['-c', 'npm ls --omit=dev --all --parseable'], {
+    cwd: rootDir,
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  // npm ls 在有 peer/extraneous 告警时会以非零退出，但 stdout 仍完整可用，
+  // 因此不检查 exitCode，只要拿到路径列表即可。
+  const nmPrefix = path.join(rootDir, 'node_modules') + path.sep;
+  return result.stdout
+    .toString()
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith(nmPrefix))
+    .map(abs => path.relative(rootDir, abs));
+}
+
+/**
+ * 把生产依赖闭包从根 node_modules 复制到 vite-pack/node_modules。
+ *
+ * 复用根目录的产物 —— 其中原生模块（better-sqlite3）已由 postinstall 的
+ * rebuild-native.js 按 Electron ABI 编译好。绝不在 staging 目录里重装/重编，
+ * 否则会（a）在 Windows 上因缺 Node-ABI 预编译包退回 node-gyp 编译而失败，
+ * （b）在 mac 上误装 Node-ABI 预编译包，打进包里运行时 ABI 不匹配崩溃。
+ */
+function copyProdClosure(rootDir: string, packDir: string): number {
+  const relPaths = listProdDepPaths(rootDir);
+  for (const rel of relPaths) {
+    const src = path.join(rootDir, rel);
+    const dst = path.join(packDir, rel);
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    fs.cpSync(src, dst, { recursive: true, mode: fs.constants.COPYFILE_FICLONE });
+  }
+  return relPaths.length;
 }
 
 // ─── Package.json Generator ─────────────────────────────────────
@@ -129,14 +174,17 @@ async function main() {
 
   console.log(`  Dependencies: ${Object.keys(packPkg.dependencies as Record<string, string>).length} packages`);
 
-  // Step 3: Install production dependencies
-  console.log('\nStep 3/5: Installing production dependencies...');
-  run('npm install --omit=dev', { cwd: VITE_PACK });
+  // Step 3: Copy production dependency closure from root node_modules
+  console.log('\nStep 3/5: Copying production dependencies from root node_modules...');
+  const copied = copyProdClosure(ROOT, VITE_PACK);
+  console.log(`  Copied ${copied} packages (Electron-ABI native modules reused, no recompile)`);
 
   // Step 4: Run electron-builder
   console.log('\nStep 4/5: Running electron-builder...');
-  // electron-builder 自动加载 electron-builder.config.js（项目里唯一的打包配置真相源）。
-  const builderCmd = ['npx', 'electron-builder', ...opts.builderArgs].join(' ');
+  // 必须显式 --config：electron-builder 26 在本项目布局下不会自动发现
+  // electron-builder.config.js（缺了它会静默退回默认配置 → 默认图标、默认
+  // 产物命名、输出目录跑到 dist/ 而非 release/）。这是打包配置的唯一真相源。
+  const builderCmd = ['npx', 'electron-builder', '--config', 'electron-builder.config.js', ...opts.builderArgs].join(' ');
 
   run(builderCmd);
 

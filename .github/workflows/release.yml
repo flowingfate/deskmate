@@ -44,20 +44,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '20.19'
+          node-version: '24'
           cache: 'npm'
-
-      # pack.ts 用 Bun API 执行（Bun.spawnSync / import.meta.dir），
-      # 官方 runner 默认不带 bun，必须显式安装，否则打包脚本无法运行。
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
 
       # postinstall 会跑 rebuild-native.js（原生模块 ABI 对齐）+ setup-ai-docs.js。
       # GITHUB_TOKEN：@vscode/ripgrep postinstall 用它鉴权 GitHub API 下载预编译二进制，
@@ -70,21 +63,21 @@ jobs:
       # 发布模式：tag push → 恒 always（正式发布）；手动触发 → 读 publish 输入（默认 never = 演练）。
       # electron-builder 认 GH_TOKEN 创建 Release 并上传 asset；--publish never 时只本地打包，不联网发布。
       - name: Build & publish
-        run: bun scripts/vite/pack.ts ${{ matrix.args }} --publish ${{ (github.event_name == 'push' && 'always') || inputs.publish }}
+        run: node scripts/vite/pack.mts ${{ matrix.args }} --publish ${{ (github.event_name == 'push' && 'always') || inputs.publish }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 演练模式（手动触发）把打好的安装包传到 Actions Artifacts，供下载自检。
-      # 正式 tag 发布不需要这步（产物已在 Release 页面）。产物默认落 dist/。
+      # 产物落在 electron-builder 配置的 directories.output（release/）。
       - name: Upload artifacts (dry-run)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: deskmate-${{ runner.os }}
           path: |
-            dist/*.dmg
-            dist/*.exe
-            dist/*.zip
+            release/*.dmg
+            release/*.exe
+            release/*.zip
           if-no-files-found: warn
           retention-days: 7
 

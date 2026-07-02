@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-07 -->
+<!-- Last verified: 2026-07-02 -->
 
 # 构建系统文档
 
@@ -23,7 +23,7 @@ electron.vite.config.ts
 | `scripts/vite/defines.ts` | 编译期环境变量替换 |
 | `scripts/vite/ejs-template-plugin.ts` | HTML 模板处理（EJS 语法） |
 | `scripts/vite/monaco-worker-plugin.ts` | Monaco editor worker bundling |
-| `scripts/vite/pack.ts` | 打包编排：vite build → 创建 vite-pack/ staging → npm install --omit=dev → electron-builder |
+| `scripts/vite/pack.mts` | 打包编排：vite build → 创建 vite-pack/ staging → 从根 node_modules 复制生产依赖闭包 → electron-builder。`.mts` 让 Node 24 以 ESM + 类型擦除直接执行（也兼容 bun），CI 无需装 bun |
 
 ## npm 脚本
 
@@ -35,17 +35,17 @@ npm run pack     # 本地打包测试（--dir 模式，不签名）
 npm run dist:*   # 各平台正式打包（mac/win/linux/arm64/x64/universal）
 ```
 
-所有 `dist:*` 脚本均通过 `bun scripts/vite/pack.ts` 透传参数给 electron-builder。
+所有 `dist:*` 脚本均通过 `node scripts/vite/pack.mts` 透传参数给 electron-builder（Node 24 原生跑 `.mts`，无需 bun）。
 
-## 打包流程（pack.ts）
+## 打包流程（pack.mts）
 
 采用 **two-package.json 模式** 以确保 electron-builder 只打包生产依赖：
 
 1. 运行 vite build，输出到 `out/`
 2. 创建 staging 目录 `vite-pack/`，复制 `out/` → `vite-pack/out/`（**与源结构对齐**，asar 内路径直接复用），复制 `resources/`
 3. 生成 `vite-pack/package.json`（只含 `dependencies`，剔除 devDependencies）
-4. 在 `vite-pack/` 内运行 `npm install --omit=dev` 装生产依赖
-5. 运行 `electron-builder`（自动加载 `electron-builder.config.js`），透传用户的额外参数
+4. 从根 `node_modules` **复制**生产依赖闭包（`npm ls --omit=dev --all --parseable` 枚举）到 `vite-pack/node_modules`。**不在 staging 目录重装**——根目录的原生模块（better-sqlite3）已由 postinstall 的 rebuild-native.js 按 Electron ABI 编好，复制即复用；重装会在 Windows 上因缺 Node-ABI 预编译包退回 node-gyp 编译而失败，在 mac 上误装 Node-ABI 包导致运行时 ABI 不匹配
+5. 运行 `electron-builder --config electron-builder.config.js`（**必须显式 `--config`**：electron-builder 26 在本布局下不自动发现 `.js` 配置，缺了会静默退回默认值 → 默认图标/命名/输出目录），透传用户额外参数
 
 **配置真相源：** 项目只保留一个 `electron-builder.config.js`，里面已经把 `directories.app = 'vite-pack'` 写好；不存在 `electron-builder.vite.config.js`。
 

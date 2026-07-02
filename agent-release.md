@@ -205,7 +205,7 @@ git tag -d v0.0.1-test
 |---|---|---|
 | job 一开始就 **403 / Resource not accessible** | Workflow permissions 未设 Read and write | 让用户去 Settings→Actions 改，然后重跑该 run：`gh run rerun <id>` |
 | **422 release already exists** / 两个包只上传了一个 | 并发 matrix 抢建同一 Release | 先 `gh run rerun --failed <id>` 重试失败 job；若反复撞车，回来改 workflow 为「draft 两阶段」（前置 job 建 draft → 矩阵传 asset → 末尾 un-draft） |
-| **bun: command not found** | runner 未装 bun | 不应发生（workflow 已含 `oven-sh/setup-bun@v2`）；若真出现说明该步被删，补回 |
+| **node: 无法解析 .mts / 打包脚本报错** | Node 版本 <24（无 `.mts` 类型擦除） | workflow 已 `setup-node@v5` + `node-version: '24'`；确认未被改回旧版本。CI 已不依赖 bun |
 | **ripgrep / 原生模块 install 失败** | postinstall 拉预编译二进制被限流 | 确认 install 步骤带 `GITHUB_TOKEN`（已配）；重跑 |
 | Release 正文为空 | `release-notes` job 失败或被跳过 | 手动补：`gh api -X POST repos/flowingfate/deskmate/releases/generate-notes -f tag_name=v<new> --jq .body` 取到内容后 `gh release edit v<new> --notes "<内容>"` |
 
@@ -230,4 +230,4 @@ graph TD
 
 - `.github/workflows/release.yml` — 被 tag 触发的实际发布 workflow
 - `electron-builder.config.js` — 打包 / publish / 产物命名配置
-- `scripts/vite/pack.ts` — CI 里 `--publish always` 调的打包入口
+- `scripts/vite/pack.mts` — CI 里 `--publish always` 调的打包入口（Node 24 原生跑 `.mts`，无需 bun）

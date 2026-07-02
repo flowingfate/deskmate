@@ -98,7 +98,7 @@ deskmate/
 ├── electron.vite.config.ts          electron-vite 三段构建配置
 ├── electron-builder.config.js       electron-builder 基础配置
 ├── scripts/                         构建、打包、原生模块、日志分析脚本
-│   └── vite/                        electron-vite 自定义插件 + pack.ts 打包编排
+│   └── vite/                        electron-vite 自定义插件 + pack.mts 打包编排
 ├── src/
 │   ├── main/                        主进程（Node.js）
 │   │   ├── bootstrap.ts             先于任何 import 设置品牌 userData 路径
@@ -179,9 +179,9 @@ deskmate/
 构建走 **two-package.json 模式**（详见 [`compile-system.md`](ai.prompt/compile-system.md)）：
 
 1. `electron-vite build` → 输出到 `out/`
-2. `scripts/vite/pack.ts` 创建 staging 目录 `vite-pack/`、复制 `out/` + `resources/`
-3. 生成只含 `dependencies` 的 `vite-pack/package.json`，跑 `npm install --omit=dev`
-4. 调 `electron-builder` 出包（自动加载 `electron-builder.config.js`，其中 `directories.app = 'vite-pack'`）
+2. `scripts/vite/pack.mts`（Node 24 原生跑 `.mts`，无需 bun）创建 staging 目录 `vite-pack/`、复制 `out/` + `resources/`
+3. 生成只含 `dependencies` 的 `vite-pack/package.json`，从根 `node_modules` **复制**生产依赖闭包（不重装——复用已按 Electron ABI 编好的原生模块）
+4. 调 `electron-builder --config electron-builder.config.js` 出包（**必须显式 `--config`**，其中 `directories.app = 'vite-pack'`）
 
 > **依赖分类很重要**：electron-builder **只**打包 `dependencies` 和 `optionalDependencies`，`devDependencies` 会被静默排除。
 > 主进程运行时用到的库（如 `playwright-core`、`sharp`、`better-sqlite3`）必须放 `dependencies`。
@@ -192,14 +192,14 @@ deskmate/
 | 平台 | 目标格式 | 说明 |
 |------|----------|------|
 | macOS | DMG + ZIP | hardened runtime + notarization（`scripts/notarize.js`） |
-| Windows | NSIS + ZIP | x64 / arm64 |
+| Windows | NSIS | x64（自更新走"下载新 exe 静默重跑"，不需要 zip） |
 
-`scripts/vite/pack.ts` 把 `--mac` / `--win` / `--arm64` / `--x64` / `--publish=<mode>` 等 electron-builder 标志原样透传，所以 package.json 里只列了高频组合，其它用直接调用即可：
+`scripts/vite/pack.mts` 把 `--mac` / `--win` / `--arm64` / `--x64` / `--publish=<mode>` 等 electron-builder 标志原样透传，所以 package.json 里只列了高频组合，其它用直接调用即可：
 
 ```bash
-bun scripts/vite/pack.ts --mac --x64
-bun scripts/vite/pack.ts --win --arm64
-bun scripts/vite/pack.ts --linux
+node scripts/vite/pack.mts --mac --x64
+node scripts/vite/pack.mts --win --arm64
+node scripts/vite/pack.mts --linux
 ```
 
 ## Self-hosting / Forking

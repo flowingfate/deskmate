@@ -5,7 +5,7 @@
 //   out/preload/     preload.js / preload.screenshot.js / preload.log-viewer.js / preload.research.js
 //   out/renderer/    React SPA
 //
-// 打包时 scripts/vite/pack.ts 把整个 out/ 复制为 vite-pack/out/，
+// 打包时 scripts/vite/pack.mts 把整个 out/ 复制为 vite-pack/out/，
 // electron-builder.config.js 的 files glob 与 asarUnpack 与之对齐。
 //
 // 调用方一律走这里取路径，避免散落的 path.join(__dirname, '...') 在后续目录调整时漏改其中一处。
