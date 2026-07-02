@@ -1,8 +1,6 @@
-import * as msal from '@azure/msal-node';
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow } from 'electron';
 import { log } from '@main/log';
 import { pickAuthUiWindow } from './authWindowSelector';
-import { APP_NAME } from '../../../../shared/constants/branding';
 import { mcpAuthMainToRender } from '@shared/ipc/mcp';
 import type { McpResolvedAuthMetadata } from './types';
 import {
@@ -18,15 +16,12 @@ import { isKnownToNotSupportDcr } from './wellKnownOAuthProviders';
 import { getMcpOAuthServerKey } from './serverKey';
 import { mcpAuthPromptRegistry, type McpAuthConsentDecision } from './mcpAuthPromptRegistry';
 import type { McpServerConfig } from '@shared/types/profileTypes';
-import type { OAuthClientInformation } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type {
   McpAuthClientIdRequestPayload,
   McpAuthClientIdResponse,
 } from '../../../../shared/types/mcpAuth';
 
 const logger = log;
-const BUILTIN_MICROSOFT_PUBLIC_CLIENT_ID = 'aebc6443-996d-45c2-90f0-388ff96faa56';
-const CLIENT_ID_SCOPE_PREFIX = 'VSCODE_CLIENT_ID:';
 /** Renderer-prompt timeout matches `CallbackServer.waitForCode`. On
  *  timeout/abort we resolve as cancelled so the transport surfaces a
  *  clean "needs sign-in" rather than hanging the connection. */
@@ -38,60 +33,9 @@ type McpAuthInteractionListener = (event: {
   phase: 'consent-requested';
 }) => void;
 
-type PublicClientAppEntry = {
-  app: msal.PublicClientApplication;
-};
-
-type InMemoryTokenEntry = {
-  accessToken: string;
-  expiresAt: number;
-};
-
-function summarizeClientId(clientId: string): string {
-  if (clientId.length <= 8) {
-    return clientId;
-  }
-  return `${clientId.slice(0, 4)}...${clientId.slice(-4)}`;
-}
-
-function resolveClientId(metadata: McpResolvedAuthMetadata): { clientId: string; source: 'challenge-scope' | 'builtin-default' } {
-  const hintedClientId = metadata.scopes.find((scope) => scope.startsWith(CLIENT_ID_SCOPE_PREFIX))?.slice(CLIENT_ID_SCOPE_PREFIX.length)?.trim();
-  if (hintedClientId) {
-    return {
-      clientId: hintedClientId,
-      source: 'challenge-scope',
-    };
-  }
-
-  return {
-    clientId: BUILTIN_MICROSOFT_PUBLIC_CLIENT_ID,
-    source: 'builtin-default',
-  };
-}
-
-function resolveScopesToSend(metadata: McpResolvedAuthMetadata): string[] {
-  const scopes = metadata.scopes.filter((scope) => !scope.startsWith('VSCODE_'));
-  const nonOidcScopes = scopes.filter((scope) => !['openid', 'email', 'profile', 'offline_access'].includes(scope));
-  if (nonOidcScopes.length === 0) {
-    return [...scopes, 'User.Read'];
-  }
-  return scopes;
-}
-
-function isMicrosoftAuthority(metadata: McpResolvedAuthMetadata): boolean {
-  const haystack = `${metadata.authorizationServerUrl} ${metadata.authorizationServerMetadata.issuer || ''}`.toLowerCase();
-  return haystack.includes('login.microsoftonline.com')
-    || haystack.includes('login.windows.net')
-    || haystack.includes('microsoftonline.com')
-    || haystack.includes('microsoft.com');
-}
-
 export class McpAuthService {
   private static instance: McpAuthService | null = null;
   private static interactionListeners = new Set<McpAuthInteractionListener>();
-  private readonly apps = new Map<string, Promise<PublicClientAppEntry>>();
-  private readonly inMemoryTokens = new Map<string, InMemoryTokenEntry>();
-  private readonly tokenRequests = new Map<string, Promise<string | undefined>>();
   /**
    * Concurrent callers for the same server-key reuse one in-flight promise
    * so we never pop two consent dialogs / open two browser tabs.
@@ -127,8 +71,7 @@ export class McpAuthService {
   }
 
   /**
-   * Acquire an access token for an MCP server. Routes Microsoft authorities
-   * to the MSAL path and everything else to `_performGenericOAuth`
+   * Acquire an access token for an MCP server via `_performGenericOAuth`
    * (PKCE + DCR via the SDK, persisted in `DeskmateTokenCache.mcpOAuth`).
    */
   async getTokenForServer(
@@ -136,9 +79,6 @@ export class McpAuthService {
     metadata: McpResolvedAuthMetadata,
     options?: { forceRefresh?: boolean; cfg?: McpServerConfig; signal?: AbortSignal },
   ): Promise<string | undefined> {
-    if (isMicrosoftAuthority(metadata)) {
-      return this.getTokenForMicrosoft(serverName, metadata, options);
-    }
     return this.getTokenForGenericOAuth(serverName, metadata, options);
   }
 
@@ -315,9 +255,6 @@ export class McpAuthService {
    * Clear stored OAuth credentials for a single MCP server.
    *   - `'tokens'` (default): drop access+refresh+scope, keep clientId/secret.
    *   - `'all'`: drop everything including DCR clientId/secret.
-   *
-   * Microsoft (MSAL) servers are out of scope here; their tokens live in
-   * MSAL's own per-account cache.
    */
   async clearOAuthForServer(
     serverName: string,
@@ -326,14 +263,6 @@ export class McpAuthService {
   ): Promise<void> {
     const provider = new DeskmateOAuthProvider(serverName, cfg);
     await provider.invalidateCredentials(scope);
-
-    // Best-effort: also flush any in-memory MSAL token cache entries for
-    // this server, in case it was previously a Microsoft-protected server.
-    for (const key of Array.from(this.inMemoryTokens.keys())) {
-      if (key.includes(serverName)) {
-        this.inMemoryTokens.delete(key);
-      }
-    }
 
     logger.info({ msg: `[McpAuthService] Cleared OAuth credentials for "${serverName}" (scope=${scope})` });
   }
@@ -422,199 +351,6 @@ export class McpAuthService {
         resolve({ cancelled: true });
       }
     });
-  }
-
-  // ────────────────── Microsoft (MSAL) ──────────────────
-
-  /** MSAL-based flow for Microsoft authorities. */
-  private async getTokenForMicrosoft(
-    serverName: string,
-    metadata: McpResolvedAuthMetadata,
-    options?: { forceRefresh?: boolean },
-  ): Promise<string | undefined> {
-    if (!metadata.scopes.length) {
-      logger.warn({ msg: `[McpAuthService] No scopes resolved for ${serverName}` });
-      return undefined;
-    }
-
-    const resolvedClient = resolveClientId(metadata);
-    const scopesToSend = resolveScopesToSend(metadata);
-    const hintedClientId = metadata.scopes.find((scope) => scope.startsWith(CLIENT_ID_SCOPE_PREFIX))?.slice(CLIENT_ID_SCOPE_PREFIX.length)?.trim();
-
-    const authority = metadata.authorizationServerMetadata.issuer || metadata.authorizationServerUrl;
-    logger.info({ msg: `[McpAuthService] Auth decision for ${serverName}: `
-                + `provider=${metadata.providerLabel}, `
-                + `authority=${authority}, `
-                + `clientSource=${resolvedClient.source}, `
-                + `clientId=${summarizeClientId(resolvedClient.clientId)}, `
-                + `challengeHint=${hintedClientId ? summarizeClientId(hintedClientId) : 'none'}, `
-                + `scopes=${JSON.stringify(scopesToSend)}, `
-                + `forceRefresh=${options?.forceRefresh ? 'true' : 'false'}` });
-
-    const tokenCacheKey = this.buildTokenCacheKey(resolvedClient.clientId, authority, scopesToSend);
-    if (!options?.forceRefresh) {
-      const cachedToken = this.getCachedInMemoryToken(tokenCacheKey);
-      if (cachedToken) {
-        logger.info({ msg: `[McpAuthService] Reusing in-memory token for ${serverName}` });
-        return cachedToken;
-      }
-
-      const inflightRequest = this.tokenRequests.get(tokenCacheKey);
-      if (inflightRequest) {
-        logger.info({ msg: `[McpAuthService] Waiting for in-flight token acquisition for ${serverName}` });
-        return inflightRequest;
-      }
-    }
-
-    const tokenPromise = this.acquireTokenForServer(serverName, metadata, {
-      forceRefresh: options?.forceRefresh,
-      authority,
-      clientId: resolvedClient.clientId,
-      scopesToSend,
-      tokenCacheKey,
-    });
-
-    if (!options?.forceRefresh) {
-      this.tokenRequests.set(tokenCacheKey, tokenPromise);
-    }
-
-    try {
-      return await tokenPromise;
-    } finally {
-      if (!options?.forceRefresh) {
-        const inflightRequest = this.tokenRequests.get(tokenCacheKey);
-        if (inflightRequest === tokenPromise) {
-          this.tokenRequests.delete(tokenCacheKey);
-        }
-      }
-    }
-  }
-
-  private async acquireTokenForServer(
-    serverName: string,
-    metadata: McpResolvedAuthMetadata,
-    context: {
-      forceRefresh?: boolean;
-      authority: string;
-      clientId: string;
-      scopesToSend: string[];
-      tokenCacheKey: string;
-    }
-  ): Promise<string | undefined> {
-    const { app } = await this.getPublicClientApplication(context.clientId, context.authority);
-
-    try {
-      const accounts = await app.getTokenCache().getAllAccounts();
-      logger.info({ msg: `[McpAuthService] Cached account count for ${serverName}: ${accounts.length}` });
-      if (accounts.length > 0) {
-        const silentResult = await app.acquireTokenSilent({
-          account: accounts[0],
-          scopes: context.scopesToSend,
-          forceRefresh: context.forceRefresh ?? false,
-        });
-        if (silentResult?.accessToken) {
-          logger.info({ msg: `[McpAuthService] Silent token acquisition succeeded for ${serverName}` });
-          this.storeInMemoryToken(context.tokenCacheKey, silentResult);
-          return silentResult.accessToken;
-        }
-      }
-    } catch (error) {
-      logger.info({ msg: `[McpAuthService] Silent token acquisition failed for ${serverName}: ${error instanceof Error ? error.message : String(error)}` });
-    }
-
-    const consent = await this.requestConsent(serverName, metadata.providerLabel);
-    if (consent === 'cancel') {
-      throw createMcpAuthCancelledError(serverName);
-    }
-
-    logger.info({ msg: `[McpAuthService] Falling back to interactive token acquisition for ${serverName}` });
-    logger.info({ msg: `[McpAuthService] Interactive auth mode for ${serverName}: external-browser` });
-    const interactiveResult = await app.acquireTokenInteractive({
-      scopes: context.scopesToSend,
-      openBrowser: async (url: string) => {
-        await shell.openExternal(url);
-      },
-      successTemplate: `<html><body><h2>Authentication complete</h2><p>You can close this window and return to ${APP_NAME}.</p></body></html>`,
-      errorTemplate: `<html><body><h2>Authentication failed</h2><p>You can close this window and return to ${APP_NAME}.</p></body></html>`,
-    });
-
-    logger.info({ msg: `[McpAuthService] Interactive token acquisition ${interactiveResult?.accessToken ? 'succeeded' : 'returned no token'} for ${serverName}` });
-
-    this.storeInMemoryToken(context.tokenCacheKey, interactiveResult);
-
-    return interactiveResult?.accessToken || undefined;
-  }
-
-  private buildTokenCacheKey(clientId: string, authority: string, scopes: string[]): string {
-    return `${clientId}::${authority}::${[...scopes].sort().join(' ')}`;
-  }
-
-  private getCachedInMemoryToken(key: string): string | undefined {
-    const entry = this.inMemoryTokens.get(key);
-    if (!entry) {
-      return undefined;
-    }
-
-    if (entry.expiresAt <= Date.now()) {
-      this.inMemoryTokens.delete(key);
-      return undefined;
-    }
-
-    return entry.accessToken;
-  }
-
-  private storeInMemoryToken(key: string, result: Pick<msal.AuthenticationResult, 'accessToken' | 'expiresOn'> | null | undefined): void {
-    if (!result?.accessToken) {
-      return;
-    }
-
-    const expiresAt = result.expiresOn?.getTime() ?? Date.now() + 5 * 60 * 1000;
-    this.inMemoryTokens.set(key, {
-      accessToken: result.accessToken,
-      expiresAt,
-    });
-  }
-
-  private async getPublicClientApplication(clientId: string, authority: string): Promise<PublicClientAppEntry> {
-    const key = `${clientId}::${authority}`;
-    const existing = this.apps.get(key);
-    if (existing) {
-      return existing;
-    }
-
-    const appPromise = this.createPublicClientApplication(clientId, authority);
-    this.apps.set(key, appPromise);
-
-    try {
-      return await appPromise;
-    } catch (error) {
-      this.apps.delete(key);
-      throw error;
-    }
-  }
-
-  private async createPublicClientApplication(clientId: string, authority: string): Promise<PublicClientAppEntry> {
-    const app = new msal.PublicClientApplication({
-      auth: {
-        clientId,
-        authority,
-      },
-      system: {
-        loggerOptions: {
-          logLevel: msal.LogLevel.Warning,
-          loggerCallback: (level, message) => {
-            if (level === msal.LogLevel.Error) {
-              logger.error({ msg: `[McpAuthService] ${message}` });
-            } else if (level === msal.LogLevel.Warning) {
-              logger.warn({ msg: `[McpAuthService] ${message}` });
-            }
-          },
-        },
-      },
-    });
-
-    logger.info({ msg: `[McpAuthService] Created MSAL client (external-browser-first) for authority ${authority}` });
-    return { app };
   }
 
   private async requestConsent(

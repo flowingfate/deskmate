@@ -100,8 +100,7 @@ deskmate/
 │   │   ├── startup/                 启动流水 + IPC handlers
 │   │   ├── log/                     pino + sqlite worker
 │   │   └── lib/                     mcpRuntime、scheduler、subAgent、autoUpdate、
-│   │                                evalHarness、screenshot、token、
-│   │                                workspace、microsoftGraph、remoteChannel ...
+│   │                                evalHarness、screenshot、token、workspace ...
 │   ├── preload/                     主窗口 / screenshot / log-viewer 各自独立 preload
 │   ├── renderer/                    React SPA（2 个 BrowserWindow 共享代码池）
 │   │   ├── components/              chat / layout / settings / mcp / subAgents / skills ...
@@ -210,7 +209,7 @@ bun scripts/vite/pack.ts --linux
 
 - **不打算自己发版**：什么都不需要做。`npm run dev` / `npm run build` 不依赖 `publish` 配置。
 - **想推到自己的 GitHub Releases**：在 `electron-builder.config.js` 的 `publish` 段改 `owner` / `repo`，配好 `GH_TOKEN` 环境变量，再跑 `npm run dist:publish`。
-- **想完全替换 CDN/relay 后端**：修改 `endpoints.ts` 里的 URL；relay 协议契约见 [`src/main/lib/remoteChannel/`](src/main/lib/remoteChannel)。
+- **想完全替换 CDN/relay 后端**：修改 `endpoints.ts` 里的 URL（`BASE_CDN_URL` / `RELAY_SERVICE_URL`）。
 
 ### Python Runtime
 

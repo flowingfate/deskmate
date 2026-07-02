@@ -57,7 +57,7 @@ describe('HttpTransport auth retry', () => {
         token_endpoint: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token',
       },
       scopes: ['api://resource/.default'],
-      providerLabel: 'Microsoft',
+      providerLabel: 'Identity Provider',
       telemetry: {
         resourceMetadataSource: 'header',
         serverMetadataSource: 'resourceMetadata',
@@ -66,8 +66,8 @@ describe('HttpTransport auth retry', () => {
     mockGetTokenForServer.mockResolvedValue('test-access-token');
 
     const transport = new HttpTransport({
-      serverName: 'edge-growth-brain',
-      url: 'https://edge-growth-brain-staging.azurewebsites.net/mcp',
+      serverName: 'example-mcp',
+      url: 'https://mcp.example.com/mcp',
       headers: {},
     });
 
@@ -76,8 +76,8 @@ describe('HttpTransport auth retry', () => {
 
     expect(mockResolveMetadata).toHaveBeenCalledTimes(1);
     expect(mockGetTokenForServer).toHaveBeenCalledWith(
-      'edge-growth-brain',
-      expect.objectContaining({ providerLabel: 'Microsoft' }),
+      'example-mcp',
+      expect.objectContaining({ providerLabel: 'Identity Provider' }),
       expect.objectContaining({ cfg: undefined }),
     );
 
@@ -113,7 +113,7 @@ describe('HttpTransport auth retry', () => {
         token_endpoint: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token',
       },
       scopes: ['api://resource/.default'],
-      providerLabel: 'Microsoft',
+      providerLabel: 'Identity Provider',
       telemetry: {
         resourceMetadataSource: 'header',
         serverMetadataSource: 'resourceMetadata',
@@ -125,8 +125,8 @@ describe('HttpTransport auth retry', () => {
       .mockResolvedValueOnce('refreshed-token');
 
     const transport = new HttpTransport({
-      serverName: 'edge-growth-brain',
-      url: 'https://edge-growth-brain-staging.azurewebsites.net/mcp',
+      serverName: 'example-mcp',
+      url: 'https://mcp.example.com/mcp',
       headers: {},
     });
 
@@ -138,7 +138,7 @@ describe('HttpTransport auth retry', () => {
         token_endpoint: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token',
       },
       scopes: ['api://resource/.default'],
-      providerLabel: 'Microsoft',
+      providerLabel: 'Identity Provider',
       telemetry: {
         resourceMetadataSource: 'header',
         serverMetadataSource: 'resourceMetadata',
@@ -153,13 +153,13 @@ describe('HttpTransport auth retry', () => {
     // the original McpServerConfig (or undefined). The test doesn't supply
     // one, so cfg is undefined; forceRefresh is set on the retry call after
     // the second 401.
-    expect(mockGetTokenForServer).toHaveBeenNthCalledWith(1, 'edge-growth-brain',
+    expect(mockGetTokenForServer).toHaveBeenNthCalledWith(1, 'example-mcp',
       expect.objectContaining({ scopes: ['api://resource/.default'] }),
       expect.objectContaining({ cfg: undefined }));
-    expect(mockGetTokenForServer).toHaveBeenNthCalledWith(2, 'edge-growth-brain',
+    expect(mockGetTokenForServer).toHaveBeenNthCalledWith(2, 'example-mcp',
       expect.objectContaining({ scopes: ['api://resource/.default'] }),
       expect.objectContaining({ cfg: undefined }));
-    expect(mockGetTokenForServer).toHaveBeenNthCalledWith(3, 'edge-growth-brain',
+    expect(mockGetTokenForServer).toHaveBeenNthCalledWith(3, 'example-mcp',
       expect.objectContaining({ scopes: ['api://resource/.default'] }),
       expect.objectContaining({ forceRefresh: true, cfg: undefined }));
 

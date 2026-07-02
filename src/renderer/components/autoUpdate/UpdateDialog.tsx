@@ -325,7 +325,7 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
             </div>
 
             {/* Show troubleshooting tips if error contains network-related keywords */}
-            {error && (error.includes('network') || error.includes('connection') || error.includes('VPN') || error.includes('DNS') || error.includes('SSL')) && (
+            {error && (error.includes('network') || error.includes('connection') || error.includes('DNS') || error.includes('SSL')) && (
               <div className="bg-neutral-50 p-3 rounded-lg">
                 <div className="flex items-start">
                   <div className="shrink-0">
@@ -337,7 +337,6 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
                     </h5>
                     <ul className="text-xs text-neutral-700 space-y-1 list-disc list-inside">
                       <li>Check your network connection</li>
-                      <li>If on corporate network, ensure MSFT VPN is connected</li>
                       <li>Check if firewall or proxy settings are blocking the connection</li>
                       <li>Verify system time settings are correct</li>
                     </ul>

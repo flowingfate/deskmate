@@ -39,7 +39,7 @@ describe('McpAuthMetadataService', () => {
     const resolved = await McpAuthMetadataService.resolve('https://example.com/mcp', headers);
 
     expect(resolved?.authorizationServerUrl).toBe('https://login.microsoftonline.com/tenant-id/v2.0');
-    expect(resolved?.providerLabel).toBe('Microsoft');
+    expect(resolved?.providerLabel).toBe('Identity Provider');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-15 -->
+<!-- Last verified: 2026-07-02 -->
 # MCP Runtime
 
 > 仅管理 **外部 MCP server** 的连接生命周期、OAuth、工具元数据缓存与
@@ -12,9 +12,9 @@
 | `mcpClientManager.ts` | 单例。管理外部 MCP client 实例、连接生命周期、运行时状态、OAuth 桥接。**执行入口仅 `executeToolOnServer({ serverName, toolName, ... })`** —— server 必须由 `ToolCatalog` route 显式给出。 | ~1.4K LOC |
 | `mcpClient.ts` | 轻量适配器,委托给 `client/Client.ts`。转发原始 `McpServerConfig`(含 `oauth.*` 提示)给 HTTP 传输,供 OAuth 层构建 `DeskmateOAuthProvider`。 | — |
 | `client/Client.ts` | 自实现 MCP client(stdio / SSE / HTTP);拥有 initialize 握手、工具/资源枚举、JSON-RPC 收发与关闭。 | ~590 LOC |
-| `auth/McpAuthService.ts` | MCP 在线认证门面。**双路由**:Microsoft authority 走 MSAL(broker / 静默 SSO);其它 issuer 走 SDK 通用 OAuth(`DeskmateOAuthProvider` + `performOAuthFlow`)。 | — |
-| `auth/McpAuthMetadataService.ts` | 解析 `WWW-Authenticate` + 发现 OAuth resource/server metadata。识别 8 个常见 provider(GitHub / GitLab / Slack / Google / Atlassian / Notion / Discord / Microsoft)。 | — |
-| `auth/DeskmateOAuthProvider.ts` | 实现 MCP SDK `OAuthClientProvider` 接口,对接 Deskmate 安全 token 缓存。用于非 Microsoft OAuth 流程。 | ~280 LOC |
+| `auth/McpAuthService.ts` | MCP 在线认证门面。所有 issuer 走 SDK 通用 OAuth(`DeskmateOAuthProvider` + `performOAuthFlow`)。 | — |
+| `auth/McpAuthMetadataService.ts` | 解析 `WWW-Authenticate` + 发现 OAuth resource/server metadata。识别 7 个常见 provider(GitHub / GitLab / Slack / Google / Atlassian / Notion / Discord)。 | — |
+| `auth/DeskmateOAuthProvider.ts` | 实现 MCP SDK `OAuthClientProvider` 接口,对接 Deskmate 安全 token 缓存。用于 MCP OAuth 流程。 | ~280 LOC |
 | `auth/CallbackServer.ts` | OAuth 2.0 重定向本地 server。**按端口单例**(默认 33420)—— 不同 MCP server 可通过 `oauth.callbackPort` 绑定不同端口,内部 `Map<port, CallbackServer>` 每端口一实例。`state` 路由支持同端口并发流。 | ~280 LOC |
 | `auth/performOAuthFlow.ts` | 驱动 SDK 两步 `auth()`:discover + DCR + 浏览器重定向 → code → tokens。需要用户提供 clientId 时抛 `MCP_DCR_REQUIRES_USER_CLIENT_ID`。 | — |
 | `auth/serverKey.ts` | `name + sha256(transport+url+headers+oauth.clientId+callbackPort).slice(0,16)` —— 在 `DeskmateTokenCache.mcpOAuth` 中给 OAuth 凭据槽生成 key。 | — |
@@ -52,22 +52,16 @@ pi/tool.ts::executeToolCall(call, catalog, ctx)
 
 **在线认证(HTTP / SSE 传输)**:401/403 时 transport 解析 `WWW-Authenticate`,
 通过 `McpAuthMetadataService` 发现 OAuth metadata,在重试前向
-`McpAuthService.getTokenForServer` 取 Bearer token。Auth service 按 issuer 路由:
-
-- **Microsoft authority**(`login.microsoftonline.com` 等):优先 MSAL 路径,使用
-  `VSCODE_CLIENT_ID:` scope 提示;回退到内置 Microsoft public client。交互式
-  登录走外部浏览器环回。短期内存 token 缓存 + 按 `(clientId, authority, scopes)`
-  并发 dedup,避免重复 consent 弹窗。
-
-- **其它 issuer**(GitHub / Atlassian / Slack / Google 等):走 `DeskmateOAuthProvider`,
-  实现 SDK `OAuthClientProvider`,对接 `DeskmateTokenCache.mcpOAuth`。标准 PKCE
-  Authorization-Code,支持 DCR(RFC 7591),token 加密持久化在 profile 级缓存。
-  `CallbackServer` 在按 server 配置的端口监听(默认 33420)。token 刷新与
-  5min refresh 窗口在 provider 内处理。**同 server 并发调用 dedup** —— 通过
-  `genericTokenRequests` + `getMcpOAuthServerKey`,确保两个并发 transport 不会
-  弹两个 consent 或开两个浏览器 tab。**主动 refresh**:`expires_in <= 300s` 且
-  存在 refresh token 时,`getTokenForGenericOAuth` 内联驱动 `performOAuthFlow`
-  (无 consent 提示,用户已授权)。
+`McpAuthService.getTokenForServer` 取 Bearer token。所有 issuer 走统一的
+`DeskmateOAuthProvider`(实现 SDK `OAuthClientProvider`,对接
+`DeskmateTokenCache.mcpOAuth`):标准 PKCE Authorization-Code,支持 DCR
+(RFC 7591),token 加密持久化在 profile 级缓存。`CallbackServer` 在按 server
+配置的端口监听(默认 33420)。token 刷新与 5min refresh 窗口在 provider 内
+处理。**同 server 并发调用 dedup** —— 通过 `genericTokenRequests` +
+`getMcpOAuthServerKey`,确保两个并发 transport 不会弹两个 consent 或开两个
+浏览器 tab。**主动 refresh**:`expires_in <= 300s` 且存在 refresh token 时,
+`getTokenForGenericOAuth` 内联驱动 `performOAuthFlow`(无 consent 提示,用户
+已授权)。
 
 Renderer 侧 prompt(`requestConsent` / `requestClientIdFromUser`)受
 `MCP_AUTH_PROMPT_TIMEOUT_MS`(5min,与 `CallbackServer.waitForCode` 匹配)限制,
@@ -100,7 +94,7 @@ consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
 | 场景 | 修改文件 | 注意 |
 |------|----------|------|
 | 添加新的 MCP 传输类型 | `client/transport/` + `client/Client.ts` | 所有传输必须实现 `IUnifiedMcpClient` |
-| 扩展在线 MCP 认证 | `auth/` + `client/transport/HttpTransport.ts` + renderer 认证对话框 | 当前阶段优先 Microsoft 支持的 OAuth challenge |
+| 扩展在线 MCP 认证 | `auth/` + `client/transport/HttpTransport.ts` + renderer 认证对话框 | 标准 OAuth 2.0 / PKCE + DCR challenge |
 | 调整执行入口 | `mcpClientManager.executeToolOnServer` | **不要**回到按裸 toolName 查全局 map 的形态;route 必须由 `ToolCatalog` 显式给出 |
 | 向 UI 暴露 server 状态 | `mcpClientManager.ts` IPC notify | runtime state 由 `MCPServerRuntimeState` 定义 |
 | 从其它 MCP 客户端导入配置 | `mcpClientManager.ts` MCP 配置导入辅助 | 支持从 VS Code、Cursor、Claude Desktop 等 MCP 客户端的 `mcp.json` / `settings.json` 读取条目;配置转 ProfileCacheManager 持久化 |
@@ -121,10 +115,6 @@ consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
   命令退出前可推 `isPartial: true` chunk(详见
   [`pi/tools/ai.prompt.md`](../../pi/tools/ai.prompt.md))。MCP runtime 本身不发
   partial,仅透传上游响应。
-- **MCP 不复用其它 Microsoft 子系统的 client id。** 受保护 MCP server 走
-  `VSCODE_CLIENT_ID:` scope 提示或回退到内置 Microsoft public client;**永不**
-  复用 Graph / 其它 resource 的 admin-consent 过的 client id —— 跨 resource
-  consent 不匹配会让 MCP 流程拿到错误受众的 token。
 - **外部浏览器成功页是主路径。** MCP 登录始终走外部浏览器环回,不依赖原生
   broker UX。
 

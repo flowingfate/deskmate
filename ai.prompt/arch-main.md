@@ -1,6 +1,6 @@
 # DESKMATE AI Studio — 主进程架构
 
-<!-- Last verified: 2026-06-30 -->
+<!-- Last verified: 2026-07-02 -->
 ## 1. 范围
 
 本文档覆盖**主进程**（`src/main/`）和**预加载脚本**（`src/preload/`）。渲染进程架构见 [arch-render.md](arch-render.md)。
@@ -43,10 +43,8 @@
 | 取消令牌 | `src/main/lib/cancellation/` | 通过聊天 + 工具链的协作式取消 | — |
 | 子 Agent 系统 | `src/main/lib/subAgent/` | SubAgentManager + SubAgentChat，用于有界并行任务 | — |
 | 共享类型/工具 | `src/main/lib/types/`，`lib/utilities/`，`lib/utils/` | 跨模块类型、错误类、Sharp 辅助函数、CDN 缓存清除 | — |
-| 远程通道 | `src/main/lib/remoteChannel/` | 基于插件的远程通道支持（Teams），AgentBridge | [ai.prompt.md](../src/main/lib/remoteChannel/ai.prompt.md) |
 | 评估框架 | `src/main/lib/evalHarness/` | AgenticEval HTTP 服务器；`--eval-mode` 无头 Agent 执行 | [ai.prompt.md](../src/main/lib/evalHarness/ai.prompt.md) |
 | 崩溃捕获 | `src/main/lib/crash/` | 崩溃包、运行标记、面包屑、最近日志/dump | [crash-bundle.md](../docs/crash-bundle.md) |
-| Microsoft Graph | `src/main/lib/microsoftGraph/` | MSAL 认证 + Graph API 客户端（Teams、邮件、日历、SharePoint） | [ai.prompt.md](../src/main/lib/microsoftGraph/ai.prompt.md) |
 | 调度器 | `src/main/lib/scheduler/` | Cron 和一次性任务，cold-start catch-up 经 `persist/schedulerState.ts` 接通；job/run 落 `agents/{a}/schedules/{j}/` | [ai.prompt.md](../src/main/lib/scheduler/ai.prompt.md) |
 | Research window | `src/main/lib/research/` | `web research` 的 human-in-the-loop 网页研究：lazy-open + 串行单飞的 research `BrowserWindow` + 外部网页 `WebContentsView`（沙箱隔离）+ live DOM 抽取用户确认的来源 | [ai.prompt.md](../src/main/lib/research/ai.prompt.md) |
 | 网页内容提取 | `src/main/lib/research/extract/` | 共享「网页 → Markdown」提取链：Readability + turndown 注入产物（独立 IIFE 子构建），`web research` live view 与 `web fetch` headless 渲染共用 | [ai.prompt.md](../src/main/lib/research/extract/ai.prompt.md) |
@@ -76,8 +74,6 @@
 | 路径遍历 | 安全 | `src/main/lib/security/` |
 | token 计数、上下文大小 | Token 计数 | `src/main/lib/token/` |
 | 自动更新 | 自动更新 | `src/main/lib/autoUpdate/` |
-| Teams、中继、绑定 | 远程通道 | `src/main/lib/remoteChannel/` |
-| Graph API、Outlook、日历、SharePoint | Microsoft Graph | `src/main/lib/microsoftGraph/` |
 | cron、定时任务 | 调度器 | `src/main/lib/scheduler/` |
 | AgenticEval、无头 | 评估框架 | `src/main/lib/evalHarness/` |
 | 交互式网页搜索、research window、web research | Research window | `src/main/lib/research/` |

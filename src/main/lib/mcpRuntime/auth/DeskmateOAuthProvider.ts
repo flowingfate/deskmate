@@ -1,9 +1,8 @@
 /**
- * Implements the MCP SDK's `OAuthClientProvider` for non-Microsoft MCP
- * servers, bridging the SDK's PKCE/DCR/refresh machinery to Deskmate's
- * encrypted token cache (`DeskmateTokenCache.mcpOAuth`) and local callback
- * server. Routing into this provider happens upstream in
- * `McpAuthService.getTokenForServer`; Microsoft-AAD servers go through MSAL.
+ * Implements the MCP SDK's `OAuthClientProvider` for MCP servers, bridging
+ * the SDK's PKCE/DCR/refresh machinery to Deskmate's encrypted token cache
+ * (`DeskmateTokenCache.mcpOAuth`) and local callback server. Routing into
+ * this provider happens upstream in `McpAuthService.getTokenForServer`.
  */
 
 import type {

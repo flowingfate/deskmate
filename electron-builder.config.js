@@ -86,13 +86,6 @@ module.exports = {
     'node_modules/sqlite-vec-linux-x64/**',
     'node_modules/sqlite-vec-linux-arm64/**',
     'node_modules/sqlite-vec-windows-x64/**',
-    // Microsoft auth native dependencies must stay outside asar:
-    // 1. msal-node-runtime: native .node + .dylib/.dll/.so auth binaries
-    // 2. msal-node-extensions: loads msal-node-runtime and keytar
-    // 3. keytar: native credential storage (.node file)
-    'node_modules/@azure/msal-node-runtime/**',
-    'node_modules/@azure/msal-node-extensions/**',
-    'node_modules/keytar/**',
     'node_modules/node-screenshots/**',
     'node_modules/node-screenshots-win32-x64-msvc/**',
     'node_modules/node-screenshots-win32-ia32-msvc/**',

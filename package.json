@@ -43,7 +43,6 @@
     "pretest:e2e": "npm run build"
   },
   "dependencies": {
-    "@azure/msal-node": "^5.0.5",
     "@earendil-works/pi-ai": "^0.79.10",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@vscode/ripgrep": "^1.15.14",
