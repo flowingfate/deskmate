@@ -61,11 +61,7 @@ type(scope): 简明描述
 ## 发布流程
 
 ```bash
-# 准备发布（更新版本与 changelog）
-npm run prepare:release         # 交互式
-npm run prepare:release:patch   # x.x.1
-npm run prepare:release:minor   # x.1.0
-npm run prepare:release:major   # 1.0.0
+# 完整发布流程见 agent-release.md（push v* tag → .github/workflows/release.yml 自动出 Release）
 
 # 构建安装包
 npm run dist            # 当前平台
@@ -124,11 +120,7 @@ npm run dist:publish:mac
 ## 发布流程
 
 ```bash
-# 准备发布（更新版本与 changelog）
-npm run prepare:release         # 交互式
-npm run prepare:release:patch   # x.x.1
-npm run prepare:release:minor   # x.1.0
-npm run prepare:release:major   # 1.0.0
+# 完整发布流程见 agent-release.md（push v* tag → .github/workflows/release.yml 自动出 Release）
 
 # 构建安装包
 npm run dist            # 当前平台

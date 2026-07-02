@@ -1,0 +1,107 @@
+name: Release
+
+# 两种触发方式：
+#
+# 【正式模式】push 一个 v* tag：
+#   git tag v0.1.0 && git push origin v0.1.0
+#   → 两个 matrix runner（mac arm64 / win x64）打包，--publish always 上传到 GitHub Release 页面。
+#
+# 【演练模式 / dry-run】在 Actions 页面点 "Run workflow"（或 gh workflow run release.yml）：
+#   → 同样跑完整打包，但 publish 默认 never，不碰 Releases 页面；
+#     产物改传到 Actions Artifacts（临时、私有、几天后自动过期），供下载自检。
+#   → 用来零副作用地验证「打包这条链在 CI 里通不通」，不浪费正式版本号。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: '发布模式：never = 只打包不发布（演练），always = 正式发布到 Release'
+        type: choice
+        options:
+          - never
+          - always
+        default: never
+
+# 创建 Release + 上传 asset 需要写权限；
+# 仓库 Settings → Actions → Workflow permissions 也须为 "Read and write"。
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: release (${{ matrix.os }} ${{ matrix.args }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --mac --arm64
+          - os: windows-latest
+            args: --win --x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: 'npm'
+
+      # pack.ts 用 Bun API 执行（Bun.spawnSync / import.meta.dir），
+      # 官方 runner 默认不带 bun，必须显式安装，否则打包脚本无法运行。
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # postinstall 会跑 rebuild-native.js（原生模块 ABI 对齐）+ setup-ai-docs.js。
+      # GITHUB_TOKEN：@vscode/ripgrep postinstall 用它鉴权 GitHub API 下载预编译二进制，
+      # 否则匿名请求会撞 403 限流（对齐 ci.yml 的 install 步骤）。
+      - name: Install dependencies
+        run: npm install
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 发布模式：tag push → 恒 always（正式发布）；手动触发 → 读 publish 输入（默认 never = 演练）。
+      # electron-builder 认 GH_TOKEN 创建 Release 并上传 asset；--publish never 时只本地打包，不联网发布。
+      - name: Build & publish
+        run: bun scripts/vite/pack.ts ${{ matrix.args }} --publish ${{ (github.event_name == 'push' && 'always') || inputs.publish }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 演练模式（手动触发）把打好的安装包传到 Actions Artifacts，供下载自检。
+      # 正式 tag 发布不需要这步（产物已在 Release 页面）。产物默认落 dist/。
+      - name: Upload artifacts (dry-run)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deskmate-${{ runner.os }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.zip
+          if-no-files-found: warn
+          retention-days: 7
+
+  # 打包矩阵全部完成后，用 GitHub 自动生成 release notes 回填 Release 正文。
+  # 仅在 tag push（真的创建了 Release）时运行；演练模式无 tag、无 Release，跳过。
+  release-notes:
+    needs: release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          notes=$(gh api -X POST repos/${{ github.repository }}/releases/generate-notes \
+            -f tag_name="$TAG" --jq '.body')
+          gh release edit "$TAG" --notes "$notes"

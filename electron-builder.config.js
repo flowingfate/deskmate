@@ -119,7 +119,7 @@ module.exports = {
       private: false,
       protocol: 'https',
       releaseType: 'release',
-      publishAutoUpdate: true,
+      publishAutoUpdate: false,   // 本项目自更新走自研 CDN/GitHub API，不消费 electron-updater 的 latest*.yml，故不生成
     },
   ],
   releaseInfo: {
