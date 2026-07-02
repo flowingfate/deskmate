@@ -12,6 +12,8 @@
  * 对外字段名保留 `source`（= sqlite 列 `component`）以避免改 system prompt 大段。
  */
 
+import type { Tool } from '@earendil-works/pi-ai';
+import { jsonSchema } from '@main/pi/tools/schema';
 import * as fs from 'fs';
 import Database from 'better-sqlite3';
 import { getLogDbPath, flushLogs } from '@main/log';
@@ -79,57 +81,54 @@ const description = `Query Deskmate application runtime logs from the local sqli
 - Call \`get_log_schema\` once to see field definitions before iterating heavily.
 - Use \`trace_timeline\` when you have a specific traceId to follow end-to-end.`;
 
-export const readAppLogsToolDef = {
-  type: 'function' as const,
-  function: {
-    name: 'read_app_logs',
-    description,
-    parameters: {
-      type: 'object',
-      properties: {
-        mode: {
-          type: 'string',
-          enum: ['stats', 'sources', 'entries'],
-          description: `stats = aggregated overview; sources = list of unique component values; entries = actual log rows filtered by the criteria below.`,
-        },
-        source: {
-          type: 'string',
-          description: `Glob pattern to filter by component, supports "*" wildcard (e.g. "mcp*", "chat*"). Applies to all modes.`,
-        },
-        level: {
-          type: 'array',
-          items: { type: 'string', enum: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] },
-          description: 'Filter by level. Set semantics: only the listed levels are returned (SQL IN), not a minimum-level filter.',
-        },
-        grep: {
-          type: 'string',
-          description: `FTS5 MATCH expression against msg + err_stack + fields. SQLite FTS5 syntax (AND/OR/NOT/NEAR/phrase).`,
-        },
-        from: {
-          type: 'string',
-          description: 'Start time (inclusive). ISO 8601 or "YYYY-MM-DD HH:mm".',
-        },
-        to: {
-          type: 'string',
-          description: 'End time (inclusive). ISO 8601 or "YYYY-MM-DD HH:mm".',
-        },
-        trace: {
-          type: 'string',
-          description: 'Filter by traceId. For one full trace, prefer the trace_timeline tool.',
-        },
-        limit: {
-          type: 'number',
-          description: `Max entries to return (only applies to mode="entries"). Default ${ENTRIES_DEFAULT_LIMIT}, hard cap ${ENTRIES_HARD_LIMIT}.`,
-        },
-        scope: {
-          type: 'string',
-          enum: ['current', 'all'],
-          description: `Default "current" adds an implicit \`since=midnight\` (today only). "all" removes it. Applies to both dev and prod (both dbs accumulate across launches).`,
-        },
+export const readAppLogsToolDef: Tool = {
+  name: 'read_app_logs',
+  description,
+  parameters: jsonSchema({
+    type: 'object',
+    properties: {
+      mode: {
+        type: 'string',
+        enum: ['stats', 'sources', 'entries'],
+        description: `stats = aggregated overview; sources = list of unique component values; entries = actual log rows filtered by the criteria below.`,
       },
-      required: ['mode'],
+      source: {
+        type: 'string',
+        description: `Glob pattern to filter by component, supports "*" wildcard (e.g. "mcp*", "chat*"). Applies to all modes.`,
+      },
+      level: {
+        type: 'array',
+        items: { type: 'string', enum: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] },
+        description: 'Filter by level. Set semantics: only the listed levels are returned (SQL IN), not a minimum-level filter.',
+      },
+      grep: {
+        type: 'string',
+        description: `FTS5 MATCH expression against msg + err_stack + fields. SQLite FTS5 syntax (AND/OR/NOT/NEAR/phrase).`,
+      },
+      from: {
+        type: 'string',
+        description: 'Start time (inclusive). ISO 8601 or "YYYY-MM-DD HH:mm".',
+      },
+      to: {
+        type: 'string',
+        description: 'End time (inclusive). ISO 8601 or "YYYY-MM-DD HH:mm".',
+      },
+      trace: {
+        type: 'string',
+        description: 'Filter by traceId. For one full trace, prefer the trace_timeline tool.',
+      },
+      limit: {
+        type: 'number',
+        description: `Max entries to return (only applies to mode="entries"). Default ${ENTRIES_DEFAULT_LIMIT}, hard cap ${ENTRIES_HARD_LIMIT}.`,
+      },
+      scope: {
+        type: 'string',
+        enum: ['current', 'all'],
+        description: `Default "current" adds an implicit \`since=midnight\` (today only). "all" removes it. Applies to both dev and prod (both dbs accumulate across launches).`,
+      },
     },
-  },
+    required: ['mode'],
+  }),
 };
 
 interface ReadAppLogsArgs {

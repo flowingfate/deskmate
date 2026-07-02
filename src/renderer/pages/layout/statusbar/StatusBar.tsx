@@ -17,8 +17,10 @@ export const StatusBar: React.FC = () => {
   return (
     <div className="app-status-bar">
       <div className="app-status-bar-left">
-        <div className="ml-2">{APP_NAME} v{version}</div>
-        <div className="mx-1 flex items-center gap-1">
+        <div className="ml-1 px-1 hover:bg-black/10">
+          {APP_NAME} v{version}
+        </div>
+        <div className="flex items-center gap-1">
           <DoctorStatusIndicator />
           <DoctorInquiry />
         </div>

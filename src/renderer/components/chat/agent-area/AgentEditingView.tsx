@@ -620,7 +620,7 @@ const AgentEditingView: React.FC = () => {
           <div className="flex-1 min-w-0 overflow-hidden relative bg-white/95 box-border">
             {/* Loading Overlay */}
             {isLoading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-[100] bg-white/70 backdrop-blur-[2px]">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-100 bg-white/70 backdrop-blur-xs">
                 <Loader2 className="text-accent animate-spin" size={20} strokeWidth={2} />
                 <span className="text-sm text-content-secondary font-medium">Saving...</span>
               </div>

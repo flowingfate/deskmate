@@ -8,21 +8,20 @@
  * Intentionally does not duplicate fields already in get_app_info (version/platform/arch/etc).
  */
 
+import type { Tool } from '@earendil-works/pi-ai';
+import { jsonSchema } from '@main/pi/tools/schema';
 import * as fs from 'fs';
 import * as path from 'path';
 import { crashCaptureManager } from '../../crash/CrashCaptureManager';
 
-export const getCrashStatusToolDef = {
-  type: 'function' as const,
-  function: {
-    name: 'get_crash_status',
-    description: `Return crash-capture status for this machine: whether the previous launch ended unclean, a list of up to 10 most recent crash bundles (name + eventType + capturedAt + appVersion + size), and a list of up to 10 most recent native minidumps (binary; metadata only — Doctor cannot read them). Cheap; always call this once during the Collect phase. When hasRecoveredCrash is true OR a recentBundle matches the bug timeline, follow up with read_crash_bundle on the most relevant bundle.`,
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-    },
-  },
+export const getCrashStatusToolDef: Tool = {
+  name: 'get_crash_status',
+  description: `Return crash-capture status for this machine: whether the previous launch ended unclean, a list of up to 10 most recent crash bundles (name + eventType + capturedAt + appVersion + size), and a list of up to 10 most recent native minidumps (binary; metadata only — Doctor cannot read them). Cheap; always call this once during the Collect phase. When hasRecoveredCrash is true OR a recentBundle matches the bug timeline, follow up with read_crash_bundle on the most relevant bundle.`,
+  parameters: jsonSchema({
+    type: 'object',
+    properties: {},
+    required: [],
+  }),
 };
 
 const MAX_BUNDLES = 10;

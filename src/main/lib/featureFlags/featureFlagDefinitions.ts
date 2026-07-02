@@ -50,15 +50,6 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagConfig[] = [
     description: 'Sub-Agent system — spawn tools, settings UI, system prompt injection',
     defaultValue: (ctx) => ctx.isDev,
   },
-
-  // ============== Doctor ==============
-  {
-    name: 'deskmateFeatureDoctor',
-    description: 'Doctor (in-app self-diagnosis) Report Bug entry in UserMenu (dev environment only)',
-    defaultValue: (ctx) => ctx.isDev,
-  },
-
-
 ];
 
 /**

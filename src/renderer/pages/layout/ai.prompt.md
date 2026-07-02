@@ -8,7 +8,7 @@
 |------|------|------|
 | `AppShell.tsx` | App 级 layout：titlebar + Sidebar + content slot + StatusBar | ~145 LOC |
 | `Sidebar.tsx` | 常驻 icon bar：agent 头像列表、新建 agent、用户头像、设置入口 | ~174 LOC |
-| `StatusBar.tsx` | 全局底部状态栏：DoctorStatusIndicator | ~14 LOC |
+| `StatusBar.tsx` | 全局底部状态栏：DoctorStatusIndicator（运行/终点指示器 + done tooltip 内 View Issue）+ DoctorInquiry（诊断表单弹窗） | ~14 LOC |
 | `AgentLayout.tsx` | Agent 页面根组件 — 包装 providers（`PasteToWorkspaceProvider`、`SharePointSearchProvider` 等），拥有全局事件监听器 | ~312 LOC |
 | `AgentLayoutContent.tsx` | Agent 页面 UI 外壳 — `SessionPanel`（位于 [`components/agent-side/`](../../components/agent-side/ai.prompt.md)）+ ResizableDivider + ContentContainer + RightGlobalSidepane 布局 | ~107 LOC |
 | `ContentContainer.tsx` | `<main>` 包装器；渲染 `<Outlet>`（React Router），处理 `agent:newAgent` / `agent:editAgent` 事件 | ~80 LOC |
@@ -50,7 +50,7 @@ AppRoutes → RequireAuth → AppShell (Sidebar + StatusBar + Titlebar)
 | 更改 SessionPanel 最小/最大宽度 | `src/renderer/states/left-nav.atom.ts` | 常量 `MIN_WIDTH` / `MAX_WIDTH` 在此定义 |
 | 修改 Sidebar 图标/布局 | `Sidebar.tsx` | 包含 `SidebarAgentItem`、`SidebarUserAvatar` 子组件 |
 | 修改 SessionPanel 头部/搜索/列表 | [`src/renderer/components/agent-side/`](../../components/agent-side/ai.prompt.md) | sessions / jobs 子屏 + alarm 切换 |
-| 修改 StatusBar 内容 | `StatusBar.tsx` | 目前仅有 DoctorStatusIndicator |
+| 修改 StatusBar 内容 | `StatusBar.tsx` | 含 DoctorStatusIndicator / DoctorInquiry |
 | 调整 Windows 标题栏控件 | `WindowsTitleBar.tsx` | 仅在 `win32` 上渲染 |
 
 ## 联动变更映射

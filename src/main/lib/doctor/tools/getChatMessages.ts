@@ -6,6 +6,8 @@
  * Up to 10 messages per call.
  */
 
+import type { Tool } from '@earendil-works/pi-ai';
+import { jsonSchema } from '@main/pi/tools/schema';
 import type { DoctorSessionFile } from '../chatSession/types';
 import { Profiles } from '../../../persist';
 import {
@@ -17,36 +19,33 @@ import {
 } from '../chatSession/messageReader';
 import type { HistoryView } from '../chatSession/types';
 
-export const getChatMessagesToolDef = {
-  type: 'function' as const,
-  function: {
-    name: 'get_chat_messages',
-    description: `Read up to ${MAX_MESSAGES_PER_CALL} chat messages by their indices in the skeleton returned by read_chat_session. Long fields are truncated: text/thinking ${TEXT_LIMIT} chars, tool result ${TOOL_RESULT_LIMIT} chars, tool_call arguments ${ARGUMENTS_LIMIT} chars; image url is replaced by a [image: name W×H sizeKB] placeholder. view='ui' reads messages directly; view='llm' derives the LLM context from messages + contextState (may report 'dropped' if a message was compressed away).`,
-    parameters: {
-      type: 'object',
-      properties: {
-        agentId: {
-          type: 'string',
-          description: 'The chat (agent) id the session belongs to.',
-        },
-        chatSessionId: {
-          type: 'string',
-          description: 'The chat session id to read.',
-        },
-        messageIndices: {
-          type: 'array',
-          items: { type: 'integer', minimum: 0 },
-          description: `Message indices (0-based) from the skeleton. Max ${MAX_MESSAGES_PER_CALL} per call.`,
-        },
-        view: {
-          type: 'string',
-          enum: ['ui', 'llm'],
-          description: "Which view to read. 'ui' = messages as displayed (default), 'llm' = messages as sent to LLM (may report 'dropped' for compressed messages).",
-        },
+export const getChatMessagesToolDef: Tool = {
+  name: 'get_chat_messages',
+  description: `Read up to ${MAX_MESSAGES_PER_CALL} chat messages by their indices in the skeleton returned by read_chat_session. Long fields are truncated: text/thinking ${TEXT_LIMIT} chars, tool result ${TOOL_RESULT_LIMIT} chars, tool_call arguments ${ARGUMENTS_LIMIT} chars; image url is replaced by a [image: name W×H sizeKB] placeholder. view='ui' reads messages directly; view='llm' derives the LLM context from messages + contextState (may report 'dropped' if a message was compressed away).`,
+  parameters: jsonSchema({
+    type: 'object',
+    properties: {
+      agentId: {
+        type: 'string',
+        description: 'The chat (agent) id the session belongs to.',
       },
-      required: ['agentId', 'chatSessionId', 'messageIndices'],
+      chatSessionId: {
+        type: 'string',
+        description: 'The chat session id to read.',
+      },
+      messageIndices: {
+        type: 'array',
+        items: { type: 'integer', minimum: 0 },
+        description: `Message indices (0-based) from the skeleton. Max ${MAX_MESSAGES_PER_CALL} per call.`,
+      },
+      view: {
+        type: 'string',
+        enum: ['ui', 'llm'],
+        description: "Which view to read. 'ui' = messages as displayed (default), 'llm' = messages as sent to LLM (may report 'dropped' for compressed messages).",
+      },
     },
-  },
+    required: ['agentId', 'chatSessionId', 'messageIndices'],
+  }),
 };
 
 export async function executeGetChatMessages(args: {

@@ -15,7 +15,7 @@ import type {
 import { mainToRender, type MainToRender, type MapMainInvoke } from '@shared/ipc/doctor';
 import { log } from '@main/log';
 import { DoctorAgentRunner } from './agentRunner';
-import { eachWebContent } from '@main/startup/wins';
+import { mainWebContents } from '@main/startup/wins';
 
 const logger = log;
 
@@ -26,11 +26,11 @@ function useSender(
   methods: string,
   handle: (s: MapMainInvoke<MainToRender>) => void
 ) {
+  const wc = mainWebContents();
+  if (!wc) return;
   try {
-    eachWebContent((wc) => {
-      const sender = mainToRender.bindWebContents(wc);
-      handle(sender);
-    });
+    const sender = mainToRender.bindWebContents(wc);
+    handle(sender);
   } catch (err) {
     logger.warn({ msg: '[DoctorManager] Failed to notify renderer', mod: methods, taskId, err: err });
   }
@@ -72,10 +72,11 @@ export class DoctorManager {
 
     // Broadcast question to all renderer windows
     try {
-      eachWebContent((wc) => {
+      const wc = mainWebContents();
+      if (wc) {
         const sender = mainToRender.bindWebContents(wc);
         sender.doctorAgentQuestion(payload);
-      });
+      }
     } catch (err) {
       logger.warn({ msg: '[DoctorManager] Failed to send question to renderer', mod: 'askUserQuestion', taskId, err: err });
     }

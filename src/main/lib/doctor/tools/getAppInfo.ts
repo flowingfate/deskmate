@@ -2,6 +2,8 @@
  * get_app_info — return runtime environment info for the application.
  */
 
+import type { Tool } from '@earendil-works/pi-ai';
+import { jsonSchema } from '@main/pi/tools/schema';
 import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -9,17 +11,14 @@ import { getLogDbPath } from '@main/log';
 import { getAppDataPath, getChromiumDataPath } from '@main/persist/lib/path';
 import { APP_VERSION } from '@shared/constants/branding';
 
-export const getAppInfoToolDef = {
-  type: 'function' as const,
-  function: {
-    name: 'get_app_info',
-    description: `Get current application environment information: version, platform, architecture, memory usage, uptime, and the active sqlite log database (so read_app_logs results can be interpreted in context).`,
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-    },
-  },
+export const getAppInfoToolDef: Tool = {
+  name: 'get_app_info',
+  description: `Get current application environment information: version, platform, architecture, memory usage, uptime, and the active sqlite log database (so read_app_logs results can be interpreted in context).`,
+  parameters: jsonSchema({
+    type: 'object',
+    properties: {},
+    required: [],
+  }),
 };
 
 export async function executeGetAppInfo(): Promise<string> {

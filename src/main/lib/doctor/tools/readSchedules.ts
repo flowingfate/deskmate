@@ -15,6 +15,8 @@
  * "triggered when it shouldn't have".
  */
 
+import type { Tool } from '@earendil-works/pi-ai';
+import { jsonSchema } from '@main/pi/tools/schema';
 import * as fs from 'fs';
 import { Profiles } from '@main/persist';
 import { toSchedulerJob } from '../../scheduler/jobAdapter';
@@ -24,30 +26,27 @@ import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
 import type { SchedulerStateFile } from '@shared/persist/types';
 
-export const readSchedulesToolDef = {
-  type: 'function' as const,
-  function: {
-    name: 'read_schedules',
-    description: `Read the current profile's scheduled jobs. Two modes:
+export const readSchedulesToolDef: Tool = {
+  name: 'read_schedules',
+  description: `Read the current profile's scheduled jobs. Two modes:
 • "list" — markdown table of every job with skeleton columns: metadata (id, name, type, cron/runAt, enabled, status, agentId, lastRunAt, lastFinishedAt) plus message skeleton (msg.len, msg.lines, msg.firstLine preview) and description length. Includes scheduler runtime-state header.
 • "detail" — one job's prompt body (truncated to 2 KB) + description (truncated to 512 chars) + cold-start catch-up record if present. Call after "list" identifies a relevant job.
 ONLY call this when the user's bug description involves scheduled tasks / cron / "didn't trigger" — do not call for unrelated bugs.`,
-    parameters: {
-      type: 'object',
-      properties: {
-        mode: {
-          type: 'string',
-          enum: ['list', 'detail'],
-          description: `list = markdown table of all jobs with message skeleton; detail = one job's prompt body + description (requires scheduleId).`,
-        },
-        scheduleId: {
-          type: 'string',
-          description: 'Required when mode="detail". The job id from the list output.',
-        },
+  parameters: jsonSchema({
+    type: 'object',
+    properties: {
+      mode: {
+        type: 'string',
+        enum: ['list', 'detail'],
+        description: `list = markdown table of all jobs with message skeleton; detail = one job's prompt body + description (requires scheduleId).`,
       },
-      required: ['mode'],
+      scheduleId: {
+        type: 'string',
+        description: 'Required when mode="detail". The job id from the list output.',
+      },
     },
-  },
+    required: ['mode'],
+  }),
 };
 
 const MAX_JOBS_IN_LIST = 50;

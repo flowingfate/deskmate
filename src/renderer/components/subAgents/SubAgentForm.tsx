@@ -236,7 +236,7 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
         <label className="sub-agent-form-label">Max Turns</label>
         <Input
           type="number"
-          className="w-[120px]"
+          className="w-30"
           value={formData.max_turns}
           onChange={(e) => onUpdateField('max_turns', parseInt(e.target.value) || 25)}
           min={1}

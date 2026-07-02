@@ -16,19 +16,13 @@ import { readSchedulesToolDef } from './tools/readSchedules';
 import { createGithubIssueToolDef } from './tools/createGithubIssue';
 import { askUserQuestionToolDef } from './tools/askUserQuestion';
 import { APP_INTRO_L1 } from './appKnowledge';
-
-/**
- * Doctor Agent 使用的模型（pi `${provider}::${modelId}` 复合 key）。
- * 当前固定走 GitHub Copilot 上的 claude-sonnet-4.6；未来如需切 provider
- * 仅改这里即可，调用链不会感知。
- */
-export const DOCTOR_MODEL_KEY = 'github-copilot::claude-sonnet-4.6';
+import type { Tool } from '@earendil-works/pi-ai';
 
 /** Max conversation turns (guards against infinite loops). Set on the high side to allow read_app_logs to iterate. */
 export const MAX_TURNS = 15;
 
-/** Tool definition list (OpenAI function-calling format). */
-export const TOOL_DEFINITIONS = [
+/** Tool definitions fed to pi.complete (`pi.Tool[]`). */
+export const TOOL_DEFINITIONS: Tool[] = [
   getAppInfoToolDef,
   getAppKnowledgeToolDef,
   readAppLogsToolDef,

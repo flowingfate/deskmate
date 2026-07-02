@@ -1,19 +1,30 @@
+import type {
+  AssistantMessage as PiAssistantMessage,
+  ImageContent as PiImageContent,
+  Message as PiMessage,
+  TextContent as PiTextContent,
+  ToolCall as PiToolCall,
+} from '@earendil-works/pi-ai';
+import type { DoctorInquiryPayload } from '@shared/ipc/doctor';
+
 import { log } from '@main/log';
 import { MAX_TURNS, TOOL_DEFINITIONS, SYSTEM_PROMPT } from './agentConfig';
 import { executeTool } from './toolExecutor';
 import { clearDebugLog, appendDebugLog } from './log';
-import { callDoctorLlm, type ChatMessage, type MessageContent } from './llmClient';
+import { callDoctorLlm } from './llmClient';
 import {
   compressImageFirstPass,
   MAX_IMAGE_BYTES_FOR_INLINE,
   MAX_COMPRESSED_IMAGE_BYTES_FOR_INLINE,
 } from '../utilities/imageStorageCompression';
 
-const SUPPORTED_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp']);
-
-type ImagePart = { type: 'image_url'; image_url: { url: string; detail: 'high' } };
-type TextPart = { type: 'text'; text: string };
-import type { DoctorInquiryPayload } from '@shared/ipc/doctor';
+const SUPPORTED_IMAGE_MIME: Record<string, true> = {
+  'image/png': true,
+  'image/jpeg': true,
+  'image/gif': true,
+  'image/webp': true,
+  'image/bmp': true,
+};
 
 const logger = log;
 
@@ -37,6 +48,20 @@ const TOOL_STEP_INFO: Record<string, string> = {
   create_github_issue: 'Generating diagnostic report...',
 };
 
+/** 把 assistant message 里所有 text 块拼成一段纯文本（用于 debug log 摘要）。 */
+function assistantText(msg: PiAssistantMessage): string {
+  let text = '';
+  for (const block of msg.content) {
+    if (block.type === 'text') text += block.text;
+  }
+  return text;
+}
+
+/** 抽出 assistant message 里的 toolCall 块。 */
+function toolCallsOf(msg: PiAssistantMessage): PiToolCall[] {
+  return msg.content.filter((b): b is PiToolCall => b.type === 'toolCall');
+}
+
 export class DoctorAgentRunner {
   constructor(private readonly pushStepInfo: StepInfoPusher) {}
 
@@ -45,10 +70,8 @@ export class DoctorAgentRunner {
     appendDebugLog('Agent Started', `**TaskId:** ${taskId}\n**MaxTurns:** ${MAX_TURNS}`);
     this.pushStepInfo('Preparing analysis...');
 
-    const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      await this.buildUserMessage(payload),
-    ];
+    // 全程 pi 原生 message；system prompt 由 pi.Context.systemPrompt 承载，不入 messages。
+    const messages: PiMessage[] = [await this.buildUserMessage(payload)];
 
     appendDebugLog(
       'User Bug Report',
@@ -67,47 +90,37 @@ export class DoctorAgentRunner {
       logger.info({ msg: `[DoctorAgent] Turn ${turn + 1}/${MAX_TURNS}`, mod: 'run' });
       appendDebugLog(`Turn ${turn + 1}/${MAX_TURNS}`, 'Calling LLM...');
 
-      const response = await callDoctorLlm(messages, TOOL_DEFINITIONS);
+      const response = await callDoctorLlm(SYSTEM_PROMPT, messages, TOOL_DEFINITIONS, payload.modelKey);
+      const toolCalls = toolCallsOf(response);
+      const content = assistantText(response);
 
       appendDebugLog(
         `LLM Response (Turn ${turn + 1})`,
-        `**FinishReason:** ${response.finishReason}\n` +
-        `**Content:** ${response.content ? response.content.slice(0, 500) + (response.content.length > 500 ? '...' : '') : '(none)'}\n` +
-        `**ToolCalls:** ${response.toolCalls.length}`,
+        `**StopReason:** ${response.stopReason}\n` +
+        `**Content:** ${content ? content.slice(0, 500) + (content.length > 500 ? '...' : '') : '(none)'}\n` +
+        `**ToolCalls:** ${toolCalls.length}`,
       );
 
-      // Accumulate assistant message
-      const assistantMsg: ChatMessage = {
-        role: 'assistant',
-        ...(response.content ? { content: response.content } : {}),
-        ...(response.toolCalls.length > 0 ? { tool_calls: response.toolCalls } : {}),
-      };
-      messages.push(assistantMsg);
+      // pi.AssistantMessage 直接进 history —— 不重建、不丢 usage/provider。
+      messages.push(response);
 
       // Termination condition: no tool_calls
-      if (response.toolCalls.length === 0) {
+      if (toolCalls.length === 0) {
         logger.info({ msg: '[DoctorAgent] Agent finished (no more tool calls)', mod: 'run' });
         appendDebugLog('Agent Finished', 'No more tool calls.');
         break;
       }
 
       // Execute tools sequentially
-      for (const toolCall of response.toolCalls) {
-        const { name, arguments: argsStr } = toolCall.function;
+      for (const toolCall of toolCalls) {
+        const { name, arguments: args } = toolCall;
 
         const stepText = TOOL_STEP_INFO[name] ?? `Running ${name}...`;
         this.pushStepInfo(stepText);
 
-        let parsedArgs: any = {};
-        try {
-          parsedArgs = argsStr ? JSON.parse(argsStr) : {};
-        } catch {
-          logger.warn({ msg: `[DoctorAgent] Failed to parse tool args for ${name}`, mod: 'run' });
-        }
+        appendDebugLog(`Tool Call: ${name}`, `**Args:**\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``);
 
-        appendDebugLog(`Tool Call: ${name}`, `**Args:**\n\`\`\`json\n${JSON.stringify(parsedArgs, null, 2)}\n\`\`\``);
-
-        const result = await executeTool(name, parsedArgs, { taskId });
+        const result = await executeTool(name, args, { taskId });
 
         appendDebugLog(
           `Tool Result: ${name}`,
@@ -125,9 +138,12 @@ export class DoctorAgentRunner {
         }
 
         messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: result,
+          role: 'toolResult',
+          toolCallId: toolCall.id,
+          toolName: name,
+          content: [{ type: 'text', text: result }],
+          isError: false,
+          timestamp: Date.now(),
         });
       }
     }
@@ -141,7 +157,7 @@ export class DoctorAgentRunner {
     return { success: false, error: 'Agent completed but did not create a GitHub issue.' };
   }
 
-  private async buildUserMessage(payload: DoctorInquiryPayload): Promise<ChatMessage> {
+  private async buildUserMessage(payload: DoctorInquiryPayload): Promise<PiMessage> {
     let text = `## Bug Report\n\n`;
     text += `**Description:**\n${payload.description}\n\n`;
     text += `**Steps to Reproduce:**\n${payload.stepsToReproduce}\n\n`;
@@ -155,12 +171,12 @@ export class DoctorAgentRunner {
     }
 
     if (payload.screenshots && payload.screenshots.length > 0) {
-      const extraParts: Array<ImagePart | TextPart> = [];
+      const images: PiImageContent[] = [];
       const skippedNotes: string[] = [];
 
       for (const shot of payload.screenshots) {
         const rawMime = (shot.mimeType || 'image/png').toLowerCase();
-        const inputMime = SUPPORTED_IMAGE_MIME.has(rawMime) ? rawMime : 'image/png';
+        const inputMime = SUPPORTED_IMAGE_MIME[rawMime] ? rawMime : 'image/png';
         const originalBytes = shot.bytes.byteLength;
 
         if (originalBytes > MAX_IMAGE_BYTES_FOR_INLINE) {
@@ -189,12 +205,10 @@ export class DoctorAgentRunner {
               `**Original:** ${compressed.originalSize} bytes (${inputMime})\n` +
               `**Compressed:** ${compressed.compressedSize} bytes (${compressed.mimeType}, ${compressed.width}x${compressed.height})`,
           );
-          extraParts.push({
-            type: 'image_url',
-            image_url: {
-              url: `data:${compressed.mimeType};base64,${compressed.base64Data}`,
-              detail: 'high',
-            },
+          images.push({
+            type: 'image',
+            data: compressed.base64Data,
+            mimeType: compressed.mimeType,
           });
         } catch (err) {
           const note = `[Screenshot "${shot.name}" compression failed; inline embedding was skipped.]`;
@@ -206,16 +220,15 @@ export class DoctorAgentRunner {
         }
       }
 
-      const embeddedCount = extraParts.length;
-      text += `\n**Screenshots:** ${embeddedCount} of ${payload.screenshots.length} screenshot(s) embedded above.\n`;
+      text += `\n**Screenshots:** ${images.length} of ${payload.screenshots.length} screenshot(s) embedded above.\n`;
       if (skippedNotes.length > 0) {
         text += skippedNotes.map((n) => `- ${n}`).join('\n') + '\n';
       }
 
-      const content: MessageContent = [{ type: 'text', text }, ...extraParts];
-      return { role: 'user', content };
+      const content: (PiTextContent | PiImageContent)[] = [{ type: 'text', text }, ...images];
+      return { role: 'user', content, timestamp: Date.now() };
     }
 
-    return { role: 'user', content: text };
+    return { role: 'user', content: text, timestamp: Date.now() };
   }
 }

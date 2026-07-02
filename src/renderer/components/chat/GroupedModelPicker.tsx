@@ -89,22 +89,19 @@ export const GroupedModelPicker: React.FC<Props> = ({ value, onChange, variant =
   );
 };
 
-/**
- * 给"按钮上显示当前 model name"的常用场景。
- * - composite 解析失败 → { label: 'Select Model', invalid: true }
- * - 解析成功但 provider 未登录或模型未列出 → 用裸 modelId 兜底显示
- * - 正常 → 显示模型 name（不带 provider 前缀，避免 UI 暴露 `::` 分隔符）
- */
+
 export function useModelDisplayLabel(composite: string | null | undefined): {
   label: string;
   invalid: boolean;
 } {
-  const { groups } = useGroupedProviderModels();
+  const { groups, isLoading, error } = useGroupedProviderModels();
   const parsed = parseAgentModel(composite);
   if (!parsed) {
     return { label: composite || 'Select Model', invalid: Boolean(composite) };
   }
   const group: ProviderModelGroup | undefined = groups.find((g) => g.providerId === parsed.provider);
   const model = group?.models.find((m) => m.id === parsed.modelId);
-  return { label: model?.name ?? parsed.modelId, invalid: false };
+  // 只在「已加载完成且无 error」时，才敢把查无此项判为 invalid。
+  const resolvable = isLoading || Boolean(error) || Boolean(model);
+  return { label: model?.name ?? parsed.modelId, invalid: !resolvable };
 }

@@ -3,6 +3,8 @@
  * 适合定位一次跨进程操作（如 chat 流式请求、MCP 工具调用）的端到端时间线。
  */
 
+import type { Tool } from '@earendil-works/pi-ai';
+import { jsonSchema } from '@main/pi/tools/schema';
 import * as fs from 'fs';
 import Database from 'better-sqlite3';
 import { getLogDbPath, flushLogs } from '@main/log';
@@ -10,27 +12,24 @@ import { NUM_LEVEL, type LogRow } from '@shared/log/query';
 
 const ROW_HARD_LIMIT = 500;
 
-export const traceTimelineToolDef = {
-  type: 'function' as const,
-  function: {
-    name: 'trace_timeline',
-    description:
-      'Given a traceId, return all log rows correlated to it, ordered by time. Use after you spotted a traceId in read_app_logs and want the full cross-process timeline.',
-    parameters: {
-      type: 'object',
-      properties: {
-        traceId: {
-          type: 'string',
-          description: 'The trace identifier (column `trace_id`). Often surfaced by an earlier read_app_logs call.',
-        },
-        limit: {
-          type: 'number',
-          description: `Max rows to return; hard cap ${ROW_HARD_LIMIT}. Default 200.`,
-        },
+export const traceTimelineToolDef: Tool = {
+  name: 'trace_timeline',
+  description:
+    'Given a traceId, return all log rows correlated to it, ordered by time. Use after you spotted a traceId in read_app_logs and want the full cross-process timeline.',
+  parameters: jsonSchema({
+    type: 'object',
+    properties: {
+      traceId: {
+        type: 'string',
+        description: 'The trace identifier (column `trace_id`). Often surfaced by an earlier read_app_logs call.',
       },
-      required: ['traceId'],
+      limit: {
+        type: 'number',
+        description: `Max rows to return; hard cap ${ROW_HARD_LIMIT}. Default 200.`,
+      },
     },
-  },
+    required: ['traceId'],
+  }),
 };
 
 interface Args {
