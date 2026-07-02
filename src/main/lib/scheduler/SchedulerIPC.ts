@@ -55,9 +55,9 @@ export const registerSchedulerIPC = (): void => {
     }
   });
 
-  handle.runJobNow(async (_event, jobId) => {
+  handle.runJobNow(async (_event, jobId, force) => {
     try {
-      const result = await schedulerManager.runJobNow(jobId);
+      const result = await schedulerManager.runJobNow(jobId, force);
       if (!result.success) {
         return { success: false, error: result.error || 'Failed to run schedule' };
       }

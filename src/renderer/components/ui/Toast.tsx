@@ -9,11 +9,7 @@ export interface ToastMessage {
   duration?: number;
   persistent?: boolean; // Whether to display persistently, don't auto-dismiss
   onDismiss?: () => void;
-  actions?: Array<{
-    label: string;
-    onClick: () => void;
-    variant?: 'primary' | 'secondary';
-  }>;
+  actions?: Array<{ label: string; onClick: () => void }>;
 }
 
 interface ToastItemProps {
@@ -25,34 +21,8 @@ interface ToastItemProps {
 const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose, index }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [progress, setProgress] = useState(100);
   const closeRef = useRef<NodeJS.Timeout>();
-
-  useEffect(() => {
-    // Enter animation
-    const showTimer = setTimeout(() => setIsVisible(true), 10);
-
-    // If it's a persistent toast, don't set auto-dismiss
-    if (toast.persistent) {
-      return () => {
-        clearTimeout(showTimer);
-        if (closeRef.current) clearTimeout(closeRef.current);
-      };
-    }
-
-    // All non-persistent toasts auto-dismiss after 2 seconds
-    const duration = toast.duration || 2000;
-
-    // Auto-dismiss after duration
-    const autoCloseTimer = setTimeout(() => {
-      handleClose();
-    }, duration);
-
-    return () => {
-      clearTimeout(showTimer);
-      clearTimeout(autoCloseTimer);
-      if (closeRef.current) clearTimeout(closeRef.current);
-    };
-  }, [toast]);
 
   const handleClose = () => {
     if (isClosing) return;
@@ -65,69 +35,67 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose, index }) => {
     }, 200); // Wait for exit animation to complete
   };
 
+  useEffect(() => {
+    // Enter animation
+    const showTimer = setTimeout(() => setIsVisible(true), 10);
+
+    // If it's a persistent toast, don't set auto-dismiss
+    if (toast.persistent) {
+      return () => {
+        clearTimeout(showTimer);
+        clearTimeout(closeRef.current);
+      };
+    }
+
+    // All non-persistent toasts auto-dismiss after 2 seconds
+    const duration = toast.duration || 2000;
+
+    // Kick off the progress countdown once the enter animation settles
+    const progressTimer = setTimeout(() => setProgress(0), 30);
+
+    // Auto-dismiss after duration
+    const autoCloseTimer = setTimeout(() => {
+      handleClose();
+    }, duration);
+
+    return () => {
+      clearTimeout(showTimer);
+      clearTimeout(progressTimer);
+      clearTimeout(autoCloseTimer);
+      clearTimeout(closeRef.current);
+    };
+  }, [toast]);
+
   const getTypeStyles = (type: ToastMessage['type']) => {
     switch (type) {
       case 'success':
-        return {
-          bg: 'bg-green-50/95',
-          border: 'border-green-200/50',
-          text: 'text-green-800',
-          icon: CheckCircle,
-          iconColor: 'text-green-600',
-          progressBg: 'bg-green-500'
-        };
+        return { icon: CheckCircle, iconColor: 'text-green-600', iconBg: 'bg-green-100', accent: 'bg-green-500' };
       case 'error':
-        return {
-          bg: 'bg-red-50/95',
-          border: 'border-red-200/50',
-          text: 'text-red-800',
-          icon: AlertCircle,
-          iconColor: 'text-red-600',
-          progressBg: 'bg-red-500'
-        };
+        return { icon: AlertCircle, iconColor: 'text-red-600', iconBg: 'bg-red-100', accent: 'bg-red-500' };
       case 'warning':
-        return {
-          bg: 'bg-amber-50/95',
-          border: 'border-amber-200/50',
-          text: 'text-amber-800',
-          icon: AlertTriangle,
-          iconColor: 'text-amber-600',
-          progressBg: 'bg-amber-500'
-        };
-      case 'update':
-        return {
-          bg: 'bg-neutral-50/95',
-          border: 'border-neutral-200/50',
-          text: 'text-neutral-800',
-          icon: Info,
-          iconColor: 'text-neutral-600',
-          progressBg: 'bg-neutral-500'
-        };
+        return { icon: AlertTriangle, iconColor: 'text-amber-600', iconBg: 'bg-amber-100', accent: 'bg-amber-500' };
       case 'info':
+        return { icon: Info, iconColor: 'text-blue-600', iconBg: 'bg-blue-100', accent: 'bg-blue-500' };
+      case 'update':
       default:
-        return {
-          bg: 'bg-neutral-50/95',
-          border: 'border-neutral-200/50',
-          text: 'text-neutral-800',
-          icon: Info,
-          iconColor: 'text-neutral-600',
-          progressBg: 'bg-neutral-500'
-        };
+        return { icon: Info, iconColor: 'text-neutral-600', iconBg: 'bg-neutral-100', accent: 'bg-neutral-400' };
     }
   };
 
   const styles = getTypeStyles(toast.type);
   const Icon = styles.icon;
+  const duration = toast.duration || 2000;
 
   return (
     <div
+      role="status"
+      aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
       className={`
-        ${styles.bg} ${styles.border} ${styles.text}
-        backdrop-blur-md border rounded-lg shadow-lg
-        p-4
-        flex flex-col gap-3
-        relative overflow-hidden
-        transform transition-all duration-200 ease-out
+        group relative overflow-hidden
+        bg-white/95 backdrop-blur-md
+        border border-neutral-200/80
+        rounded-xl shadow-lg shadow-black/[0.06]
+        transform transition-all duration-300 ease-out
         ${isVisible && !isClosing
           ? 'translate-x-0 opacity-100 scale-100'
           : 'translate-x-full opacity-0 scale-95'
@@ -136,64 +104,63 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose, index }) => {
       style={{
         marginTop: index * 8, // Stack offset
         zIndex: 1000 - index, // Later ones on top
-        width: 'min(28rem, calc(100vw - 2rem))',
+        width: 'min(24rem, calc(100vw - 2rem))',
         maxHeight: 'min(70vh, calc(100vh - 2rem))'
       }}
     >
+      <div className="flex flex-col gap-2.5 p-3.5">
+        {/* Top content area */}
+        <div className="flex items-start gap-3 min-w-0">
+          {/* Icon chip */}
+          <div className={`${styles.iconBg} ${styles.iconColor} shrink-0 flex items-center justify-center w-7 h-7 rounded-lg`}>
+            <Icon size={16} strokeWidth={2.25} />
+          </div>
 
-      {/* Top content area */}
-      <div className="flex items-start gap-3 min-w-0">
-        {/* Icon */}
-        <div className={`${styles.iconColor} shrink-0 mt-0.5`}>
-          <Icon size={18} />
-        </div>
+          {/* Message content */}
+          <div className="flex-1 min-w-0 max-h-[42vh] overflow-y-auto pt-0.5 text-[13px] font-medium leading-relaxed text-neutral-700 whitespace-pre-line wrap-anywhere">
+            {toast.message}
+          </div>
 
-        {/* Message content */}
-        <div className="flex-1 min-w-0 max-h-[42vh] overflow-y-auto pr-1 text-sm font-medium leading-relaxed whitespace-pre-line wrap-anywhere">
-          {typeof toast.message === 'string' ? toast.message : toast.message}
-        </div>
-
-        {/* Close button */}
-        <div className="flex items-start shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
+          {/* Close button */}
+          <button
+            type="button"
             onClick={handleClose}
-            className={`
-              ${styles.iconColor} hover:opacity-70
-              p-1 rounded-md
-              transition-opacity duration-150
-            `}
+            className="shrink-0 -mt-0.5 -mr-0.5 flex items-center justify-center w-6 h-6 rounded-md text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
             aria-label="Close notification"
           >
             <X size={14} />
-          </Button>
+          </button>
         </div>
+
+        {/* Action buttons area */}
+        {toast.actions && toast.actions.length > 0 && (
+          <div className="flex flex-wrap items-center justify-end gap-2 pl-10">
+            {toast.actions.map((action, actionIndex) => (
+              <Button
+                key={actionIndex}
+                size="sm"
+                variant={actionIndex === toast.actions!.length - 1 ? 'default' : 'ghost'}
+                className="h-7 px-3 text-xs"
+                onClick={() => {
+                  action.onClick();
+                  // Always close toast when clicking action button
+                  handleClose();
+                }}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Action buttons area */}
-      {toast.actions && toast.actions.length > 0 && (
-        <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-current/10 shrink-0">
-          {toast.actions.map((action, actionIndex) => (
-            <Button
-              key={actionIndex}
-              onClick={() => {
-                action.onClick();
-                // Always close toast when clicking action button
-                handleClose();
-              }}
-              className={`
-                px-3 py-1.5 text-xs font-medium rounded-md
-                transition-colors duration-150
-                ${action.variant === 'primary'
-                  ? `text-white bg-neutral-600 hover:bg-neutral-700`
-                  : `${styles.text} hover:bg-current/5`
-                }
-              `}
-            >
-              {action.label}
-            </Button>
-          ))}
+      {/* Auto-dismiss progress bar */}
+      {!toast.persistent && (
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-neutral-100">
+          <div
+            className={`h-full ${styles.accent} transition-[width] ease-linear`}
+            style={{ width: `${progress}%`, transitionDuration: `${duration}ms` }}
+          />
         </div>
       )}
     </div>

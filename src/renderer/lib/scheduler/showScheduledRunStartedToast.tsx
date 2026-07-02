@@ -36,7 +36,7 @@ export async function runScheduleNow(
   showError: ShowSuccessFn,
 ) {
   try {
-    const res = await schedulerApi.runJobNow(jobId);
+    const res = await schedulerApi.runJobNow(jobId, true);
     if (res.success && res.data) {
       const { chatSessionId } = res.data;
       if (chatSessionId) {
@@ -45,7 +45,6 @@ export async function runScheduleNow(
           actions: [
             {
               label: 'Open schedule run',
-              variant: 'primary',
               onClick: () => {
                 navigate(`/agent/${agentId}/job/${jobId}/${chatSessionId}`, {
                   state: {

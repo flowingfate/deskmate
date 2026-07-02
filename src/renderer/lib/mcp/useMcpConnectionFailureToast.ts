@@ -172,17 +172,14 @@ export const useMcpConnectionFailureToast = () => {
           {
             label: 'Manage',
             onClick: () => handleManageServer(serverName),
-            variant: 'secondary'
           },
           {
             label: 'Details',
             onClick: () => handleShowDetails(serverName, error),
-            variant: 'secondary'
           },
           {
             label: 'Reconnect',
             onClick: () => handleReconnect(serverName),
-            variant: 'primary'
           }
         ]
       }

@@ -4,8 +4,7 @@ import { ToastContainer } from './Toast';
 export type ToastContextType = ToastActions;
 
 export function useToast(): ToastActions {
-  const [, actions] = toastAtom.use();
-  return actions;
+  return toastAtom.useChange();
 }
 
 export const ToastHost: React.FC = () => {
