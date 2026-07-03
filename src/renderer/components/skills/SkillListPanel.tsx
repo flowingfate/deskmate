@@ -122,7 +122,7 @@ const SkillListPanel: React.FC<SkillListPanelProps> = ({
   )
 
   // Keep selection in sync with filtered results (also handles initial selection)
-  // Depend on selectedSkill?.name so external selection changes (e.g. skills:selectSkill event) are caught
+  // Depend on selectedSkill?.name so external selection changes (e.g. SkillsView 的 ?selected= query) are caught
   useEffect(() => {
     if (filteredSkills.length === 0) {
       if (selectedSkill) {

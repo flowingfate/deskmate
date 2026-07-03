@@ -18,15 +18,11 @@ import { APP_NAME, BRAND_CONFIG } from '@shared/constants/branding';
 import { useFeatureFlag } from '../../../lib/featureFlags';
 import { LeftNavSizeAtom } from '@renderer/states/left-nav.atom';
 import { BACKDROP } from './backdrop';
+import { resolveSettingsBackFallbackPath } from '@renderer/lib/navigation/settingsBackFallback';
 
-interface SettingsNavigationProps {
-  onBack?: () => void;
-}
-
-const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
+const SettingsSidepanel: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-
 
   // Sub-Agent feature controlled by feature flag
   const subAgentEnabled = useFeatureFlag('deskmateFeatureSubAgent');
@@ -34,15 +30,6 @@ const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
   const screenshotEnabled = useFeatureFlag('deskmateFeatureScreenshot');
 
   const { width } = LeftNavSizeAtom.useData();
-
-  const handleBack = () => {
-    if (onBack) {
-      onBack();
-    } else {
-      // Default: navigate back to agent page
-      navigate('/agent');
-    }
-  };
 
   const getActiveView = () => {
     const path = location.pathname;
@@ -164,7 +151,7 @@ const SettingsSidepanel: React.FC<SettingsNavigationProps> = ({ onBack }) => {
           icon={<ChevronLeft size={16} />}
           label="Go back to agent"
           isActive={false}
-          onClick={handleBack}
+          onClick={() => navigate(resolveSettingsBackFallbackPath())}
           ariaLabel="Go back to agent"
         />
       </div>

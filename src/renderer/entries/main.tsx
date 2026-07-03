@@ -1,13 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, useLocation } from 'react-router-dom';
+import { RouterProvider } from 'react-router-dom';
 import { ToastHost } from '../components/ui/ToastProvider';
 import { UpdateHost } from '../components/autoUpdate/UpdateProvider';
-import { AppRoutes } from './main.routes';
-import { TitleBar } from '../pages/layout/titlebar';
-import WindowZoomHotkeys from '../pages/layout/WindowZoomHotkeys';
-import McpAuthConsentDialog from '../components/mcp/McpAuthConsentDialog';
-import RequestOAuthClientIdDialog from '../components/mcp/RequestOAuthClientIdDialog';
-import { useMcpConnectionFailureToast } from '../lib/mcp/useMcpConnectionFailureToast';
+import { router } from './main.routes';
 import { log } from '@/log';
 import { appApi, appEvents } from '@/ipc/app';
 import { APP_NAME } from '@shared/constants/branding';
@@ -16,37 +11,6 @@ const logger = log.child({ mod: 'App' });
 
 logger.debug({ msg: "App component loaded" });
 
-const McpConnectionFailureToastListener: React.FC = () => {
-  const dialog = useMcpConnectionFailureToast();
-  return dialog;
-};
-
-const AppContent: React.FC = () => {
-  return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      {/* McpConnectionFailureToastListener must be inside HashRouter because it uses useNavigate */}
-      <McpConnectionFailureToastListener />
-      <WindowZoomHotkeys />
-      <McpAuthConsentDialog />
-      <RequestOAuthClientIdDialog />
-      <AppRoutesWithTitleBar />
-    </BrowserRouter>
-  );
-};
-
-const AppRoutesWithTitleBar: React.FC = () => {
-  const location = useLocation();
-  const isAppShellRoute = location.pathname.startsWith('/agent') || location.pathname.startsWith('/settings');
-
-  return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      {!isAppShellRoute && <TitleBar />}
-      <div className="flex-1 min-h-0">
-        <AppRoutes />
-      </div>
-    </div>
-  );
-};
 
 const App: React.FC = () => {
   logger.debug({ msg: "Main App component rendering" });
@@ -107,7 +71,7 @@ const App: React.FC = () => {
 
   return (
     <>
-      <AppContent />
+      <RouterProvider router={router} />
       <ToastHost />
       <UpdateHost />
     </>

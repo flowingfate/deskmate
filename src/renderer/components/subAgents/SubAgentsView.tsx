@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { useOutletContext, useNavigate } from 'react-router-dom'
+import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom'
 import { Users, RefreshCw, Plus } from 'lucide-react'
 import { Badge } from '@/shadcn/badge'
 import { Button } from '@/shadcn/button'
@@ -31,6 +31,7 @@ const SubAgentsView: React.FC = () => {
   } = useOutletContext<AgentContextType>()
 
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Data fetching (via useSubAgents hook, not direct IPC)
   const { subAgents, stats, isLoading } = useSubAgents()
@@ -56,6 +57,23 @@ const SubAgentsView: React.FC = () => {
       setSelectedSubAgent(null)
     }
   }, [subAgents, selectedSubAgent])
+
+  // 外部入口（AgentSubAgentsTab）通过 `?selected=<name>` 表达“进来并预选某 sub-agent”的意图。
+  // 命中后清掉该 query（replace，不新增历史条目）。subAgents 首帧可能还在加载，此时不清 query，
+  // 等数据到位再选中，避免意图丢失。放在自动选首项 effect 之后，故 selected 优先级更高。
+  useEffect(() => {
+    const target = searchParams.get('selected')
+    if (!target || subAgents.length === 0) return
+    if (subAgents.some((s) => s.name === target)) setSelectedSubAgent(target)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('selected')
+        return next
+      },
+      { replace: true },
+    )
+  }, [searchParams, subAgents, setSearchParams])
 
   // Listen for refresh events (来源：内部 dispatch，仅传 subAgentName 用于自动选中；
   // 数据刷新由 subAgents.atom 通过 persist 通道自动完成，无需手动 refresh)

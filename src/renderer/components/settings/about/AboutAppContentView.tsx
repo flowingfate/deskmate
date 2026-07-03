@@ -71,7 +71,7 @@ const AboutAppContentView: React.FC<AboutAppContentViewProps> = () => {
       <div className="max-w-4xl mx-auto w-full transition-all duration-300 max-h-500 opacity-100 px-6 pb-6 space-y-6">
 
         {/* ── Card 1: Brand info + version/update status ── */}
-        <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
+        <div className="bg-white rounded-md p-2 border border-black/7 flex flex-col gap-2">
 
           {/* Brand row */}
           <div className="flex items-center gap-4 px-1 py-3">
@@ -215,7 +215,7 @@ const AboutAppContentView: React.FC<AboutAppContentViewProps> = () => {
         </div>{/* /Card 1 */}
 
         {/* ── Card 2: Copyright & legal info ── */}
-        <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
+        <div className="bg-white rounded-md p-2 border border-black/7 flex flex-col gap-2">
           {/* Copyright */}
           <div className="flex items-center justify-between px-1 py-2.5">
             <div className="flex-1">

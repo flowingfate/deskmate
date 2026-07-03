@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { useOutletContext, useNavigate } from 'react-router-dom';
+import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { BookMarked, Plus } from 'lucide-react';
 import { Badge } from '@/shadcn/badge';
 import { Button } from '@/shadcn/button';
@@ -21,6 +21,7 @@ const SkillsView: React.FC = () => {
   } = useOutletContext<AgentContextType>();
 
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Use ProfileDataManager for Skills data
   const { skills, stats: skillsStats, isLoading } = useSkills();
@@ -84,28 +85,23 @@ const SkillsView: React.FC = () => {
     });
   }, [skillsIdentity]);
 
-  // Listen for skill selection events from other components
+  // 外部入口（AgentSkillsTab）通过 `?selected=<name>` 表达“进来并预选某技能”的意图。
+  // 命中后清掉该 query（replace，不新增历史条目），避免 back/刷新重复触发、保持 URL 干净。
+  // 注意 skills 首帧可能还在加载：此时不清 query，等数据到位再选中，避免意图丢失。
   useEffect(() => {
-    const handleSelectSkillEvent = (event: CustomEvent) => {
-      const { skillName } = event.detail;
-      const skill = skills.find((s) => s.name === skillName);
-      if (skill) {
-        setSelectedSkill(skill);
-      }
-    };
-
-    window.addEventListener(
-      'skills:selectSkill',
-      handleSelectSkillEvent as EventListener,
+    const target = searchParams.get('selected');
+    if (!target || skills.length === 0) return;
+    const skill = skills.find((s) => s.name === target);
+    if (skill) setSelectedSkill(skill);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('selected');
+        return next;
+      },
+      { replace: true },
     );
-
-    return () => {
-      window.removeEventListener(
-        'skills:selectSkill',
-        handleSelectSkillEvent as EventListener,
-      );
-    };
-  }, [skills]);
+  }, [searchParams, skills, setSearchParams]);
 
   // Handle skill selection
   const handleSkillSelect = useCallback((skill: SkillConfig | null) => {

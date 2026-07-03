@@ -526,7 +526,7 @@ const getActiveView = () => {
 
 ## 12. Register Route
 
-Add a route in the app router (`src/renderer/routes/AppRoutes.tsx`):
+Add a route in the app router (`src/renderer/entries/main.routes.tsx`):
 
 ```tsx
 import XxxSettingsView from '../components/settings/XxxSettingsView'

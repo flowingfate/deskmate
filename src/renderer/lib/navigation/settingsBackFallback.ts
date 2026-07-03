@@ -1,29 +1,16 @@
 /**
- * 进入 /settings 路由前由 in-app 入口（agent editor 各 tab）写入的哨兵，
- * 用于让 SettingsPage 的 Back 按钮判断 history 中是否有可回退的应用内条目：
+ * Settings 页 Back 按钮的兜底目标解析。
  *
- * - 存在 → 走 `navigate(-1)`，回到真正的来源页（保留 URL / scroll / state）。
- * - 不存在 → 用户从外部深链或刷新落在 /settings，fallback 到一个具体 agent 路由。
+ * SettingsPage.handleBack 的策略：优先用 `history.state.idx` 判断历史里是否有可回退项，
+ * 有则 `navigate(-1)` 回真实来源；没有（深链 / 刷新，settings 是首屏）时调用本函数，
+ * 兜底到一个具体 agent 路由。
  *
  * 仅 renderer 使用；放在 main 也用得到的 shared 下没有意义。
  */
 
 import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { getAgents, getPrimaryAgentId } from '@/states/agents.atom';
-
-const KEY = 'settingsCameFromApp';
-
-export function markSettingsCameFromApp(): void {
-  sessionStorage.setItem(KEY, '1');
-}
-
-export function consumeSettingsCameFromApp(): boolean {
-  if (sessionStorage.getItem(KEY)) {
-    sessionStorage.removeItem(KEY);
-    return true;
-  }
-  return false;
-}
+import { peekSettingsEntry } from './settingsEntry';
 
 /**
  * 选出 Back 兜底要落到的 agent 路由。
@@ -38,6 +25,9 @@ export function consumeSettingsCameFromApp(): boolean {
  * currentChatSessionId 为空时补一个新 session，保持与正常进入 /agent 一致。
  */
 export function resolveSettingsBackFallbackPath(): string {
+  const prev = peekSettingsEntry();
+  if (prev) return prev;
+
   const cachedAgentId = agentSessionCacheManager.getCurrentAgentId();
   if (cachedAgentId) return `/agent/${cachedAgentId}`;
 
