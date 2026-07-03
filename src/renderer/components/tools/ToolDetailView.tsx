@@ -52,7 +52,7 @@ const ToolDetailView: React.FC<ToolDetailViewProps> = ({ tool }) => {
       </h2>
 
       {tool.description && (
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md border border-sc-border bg-sc-muted/30 p-3 font-sans text-sm leading-relaxed text-sc-muted-foreground">
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md border border-sc-border bg-sc-muted/30 p-3 font-mono text-xs leading-relaxed text-sc-muted-foreground">
           {tool.description}
         </pre>
       )}

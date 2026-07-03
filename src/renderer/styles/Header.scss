@@ -133,7 +133,7 @@
   padding: 2px 6px;
   cursor: pointer;
   white-space: nowrap;
-  font-family: monospace;
+  font-family: var(--font-mono);
   user-select: none;
   transition: all 0.15s ease;
 
@@ -188,7 +188,7 @@
   align-items: center;
   gap: 6px;
   font-size: var(--text-xs);
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: var(--text-heading);
   word-break: break-all;
   text-align: right;
