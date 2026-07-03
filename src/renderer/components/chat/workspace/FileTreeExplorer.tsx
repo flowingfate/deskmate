@@ -91,7 +91,7 @@ const FileTreeExplorer: React.FC<FileTreeExplorerProps> = ({
 
   return (
     <div className={cn('flex flex-col w-full select-none px-2 py-1.5', className)}>
-      <div className="flex flex-col gap-px min-w-min overflow-x-auto">
+      <div className="flex flex-col gap-px w-full">
         {nodes.map((node) => (
           <FileTreeNodeItem
             key={node.path}

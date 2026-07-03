@@ -3,7 +3,8 @@ import { ChevronRight, ChevronDown } from 'lucide-react';
 import { FileTreeNode } from '../../../lib/chat/workspaceOps';
 import { workspaceApi } from '@/ipc/workspace';
 import { FileTreeNodeMenuAtom } from '../../menu/FileTreeNodeContextMenu';
-import { getFileTreeIcon } from './fileTreeIcons';
+import { FileTreeIcon } from './fileTreeIcons';
+import { formatFileSize } from '@/lib/utilities/contentUtils';
 import { log } from '@/log';
 
 const logger = log.child({ mod: 'FileTreeNodeItem' });
@@ -71,25 +72,34 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeItemProps> = React.memo(({
 
   return (
     <>
-      <div className="relative min-w-max" style={{ paddingLeft: `${level * 16 + 4}px` }}>
-        <div
-          className="group/row box-border flex items-center gap-1.5 h-8 pl-2 pr-3 self-stretch cursor-pointer rounded-lg transition-colors duration-150 hover:bg-black/[0.04] active:bg-black/[0.06] motion-reduce:transition-none"
-          onClick={handleClick}
-          onContextMenu={handleContextMenu}
-          title={node.path}
-        >
-          <span className="flex items-center justify-center shrink-0 w-4 text-content-tertiary transition-colors group-hover/row:text-content-secondary">
-            {isDirectory
-              ? (isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />)
-              : null}
+      <div
+        className="group/row relative box-border flex items-center h-8 pl-2 pr-2 cursor-pointer rounded-lg transition-colors duration-150 hover:bg-black/4 active:bg-black/6 motion-reduce:transition-none"
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        title={node.path}
+      >
+        {/* 缩进引导线：每个祖先层级一条发丝竖线，跨行连续（VSCode 式层级引导） */}
+        {Array.from({ length: level }).map((_, i) => (
+          <span key={i} aria-hidden className="shrink-0 w-4 self-stretch flex justify-center">
+            <span className="w-px self-stretch bg-border/60" />
           </span>
-          <span className="inline-flex items-center justify-center shrink-0 w-4 leading-none text-content-tertiary">
-            {getFileTreeIcon(node, isExpanded)}
+        ))}
+        <span className="flex items-center justify-center shrink-0 w-4 text-content-tertiary transition-colors group-hover/row:text-content-secondary">
+          {isDirectory
+            ? (isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />)
+            : null}
+        </span>
+        <span className="inline-flex items-center justify-center shrink-0 w-4.5 h-4.5 ml-0.5 mr-1.5 leading-none">
+          <FileTreeIcon node={node} isExpanded={isExpanded} />
+        </span>
+        <span className="flex-1 min-w-0 truncate text-[13px] font-medium leading-[1.4] text-content-heading">
+          {node.name}
+        </span>
+        {!isDirectory && node.size != null && (
+          <span className="shrink-0 ml-2 text-[11px] tabular-nums text-content-tertiary opacity-0 transition-opacity group-hover/row:opacity-100 motion-reduce:transition-none">
+            {formatFileSize(node.size)}
           </span>
-          <span className="flex-1 min-w-0 truncate text-[13px] font-medium leading-[1.4] text-content-heading">
-            {node.name}
-          </span>
-        </div>
+        )}
       </div>
 
       {isDirectory && isExpanded && hasChildren && (

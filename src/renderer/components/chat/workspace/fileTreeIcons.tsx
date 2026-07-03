@@ -12,36 +12,39 @@ import {
 } from 'lucide-react';
 import { FileTreeNode } from '../../../lib/chat/workspaceOps';
 
-/** 扩展名 → 图标组件 的静态查表 */
+/** 扩展名 → 图标组件 的静态查表。 */
 const ICON_BY_EXT: Record<string, React.ReactNode> = {
-  ts: <FileCode size={16} />,
-  tsx: <FileCode size={16} />,
-  js: <FileCode size={16} />,
-  jsx: <FileCode size={16} />,
-  json: <FileJson size={16} />,
-  md: <FileType size={16} />,
-  css: <Palette size={16} />,
-  scss: <Palette size={16} />,
-  html: <Globe size={16} />,
-  png: <ImageIcon size={16} />,
-  jpg: <ImageIcon size={16} />,
-  jpeg: <ImageIcon size={16} />,
-  gif: <ImageIcon size={16} />,
-  svg: <ImageIcon size={16} />,
-  webp: <ImageIcon size={16} />,
+  ts: <FileCode size={15} strokeWidth={1.75} />,
+  tsx: <FileCode size={15} strokeWidth={1.75} />,
+  js: <FileCode size={15} strokeWidth={1.75} />,
+  jsx: <FileCode size={15} strokeWidth={1.75} />,
+  json: <FileJson size={15} strokeWidth={1.75} />,
+  md: <FileType size={15} strokeWidth={1.75} />,
+  css: <Palette size={15} strokeWidth={1.75} />,
+  scss: <Palette size={15} strokeWidth={1.75} />,
+  html: <Globe size={15} strokeWidth={1.75} />,
+  png: <ImageIcon size={15} strokeWidth={1.75} />,
+  jpg: <ImageIcon size={15} strokeWidth={1.75} />,
+  jpeg: <ImageIcon size={15} strokeWidth={1.75} />,
+  gif: <ImageIcon size={15} strokeWidth={1.75} />,
+  svg: <ImageIcon size={15} strokeWidth={1.75} />,
+  webp: <ImageIcon size={15} strokeWidth={1.75} />,
 };
 
+const getExt = (name: string): string => name.split('.').pop()?.toLowerCase() || '';
+
 /**
- * 依据节点类型 / 文件扩展名返回对应图标。
- * 目录区分展开态，文件按扩展名查表，未命中回退到通用文本图标。
- * 统一沉稳中性灰，颜色由消费方 span 控制；目录略深以体现层级主次。
+ * 文件树节点图标（纯图标，零渲染开销 —— 不加载文件字节，不显缩略图）。
+ * - 目录：区分展开态的文件夹图标，中性次级灰。
+ * - 文件：按扩展名查表，未命中回退通用文本图标，沉稳三级灰。
+ *
+ * 同类文件共用同一图标是刻意为之（对齐 Finder 列表视图）；差异化交给文件名与缩进层级。
  */
-export const getFileTreeIcon = (node: FileTreeNode, isExpanded: boolean): React.ReactNode => {
+export const FileTreeIcon: React.FC<{ node: FileTreeNode; isExpanded: boolean }> = ({ node, isExpanded }) => {
   if (node.type === 'directory') {
     return isExpanded
-      ? <FolderOpen size={16} className="text-content-secondary" />
-      : <Folder size={16} className="text-content-secondary" />;
+      ? <FolderOpen size={15} strokeWidth={1.75} className="text-content-secondary" />
+      : <Folder size={15} strokeWidth={1.75} className="text-content-secondary" />;
   }
-  const ext = node.name.split('.').pop()?.toLowerCase() || '';
-  return ICON_BY_EXT[ext] ?? <FileText size={16} />;
+  return <span className="text-content-tertiary">{ICON_BY_EXT[getExt(node.name)] ?? <FileText size={15} strokeWidth={1.75} />}</span>;
 };
