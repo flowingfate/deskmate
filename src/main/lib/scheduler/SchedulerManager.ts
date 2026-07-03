@@ -926,10 +926,10 @@ export class SchedulerManager {
       logger.warn({ msg: 'scheduler.execute.finish-run-failed', mod: 'executeJob', jobId: job.id, runId: runSession.id, err });
     }
 
-    const notify = job.notifyOnCompletion !== false;
-    if (notify) {
+    if (job.notifyOnCompletion) {
       showSessionCompletionNotification({
         agentId: job.agentId,
+        jobId: job.id,
         sessionId: runSession.id,
         sessionTitle: runSession.title,
         outcome: runError == null ? 'completed' : 'failed',

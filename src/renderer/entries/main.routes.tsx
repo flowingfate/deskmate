@@ -21,6 +21,7 @@ import CreateSubAgentView from '../components/subAgents/CreateSubAgentView';
 import EditSubAgentView from '../components/subAgents/EditSubAgentView';
 import RuntimeSettingsView from '../components/settings/runtime/RuntimeSettingsView';
 import { navigateEvents } from '@/ipc/navigate';
+import { useSessionCompletionToast } from '../lib/scheduler/useSessionCompletionToast';
 import ScreenshotSettingsView from '../components/settings/screenshot/ScreenshotSettingsView';
 import AboutAppView from '../components/settings/about/AboutAppView';
 import ArchivedAgentsView from '../components/settings/ArchivedAgentsView';
@@ -89,6 +90,9 @@ const RootLayout: React.FC = () => {
       hash: location.hash,
     });
   }, [location.hash, location.pathname, location.search]);
+
+  // Hook to listen for session completion events and show toast notifications
+  useSessionCompletionToast();
 
   const isAppShellRoute =
     location.pathname.startsWith('/agent') || location.pathname.startsWith('/settings');

@@ -18,7 +18,7 @@ export const SignInPage: React.FC = () => {
     <div className="h-full flex items-center justify-center bg-linear-to-br from-[#FFFBF8] via-white to-[#F8F4F1] p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-center">GitHub Copilot sign-in is offline</CardTitle>
+          <CardTitle className="text-center">Sign in page</CardTitle>
           <CardDescription className="text-center">
             登录子系统正在重做。现在请通过{' '}
             <span className="font-medium">Settings → Provider</span>{' '}

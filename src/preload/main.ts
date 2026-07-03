@@ -206,6 +206,12 @@ export interface ElectronAPI {
     off: OnOff;
   };
 
+  // Notification events (M→R only)
+  notification: {
+    on: OnOff;
+    off: OnOff;
+  };
+
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -337,6 +343,12 @@ export const electronAPI: ElectronAPI = {
 
   // Navigate events (M→R only)
   navigate: {
+    on: ipcOn,
+    off: ipcOff,
+  },
+
+  // Notification events (M→R only)
+  notification: {
     on: ipcOn,
     off: ipcOff,
   },
