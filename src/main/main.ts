@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
 import JSZip from 'jszip';
+import { mainToRender as navigateMainToRender } from '@shared/ipc/navigate';
 
 
 // 🔥 Must be called before app.ready - register custom privileged schemes.
@@ -1132,14 +1133,18 @@ class ElectronApp {
               this.notifyDebugInfoDownload(result);
             },
           },
-          { type: 'separator' },
-          {
-            label: 'Exit',
-            accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
-            click: () => {
-              app.quit();
-            },
-          },
+          ...(process.platform !== 'darwin'
+            ? [
+                { type: 'separator' as const },
+                {
+                  label: 'Exit',
+                  accelerator: 'Ctrl+Q',
+                  click: () => {
+                    app.quit();
+                  },
+                },
+              ]
+            : []),
         ],
       },
       {
@@ -1211,9 +1216,10 @@ class ElectronApp {
         label: 'Window',
         submenu: [
           { role: 'minimize' },
-          { role: 'zoom' },
           ...(process.platform === 'darwin'
             ? [
+                { role: 'zoom' as const },
+                { role: 'close' as const },
                 { type: 'separator' as const },
                 { role: 'front' as const, label: 'Bring All to Front' },
               ]
@@ -1240,6 +1246,18 @@ class ElectronApp {
         label: app.getName(),
         submenu: [
           { role: 'about', label: 'About ' + app.getName() },
+          { type: 'separator' },
+          {
+            label: 'Preferences…',
+            accelerator: 'Cmd+,',
+            click: () => {
+              const win = this.mainWindow;
+              if (!win || win.isDestroyed()) return;
+              win.show();
+              win.focus();
+              navigateMainToRender.bindWebContents(win.webContents).to({ route: '/settings' });
+            },
+          },
           { type: 'separator' },
           { role: 'services', label: 'Services', submenu: [] },
           { type: 'separator' },
