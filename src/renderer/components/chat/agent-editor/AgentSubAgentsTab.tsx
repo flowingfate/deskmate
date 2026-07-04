@@ -235,7 +235,7 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
                       </div>
                     </div>
                     {subAgent.description && (
-                      <div className="sub-agent-card-description" style={{
+                      <div style={{
                         padding: '0 12px 8px 36px',
                         fontSize: '12px',
                         color: 'var(--text-secondary, #6b7280)',

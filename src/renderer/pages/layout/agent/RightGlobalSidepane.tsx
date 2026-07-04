@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import './RightGlobalSidepane.scss';
 import { RightPaneCollapsedAtom, RightPaneSizeAtom } from '@/states/right-pane.atom';
 
 /** Matches the CSS transition duration in RightGlobalSidepane.css */
@@ -44,7 +43,7 @@ export const RightGlobalSidepane: React.FC = () => {
 
   return (
     <div
-      className="right-global-sidepane"
+      className="shrink-0 flex flex-col overflow-hidden h-full rounded-lg border border-black/7.5 shadow-[0px_2px_6px_rgba(0,0,0,0.05)] transition-[width] duration-250 ease-[ease]"
       style={{
         width: collapsed ? 0 : width,
         visibility: collapsed ? 'hidden' : undefined,

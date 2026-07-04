@@ -60,13 +60,13 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
   } = props;
 
   if (item.type === 'activity-loading') {
-    return <div className="chat-activity-slot">{renderLoadingIndicator()}</div>;
+    return <div className="flex items-start mt-2">{renderLoadingIndicator()}</div>;
   }
 
   if (item.type === 'activity-placeholder') {
     return (
-      <div className="chat-activity-slot chat-activity-slot-placeholder" aria-hidden="true">
-        {renderLoadingIndicator('chat-activity-slot-placeholder-content')}
+      <div className="flex items-start mt-2 pointer-events-none" aria-hidden="true">
+        {renderLoadingIndicator('invisible')}
       </div>
     );
   }
@@ -89,7 +89,7 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
     const isEditing = editingMessage?.id === item.message.id;
     if (isEditing) {
       return (
-        <div className="inline-edit-message-shell">
+        <div className="relative isolate mb-5">
           <EditInlineInput
             initialMessage={item.message}
             onSubmitEditedMessage={onSaveEditedMessage}

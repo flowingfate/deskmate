@@ -30,15 +30,15 @@ function Version() {
 export const StatusBar: React.FC = () => {
   const version = useVersion();
   return (
-    <div className="app-status-bar">
-      <div className="app-status-bar-left">
+    <div className="h-5 shrink-0 flex items-center justify-between px-2 bg-[#f8f8f8] border-t border-black/[0.06] text-[11px] text-black/50">
+      <div className="flex items-center">
         <Version />
         <div className="flex items-center gap-1">
           <DoctorStatusIndicator />
           <DoctorInquiry />
         </div>
       </div>
-      <div className="app-status-bar-right" />
+      <div className="flex items-center" />
     </div>
   );
 };

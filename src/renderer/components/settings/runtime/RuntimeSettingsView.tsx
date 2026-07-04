@@ -171,7 +171,7 @@ const RuntimeSettingsView: React.FC = () => {
   if (!configForView || !status) {
     return (
       <SettingsLayout icon={<Terminal size={18} />} title="Runtime Environment">
-        <div className="runtime-settings-loading">
+        <div className="p-6 text-content-secondary">
           Loading runtime status...
         </div>
       </SettingsLayout>

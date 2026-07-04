@@ -7,7 +7,6 @@ import SubAgentForm, { DEFAULT_FORM_DATA } from './SubAgentForm'
 import type { SubAgentFormData } from './SubAgentForm'
 import { Button } from '@/shadcn/button'
 import { subAgentApi } from '@/ipc/subAgent'
-import './SubAgentsView.scss'
 
 /**
  * EditSubAgentView - Sub-agent edit form
@@ -131,9 +130,9 @@ const EditSubAgentView: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="sub-agent-form-view">
-        <div className="sub-agent-form-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div className="loading-spinner" />
+      <div className="flex flex-col w-full h-full">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-white custom-scrollbar flex justify-center items-center">
+          <div className="w-6 h-6 rounded-full border-2 border-border border-t-accent animate-spin opacity-60" />
         </div>
       </div>
     )
@@ -144,19 +143,19 @@ const EditSubAgentView: React.FC = () => {
 
   if (!existing && isInitialized) {
     return (
-      <div className="sub-agent-form-view">
-        <div className="unified-header">
-          <div className="header-title">
+      <div className="flex flex-col w-full h-full">
+        <div className="box-border flex justify-between items-center px-6 py-2.5 h-13 bg-white border-b border-black/7">
+          <div className="flex flex-row items-center gap-2 h-5.5 flex-none grow-0">
             <Button variant="ghost" size="icon" onClick={() => navigate('/settings/sub-agents')} title="Back">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M20 11H7.83L13.42 5.41L12 4L4 12L12 20L13.41 18.59L7.83 13H20V11Z" fill="#272320"/>
               </svg>
             </Button>
-            <span className="header-name">Sub-Agent Not Found</span>
+            <span className="h-5.5 not-italic font-semibold text-[15px] leading-5.5 text-black flex-none grow-0 [font-variation-settings:'opsz'_10.5]">Sub-Agent Not Found</span>
           </div>
-          <div className="header-actions" />
+          <div className="flex items-center shrink-0" />
         </div>
-        <div className="sub-agent-form-content">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-white custom-scrollbar">
           <p>Sub-agent "{decodedName}" not found.</p>
         </div>
       </div>
@@ -164,22 +163,22 @@ const EditSubAgentView: React.FC = () => {
   }
 
   return (
-    <div className="sub-agent-form-view">
+    <div className="flex flex-col w-full h-full">
       {/* Header */}
-      <div className="unified-header">
-        <div className="header-title">
+      <div className="box-border flex justify-between items-center px-6 py-2.5 h-13 bg-white border-b border-black/7">
+        <div className="flex flex-row items-center gap-2 h-5.5 flex-none grow-0">
           <Button variant="ghost" size="icon" onClick={() => navigate('/settings/sub-agents')} title="Back">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M20 11H7.83L13.42 5.41L12 4L4 12L12 20L13.41 18.59L7.83 13H20V11Z" fill="#272320"/>
             </svg>
           </Button>
-          <span className="header-name">Edit Sub-Agent: {existing?.display_name || decodedName}</span>
+          <span className="h-5.5 not-italic font-semibold text-[15px] leading-5.5 text-black flex-none grow-0 [font-variation-settings:'opsz'_10.5]">Edit Sub-Agent: {existing?.display_name || decodedName}</span>
         </div>
-        <div className="header-actions" />
+        <div className="flex items-center shrink-0" />
       </div>
 
       {/* Scrollable Form Content */}
-      <div className="sub-agent-form-content">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-white custom-scrollbar">
         <SubAgentForm
           formData={formData}
           errors={errors}

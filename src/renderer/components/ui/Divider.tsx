@@ -1,10 +1,9 @@
 import React from 'react';
-import './Divider.scss';
 
 const Divider: React.FC = () => {
   return (
-    <div className="divider">
-      <div className="divider-line" />
+    <div className="flex items-center justify-center w-full h-2.25 min-h-2 flex-none self-stretch grow-0 pt-1.25 pb-1">
+      <div className="box-border w-full h-0 border-b border-black/10 flex-none self-stretch grow" />
     </div>
   );
 };

@@ -176,8 +176,8 @@ export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({
   };
 
   return (
-    <div className="image-gallery-new">
-      <div className="gallery-grid-container">
+    <div data-dbg="image-gallery" className="flex flex-col items-start gap-1 w-full">
+      <div className="flex flex-wrap gap-1 items-start w-full">
         {images.map((imageData, index) => {
           if (!imageData || !imageData.url) {
             logger.warn({ msg: "🚨 Skipping invalid image data", index, imageData });
@@ -204,7 +204,7 @@ export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({
           return (
             <div
               key={imageData.id || `fallback-${index}`}
-              className="gallery-grid-item"
+              className="relative h-32.5 bg-[#D9D9D9] rounded overflow-hidden transition-[transform,box-shadow] shrink-0 cursor-pointer bg-center bg-cover bg-no-repeat hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:z-1"
               style={{
                 width: `${calculatedWidth}px`,
                 maxWidth: '100%',
@@ -221,22 +221,23 @@ export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({
               title={!isLoading && !hasError ? "Click to view full size | Right-click for more options" : undefined}
             >
               {isLoading && (
-                <div className="image-loading-overlay">
-                  <div className="loading-spinner">
-                    <div className="spinner-circle"></div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(250,250,250,0.95)] z-1">
+                  <div className="w-10 h-10 mb-3 opacity-60">
+                    <div className="w-full h-full border-[3px] border-[rgba(214,214,214,0.3)] border-t-[#404040] rounded-full animate-spin"></div>
                   </div>
                 </div>
               )}
 
               {hasError && (
-                <div className="image-error-placeholder">
-                  <span className="error-icon">⚠️</span>
-                  <span className="error-text">Image failed to load</span>
+                <div className="w-full py-10 px-5 flex flex-col items-center justify-center gap-2 bg-[rgba(254,242,242,0.5)] border border-dashed border-[rgba(239,68,68,0.3)] rounded-lg text-center">
+                  <span className="text-[32px]">⚠️</span>
+                  <span className="text-sm text-[#dc2626] font-medium">Image failed to load</span>
                 </div>
               )}
 
               {!hasError && (
                 <img
+                  className="m-0!"
                   src={cachedUrl}
                   alt={imageData.alt || `Image ${imageData.id}`}
                   onLoad={(e) => handleImageLoadWithDimensions(imageData.id, e.currentTarget)}

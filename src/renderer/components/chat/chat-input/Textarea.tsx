@@ -520,7 +520,7 @@ export function TextArea(props: TextAreaProps) {
 
 
   return (
-    <div className="textarea-layer-container">
+    <div className="textarea-layer-container relative mt-2.5">
       {/* Highlight layer (below the textarea) */}
       <MentionHighlight text={message} textareaRef={textareaRef} />
 
@@ -538,7 +538,7 @@ export function TextArea(props: TextAreaProps) {
             ? 'Type a message, drag files/images, paste screenshot, @ to mention files, # for skills...'
             : 'Type a message, drag files, @ to mention files, # for skills...'
         }
-        className="chat-textarea"
+        className="w-full resize-none border-none px-5 py-0 m-0 text-[13px] leading-[1.6] bg-transparent text-[#1a1a1a] outline-none font-[inherit] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden relative z-2 field-sizing-content min-h-[3lh] max-h-[8lh] placeholder:text-[#a3a3a3] disabled:opacity-50 disabled:cursor-not-allowed"
       />
     </div>
   );

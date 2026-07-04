@@ -11,7 +11,7 @@ export const SidebarUserAvatar: React.FC = () => {
       <Button
         variant="ghost"
         size="icon"
-        className="sidebar-item"
+        className="relative flex items-center justify-center w-7 h-7 p-0 shrink-0 rounded-[7px] border-[1.5px] border-transparent bg-transparent transition-[background-color,border-color] duration-150 hover:bg-black/5"
         title={displayName}
         aria-label="User menu"
       >

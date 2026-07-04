@@ -17,8 +17,6 @@ import { persistApi } from '@/ipc/persist';
 import { chatSessionApi } from '@/ipc/chatSession';
 import { workspaceApi } from '@/ipc/workspace';
 import { skillsApi } from '@/ipc/skill';
-
-import './Agent.scss';
 const logger = log.child({ mod: 'AgentLayout' });
 
 const AgentLayout: React.FC = () => {

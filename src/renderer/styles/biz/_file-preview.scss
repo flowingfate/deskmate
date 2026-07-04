@@ -1,0 +1,129 @@
+// ===========================
+// FilePreviewPanel 业务样式
+//
+// 从 globals.css 抽出。均为无法纯 Tailwind 表达的规则：`:fullscreen` 伪类
+// 几何、以及作用于 ReactMarkdown 裸 HTML(h1/p/ul/table/code…)的 element
+// 选择器。全部 un-layered，层叠优先级对齐原 SCSS。
+//
+// hook 类名 `inline-preview-*` / `fm-key` / `fm-val` 是 CSS 锚点，勿改名。
+// ===========================
+
+// 全屏态：铺满视口 + 取消入场动画；header 允许拖拽区退出
+.inline-preview-fullscreen:fullscreen {
+  flex: unset;
+  width: 100vw;
+  height: 100vh;
+  border-left: none;
+  animation: none;
+
+  .inline-preview-header {
+    -webkit-app-region: no-drag;
+  }
+}
+
+// Markdown 渲染体：作用于 react-markdown 生成的裸标签
+.inline-preview-markdown {
+  h1 {
+    font-size: 1.8em;
+    margin: 1em 0 0.5em;
+    font-weight: 700;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding-bottom: 0.3em;
+  }
+  h2 { font-size: 1.5em; margin: 0.9em 0 0.4em; font-weight: 600; }
+  h3 { font-size: 1.25em; margin: 0.8em 0 0.3em; font-weight: 600; }
+  h4, h5 { font-size: 1em; margin: 0.7em 0 0.3em; font-weight: 600; }
+  p { margin: 0.6em 0; }
+
+  ul, ol { padding-left: 1.5em; margin: 0.5em 0; }
+  ul { list-style-type: disc; }
+  ol { list-style-type: decimal; }
+  li { margin: 0.25em 0; }
+
+  code {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-size: 0.92em;
+    font-family: var(--font-mono);
+  }
+
+  pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 14px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 0.8em 0;
+    font-size: 15px;
+    line-height: 1.5;
+
+    code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+      font-size: inherit;
+      color: inherit;
+    }
+  }
+
+  blockquote {
+    border-left: 3px solid #404040;
+    margin: 0.5em 0;
+    padding: 0.3em 1em;
+    color: #4b5563;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 0 6px 6px 0;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.8em 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 8px 12px;
+    text-align: left;
+  }
+  th {
+    background: rgba(0, 0, 0, 0.03);
+    font-weight: 600;
+  }
+
+  a {
+    color: #404040;
+    text-decoration: none;
+
+    &:hover { text-decoration: underline; }
+  }
+
+  img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 0.5em 0;
+  }
+}
+
+// Front-matter 表格：YAML 头，同为裸 <table>
+.inline-preview-frontmatter {
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  td {
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  .fm-key {
+    font-weight: 600;
+    color: #6b7280;
+    width: 100px;
+    background: rgba(0, 0, 0, 0.02);
+  }
+  .fm-val {
+    color: #444444;
+  }
+}

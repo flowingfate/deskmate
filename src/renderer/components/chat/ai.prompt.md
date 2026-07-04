@@ -41,8 +41,8 @@
 | `chat-input/ThinkingLevelSelector.tsx` | 单聊会话的 thinking level 选择器（pi-ai `ThinkingLevel` 枚举：`minimal/low/medium/high/xhigh`）；仅在活跃模型支持 ≥2 个等级时渲染；写入 `chat.agent.thinkingLevel`，通过 `updateAgent` 持久化到 AGENT.md front-matter。dropdown 顶部 "Auto" 项写入 `thinkingLevel: null` 清除字段，回到 provider 默认 —— 前端不假装知道默认值。运行时由 `pi.streamSimple({ reasoning })` 翻译给各 provider，不再走旧的"Claude→high / GPT→medium"启发式 | 小 |
 | `chat-input/ContextMenu.tsx` | @-提及下拉菜单，用于文件、技能和工作区项目 | — |
 | `ErrorBar.tsx` | 聊天中的内联错误显示 | — |
-| `ChatInlinePreviewOverlay.tsx` | inline 文件预览的全屏浮层;铺满整个 chat-content 区域(连 ComposeInput 一起遮住),通过 `fileViewer:open` 自定义事件触发。导出的 `inlinePreviewCoordinator.mounted` 让 `OverlayFileViewer` 在本组件挂载时让出处理权,避免同一事件被两个 viewer 同时打开 | — |
-| `chat-side.atom.ts` | `WorkspaceExplorerAtom` 和 `InlinePreviewAtom` 的 atom | — |
+| `../filePreview/ChatFilePreviewOverlay.tsx` | 聊天页 inline 文件预览浮层;满铺 chat-content 区(连 ComposeInput 一起遮住),通过 `fileViewer:open` 事件触发。捕获阶段 + `chatFilePreviewCoordinator` 占用,让全局 `GlobalFilePreviewOverlay` 让出,避免同一事件被两处消费。**外壳薄,渲染共用 `filePreview/FilePreviewPanel`** | — |
+| `chat-side.atom.ts` | `WorkspaceExplorerAtom`（右侧工作区侧栏可见性 + reveal）的 atom；`effectiveToggle` 打开侧栏时顺带 `ChatFilePreviewAtom.cancel()`。文件预览状态已迁到 `filePreview/filePreview.atom.ts` | — |
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
 | `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（基本信息、上下文增强、知识库、MCP 服务器、技能、子 agent、系统提示词） | — |
@@ -75,7 +75,7 @@ ChatView (路由同步, 会话操作)
        │         └─ EditInlineInput (内联编辑模式)
        ├─ ComposeInput (主编辑器)
        ├─ ChatWorkspaceSideOverlay (右侧工作区浮层, 覆盖消息区; ChatViewContent 本地组件)
-       └─ ChatInlinePreviewOverlay (全屏 inline 文件预览, 覆盖整个 chat-content)
+       └─ ChatFilePreviewOverlay (满铺 inline 文件预览, 覆盖整个 chat-content; 复用 filePreview/FilePreviewPanel)
 
 `ChatView` 位于 `/agent/:agentId/:sessionId` 与 `/agent/:agentId/job/:jobId/:sessionId` 路由下。两条路由在 `entries/main.routes.tsx` 用同一个 `ChatView` 组件渲染，由路由显式注入 `kind?: 'regular' | 'job-run'` prop（默认 `'regular'`）；ChatView 据此决定快照拉取走 `loadChatSessionSnapshot/markSessionRead`（regular，命中 `regular_sessions` + `Agent.getSession()`）还是 `loadJobRunSnapshot/markJobRunRead`（job-run，命中 `job_runs` + `Agent.getJob().getRun()`）。两条 IPC 路径在主进程 persist 层完全物理隔离，禁止写"按 sessionId 万能取" 的混查 helper。它通过 `agentSessionCacheManager` 将路由与后端会话状态同步，处理会话分叉/选择，并分发 agent 编辑的导航事件。
 
@@ -149,10 +149,10 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 聊天输入中的新附件类型 | `chat-input/shared/useFileHandling.ts` + `contentUtils.ts`(`ContentPartFactory`)+ `@shared/types/chatTypes`(`UnifiedContentPart`)+ shared constants 中的 `FILE_ATTACHMENT_LIMITS` + `message/AttachmentList.tsx`(渲染分支)+ [`src/main/lib/attachment/`](../../../main/lib/attachment/ai.prompt.md)(若新来源需要新的 main 端 attach 入口) |
 | 新交互式请求控件类型 | `interactive/RequestCard.tsx` 或专用卡片 + `@shared/types/interactiveRequestTypes` + `agentSessionCacheManager.ts` + `ChatViewContent.tsx` 分发 |
 | 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `entries/main.routes.tsx`（嵌套路由）+ `agent-editor/AgentSettingsNav.tsx`（`NAV_ITEMS`）+ `agent-area/AgentEditingView.tsx`（Tab 渲染分支） |
-| 会话滚动/布局变更 | `ChatContainer.tsx` + `ChatContainer.css` — 始终验证基于 `chatSessionId` 的重置，而非基于 `agentId` |
+| 会话滚动/布局变更 | `ChatContainer.tsx`(容器几何已 Tailwind 化) + `styles/biz/_chat.scss`(scrollbar/inset/data-mode/`:has()` 等无法 Tailwind 化的规则,原 `ChatContainer.scss` 已删,曾暂存于 `globals.css` 尾部,现归入 biz 层) — 始终验证基于 `chatSessionId` 的重置，而非基于 `agentId` |
 | Markdown 渲染变更 | `message/MarkdownView.tsx` + `message/MarkdownView.scss`（全局生效） |
 | 发送门控逻辑 | `chat-input/ComposeInput.tsx` + `chat-input/EditInlineInput.tsx`（显式 `chatStatus === 'idle'` 守卫）+ 渲染进程发送入口点缓存状态重新检查 |
-| `.chat-container-reverse` 左右 inset 改动 | `ChatContainer.scss` 的 `--chat-pad-x` CSS 变量是唯一写入点 — 水平 inset 由 `.chat-message-flow-reverse > *` 选择器统一加给所有直接子项(替代旧的 `.chat-container-reverse` 自带 padding);`ToolCallsSection` 通过 className 豁免该 padding 自己控制。改值只能改 `--chat-pad-x`;**禁止**删除该变量或在其它地方 hardcode 36px |
+| `.chat-container-reverse` 左右 inset 改动 | `--chat-pad-x` CSS 变量是唯一写入点(现由 `ChatContainer.tsx` 容器上的 `[--chat-pad-x:36px]` 任意值设定) — 水平 inset 由 `styles/biz/_chat.scss` 里 `.chat-message-flow-reverse > *` 选择器统一加给所有直接子项(替代旧的 `.chat-container-reverse` 自带 padding);`ToolCallsSection` 通过 className 豁免该 padding 自己控制。改值只能改 `--chat-pad-x`;**禁止**删除该变量或在其它地方 hardcode 36px |
 
 ## 反模式
 - **在 `ChatContainer` 内部读取 `useMessages()`**：会导致会话切换时的过时渲染。消息列表必须由 `ChatViewContent` 拥有并通过 props 传递。

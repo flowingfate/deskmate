@@ -72,7 +72,7 @@ const ContentContainer: React.FC<ContentContainerProps> = () => {
   const agentContext: AgentContextType = {};
 
   return (
-    <main className="content-container pl-[2px]" role="main" aria-live="polite">
+    <main className="flex-1 flex flex-col overflow-hidden relative pl-0.5" role="main" aria-live="polite">
       <Outlet context={agentContext} />
     </main>
   );

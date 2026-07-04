@@ -9,7 +9,6 @@ import { Textarea } from '@/shadcn/textarea'
 import SubAgentModelSelect from './SubAgentModelSelect'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/shadcn/select'
 import { Checkbox } from '@/shadcn/checkbox'
-import './SubAgentsView.scss'
 
 /**
  * Sub-agent form data structure shared between Create and Edit views.
@@ -118,11 +117,11 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
   }
 
   return (
-    <div className="sub-agent-form-inner">
+    <div className="max-w-[720px] flex flex-col gap-5">
       {/* Name */}
-      <div className="sub-agent-form-field">
-        <label className="sub-agent-form-label">
-          Name {isNameEditable && <span className="required">*</span>}
+      <div className="flex flex-col">
+        <label className="block text-[13px] font-medium text-[#444444] mb-1.5">
+          Name {isNameEditable && <span className="text-[#ef4444]">*</span>}
         </label>
         {isNameEditable ? (
           <Input
@@ -139,8 +138,8 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
             disabled
           />
         )}
-        {errors.name && <p className="sub-agent-form-error">{errors.name}</p>}
-        <p className="sub-agent-form-hint">
+        {errors.name && <p className="text-xs text-[#ef4444] mt-1">{errors.name}</p>}
+        <p className="text-xs text-[#9ca3af] mt-1">
           {isNameEditable
             ? 'Unique identifier. Lowercase letters, numbers, and hyphens only.'
             : 'Name cannot be changed after creation.'}
@@ -148,9 +147,9 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
       </div>
 
       {/* Display Name + Emoji */}
-      <div className="sub-agent-form-row">
-        <div className="sub-agent-form-field">
-          <label className="sub-agent-form-label">Emoji</label>
+      <div className="flex gap-3">
+        <div className="flex flex-col">
+          <label className="block text-[13px] font-medium text-[#444444] mb-1.5">Emoji</label>
           <Input
             type="text"
             className="w-20 text-xl text-center"
@@ -158,9 +157,9 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
             onChange={(e) => onUpdateField('emoji', e.target.value)}
           />
         </div>
-        <div className="sub-agent-form-field" style={{ flex: 1 }}>
-          <label className="sub-agent-form-label">
-            Display Name <span className="required">*</span>
+        <div className="flex flex-col flex-1">
+          <label className="block text-[13px] font-medium text-[#444444] mb-1.5">
+            Display Name <span className="text-[#ef4444]">*</span>
           </label>
           <Input
             type="text"
@@ -169,14 +168,14 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
             onChange={(e) => onUpdateField('display_name', e.target.value)}
             placeholder="e.g., Web Researcher"
           />
-          {errors.display_name && <p className="sub-agent-form-error">{errors.display_name}</p>}
+          {errors.display_name && <p className="text-xs text-[#ef4444] mt-1">{errors.display_name}</p>}
         </div>
       </div>
 
       {/* Description */}
-      <div className="sub-agent-form-field">
-        <label className="sub-agent-form-label">
-          Description <span className="required">*</span>
+      <div className="flex flex-col">
+        <label className="block text-[13px] font-medium text-[#444444] mb-1.5">
+          Description <span className="text-[#ef4444]">*</span>
         </label>
         <Textarea
           className={errors.description ? 'border-red-500' : ''}
@@ -185,13 +184,13 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
           placeholder="Describe what this sub-agent does..."
           rows={2}
         />
-        {errors.description && <p className="sub-agent-form-error">{errors.description}</p>}
+        {errors.description && <p className="text-xs text-[#ef4444] mt-1">{errors.description}</p>}
       </div>
 
       {/* System Prompt */}
-      <div className="sub-agent-form-field">
-        <label className="sub-agent-form-label">
-          System Prompt <span className="required">*</span>
+      <div className="flex flex-col">
+        <label className="block text-[13px] font-medium text-[#444444] mb-1.5">
+          System Prompt <span className="text-[#ef4444]">*</span>
         </label>
         <Textarea
           className={`font-mono ${errors.system_prompt ? 'border-red-500' : ''}`}
@@ -200,40 +199,40 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
           placeholder="Provide the system prompt that defines this sub-agent's behavior..."
           rows={8}
         />
-        {errors.system_prompt && <p className="sub-agent-form-error">{errors.system_prompt}</p>}
+        {errors.system_prompt && <p className="text-xs text-[#ef4444] mt-1">{errors.system_prompt}</p>}
       </div>
 
       {/* Model */}
-      <div className="sub-agent-form-field">
-        <label className="sub-agent-form-label">Model</label>
+      <div className="flex flex-col">
+        <label className="block text-[13px] font-medium text-[#444444] mb-1.5">Model</label>
         <SubAgentModelSelect
           value={formData.model}
           onChange={(modelId) => onUpdateField('model', modelId)}
         />
-        <p className="sub-agent-form-hint">
+        <p className="text-xs text-[#9ca3af] mt-1">
           Use the parent agent model by default, or choose a specific model for this sub-agent.
         </p>
       </div>
 
       {/* Context Access */}
-      <div className="sub-agent-form-field">
-        <label className="sub-agent-form-label">Context Access</label>
+      <div className="flex flex-col">
+        <label className="block text-[13px] font-medium text-[#444444] mb-1.5">Context Access</label>
         <Select value={formData.context_access} onValueChange={(v) => onUpdateField('context_access', v)}>
-          <SelectTrigger className="sub-agent-form-select"><SelectValue /></SelectTrigger>
+          <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="isolated">Isolated — No access to parent context</SelectItem>
             <SelectItem value="parent_summary">Summary — Receives a summary of parent conversation</SelectItem>
             <SelectItem value="full_history">Full History — Receives full parent conversation history</SelectItem>
           </SelectContent>
         </Select>
-        <p className="sub-agent-form-hint">
+        <p className="text-xs text-[#9ca3af] mt-1">
           Controls how much context the sub-agent receives from the parent conversation.
         </p>
       </div>
 
       {/* Max Turns */}
-      <div className="sub-agent-form-field">
-        <label className="sub-agent-form-label">Max Turns</label>
+      <div className="flex flex-col">
+        <label className="block text-[13px] font-medium text-[#444444] mb-1.5">Max Turns</label>
         <Input
           type="number"
           className="w-30"
@@ -242,15 +241,15 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
           min={1}
           max={100}
         />
-        <p className="sub-agent-form-hint">
+        <p className="text-xs text-[#9ca3af] mt-1">
           Maximum number of conversation turns for this sub-agent (1-100).
         </p>
       </div>
 
       {/* Workspace (optional) */}
-      <div className="sub-agent-form-field">
-        <label className="sub-agent-form-label">
-          Workspace Path <span className="optional">(optional)</span>
+      <div className="flex flex-col">
+        <label className="block text-[13px] font-medium text-[#444444] mb-1.5">
+          Workspace Path <span className="text-xs text-[#9ca3af] font-normal">(optional)</span>
         </label>
         <Input
           type="text"
@@ -261,14 +260,14 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
       </div>
 
       {/* ═══ Capabilities Section ═══ */}
-      <div className="sub-agent-capabilities-section">
-        <h3 className="sub-agent-capabilities-title">Capabilities</h3>
+      <div className="border-t-2 border-black/8 pt-4 mt-1">
+        <h3 className="text-[15px] font-semibold text-[#1c1c1c] m-0 mb-4">Capabilities</h3>
 
         {/* MCP Servers */}
-        <div className="sub-agent-capability-card">
-          <div className="sub-agent-capability-header">
-            <label className="sub-agent-capability-label">MCP Servers</label>
-            <label className="sub-agent-inherit-toggle">
+        <div className="mb-5 last:mb-0 p-3 border border-black/10 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-[13px] font-medium text-[#444444]">MCP Servers</label>
+            <label className="flex items-center gap-1.5 text-xs text-[#6b7280] cursor-pointer">
               <Checkbox
                 checked={formData.inherit_mcp_servers}
                 onCheckedChange={(checked) => onUpdateFormData(prev => ({ ...prev, inherit_mcp_servers: !!checked }))}
@@ -277,28 +276,28 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
             </label>
           </div>
           {formData.inherit_mcp_servers && (
-            <p className="sub-agent-inherit-hint">
+            <p className="text-xs text-[#404040] mb-2 italic">
               All MCP servers will be inherited from the parent agent and cannot be changed individually.
             </p>
           )}
-          <div className="sub-agent-capability-list">
+          <div className="max-h-40 overflow-y-auto custom-scrollbar">
             {mcpLoading ? (
-              <p className="sub-agent-capability-empty">Loading servers...</p>
+              <p className="text-xs text-[#9ca3af]">Loading servers...</p>
             ) : mcpServersList.length === 0 ? (
-              <p className="sub-agent-capability-empty">No MCP servers configured. Add servers in Settings → MCP.</p>
+              <p className="text-xs text-[#9ca3af]">No MCP servers configured. Add servers in Settings → MCP.</p>
             ) : (
               mcpServersList.map(server => (
-                <label key={server.name} className={`sub-agent-capability-item${formData.inherit_mcp_servers ? ' inherited' : ''}`}>
+                <label key={server.name} className={`flex items-center gap-2 py-1 text-[13px] text-[#444444] cursor-pointer${formData.inherit_mcp_servers ? ' opacity-60 cursor-not-allowed' : ''}`}>
                   <Checkbox
                     checked={formData.inherit_mcp_servers || formData.mcp_servers.some(s => s.name === server.name)}
                     onCheckedChange={() => toggleMcpServer(server.name)}
                     disabled={formData.inherit_mcp_servers}
                   />
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <span className={`sub-agent-mcp-status-dot ${server.status === 'connected' ? 'connected' : 'disconnected'}`} />
+                  <span className="inline-flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full inline-block ${server.status === 'connected' ? 'bg-[#22c55e]' : 'bg-[#d1d5db]'}`} />
                     {server.name}
                   </span>
-                  {server.tools && <span className="sub-agent-capability-tools-count">({server.tools.length} tools)</span>}
+                  {server.tools && <span className="text-[11px] text-[#9ca3af]">({server.tools.length} tools)</span>}
                 </label>
               ))
             )}
@@ -306,10 +305,10 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
         </div>
 
         {/* Skills */}
-        <div className="sub-agent-capability-card">
-          <div className="sub-agent-capability-header">
-            <label className="sub-agent-capability-label">Skills</label>
-            <label className="sub-agent-inherit-toggle">
+        <div className="mb-5 last:mb-0 p-3 border border-black/10 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-[13px] font-medium text-[#444444]">Skills</label>
+            <label className="flex items-center gap-1.5 text-xs text-[#6b7280] cursor-pointer">
               <Checkbox
                 checked={formData.inherit_skills}
                 onCheckedChange={(checked) => onUpdateFormData(prev => ({ ...prev, inherit_skills: !!checked }))}
@@ -318,25 +317,25 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
             </label>
           </div>
           {formData.inherit_skills && (
-            <p className="sub-agent-inherit-hint">
+            <p className="text-xs text-[#404040] mb-2 italic">
               All skills will be inherited from the parent agent and cannot be changed individually.
             </p>
           )}
-          <div className="sub-agent-capability-list">
+          <div className="max-h-40 overflow-y-auto custom-scrollbar">
             {skillsLoading ? (
-              <p className="sub-agent-capability-empty">Loading skills...</p>
+              <p className="text-xs text-[#9ca3af]">Loading skills...</p>
             ) : skillsList.length === 0 ? (
-              <p className="sub-agent-capability-empty">No skills installed. Add skills in Settings → Skills.</p>
+              <p className="text-xs text-[#9ca3af]">No skills installed. Add skills in Settings → Skills.</p>
             ) : (
               skillsList.map(skill => (
-                <label key={skill.name} className={`sub-agent-capability-item${formData.inherit_skills ? ' inherited' : ''}`}>
+                <label key={skill.name} className={`flex items-center gap-2 py-1 text-[13px] text-[#444444] cursor-pointer${formData.inherit_skills ? ' opacity-60 cursor-not-allowed' : ''}`}>
                   <Checkbox
                     checked={formData.inherit_skills || formData.skills.includes(skill.name)}
                     onCheckedChange={() => toggleSkill(skill.name)}
                     disabled={formData.inherit_skills}
                   />
                   {skill.name}
-                  {skill.description && <span className="sub-agent-capability-description">— {skill.description}</span>}
+                  {skill.description && <span className="text-[11px] text-[#9ca3af]">— {skill.description}</span>}
                 </label>
               ))
             )}
@@ -344,10 +343,10 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
         </div>
 
         {/* Knowledge Base */}
-        <div className="sub-agent-capability-card">
-          <div className="sub-agent-capability-header">
-            <label className="sub-agent-capability-label">Knowledge Base</label>
-            <label className="sub-agent-inherit-toggle">
+        <div className="mb-5 last:mb-0 p-3 border border-black/10 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-[13px] font-medium text-[#444444]">Knowledge Base</label>
+            <label className="flex items-center gap-1.5 text-xs text-[#6b7280] cursor-pointer">
               <Checkbox
                 checked={formData.inherit_knowledge_base}
                 onCheckedChange={(checked) => onUpdateFormData(prev => ({ ...prev, inherit_knowledge_base: !!checked }))}
@@ -356,13 +355,14 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
             </label>
           </div>
           {formData.inherit_knowledge_base && (
-            <p className="sub-agent-inherit-hint">
+            <p className="text-xs text-[#404040] mb-2 italic">
               Leave empty to use parent agent's knowledge base at runtime.
             </p>
           )}
-          <div className="sub-agent-kb-row">
+          <div className="flex gap-2">
             <Input
               type="text"
+              className="flex-1"
               value={formData.knowledgeBase}
               onChange={(e) => onUpdateFormData(prev => ({ ...prev, knowledgeBase: e.target.value }))}
               placeholder={formData.inherit_knowledge_base ? 'Leave empty to inherit from parent' : 'Enter knowledge base directory path'}
@@ -370,7 +370,7 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
             <Button
               type="button"
               variant="secondary"
-              style={{ padding: '8px 12px', fontSize: '13px', whiteSpace: 'nowrap' }}
+              className="px-3 py-2 text-[13px] whitespace-nowrap"
               onClick={handleBrowseKnowledgeBase}
             >
               Browse
@@ -380,7 +380,7 @@ const SubAgentForm: React.FC<SubAgentFormProps> = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="sub-agent-form-actions">
+      <div className="flex justify-end gap-2 pt-3 border-t border-black/8">
         <Button
           variant="secondary"
           onClick={onCancel}

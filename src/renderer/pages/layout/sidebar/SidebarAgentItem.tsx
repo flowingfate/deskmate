@@ -20,7 +20,7 @@ export const SidebarAgentItem: React.FC<SidebarAgentItemProps> = ({ agent, isAct
     <Button
       variant="ghost"
       size="icon"
-      className={`sidebar-item ${isActive ? 'active' : ''}`}
+      className={`relative flex items-center justify-center w-7 h-7 p-0 shrink-0 rounded-[7px] border-[1.5px] transition-[background-color,border-color] duration-150 ${isActive ? 'border-black/[0.12] bg-black/[0.07]' : 'border-transparent bg-transparent hover:bg-black/5'}`}
       onClick={onClick}
       title={agent.name || 'Agent'}
     >
@@ -31,7 +31,7 @@ export const SidebarAgentItem: React.FC<SidebarAgentItemProps> = ({ agent, isAct
         size="sm"
         version={agent.version}
       />
-      {hasUnread && <span className="sidebar-unread-dot" />}
+      {hasUnread && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#e92b0e] pointer-events-none" />}
     </Button>
   );
 };

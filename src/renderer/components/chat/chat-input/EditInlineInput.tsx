@@ -4,7 +4,6 @@ import { useSupportsImages } from '@/lib/models/useSupportsImages';
 import { ChatStatus } from '@/lib/chat/agentSessionCacheManager';
 import type { UserMessage } from '@shared/types/message';
 import { getChatInputShortcutHint } from '@/lib/chat/chatInputKeyboard';
-import '../ChatInput.scss';
 import { log } from '@/log';
 import { AttachmentList, AttachmentsStatus } from './Attachments';
 import { TextArea } from './Textarea';
@@ -140,13 +139,13 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
 
   return (
     <div
-      className={`chat-input-container inline-edit-mode ${isDragOver ? 'drag-over' : ''}`}
+      className={`chat-input-container relative shrink-0 overflow-visible pt-4 px-6 pb-0 max-[480px]:pt-3 max-[480px]:px-4 ${isDragOver ? 'drag-over' : ''}`}
       onDragOver={dragHandlers.handleDragOver}
       onDragEnter={dragHandlers.handleDragEnter}
       onDragLeave={dragHandlers.handleDragLeave}
       onDrop={dragHandlers.handleDrop}
     >
-      <div className="input-area">
+      <div className="relative border border-black/7.5 rounded-md overflow-visible transition-all duration-200 ease min-w-95 max-md:min-w-70 max-[480px]:min-w-60 focus-within:border-[#404040] focus-within:shadow-[0_0_0_3px_rgba(0,0,0,0.1),0_2px_12px_rgba(0,0,0,0.08)] contrast-more:border-black">
         <AttachmentList attachmentsStateAtom={attachmentsStateAtom} />
         <TextArea
           handleImageSelect={handleImageSelect}
@@ -159,15 +158,15 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
           textareaStateAtom={textareaStateAtom}
         />
 
-        <div className="button-area">
+        <div className="flex items-center justify-between p-3.5 pt-1 gap-3">
           <Button
             variant="outline"
-            size="icon"
+            size="icon-sm"
             onClick={() => handleElectronFileSelect()}
             disabled={isProcessing || isSubmittingEdit}
             title="Attach"
           >
-            <Plus size={18} />
+            <Plus size={14} />
           </Button>
 
           <input
@@ -179,12 +178,12 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
             multiple
           />
 
-          <div className="right-buttons-group">
+          <div className="order-3 ml-auto flex items-center gap-3">
             {isIdle ? (
               <>
                 <Button
                   variant="outline"
-                  className="w-24 min-w-24"
+                  size="sm"
                   onClick={onCancelEdit}
                   type="button"
                   disabled={isSubmittingEdit || isAwaitingEditConfirmation}
@@ -194,7 +193,7 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
                   Cancel
                 </Button>
                 <Button
-                  className="w-24 min-w-24"
+                  size="sm"
                   onClick={handleSend}
                   disabled={!hasValidInput || isProcessing || isSubmittingEdit || isAwaitingEditConfirmation}
                   title="Send"
@@ -208,7 +207,7 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
               <>
                 <Button
                   variant="outline"
-                  className="w-24 min-w-24"
+                  size="sm"
                   onClick={onCancelEdit}
                   type="button"
                   disabled={isSubmittingEdit || isAwaitingEditConfirmation}
@@ -218,7 +217,7 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
                   Cancel
                 </Button>
                 <Button
-                  className="w-24 min-w-24"
+                  size="sm"
                   onClick={handleSend}
                   disabled
                   title="Waiting for chat status"

@@ -84,54 +84,57 @@ export const GeneratedScheduleCards: React.FC<GeneratedScheduleCardsProps> = ({ 
   }
 
   return (
-    <div className="message-schedule-cards">
+    <div className="flex flex-col gap-2.5 w-full max-w-[min(100%,420px)]">
       {normalizedScheduleIds.map((scheduleId) => {
         const job = jobsById[scheduleId];
         const isRunning = runningJobId === scheduleId;
 
         return (
-          <div key={scheduleId} className="message-schedule-card">
-            <div className="message-schedule-card-header">
-              <div className="message-schedule-card-title-group">
-                <span className="message-schedule-card-icon">
+          <div
+            key={scheduleId}
+            className="flex flex-col gap-3 px-4 py-3.5 border border-[rgba(214,196,174,0.8)] rounded-[14px] bg-[linear-gradient(180deg,rgba(249,244,238,0.98)_0%,rgba(255,252,248,0.98)_100%)] shadow-[0_8px_20px_rgba(39,35,32,0.06)]"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="flex items-center justify-center w-8.5 h-8.5 rounded-[10px] bg-[rgba(39,35,32,0.08)] text-[#272320] shrink-0">
                   <CalendarClock size={18} strokeWidth={1.8} />
                 </span>
-                <div className="message-schedule-card-copy">
-                  <span className="message-schedule-card-label">Schedule</span>
-                  <span className="message-schedule-card-title">{job?.name || 'Scheduled task'}</span>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[11px] leading-[1.4] tracking-[0.04em] uppercase text-[#8a6f54]">Schedule</span>
+                  <span className="text-sm leading-[1.4] font-semibold text-[#272320] truncate">{job?.name || 'Scheduled task'}</span>
                 </div>
               </div>
               {!hydrated && !job && (
-                <Loader2 size={14} className="message-schedule-card-loading" />
+                <Loader2 size={14} className="animate-spin" />
               )}
             </div>
 
-            <div className="message-schedule-card-body">
-              <div className="message-schedule-card-row">
-                <span className="message-schedule-card-row-label">Runs</span>
-                <span className="message-schedule-card-row-value">{formatRunSummary(job)}</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] leading-[1.4] uppercase tracking-[0.04em] text-[#8a6f54]">Runs</span>
+                <span className="text-[13px] leading-normal text-[#3d3a36]">{formatRunSummary(job)}</span>
               </div>
-              <div className="message-schedule-card-row">
-                <span className="message-schedule-card-row-label">Job ID</span>
-                <span className="message-schedule-card-id">{scheduleId}</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] leading-[1.4] uppercase tracking-[0.04em] text-[#8a6f54]">Job ID</span>
+                <span className="inline-flex w-fit max-w-full px-2 py-1 rounded-lg bg-[rgba(214,196,174,0.55)] text-[#4c4137] text-xs leading-[1.4] font-mono wrap-anywhere">{scheduleId}</span>
               </div>
             </div>
 
-            <div className="message-schedule-card-actions">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="ghost"
                 size="icon"
-                className="message-schedule-card-button secondary"
+                className="inline-flex items-center justify-center gap-1.5 min-h-8 w-auto px-3 py-2 rounded-[9px] border border-[rgba(39,35,32,0.14)] text-xs font-semibold bg-white/90 text-[#272320] transition-colors [&:hover:not(:disabled)]:bg-white [&:hover:not(:disabled)]:border-[rgba(39,35,32,0.24)] disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => handleRunNow(scheduleId)}
                 disabled={isRunning || !job}
               >
-                {isRunning ? <Loader2 size={14} className="message-schedule-card-button-spinner" /> : <Play size={14} strokeWidth={2} />}
+                {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} strokeWidth={2} />}
                 Run now
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="message-schedule-card-button primary"
+                className="inline-flex items-center justify-center gap-1.5 min-h-8 w-auto px-3 py-2 rounded-[9px] border border-[#272320] text-xs font-semibold bg-[#272320] text-white transition-colors [&:hover:not(:disabled)]:bg-[#3d3a36] [&:hover:not(:disabled)]:border-[#3d3a36] disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => handleManage(scheduleId)}
                 disabled={!job && !effectiveAgentId}
               >

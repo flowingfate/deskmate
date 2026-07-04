@@ -73,7 +73,7 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeItemProps> = React.memo(({
   return (
     <>
       <div
-        className="group/row relative box-border flex items-center h-8 pl-2 pr-2 cursor-pointer rounded-lg transition-colors duration-150 hover:bg-black/4 active:bg-black/6 motion-reduce:transition-none"
+        className="group/row relative box-border flex items-center h-8 pl-2 pr-2 cursor-pointer rounded-lg transition-colors duration-150 hover:bg-black/4 active:bg-black/6"
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         title={node.path}
@@ -96,7 +96,7 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeItemProps> = React.memo(({
           {node.name}
         </span>
         {!isDirectory && node.size != null && (
-          <span className="shrink-0 ml-2 text-[11px] tabular-nums text-content-tertiary opacity-0 transition-opacity group-hover/row:opacity-100 motion-reduce:transition-none">
+          <span className="shrink-0 ml-2 text-[11px] tabular-nums text-content-tertiary opacity-0 transition-opacity group-hover/row:opacity-100">
             {formatFileSize(node.size)}
           </span>
         )}

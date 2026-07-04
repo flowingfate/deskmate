@@ -20,7 +20,7 @@ export const DropOverlay: React.FC<{ title: string }> = ({ title }) => (
   <div className="absolute inset-0 z-1000 flex items-center justify-center p-3 pointer-events-none">
     <div className="absolute inset-2 rounded-2xl border border-dashed border-accent/40 bg-white/70 backdrop-blur-xs" />
     <div className="relative flex flex-col items-center gap-3 text-center">
-      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-accent text-white animate-bounce motion-reduce:animate-none">
+      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-accent text-white animate-bounce">
         <FolderDown size={22} strokeWidth={1.5} />
       </div>
       <p className="m-0 text-[13px] font-semibold tracking-tight text-content-strong">
@@ -34,7 +34,7 @@ export const DropOverlay: React.FC<{ title: string }> = ({ title }) => (
 export const LoadingState: React.FC<{ title: string }> = ({ title }) => (
   <div className="flex flex-col items-center justify-center gap-3 py-10 px-6 text-center">
     <IconDisc>
-      <Loader2 size={18} strokeWidth={1.75} className="animate-spin motion-reduce:animate-none" />
+      <Loader2 size={18} strokeWidth={1.75} className="animate-spin" />
     </IconDisc>
     <p className="m-0 text-xs font-medium text-content-tertiary">
       Loading {title.toLowerCase()}…

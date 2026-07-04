@@ -60,7 +60,7 @@ const isImageFile = (filename: string): boolean => {
  * - Display and manage the Agent's Knowledge Base directory
  * - File/folder browsing and navigation
  * - Style kept consistent with SkillFolderExplorer
- * - Image files open with OverlayImageViewer; other files open with OverlayFileViewer
+ * - Image files open with OverlayImageViewer; other files dispatch `fileViewer:open` (全局 GlobalFilePreviewOverlay 兜底渲染)
  * - Folder watching sync kept consistent with WorkspaceExplorerSidepane
  * - Shows different empty-state messages based on brand
  */
@@ -457,7 +457,7 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
     setDirectoryStack(prev => [...prev, node]);
   }, [directoryStack, markNavigationChanged]);
 
-  // Handle file click - use OverlayImageViewer for images, OverlayFileViewer for other files
+  // Handle file click - images → OverlayImageViewer; other files → dispatch fileViewer:open (GlobalFilePreviewOverlay 兜底)
   const handleFileClick = useCallback((item: { path: string; name: string; size?: number }) => {
     if (isImageFile(item.name)) {
       // Collect all image files in current directory

@@ -53,19 +53,19 @@ function DevInfoBadge({ appVersion, agentId, sessionId }: {
   ];
 
   return (
-    <div className="dev-info-wrapper" ref={ref}>
+    <div className="relative ml-2 shrink-0 flex items-center" ref={ref}>
       <button
-        className={`dev-info-badge${open ? ' dev-info-badge--active' : ''}`}
+        className={`text-[10px] font-semibold tracking-[0.5px] text-[#737373] border rounded-sm px-1.5 py-0.5 cursor-pointer whitespace-nowrap font-mono select-none transition-all duration-150 ${open ? 'bg-[rgba(115,115,115,0.15)] border-[rgba(115,115,115,0.4)]' : 'bg-[rgba(115,115,115,0.08)] border-[rgba(115,115,115,0.2)] hover:bg-[rgba(115,115,115,0.15)] hover:border-[rgba(115,115,115,0.4)]'}`}
         onClick={() => setOpen(v => !v)}
       >
         DEV
       </button>
       {open && (
-        <div className="dev-info-popover">
+        <div className="absolute top-[calc(100%+6px)] left-0 z-1000 bg-white border border-border rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.1)] min-w-60 overflow-hidden">
           {rows.map(({ key, label, value, display }) => (
-            <div key={key} className="dev-info-row" onClick={() => copyValue(key, value)}>
-              <span className="dev-info-label">{label}</span>
-              <span className="dev-info-value">
+            <div key={key} className="flex items-center justify-between gap-3 px-3 py-2 cursor-pointer transition-[background] duration-100 hover:bg-[#fafafa] not-first:border-t not-first:border-(--bg-secondary)" onClick={() => copyValue(key, value)}>
+              <span className="text-[11px] font-medium text-content-tertiary whitespace-nowrap shrink-0">{label}</span>
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-content-heading break-all text-right [&_svg]:shrink-0 [&_svg]:text-content-tertiary">
                 <span>{display ?? value}</span>
                 {copied === key ? <Check size={12} /> : <Copy size={12} />}
               </span>
@@ -130,7 +130,7 @@ const ChatViewHeader: React.FC<ChatViewHeaderProps> = ({
     <>
       <div className="flex items-center gap-2">
         {agent && (
-          <span className="header-icon">
+          <span className="inline-flex items-center">
             <AgentAvatar
               emoji={agent.emoji}
               avatar={agent.avatar}
@@ -140,7 +140,7 @@ const ChatViewHeader: React.FC<ChatViewHeaderProps> = ({
             />
           </span>
         )}
-        <span className="header-name">{agent ? agent.name : 'Chat'}</span>
+        <span>{agent ? agent.name : 'Chat'}</span>
         <StatusBadges
           onOpenMcpTools={onOpenMcpTools}
           onOpenSkills={onOpenSkills}
@@ -154,8 +154,7 @@ const ChatViewHeader: React.FC<ChatViewHeaderProps> = ({
           />
         )}
       </div>
-      <div className="header-actions">
-
+      <div className="flex items-center shrink-0">
         <ToggleWorkspaceExplorer />
       </div>
     </>

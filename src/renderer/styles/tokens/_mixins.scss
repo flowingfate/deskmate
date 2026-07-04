@@ -10,38 +10,6 @@
   flex-direction: column;
 }
 
-@mixin text-ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@mixin text-line-clamp($lines) {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: $lines;
-  line-clamp: $lines;
-}
-
-@mixin scrollbar-thin {
-  scrollbar-width: thin;
-  scrollbar-color: var(--glass-border) transparent;
-
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: var(--glass-border);
-    border-radius: 3px;
-  }
-}
-
 @mixin scrollbar-hidden {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -66,14 +34,6 @@
   flex-shrink: 0;
 }
 
-@mixin disabled-state {
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-  }
-}
-
 @mixin overlay-backdrop {
   position: fixed;
   top: 0;
@@ -83,16 +43,4 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-@mixin absolute-fill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}
-
-@mixin transition-default {
-  transition: all var(--transition-duration) var(--transition-easing);
 }

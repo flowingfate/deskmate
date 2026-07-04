@@ -3,18 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './entries/main'
 import './styles/tokens/_index.scss'
 import './styles/globals.css'
-import './styles/globals.scss'
-import './styles/Common.scss';
-import './styles/Header.scss';
-import './styles/ContentView.scss';
-import './styles/ToolbarSettingsView.scss';
-import './styles/RuntimeSettings.scss';
-import './styles/biz/Form.scss';
-import './styles/biz/ServerCard.scss';
-import './styles/biz/Sidepane.scss';
-import './styles/biz/SkillsContentView.scss';
-import './styles/biz/StreamingMessage.scss';
-import './styles/biz/markdown-render.scss';
+import './styles/biz/_index.scss';
 import { log as logger } from '@/log';
 import { installGlobalErrorHandlers } from '@/log/installGlobalHandlers';
 

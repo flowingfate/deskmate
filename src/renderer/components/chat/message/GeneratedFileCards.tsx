@@ -21,6 +21,12 @@ const logger = log.child({ mod: 'GeneratedFileCards' });
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif', 'avif']);
 
+/** portal 下拉菜单项:shadcn ghost Button 上覆盖为左对齐行 + hover 高亮。 */
+const MENU_ITEM =
+  'flex items-center text-left gap-2 px-3 py-2 w-full min-h-9 rounded-md border-0 bg-transparent cursor-pointer transition-colors hover:bg-black/5 active:bg-black/[0.08]';
+const MENU_ITEM_ICON = 'flex items-center justify-center w-5 h-5 text-base';
+const MENU_ITEM_TEXT = 'not-italic font-[410] text-sm leading-5 text-[#272320] flex-1 truncate';
+
 export interface GeneratedFileCardItem {
   fileUri: string;
   exists?: boolean;
@@ -347,7 +353,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
     return (
       <div
         key={`${filePath}-${index}`}
-        className={`file-attachment-item ${isAvailable ? 'clickable' : 'deleted'}`}
+        className="box-border flex text-[13px] items-center gap-1 p-2 w-full min-w-0 bg-white border border-[#EFEAE7] rounded transition-all cursor-pointer relative hover:bg-[#FAFAFA] hover:border-[#E0DBD8] hover:translate-x-0.5 hover:shadow-[0_2px_4px_rgba(0,0,0,0.05)] active:translate-x-px active:bg-[#F5F5F5]"
         onClick={() => isAvailable && previewGeneratedFile(filePath, mediaCtx)}
         title={!fileExists ? `File deleted: ${filePath}` : `Click to open: ${filePath}`}
         style={
@@ -356,10 +362,10 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
             : responsiveCardStyle
         }
       >
-        <span className="file-attachment-icon">
+        <span className="flex items-center justify-center w-6 h-6 shrink-0">
           <FileTypeIcon fileName={fileName} size={16} />
         </span>
-        <span className="file-attachment-name" title={filePath}>
+        <span className="font-[410] text-[#322D29] truncate flex-1 min-w-0" title={filePath}>
           {fileName}
         </span>
         {!fileExists && (
@@ -371,7 +377,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
           <Button
             variant="ghost"
             size="icon-xs"
-            className="file-attachment-menu-trigger"
+            className="flex flex-col items-center justify-center p-1 w-6 h-6 border-0 bg-transparent cursor-pointer rounded transition-colors shrink-0 hover:bg-black/8 active:scale-95"
             onClick={(event) => handleFileMenuToggle(filePath, event)}
             title="More options"
           >
@@ -384,8 +390,8 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
 
   return (
     <>
-      <div className="message-file-attachments">
-        <div className="file-attachments-list">
+      <div className="mt-0 mb-0 w-full">
+        <div className="flex flex-col gap-2 w-full">
           {items.map(renderGeneratedFileItem)}
         </div>
       </div>
@@ -403,7 +409,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
         return ReactDOM.createPortal(
           <div
             key={filePath}
-            className="file-attachment-menu"
+            className="fixed z-1000 flex flex-col items-start p-1 gap-0.5 min-w-50 bg-white border border-black/10 rounded-lg shadow-[0px_2px_8px_rgba(0,0,0,0.15),0px_0px_1px_rgba(0,0,0,0.1)] animate-[dropdownFadeIn_0.15s_ease-out]"
             style={{
               top: `${menuPos.top}px`,
               left: `${menuPos.left}px`,
@@ -412,80 +418,80 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
             <Button
               variant="ghost"
               size="icon"
-              className="file-attachment-menu-item"
+              className={MENU_ITEM}
               onClick={() => {
                 setFileMenuOpen({});
                 previewGeneratedFile(filePath, mediaCtx);
               }}
             >
-              <span className="file-attachment-menu-item-icon">
+              <span className={MENU_ITEM_ICON}>
                 <Eye size={16} strokeWidth={2} />
               </span>
-              <span className="file-attachment-menu-item-text">Preview file</span>
+              <span className={MENU_ITEM_TEXT}>Preview file</span>
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="file-attachment-menu-item"
+              className={MENU_ITEM}
               onClick={() => handleOpenWithDefaultApp(filePath)}
             >
-              <span className="file-attachment-menu-item-icon">
+              <span className={MENU_ITEM_ICON}>
                 <FolderOpen size={16} strokeWidth={2} />
               </span>
-              <span className="file-attachment-menu-item-text">Open file with default app</span>
+              <span className={MENU_ITEM_TEXT}>Open file with default app</span>
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="file-attachment-menu-item"
+              className={MENU_ITEM}
               onClick={() => handleShowInFolder(filePath)}
             >
-              <span className="file-attachment-menu-item-icon">
+              <span className={MENU_ITEM_ICON}>
                 <Folder size={16} strokeWidth={2} />
               </span>
-              <span className="file-attachment-menu-item-text">Open file in folder</span>
+              <span className={MENU_ITEM_TEXT}>Open file in folder</span>
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="file-attachment-menu-item"
+              className={MENU_ITEM}
               onClick={() => {
                 navigator.clipboard.writeText(filePath);
                 setFileMenuOpen({});
               }}
             >
-              <span className="file-attachment-menu-item-icon">
+              <span className={MENU_ITEM_ICON}>
                 <Copy size={16} strokeWidth={2} />
               </span>
-              <span className="file-attachment-menu-item-text">Copy file path</span>
+              <span className={MENU_ITEM_TEXT}>Copy file path</span>
             </Button>
             {isInstallableSkillArtifact(filePath) && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="file-attachment-menu-item"
+                className={MENU_ITEM}
                 onClick={() => {
                   setFileMenuOpen({});
                   handleInstallSkill(filePath);
                 }}
               >
-                <span className="file-attachment-menu-item-icon">
+                <span className={MENU_ITEM_ICON}>
                   <Download size={16} strokeWidth={2} />
                 </span>
-                <span className="file-attachment-menu-item-text">Install skill</span>
+                <span className={MENU_ITEM_TEXT}>Install skill</span>
               </Button>
             )}
             {shouldShowAddToKnowledgeBaseOption(filePath, isSessionIdle) && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="file-attachment-menu-item"
+                className={MENU_ITEM}
                 onClick={() => handleAddToKnowledge(filePath)}
               >
-                <span className="file-attachment-menu-item-icon">
+                <span className={MENU_ITEM_ICON}>
                   <BookPlus size={16} strokeWidth={2} />
                 </span>
-                <span className="file-attachment-menu-item-text">Add to Knowledge Base</span>
+                <span className={MENU_ITEM_TEXT}>Add to Knowledge Base</span>
               </Button>
             )}
           </div>,

@@ -1,5 +1,5 @@
 // ToolCallsSection — 工具调用章节,collapsed(chip 卡片) / expanded(view all) 两种视图。
-// 外壳几何由 SCSS data-mode 选择器驱动(ChatContainer.scss),高度 + 滚动锚定由 AnimatedHeight 统一。
+// 外壳几何由 data-mode 选择器驱动(styles/biz/_chat.scss 的 .tool-calls-section[data-mode]),高度 + 滚动锚定由 AnimatedHeight 统一。
 
 import React, { useCallback, useState } from 'react';
 import { Wrench, ChevronRight, X } from 'lucide-react';
@@ -56,7 +56,7 @@ export const ToolCallsSection: React.FC<ToolCallsSectionProps> = ({
   return (
     <AnimatedHeight
       duration={220}
-      className="tool-calls-section min-w-0 mb-3 flex flex-col items-stretch motion-reduce:transition-none"
+      className="tool-calls-section min-w-0 mb-3 flex flex-col items-stretch"
       data-section-key={sectionKey}
       data-mode={mode}
       isLive={isLive}

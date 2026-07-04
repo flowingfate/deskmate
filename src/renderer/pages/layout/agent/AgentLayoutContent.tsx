@@ -8,7 +8,7 @@ import ResizableDivider from '@/components/ui/ResizableDivider';
 import RightResizableDivider from '@/components/ui/RightResizableDivider';
 import { RightGlobalSidepane } from './RightGlobalSidepane';
 import { OverlayImageViewer } from '@/components/ui/OverlayImageViewer';
-import { OverlayFileViewer } from '@/components/ui/OverlayFileViewer';
+import GlobalFilePreviewOverlay from '@/components/filePreview/GlobalFilePreviewOverlay';
 import ApplySkillToAgentsDialog from '@/components/skills/ApplySkillToAgentsDialog';
 import {
   AgentDropdownMenu,
@@ -43,15 +43,8 @@ export const AgentLayoutContent: React.FC<AgentLayoutContentProps> = ({
   const isRightPaneVisible = !rightPanelCollapsed;
 
   return (
-    <div
-      className={[
-        'app-layout',
-        leftPanelCollapsed ? 'left-panel-collapsed' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      <div className="app-body">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative pr-2 pb-2">
 
         {/* SessionPanel — agent header + session list */}
         <div
@@ -89,7 +82,7 @@ export const AgentLayoutContent: React.FC<AgentLayoutContentProps> = ({
         <DuplicateAgentOverlay />
         <RenameChatSessionOverlay />
         <OverlayImageViewer />
-        <OverlayFileViewer onInstallSkill={handleFileTreeNodeInstallSkill} />
+        <GlobalFilePreviewOverlay onInstallSkill={handleFileTreeNodeInstallSkill} />
         <ApplySkillToAgentsDialog />
       </div>
     </div>

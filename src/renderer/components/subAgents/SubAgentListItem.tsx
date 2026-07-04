@@ -13,7 +13,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/shadcn/dropdown-menu'
-import './SubAgentsView.scss'
 
 interface SubAgentListItemProps {
   config: SubAgentConfig
@@ -112,14 +111,14 @@ const SubAgentListItem: React.FC<SubAgentListItemProps> = ({
 
   return (
     <div
-      className={`sub-agent-card-wrapper ${isSelected ? 'selected' : ''}`}
+      className={`group box-border flex flex-col gap-1.5 px-5 py-4 border border-black/12 rounded-xl cursor-pointer relative transition-[background,border] duration-200 ${isSelected ? 'bg-[#F8F4F1]' : 'bg-white hover:bg-[#F8F4F1]'}`}
       onClick={onClick}
     >
-      <div className="sub-agent-card-header">
-        <span className="sub-agent-card-emoji">{config.emoji}</span>
-        <span className="sub-agent-card-name">{config.display_name}</span>
-        <span className="sub-agent-card-version">v{config.version}</span>
-        <div className="sub-agent-menu-container">
+      <div className="flex items-center gap-2">
+        <span className="text-lg leading-none">{config.emoji}</span>
+        <span className="flex-1 truncate text-sm font-[650] text-[#272320] [font-variation-settings:'opsz'_10.5]">{config.display_name}</span>
+        <span className="inline-flex items-center justify-center gap-1 shrink-0 whitespace-nowrap px-2 py-1 rounded-lg bg-[rgba(224,158,102,0.3)] text-xs font-semibold leading-4 text-[#6B3900] [font-variation-settings:'opsz'_10.5]">v{config.version}</span>
+        <div className="relative opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -161,13 +160,13 @@ const SubAgentListItem: React.FC<SubAgentListItemProps> = ({
         </div>
       </div>
 
-      <p className="sub-agent-card-description">{config.description}</p>
+      <p className="m-0 text-[13px] leading-[1.4] text-[#6b7280] line-clamp-2">{config.description}</p>
 
-      <div className="sub-agent-card-meta">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-[#9ca3af]">
         <span>MCP: {mcpDisplay}</span>
-        <span className="sub-agent-card-meta-separator">·</span>
+        <span className="text-[#d1d5db]">·</span>
         <span>Skills: {skillsDisplay}</span>
-        <span className="sub-agent-card-meta-separator">·</span>
+        <span className="text-[#d1d5db]">·</span>
         <span>Context: {contextAccessLabels[config.context_access] || config.context_access}</span>
       </div>
     </div>

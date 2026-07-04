@@ -1,5 +1,4 @@
 import React from 'react';
-import './ErrorBar.scss';
 import { Button } from '@/shadcn/button';
 import { getAgentById, getAgents } from '@/states/agents.atom';
 import { agentSessionCacheManager } from '../../lib/chat/agentSessionCacheManager';
@@ -144,26 +143,24 @@ const ErrorBar: React.FC<ErrorBarProps> = ({ errorMessage, chatSessionId }) => {
   const fixSuggestion = getFixSuggestion(errorMessage, chatSessionId);
 
   return (
-    <div className="error-bar">
-      <div className="error-bar-content">
-        <div className="error-bar-icon">⚠️</div>
-        <div className="error-bar-message">
-          {errorMessage}
-          {fixSuggestion && (
-            <span> {fixSuggestion}</span>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="error-bar-btn retry"
-          onClick={handleRetry}
-          title="Retry the failed request"
-          aria-label="Retry"
-        >
-          Retry
-        </Button>
+    <div className="bg-[linear-gradient(135deg,rgba(254,226,226,0.98)_0%,rgba(254,202,202,0.98)_100%)] animate-[errorSlideDown_0.3s_ease-out] px-5 py-1 flex items-center gap-2.5">
+      <div className="text-base shrink-0 leading-[1.4]">⚠️</div>
+      <div className="flex-1 text-[13px] leading-normal text-[#7f1d1d] font-medium whitespace-pre-wrap wrap-break-word">
+        {errorMessage}
+        {fixSuggestion && (
+          <span> {fixSuggestion}</span>
+        )}
       </div>
+      <Button
+        variant="destructive"
+        size="sm"
+        className="shrink-0 h-6"
+        onClick={handleRetry}
+        title="Retry the failed request"
+        aria-label="Retry"
+      >
+        Retry
+      </Button>
     </div>
   );
 };

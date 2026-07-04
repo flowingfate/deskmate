@@ -276,8 +276,7 @@ function renderAttachment(
     return (
       <div
         key={`image-${originalIndex}`}
-        className="attachment-item image"
-        style={{ cursor: 'pointer' }}
+        className="group relative w-12 h-12 max-md:w-10.5 max-md:h-10.5 bg-[rgba(245,245,245,0.9)] border border-[rgba(220,220,220,0.8)] rounded-lg shadow-[0_2px_8px_rgba(0,0,0,0.1)] overflow-hidden cursor-pointer transition-all duration-200 ease hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)] hover:border-black/60"
         onClick={() => {
           if (previewUrl) {
             window.dispatchEvent(
@@ -298,10 +297,10 @@ function renderAttachment(
         }}
       >
         {previewUrl && (
-          <img src={previewUrl} alt={att.fileName} className="attachment-image-preview" />
+          <img src={previewUrl} alt={att.fileName} className="w-full h-full object-cover rounded-md" />
         )}
-        <div className="attachment-image-overlay">
-          <svg className="attachment-file-icon" fill="currentColor" viewBox="0 0 20 20">
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 transition-opacity duration-200 ease group-hover:opacity-100">
+          <svg className="w-4 h-4 max-md:w-3.5 max-md:h-3.5 text-[#404040] shrink-0 mb-0.5" fill="currentColor" viewBox="0 0 20 20">
             <path
               fillRule="evenodd"
               d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
@@ -309,9 +308,9 @@ function renderAttachment(
             />
           </svg>
         </div>
-        <div className="attachment-image-name">{att.fileName}</div>
+        <div className="absolute bottom-0 left-0 right-0 bg-[linear-gradient(transparent,rgba(0,0,0,0.7))] text-white text-[10px] font-medium pt-2 px-1.5 pb-1 text-center truncate">{att.fileName}</div>
         <button
-          className="attachment-remove"
+          className="absolute top-1 right-1 flex items-center justify-center w-4.5 h-4.5 p-0 bg-black/70 border-none rounded-full cursor-pointer transition-all duration-200 ease text-white opacity-0 scale-[0.8] z-10 hover:bg-[rgba(239,68,68,0.9)] hover:scale-110 group-hover:opacity-100 group-hover:scale-100 [&>svg]:w-2.5 [&>svg]:h-2.5"
           onClick={(e) => {
             e.stopPropagation();
             manager.removeContent(originalIndex);
@@ -337,8 +336,7 @@ function renderAttachment(
     return (
       <div
         key={`${att.kind}-${originalIndex}`}
-        className="attachment-item file"
-        style={{ cursor: 'pointer' }}
+        className="group flex flex-col items-center justify-center relative w-12 h-12 max-md:w-10.5 max-md:h-10.5 px-2 py-1.5 max-md:px-1.5 max-md:py-1 bg-[rgba(245,245,245,0.8)] border border-[rgba(220,220,220,0.6)] rounded-lg shadow-[0_2px_6px_rgba(0,0,0,0.1)] cursor-pointer transition-all duration-200 ease hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:border-black/60 hover:bg-[rgba(245,245,245,0.95)]"
         onClick={() => {
           if (fileLike.fileUri) {
             window.dispatchEvent(
@@ -360,16 +358,16 @@ function renderAttachment(
           }
         }}
       >
-        <div className="attachment-file-icon">
+        <div className="w-4 h-4 max-md:w-3.5 max-md:h-3.5 text-[#404040] shrink-0 mb-0.5">
           <FileTypeIcon fileName={fileLike.fileName} size={16} />
         </div>
-        <div className="attachment-file-info">
-          <div className="attachment-name" title={fileLike.fileName}>
+        <div className="flex flex-col items-center text-center w-full overflow-hidden">
+          <div className="text-[9px] max-md:text-[8px] font-medium text-[#444444] truncate max-w-full leading-[1.1]" title={fileLike.fileName}>
             {fileLike.fileName}
           </div>
         </div>
         <button
-          className="attachment-remove"
+          className="absolute top-1 right-1 flex items-center justify-center w-4.5 h-4.5 p-0 bg-[rgba(239,68,68,0.9)] border-none rounded-full cursor-pointer transition-all duration-200 ease text-white opacity-0 scale-[0.8] z-10 hover:bg-[rgba(220,38,38,1)] hover:scale-110 group-hover:opacity-100 group-hover:scale-100 [&>svg]:w-2.5 [&>svg]:h-2.5"
           onClick={(e) => {
             e.stopPropagation();
             manager.removeContent(originalIndex);
@@ -401,8 +399,8 @@ function List({ attachmentsStateAtom }: { attachmentsStateAtom: AttachmentsState
   });
   if (nodes.length === 0) return null;
   return (
-    <div className="attachments-area">
-      <div className="attachment-list">{nodes}</div>
+    <div className="pt-4 px-5 bg-transparent">
+      <div className="flex flex-wrap gap-2 items-start">{nodes}</div>
     </div>
   );
 }
@@ -413,7 +411,7 @@ function Status({ attachmentsStateAtom }: { attachmentsStateAtom: AttachmentsSta
   const stats = ContentAnalyzer.analyzeContent(list);
   if (stats.totalSize === 0) return null;
   return (
-    <div className="content-stats">
+    <div className="content-stats text-xs">
       📊 Images: {stats.imageCount} | Files: {stats.fileCount}{' '}
       | Others: {stats.othersCount} | Size:{' '}
       {formatFileSize(stats.totalSize)} | Est. Tokens:{' '}

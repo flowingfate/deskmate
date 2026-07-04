@@ -15,13 +15,13 @@ interface CopyButtonProps {
 const COPIED_RESET_MS = 500;
 
 const CopiedIcon: React.FC = () => (
-  <svg className="action-icon" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+  <svg className="block shrink-0 text-[#6C6C70] transition-all" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
   </svg>
 );
 
 const CopyIcon: React.FC = () => (
-  <svg className="action-icon" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+  <svg className="block shrink-0 text-[#6C6C70] transition-all" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
   </svg>
@@ -45,7 +45,6 @@ export const CopyButton: React.FC<CopyButtonProps> = ({ text }) => {
     <Button
       variant="ghost"
       size="icon-xs"
-      className="copy-btn"
       onClick={handleCopy}
       title={isCopied ? 'Copied' : 'Copy'}
       aria-label={isCopied ? 'Copied' : 'Copy'}

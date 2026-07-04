@@ -21,6 +21,7 @@ import type {
 import { useCurrentSession } from '@/states/currentSession.atom';
 import { toMediaUrl, type MediaUrlContext } from '@/lib/mediaUrl';
 import FileTypeIcon from '../../ui/FileTypeIcon';
+import { cn } from '@/lib/utilities/utils';
 
 type ImageAttachment = Extract<Attachment, { kind: 'image' }>;
 type FileLikeAttachment = Extract<Attachment, { kind: 'text' | 'office' | 'opaque' }>;
@@ -30,24 +31,38 @@ interface ImageCardProps {
   attachment: ImageRenderable;
   index: number;
   url?: string | null;
+  isSingle: boolean;
   onOpen: (index: number) => void;
 }
 
-const ImageAttachmentCard: React.FC<ImageCardProps> = ({ attachment, index, url, onOpen }) => {
+const CARD_BASE =
+  'group flex flex-col rounded-lg overflow-hidden cursor-pointer bg-[#f8f9facc] border border-[#d6d6d680] transition-all hover:border-black/50 hover:-translate-y-px hover:shadow-[0_2px_8px_#0000001a]';
+const PREVIEW_BASE = 'w-full flex items-center justify-center relative overflow-hidden';
+const FILE_ICON = 'opacity-80 transition-all group-hover:opacity-100 group-hover:scale-105';
+
+const ImageAttachmentCard: React.FC<ImageCardProps> = ({ attachment, index, url, isSingle, onOpen }) => {
   const label = attachment.fileName || `Image ${index + 1}`;
   return (
     <div
-      className="attachment-card image-attachment clickable"
+      className={cn(
+        CARD_BASE,
+        isSingle ? 'w-50 max-md:w-40' : 'w-12.5 max-md:w-10.5',
+      )}
       onClick={() => onOpen(index)}
-      style={{ cursor: 'pointer' }}
       title={`Click to preview: ${label}`}
     >
-      <div className="attachment-preview image-preview-full">
+      <div
+        className={cn(
+          PREVIEW_BASE,
+          'bg-transparent',
+          isSingle ? 'h-40 max-md:h-34' : 'h-12.5 max-md:h-10.5',
+        )}
+      >
         {url ? (
           <img
             src={url}
             alt={label}
-            className="attachment-image"
+            className="object-cover max-w-full max-h-full"
             title={label}
             loading="lazy"
             decoding="async"
@@ -56,7 +71,7 @@ const ImageAttachmentCard: React.FC<ImageCardProps> = ({ attachment, index, url,
             }}
           />
         ) : (
-          <div className="file-icon">
+          <div className={cn(FILE_ICON, isSingle ? 'text-5xl' : 'text-base max-md:text-sm')}>
             <FileTypeIcon fileName={label} size={24} />
           </div>
         )}
@@ -67,25 +82,47 @@ const ImageAttachmentCard: React.FC<ImageCardProps> = ({ attachment, index, url,
 
 interface FileCardProps {
   attachment: FileLikeAttachment;
+  isSingle: boolean;
   onOpen: (att: FileLikeAttachment) => void;
 }
 
-const FileAttachmentCard: React.FC<FileCardProps> = ({ attachment, onOpen }) => {
+const FileAttachmentCard: React.FC<FileCardProps> = ({ attachment, isSingle, onOpen }) => {
   const fileName = attachment.fileName;
   return (
     <div
-      className="attachment-card file-attachment clickable"
+      className={cn(
+        CARD_BASE,
+        isSingle ? 'w-50 max-md:w-40' : 'w-12.5 max-md:w-10.5',
+      )}
       onClick={() => onOpen(attachment)}
-      style={{ cursor: 'pointer' }}
       title={`Click to preview: ${fileName}`}
     >
-      <div className="attachment-preview">
-        <div className="file-icon">
+      <div
+        className={cn(
+          PREVIEW_BASE,
+          'bg-[#f3f4f6cc]',
+          isSingle ? 'h-30 max-md:h-25' : 'h-7.5 max-md:h-6.5',
+        )}
+      >
+        <div className={cn(FILE_ICON, isSingle ? 'text-5xl max-md:text-[40px]' : 'text-base max-md:text-sm')}>
           <FileTypeIcon fileName={fileName} size={24} />
         </div>
       </div>
-      <div className="attachment-info">
-        <div className="attachment-name" title={fileName}>
+      <div
+        className={cn(
+          'w-full flex items-center justify-center border-t border-[#e5e7eb99] bg-white/90',
+          isSingle
+            ? 'h-10 p-2 max-md:h-9 max-md:p-1.5'
+            : 'h-5 px-0.5 py-1 max-md:h-4 max-md:px-px max-md:py-0.5',
+        )}
+      >
+        <div
+          className={cn(
+            'text-[#4b5563e6] font-medium leading-[1.2] text-center',
+            isSingle ? 'text-[13px] max-md:text-xs' : 'truncate text-[9px] leading-[1.1] max-md:text-[8px]',
+          )}
+          title={fileName}
+        >
           {fileName}
         </div>
       </div>
@@ -160,13 +197,19 @@ export const AttachmentList: React.FC<AttachmentListProps> = ({ message }) => {
 
   return (
     <div className="message-attachments">
-      <div className={`attachments-grid ${isSingle ? 'single-attachment' : 'multiple-attachments'}`}>
+      <div
+        className={cn(
+          'flex flex-wrap gap-2 items-start',
+          isSingle ? 'max-w-50' : 'max-w-full',
+        )}
+      >
         {images.map((att, index) => (
           <ImageAttachmentCard
             key={`image-${index}`}
             attachment={att}
             index={index}
             url={imageUrls[index]}
+            isSingle={isSingle}
             onOpen={openImageViewer}
           />
         ))}
@@ -174,6 +217,7 @@ export const AttachmentList: React.FC<AttachmentListProps> = ({ message }) => {
           <FileAttachmentCard
             key={`${att.kind}-${index}`}
             attachment={att}
+            isSingle={isSingle}
             onOpen={openFileViewer}
           />
         ))}

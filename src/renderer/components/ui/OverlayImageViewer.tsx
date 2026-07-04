@@ -4,9 +4,15 @@ import { Button } from '@/shadcn/button';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Dialog, DialogPortal } from '@/shadcn/dialog';
 import { atom } from '@/atom';
-import './OverlayImageViewer.scss';
 import { log } from '@/log';
 const logger = log.child({ mod: 'OverlayImageViewer' });
+
+// 深色浮层上的圆形玻璃按钮（工具栏 + 左右翻页共用视觉：白色半透明 + backdrop-blur + hover 放大）。
+// shadcn Button 的 ghost hover 由 twMerge 用后置类覆盖，故显式补 hover:bg/border/text。
+const TOOL_BTN =
+  'w-12 h-12 flex items-center justify-center bg-white/10 border border-white/20 rounded-full text-white transition-all duration-200 backdrop-blur-[10px] hover:bg-white/20 hover:border-white/30 hover:text-white hover:scale-110 active:scale-95 max-md:w-10 max-md:h-10';
+const NAV_BTN =
+  'fixed top-1/2 -translate-y-1/2 z-[10001] w-16 h-16 flex items-center justify-center bg-white/10 border border-white/20 rounded-full text-white transition-all duration-200 backdrop-blur-[10px] hover:bg-white/20 hover:border-white/30 hover:text-white hover:scale-110 active:scale-95 max-md:w-12 max-md:h-12';
 
 interface ImageItem {
   id: string;
@@ -148,13 +154,14 @@ export const OverlayImageViewer: React.FC = () => {
   // Guard against invalid image data
   if (!currentImage || !currentImage.url) {
     logger.error({ msg: "Current image is invalid:", currentIndex, currentImage });
+    const newLocal = "fixed inset-0 flex items-center justify-center z-[9999] bg-black/95 animate-[imageViewerFadeIn_0.2s_ease-out] select-none";
     return (
       <Dialog open={true} onOpenChange={(open) => { if (!open) actions.close(); }}>
         <DialogPortal>
-          <DialogPrimitive.Content className="image-viewer-overlay" onClick={actions.close}>
+          <DialogPrimitive.Content className={newLocal} onClick={actions.close}>
             <DialogPrimitive.Title className="sr-only">Image Error</DialogPrimitive.Title>
-            <div className="image-viewer-content">
-              <div className="image-viewer-error">
+            <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center">
+              <div className="flex flex-col items-center gap-4 text-white">
                 <p>Image failed to load</p>
                 <Button variant="secondary" onClick={actions.close}>Close</Button>
               </div>
@@ -172,7 +179,8 @@ export const OverlayImageViewer: React.FC = () => {
     <Dialog open={true} onOpenChange={(open) => { if (!open) actions.close(); }}>
       <DialogPortal>
         <DialogPrimitive.Content
-          className="image-viewer-overlay"
+          className="fixed inset-0 flex items-center justify-center z-9999 bg-black/95 animate-[imageViewerFadeIn_0.2s_ease-out] select-none"
+          data-dbg="OverlayImageViewer"
           onClick={handleOverlayClick}
           onEscapeKeyDown={(e) => {
             e.preventDefault();
@@ -182,12 +190,12 @@ export const OverlayImageViewer: React.FC = () => {
           <DialogPrimitive.Title className="sr-only">Image Viewer</DialogPrimitive.Title>
 
           {/* Toolbar buttons */}
-          <div className="image-viewer-toolbar">
+          <div className="fixed top-6 right-6 z-10001 flex gap-3 animate-[toolbarSlideIn_0.3s_ease-out] max-md:top-4 max-md:right-4 max-md:gap-2">
             {/* Save button */}
             <Button
               variant="ghost"
               size="icon"
-              className="image-viewer-tool-btn"
+              className={TOOL_BTN}
               onClick={handleSaveImage}
               aria-label="Save image"
               title="Save image"
@@ -199,7 +207,7 @@ export const OverlayImageViewer: React.FC = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="image-viewer-tool-btn image-viewer-close"
+              className={TOOL_BTN}
               onClick={actions.close}
               aria-label="Close image viewer"
               title="Close"
@@ -213,7 +221,7 @@ export const OverlayImageViewer: React.FC = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="image-viewer-nav image-viewer-nav-prev"
+              className={`${NAV_BTN} left-8 max-md:left-4`}
               onClick={handlePrevious}
               aria-label="Previous image"
             >
@@ -222,24 +230,24 @@ export const OverlayImageViewer: React.FC = () => {
           )}
 
           {/* Image container */}
-          <div className="image-viewer-content">
+          <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center">
             {isImageLoading && (
-              <div className="image-viewer-loading">
-                <div className="loading-spinner-large">
-                  <div className="spinner-circle-large"></div>
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center gap-4">
+                <div className="w-15 h-15">
+                  <div className="w-full h-full border-4 border-white/20 border-t-white rounded-full animate-[spin_0.8s_linear_infinite]"></div>
                 </div>
-                <div className="loading-text">Loading...</div>
+                <div className="text-base text-white/80 font-medium">Loading...</div>
               </div>
             )}
             <img
               src={currentImage.url}
               alt={currentImage.alt || `Image ${currentIndex + 1}`}
-              className="image-viewer-image"
+              className="max-w-full max-h-[90vh] w-auto h-auto object-contain object-center rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.5)] animate-[imageZoomIn_0.3s_ease-out]"
               onLoad={handleImageLoad}
               style={{ display: isImageLoading ? 'none' : 'block' }}
             />
             {currentImage.alt && !isImageLoading && (
-              <div className="image-viewer-caption">
+              <div className="fixed bottom-20 left-1/2 transform-[translateX(-50%)] max-w-[80vw] px-6 py-3 bg-black/80 border border-white/10 rounded-lg text-white text-sm leading-normal text-center backdrop-blur-[10px] animate-[captionSlideUp_0.3s_ease-out] max-md:bottom-35 max-md:max-w-[90vw] max-md:px-4 max-md:py-2.5 max-md:text-[13px]">
                 {currentImage.alt}
               </div>
             )}
@@ -250,7 +258,7 @@ export const OverlayImageViewer: React.FC = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="image-viewer-nav image-viewer-nav-next"
+              className={`${NAV_BTN} right-8 max-md:right-4`}
               onClick={handleNext}
               aria-label="Next image"
             >
@@ -260,14 +268,14 @@ export const OverlayImageViewer: React.FC = () => {
 
           {/* Thumbnail indicator */}
           {images.length > 1 && (
-            <div className="image-viewer-thumbnails">
-              <div className="thumbnails-container">
+            <div className="fixed bottom-6 left-1/2 transform-[translateX(-50%)] flex flex-col items-center gap-3 max-w-[90vw] animate-[captionSlideUp_0.3s_ease-out] max-md:bottom-4 max-md:max-w-[95vw]">
+              <div className="flex gap-2 p-3 bg-black/80 border border-white/10 rounded-xl backdrop-blur-[10px] overflow-x-auto max-w-full [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.3)_transparent] max-md:p-2 max-md:gap-1.5">
                 {images.map((img, index) => (
                   <Button
                     variant="ghost"
                     size="icon"
                     key={img.id}
-                    className={`thumbnail-item ${index === currentIndex ? 'active' : ''}`}
+                    className={`relative w-20 h-20 shrink-0 border-2 rounded-lg overflow-hidden cursor-pointer transition-all duration-200 bg-white/5 hover:scale-105 max-md:w-15 max-md:h-15 ${index === currentIndex ? 'border-white shadow-[0_0_12px_rgba(255,255,255,0.5)]' : 'border-transparent hover:border-white/30'}`}
                     onClick={() => {
                       setCurrentIndex(index);
                       setIsImageLoading(true);
@@ -277,15 +285,15 @@ export const OverlayImageViewer: React.FC = () => {
                     <img
                       src={img.url}
                       alt={img.alt || `Thumbnail ${index + 1}`}
-                      className="thumbnail-image"
+                      className="w-full h-full object-cover object-center"
                     />
                     {index === currentIndex && (
-                      <div className="thumbnail-active-indicator" />
+                      <div className="absolute bottom-1 left-1/2 transform-[translateX(-50%)] w-6 h-0.75 bg-white rounded-[2px] shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
                     )}
                   </Button>
                 ))}
               </div>
-              <div className="image-viewer-counter">
+              <div className="px-4 py-1.5 bg-black/80 border border-white/10 rounded-2xl backdrop-blur-[10px] text-white text-[13px] font-medium whitespace-nowrap max-md:text-xs max-md:px-3 max-md:py-1">
                 {currentIndex + 1} / {images.length}
               </div>
             </div>

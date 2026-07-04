@@ -1,12 +1,13 @@
 /**
- * InlineFilePreviewPanel — Inline file preview panel for chat view
+ * FilePreviewPanel — 通用文件预览面板（纯受控，无自有可见状态）。
  *
- * Renders as a flex sibling of .chat-content inside .chat-content-wrapper,
- * splitting the horizontal space 50/50 so the user can read a file while
- * continuing to chat.
+ * 由外层容器决定形态与定位:
+ *  - 聊天页 `ChatFilePreviewOverlay` 满铺 chat-content 区(inline);
+ *  - 全局 `GlobalFilePreviewOverlay` 居中弹窗(agent 编辑器 / 工作区侧栏等非聊天场景)。
  *
- * Supports: Markdown (rendered), code (Monaco), JSON, HTML, PDF, text.
- * Read-only — editing is not supported in inline mode.
+ * 能力:Markdown(渲染/源码)、code / JSON / text(Monaco 只读)、HTML(iframe/源码)、
+ * PDF(iframe)、office / other(兜底"用默认应用打开")、就地编辑保存(Monaco)、
+ * 磁盘 mtime 轮询自动刷新、原生全屏、Install Skill。
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -40,17 +41,19 @@ import rehypeRaw from 'rehype-raw';
 import type * as monaco from 'monaco-editor';
 import { FrontMatter, parseFrontMatter } from '../../lib/utils/yamlFrontMatter';
 import { useToast } from '../ui/ToastProvider';
-import './InlineFilePreviewPanel.scss';
 import { Button } from '@/shadcn/button';
 import { Badge } from '@/shadcn/badge';
 import { log } from '@/log';
-const logger = log.child({ mod: 'InlineFilePreviewPanel' });
+const logger = log.child({ mod: 'FilePreviewPanel' });
+// 共享 Tailwind class 常量（原 SCSS .inline-preview-loading / -spinner）。
+const LOADING_BOX = 'flex flex-col items-center justify-center gap-3 h-full text-[#9ca3af] text-[13px]';
+const SPINNER = 'w-6 h-6 border-[2.5px] border-black/8 border-t-[#404040] rounded-full animate-spin';
 
 // ============================================================
-// Types (reuse the same descriptor shape as OverlayFileViewer)
+// Types
 // ============================================================
 
-export interface InlineFileDescriptor {
+export interface FilePreviewDescriptor {
   name: string;
   url: string;
   mimeType?: string;
@@ -58,8 +61,8 @@ export interface InlineFileDescriptor {
   lastModified?: string;
 }
 
-export interface InlineFilePreviewPanelProps {
-  file: InlineFileDescriptor | null;
+export interface FilePreviewPanelProps {
+  file: FilePreviewDescriptor | null;
   isOpen: boolean;
   onClose: () => void;
   onDirtyStateChange?: (isDirty: boolean) => void;
@@ -68,7 +71,7 @@ export interface InlineFilePreviewPanelProps {
 }
 
 // ============================================================
-// Helpers (duplicated from OverlayFileViewer to stay decoupled)
+// Helpers
 // ============================================================
 
 type FileCategory = 'code' | 'text' | 'json' | 'markdown' | 'html' | 'pdf' | 'office' | 'other';
@@ -123,7 +126,7 @@ function getExtension(filename: string): string {
   return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
 }
 
-function classifyFile(file: InlineFileDescriptor): FileCategory {
+function classifyFile(file: FilePreviewDescriptor): FileCategory {
   const ext = getExtension(file.name);
   if (file.mimeType) {
     if (file.mimeType === 'application/pdf') return 'pdf';
@@ -172,14 +175,14 @@ function formatFileSize(bytes?: number): string {
 
 function getFileIcon(category: FileCategory) {
   switch (category) {
-    case 'code': return <Code size={16} />;
-    case 'text': return <FileText size={16} />;
-    case 'json': return <Braces size={16} />;
-    case 'markdown': return <BookOpen size={16} />;
-    case 'html': return <Globe size={16} />;
-    case 'pdf': return <FileType size={16} />;
-    case 'office': return <FileSpreadsheet size={16} />;
-    default: return <File size={16} />;
+    case 'code': return <Code size={14} />;
+    case 'text': return <FileText size={14} />;
+    case 'json': return <Braces size={14} />;
+    case 'markdown': return <BookOpen size={14} />;
+    case 'html': return <Globe size={14} />;
+    case 'pdf': return <FileType size={14} />;
+    case 'office': return <FileSpreadsheet size={14} />;
+    default: return <File size={14} />;
   }
 }
 
@@ -216,9 +219,9 @@ const ReadonlyMonacoViewer: React.FC<{ content: string; language: string }> = ({
   }, [content, language]);
 
   return (
-    <div className="inline-preview-monaco-wrapper">
-      {!isReady && <div className="inline-preview-loading"><div className="inline-preview-spinner" /><span>Loading…</span></div>}
-      <div ref={containerRef} className="inline-preview-monaco-container" />
+    <div className="h-full relative">
+      {!isReady && <div className={LOADING_BOX}><div className={SPINNER} /><span>Loading…</span></div>}
+      <div ref={containerRef} className="h-full w-full" />
     </div>
   );
 };
@@ -245,7 +248,7 @@ const FrontMatterTable: React.FC<{ frontMatter: FrontMatter }> = ({ frontMatter 
 // Component
 // ============================================================
 
-export const InlineFilePreviewPanel: React.FC<InlineFilePreviewPanelProps> = ({
+export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
   file,
   isOpen,
   onClose,
@@ -596,24 +599,24 @@ export const InlineFilePreviewPanel: React.FC<InlineFilePreviewPanelProps> = ({
     const isNonText = category === 'pdf' || category === 'office' || category === 'other';
 
     if (loadError) {
-      return <div className="inline-preview-error"><AlertTriangle size={32} /><p>{loadError}</p></div>;
+      return <div className="flex flex-col items-center justify-center gap-3 h-full text-[#9ca3af] p-6 text-center"><AlertTriangle size={32} className="text-[#f59e0b]" /><p className="text-[13px] m-0 max-w-75 wrap-break-word">{loadError}</p></div>;
     }
 
     if (!isNonText && (isLoading || !isContentReady || loadedFileKeyRef.current !== fileKey)) {
-      return <div className="inline-preview-loading"><div className="inline-preview-spinner" /><span>Loading…</span></div>;
+      return <div className={LOADING_BOX}><div className={SPINNER} /><span>Loading…</span></div>;
     }
 
     if (isEditing) {
       return (
-        <div className="inline-preview-edit-wrapper">
-          {isEditorLoading && <div className="inline-preview-loading"><div className="inline-preview-spinner" /><span>Loading editor…</span></div>}
+        <div className="flex flex-col h-full min-h-0 relative">
+          {isEditorLoading && <div className={LOADING_BOX}><div className={SPINNER} /><span>Loading editor…</span></div>}
           {saveError && (
-            <div className="inline-preview-save-error">
+            <div className="flex items-center gap-2 px-3 py-2 bg-[#fef2f2] border-b border-[#fecaca] text-[#dc2626] text-xs font-medium shrink-0">
               <AlertTriangle size={14} />
               <span>{saveError}</span>
             </div>
           )}
-          <div ref={monacoContainerRef} className="inline-preview-monaco-container" />
+          <div ref={monacoContainerRef} className="h-full w-full" />
         </div>
       );
     }
@@ -622,7 +625,7 @@ export const InlineFilePreviewPanel: React.FC<InlineFilePreviewPanelProps> = ({
       case 'html':
         if (viewMode === 'source') return <ReadonlyMonacoViewer content={textContent ?? ''} language="html" />;
         if (!htmlBlobUrl) return null;
-        return <iframe className="inline-preview-iframe" src={htmlBlobUrl} title={file.name} sandbox="allow-scripts allow-popups" />;
+        return <iframe className="w-full h-full border-none" src={htmlBlobUrl} title={file.name} sandbox="allow-scripts allow-popups" />;
 
       case 'json':
         return <ReadonlyMonacoViewer content={textContent ?? ''} language="json" />;
@@ -631,7 +634,7 @@ export const InlineFilePreviewPanel: React.FC<InlineFilePreviewPanelProps> = ({
         if (viewMode === 'source') return <ReadonlyMonacoViewer content={textContent ?? ''} language="markdown" />;
         const { frontMatter, content: body } = parseFrontMatter(textContent ?? '');
         return (
-          <div className="inline-preview-markdown">
+          <div className="inline-preview-markdown px-6 py-5 text-base leading-[1.8] text-[#2b2b2b] wrap-break-word">
             {frontMatter && <FrontMatterTable frontMatter={frontMatter} />}
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}
               components={{
@@ -653,90 +656,95 @@ export const InlineFilePreviewPanel: React.FC<InlineFilePreviewPanelProps> = ({
 
       case 'pdf': {
         const src = isLocalFile(file.url) ? `file://${getLocalPath(file.url)}` : file.url;
-        return <iframe className="inline-preview-iframe" src={`${src}#view=FitH`} title={file.name} />;
+        return <iframe className="w-full h-full border-none" src={`${src}#view=FitH`} title={file.name} />;
       }
 
       case 'office':
       case 'other':
       default:
         return (
-          <div className="inline-preview-fallback">
+          <div className="flex flex-col items-center justify-center gap-3 h-full text-[#9ca3af] p-6 text-center">
             <FileIcon size={40} />
-            <p>This file type cannot be previewed inline.</p>
-            <Button variant="default" size="sm" className="inline-preview-open-btn" onClick={handleOpenExternal}>Open with Default App</Button>
+            <p className="text-[13px] m-0">This file type cannot be previewed inline.</p>
+            <Button variant="default" size="sm" className="px-4 py-2 border border-black/12 rounded-lg bg-white text-[#444444] text-[13px] hover:bg-black/4 hover:border-black/20" onClick={handleOpenExternal}>Open with Default App</Button>
           </div>
         );
     }
   };
 
   return (
-    <div className={`inline-file-preview-panel${isFullscreen ? ' inline-preview-fullscreen' : ''}`} ref={contentRef} style={style}>
+    <div
+      data-dbg="inline-file-preview-panel"
+      className="inline-preview-fullscreen flex-1 flex flex-col min-w-0 h-full bg-white overflow-hidden animate-[inlinePreviewSlideIn_0.3s_cubic-bezier(0.16,1,0.3,1)] will-change-[transform,opacity]"
+      ref={contentRef}
+      style={style}
+    >
       {/* Header */}
-      <div className="inline-preview-header">
-        <div className="inline-preview-file-info">
-          <span className="inline-preview-icon">{getFileIcon(category)}</span>
-          <div className="inline-preview-title-block">
-            <span className="inline-preview-filename" title={file.name}>{file.name}</span>
-            <span className="inline-preview-meta">
+      <div className="inline-preview-header flex items-center justify-between px-3 py-1 border-b border-black/8 shrink-0 gap-2">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span className="shrink-0 text-[#6b7280] flex items-center">{getFileIcon(category)}</span>
+          <div className="flex flex-col min-w-0 gap-0.5">
+            <span className="text-[13px] font-medium text-[#2b2b2b] truncate" title={file.name}>{file.name}</span>
+            <span className="flex items-center gap-1.5 min-w-0 text-[11px] text-[#9ca3af]">
               {ext.toUpperCase() || 'FILE'}
               {fileSize !== undefined ? ` · ${formatFileSize(fileSize)}` : ''}
               {file.lastModified ? ` · ${file.lastModified}` : ''}
-              <Badge className={`inline-preview-mode-badge ${isEditing ? 'inline-preview-mode-edit' : 'inline-preview-mode-preview'}`}>
+              <Badge className={`inline-block text-[10px] font-semibold tracking-[0.4px] px-1.5 py-px rounded leading-[1.4] ${isEditing ? 'bg-[#fef3c7] text-[#92400e] border-[#fcd34d]' : 'bg-[#ededed] text-[#171717] border-[#cfcfcf]'}`}>
                 {isEditing ? 'EDIT' : 'PREVIEW'}
               </Badge>
             </span>
           </div>
         </div>
-        <div className="inline-preview-actions">
+        <div className="flex items-center gap-0.5 shrink-0">
           {isEditing ? (
             <>
-              <Button variant="ghost" size="icon" className={isDirty ? 'inline-preview-btn-dirty' : ''} onClick={handleSave} disabled={isSaving || !isDirty} title={isDirty ? 'Save (Ctrl/Cmd+S)' : 'No changes'}>
-                <Save size={16} />
+              <Button variant="ghost" size="icon-sm" className={isDirty ? 'text-[#dc2626] animate-[inlinePreviewSavePulse_1.5s_ease-in-out_infinite]' : ''} onClick={handleSave} disabled={isSaving || !isDirty} title={isDirty ? 'Save (Ctrl/Cmd+S)' : 'No changes'}>
+                <Save size={14} />
               </Button>
-              <Button variant="ghost" size="icon" onClick={handleCancelEdit} disabled={isSaving} title="Exit Edit Mode">
-                <LogOut size={16} />
+              <Button variant="ghost" size="icon-sm" onClick={handleCancelEdit} disabled={isSaving} title="Exit Edit Mode">
+                <LogOut size={14} />
               </Button>
             </>
           ) : (
             <>
               {(category === 'html' || category === 'markdown') && (
-                <Button variant="ghost" size="icon" onClick={() => setViewMode(v => v === 'render' ? 'source' : 'render')}
+                <Button variant="ghost" size="icon-sm" onClick={() => setViewMode(v => v === 'render' ? 'source' : 'render')}
                   title={viewMode === 'render' ? 'View Source' : 'View Rendered'}>
-                  {viewMode === 'render' ? <Code size={16} /> : <Eye size={16} />}
+                  {viewMode === 'render' ? <Code size={14} /> : <Eye size={14} />}
                 </Button>
               )}
               {isEditable && (
-                <Button variant="ghost" size="icon" onClick={handleEdit} title="Edit">
-                  <Pencil size={16} />
+                <Button variant="ghost" size="icon-sm" onClick={handleEdit} title="Edit">
+                  <Pencil size={14} />
                 </Button>
               )}
-              <Button variant="ghost" size="icon" onClick={handleOpenExternal} title="Open externally">
-                <ExternalLink size={16} />
+              <Button variant="ghost" size="icon-sm" onClick={handleOpenExternal} title="Open externally">
+                <ExternalLink size={14} />
               </Button>
-              <Button variant="ghost" size="icon" onClick={handleDownload} title="Show in folder">
-                <Download size={16} />
+              <Button variant="ghost" size="icon-sm" onClick={handleDownload} title="Show in folder">
+                <Download size={14} />
               </Button>
               {onInstallSkill && isLocalFile(file.url) && isInstallableSkillArtifact(getLocalPath(file.url)) && (
-                <Button variant="ghost" size="icon" onClick={() => onInstallSkill(getLocalPath(file.url))} title="Install Skill">
-                  <Download size={16} />
+                <Button variant="ghost" size="icon-sm" onClick={() => onInstallSkill(getLocalPath(file.url))} title="Install Skill">
+                  <Download size={14} />
                 </Button>
               )}
-              <Button variant="ghost" size="icon" onClick={() => { void toggleFullscreen(); }} title={isFullscreen ? 'Exit Fullscreen (Ctrl+Shift+F)' : 'Fullscreen (Ctrl+Shift+F)'}>
-                {isFullscreen ? <Minimize size={16} /> : <Monitor size={16} />}
+              <Button variant="ghost" size="icon-sm" onClick={() => { void toggleFullscreen(); }} title={isFullscreen ? 'Exit Fullscreen (Ctrl+Shift+F)' : 'Fullscreen (Ctrl+Shift+F)'}>
+                {isFullscreen ? <Minimize size={14} /> : <Monitor size={14} />}
               </Button>
             </>
           )}
-          <Button variant="ghost" size="icon" className="inline-preview-close" onClick={handleClose} title="Close preview">
-            <X size={16} />
+          <Button variant="ghost" size="icon-sm" className="ml-1 relative before:content-[''] before:absolute before:-left-1 before:top-1 before:bottom-1 before:w-px before:bg-black/10 hover:bg-red-500/10 hover:text-[#dc2626]" onClick={handleClose} title="Close preview">
+            <X size={14} />
           </Button>
         </div>
       </div>
       {/* Body */}
-      <div className="inline-preview-body">
+      <div className="flex-1 overflow-auto relative custom-scrollbar">
         {renderBody()}
       </div>
     </div>
   );
 };
 
-export default InlineFilePreviewPanel;
+export default FilePreviewPanel;
