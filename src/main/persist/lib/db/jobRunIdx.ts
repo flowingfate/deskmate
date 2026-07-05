@@ -130,6 +130,20 @@ export class JobRunIdx {
     return row.n;
   }
 
+  /** 该 profile 全部 schedule_run 行数（全表 COUNT，用于存储概览）。 */
+  public countAll(): number {
+    const row = this.db.prepare('SELECT count(*) AS n FROM job_runs').get() as { n: number };
+    return row.n;
+  }
+
+  /** 某 agent 的 schedule_run 行数（`ix_runs_agent_started` 命中）。 */
+  public countAgent(agentId: string): number {
+    const row = this.db
+      .prepare('SELECT count(*) AS n FROM job_runs WHERE agent_id = ?')
+      .get(agentId) as { n: number };
+    return row.n;
+  }
+
   /** 删 job 时连带清掉它的 runs。返回受影响行数（仅供日志/测试断言）。 */
   public removeByJob(jobId: string): number {
     const info = this.db.prepare('DELETE FROM job_runs WHERE job_id = ?').run(jobId);

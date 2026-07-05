@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-15 (Phase 5 Domain Message + PersistedJsonLine + appendDomainMessage/appendToolResponse/rewriteMessages 三招) -->
+<!-- Last verified: 2026-07-05 (新增 storageOverview.ts + getStorageOverview/revealStoragePath 通道) -->
 
 # Persist 模块（新布局 store 层）
 
@@ -20,6 +20,7 @@
 | `knowledge.ts` | agent knowledge/ 目录生命周期 | tiny |
 | `auth.ts` | `LegacyAuth` / `PiAuth`：auth.json / auth.pi.json | small |
 | `ipc.ts` | `registerPersistIpc()` —— dry-run handler，**未接入 startup pipeline** | small |
+| `storageOverview.ts` | 「本地数据透明」聚合器:只读递归统计。**以 agent 为组**（`AgentStorageGroup`：会话/定时/知识/config 四子项，config 用减法兜底守恒）+ profile 级共享分类（`StorageCategory`：skills/subAgents/mcp/models/搜索索引/归档/profileConfig）。`computeStorageOverview` + reveal 边界校验 `resolveRevealTarget`。`/settings/persist` 页数据源 | small |
 | `lib/atomic.ts` | tmp→rename 原子写 + 增量 helpers | small |
 | `lib/emit.ts` | `emit()` —— persist → renderer 广播入口（mainWindow 不存在时 no-op） | tiny |
 | `lib/root.ts` | `getAppRoot()` + `setRootForTesting()` | tiny |

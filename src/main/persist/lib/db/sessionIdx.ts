@@ -138,6 +138,20 @@ export class SessionIdx {
     return row.n;
   }
 
+  /** 该 profile 全部 regular session 行数（全表 COUNT，用于存储概览）。 */
+  public countAll(): number {
+    const row = this.db.prepare('SELECT count(*) AS n FROM regular_sessions').get() as { n: number };
+    return row.n;
+  }
+
+  /** 某 agent 的 regular session 行数（`ix_regular_agent_updated` 命中）。 */
+  public countAgent(agentId: string): number {
+    const row = this.db
+      .prepare('SELECT count(*) AS n FROM regular_sessions WHERE agent_id = ?')
+      .get(agentId) as { n: number };
+    return row.n;
+  }
+
   /**
    * 列出某 agent 已收藏 entry（按 starred_at 倒序）；agentId 省略 → profile 内全部 starred。
    * 偏序索引 `ix_regular_agent_starred` 命中。

@@ -4,11 +4,14 @@
  * [`src/shared/ipc/persist.ts`](../../shared/ipc/persist.ts)。
  */
 
-import type { IpcMain } from 'electron';
+import { shell, type IpcMain } from 'electron';
 
 import { renderToMain, type PersistResult, type PersistSnapshot } from '../../shared/ipc/persist';
 import { Profiles } from './profiles';
 import { emit } from './lib/emit';
+import { getAppRoot } from './lib/root';
+import { PERSIST_PATH } from '../../shared/persist/path';
+import { computeStorageOverview, resolveRevealTarget } from './storageOverview';
 import type { AgentRecord, ArchivedAgentEntry } from '../../shared/persist/types';
 
 function err(error: unknown): { success: false; error: string } {
@@ -284,6 +287,35 @@ export function registerPersistIpc(ipc: IpcMain): void {
     try {
       const profile = await Profiles.get().active();
       await profile.patchSettings({ webSearch: settings });
+      return { success: true };
+    } catch (e) { return err(e); }
+  });
+
+  // ─────────── 本地数据透明（/settings/persist） ───────────
+
+  handle.getStorageOverview(async () => {
+    try {
+      const profiles = Profiles.get();
+      const profile = await profiles.active();
+      const data = await computeStorageOverview(profile, profiles);
+      return { success: true, data };
+    } catch (e) { return err(e); }
+  });
+
+  handle.revealStoragePath(async (_e, absPath) => {
+    try {
+      const profiles = Profiles.get();
+      const profile = await profiles.active();
+      const root = getAppRoot();
+      const profileRoot = PERSIST_PATH.profileDir(root, profile.id);
+      const resolved = await resolveRevealTarget(profileRoot, root, absPath);
+      if (!resolved) return { success: false, error: 'Path is outside the profile directory or does not exist' };
+      if (resolved.isFile) {
+        shell.showItemInFolder(resolved.target);
+      } else {
+        const openErr = await shell.openPath(resolved.target);
+        if (openErr) return { success: false, error: openErr };
+      }
       return { success: true };
     } catch (e) { return err(e); }
   });

@@ -54,6 +54,98 @@ export interface PersistSnapshot {
 }
 
 // ──────────────────────────────────────────────
+// 本地数据透明（/settings/persist）
+// ──────────────────────────────────────────────
+
+/**
+ * profile 级共享数据的一条扁平分类（不隶属任何单一 agent）。
+ * agent 私有数据（会话/定时/知识/配置）改由 `AgentStorageGroup` 承载，不在此列。
+ */
+export interface StorageCategory {
+  /** 稳定 key（i18n / 测试断言用），不展示。 */
+  key:
+    | 'skills'
+    | 'subAgents'
+    | 'mcp'
+    | 'models'
+    | 'searchIndex'
+    | 'archive'
+    | 'profileConfig';
+  /** 展示名。 */
+  label: string;
+  /** 一句话说明这类数据是什么。 */
+  description: string;
+  /** 占盘字节数（递归统计）。 */
+  bytes: number;
+  /** 该分类对应的磁盘绝对路径（展示 + 在文件管理器中打开）。 */
+  path: string;
+  /** 可选的条目计数。 */
+  count?: number;
+}
+
+/** 单个 agent 分组内的一个子项（会话/定时/知识/配置）。 */
+export interface AgentStoragePart {
+  key: 'conversations' | 'scheduledRuns' | 'knowledge' | 'config';
+  label: string;
+  bytes: number;
+  /** 会话数 / 定时运行数等；config、knowledge 无计数则缺席。 */
+  count?: number;
+  /** 该子项对应的磁盘绝对路径（reveal 用）。 */
+  path: string;
+}
+
+/**
+ * 一个 agent 的存储分组 —— 把该 agent 私有的会话、定时运行、知识库、配置聚合到一起，
+ * 体现"agent 是一等公民"的数据组织轴心。
+ */
+export interface AgentStorageGroup {
+  agentId: string;
+  name: string;
+  emoji?: string;
+  avatar?: string;
+  model: string;
+  /** 受保护 agent（不可删）；UI 据此弱化删除入口。 */
+  locked?: boolean;
+  /** agent 目录绝对路径（`agents/a_xxx`），reveal 用。 */
+  agentRoot: string;
+  /** agent 目录递归总字节。 */
+  totalBytes: number;
+  /** 子项明细（按字节倒序）。 */
+  parts: AgentStoragePart[];
+}
+
+/** 当前 active profile 的本地存储全景（agent 分组 + profile 级共享）。 */
+export interface StorageOverview {
+  profileId: string;
+  profileName: string;
+  profileKind: 'guest' | 'signed_in';
+  /** 应用数据根目录（`~/.deskmate`）。 */
+  dataRoot: string;
+  /** 当前 profile 根目录（`~/.deskmate/profiles/p_xxx`）。 */
+  profileRoot: string;
+  /** profile 根目录递归统计的总字节数。 */
+  totalBytes: number;
+  /** 所有 agent 目录合计字节（= Σ agents[].totalBytes）。 */
+  agentsTotalBytes: number;
+  /** 按 agent 分组的私有数据（按 totalBytes 倒序）。 */
+  agents: AgentStorageGroup[];
+  /** profile 级共享分类（按字节倒序）。 */
+  shared: StorageCategory[];
+  /** 概览计数。 */
+  stats: {
+    agents: number;
+    conversations: number;
+    scheduledRuns: number;
+    skills: number;
+    subAgents: number;
+    mcpServers: number;
+    archivedAgents: number;
+  };
+  /** 统计生成时间（ISO）。 */
+  generatedAt: string;
+}
+
+// ──────────────────────────────────────────────
 // Render → Main
 // ──────────────────────────────────────────────
 
@@ -106,6 +198,12 @@ type RenderToMain = {
   // ─────────── Settings ───────────
   updateConfirmationSettings: { call: [settings: ConfirmationSettings]; return: PersistResult };
   updateWebSearchSettings: { call: [settings: WebSearchSettings]; return: PersistResult };
+
+  // ─────────── 本地数据透明（/settings/persist） ───────────
+  /** 汇总当前 active profile 的本地存储占用（递归统计各分类字节 + 条目计数）。 */
+  getStorageOverview: { call: []; return: PersistResult<StorageOverview> };
+  /** 在系统文件管理器中打开指定绝对路径（限当前 profile 目录树内）。 */
+  revealStoragePath: { call: [absPath: string]; return: PersistResult };
 };
 
 // ──────────────────────────────────────────────
