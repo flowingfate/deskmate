@@ -13,6 +13,7 @@ import SubAgentListItem from './SubAgentListItem'
 import { AgentContextType } from '../../types/agentContextTypes'
 import type { SubAgentConfig } from '../../lib/userData/types'
 import { subAgentApi } from '@/ipc/subAgent'
+import { SubAgentImportAtom } from './subAgentCommands.atom'
 import { log } from '@/log';
 const logger = log.child({ mod: 'SubAgentsView' });
 
@@ -57,13 +58,16 @@ const SubAgentsView: React.FC = () => {
     }
   }, [subAgents, selectedSubAgent])
 
-  // 外部入口（AgentSubAgentsTab）通过 `?selected=<name>` 表达“进来并预选某 sub-agent”的意图。
-  // 命中后清掉该 query（replace，不新增历史条目）。subAgents 首帧可能还在加载，此时不清 query，
-  // 等数据到位再选中，避免意图丢失。放在自动选首项 effect 之后，故 selected 优先级更高。
+  // 外部入口（AgentSubAgentsTab / Create·Edit 提交后跳转）通过 `?selected=<name>` 表达
+  // “进来并预选某 sub-agent”的意图。命中后清掉该 query（replace，不新增历史条目）。
+  // subAgents 首帧可能还在加载、或新建项经 persist 通道回灌尚未到位，此时 target 还不在
+  // 列表里——保留 query 等数据到位再选中，避免意图丢失。放在自动选首项 effect 之后，
+  // 故 selected 优先级更高。
   useEffect(() => {
     const target = searchParams.get('selected')
-    if (!target || subAgents.length === 0) return
-    if (subAgents.some((s) => s.name === target)) setSelectedSubAgent(target)
+    if (!target) return
+    if (!subAgents.some((s) => s.name === target)) return
+    setSelectedSubAgent(target)
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -74,31 +78,12 @@ const SubAgentsView: React.FC = () => {
     )
   }, [searchParams, subAgents, setSearchParams])
 
-  // Listen for refresh events (来源：内部 dispatch，仅传 subAgentName 用于自动选中；
-  // 数据刷新由 subAgents.atom 通过 persist 通道自动完成，无需手动 refresh)
+  // 「Import from Claude Code」隐藏 file input 注册进 atom，菜单项调 open() 触发。
+  const importActions = SubAgentImportAtom.useChange()
   useEffect(() => {
-    const handleRefresh = (event: CustomEvent<{ subAgentName?: string } | null>) => {
-      if (event.detail?.subAgentName) {
-        setSelectedSubAgent(event.detail.subAgentName)
-      }
-    }
-
-    window.addEventListener('subAgents:refreshList', handleRefresh as EventListener)
-    return () => {
-      window.removeEventListener('subAgents:refreshList', handleRefresh as EventListener)
-    }
-  }, [])
-
-  // Listen for "Import from Claude Code" event (from SubAgentsAddMenuDropdown)
-  useEffect(() => {
-    const handleImport = () => {
-      importFileInputRef.current?.click()
-    }
-    window.addEventListener('subAgents:importFromClaudeCode', handleImport)
-    return () => {
-      window.removeEventListener('subAgents:importFromClaudeCode', handleImport)
-    }
-  }, [])
+    importActions.register(() => importFileInputRef.current?.click())
+    return () => importActions.unregister()
+  }, [importActions])
 
   // Handle import after file selection
   const handleImportFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {

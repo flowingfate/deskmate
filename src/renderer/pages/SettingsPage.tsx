@@ -47,17 +47,9 @@ const SettingsPage: React.FC = () => {
       />
 
       <SettingsDialogs
-        deleteSkillDialog={actions.deleteSkillDialog}
-        setDeleteSkillDialog={actions.setDeleteSkillDialog}
-        handleConfirmDeleteSkill={actions.handleConfirmDeleteSkill}
         deleteMcpDialog={actions.deleteMcpDialog}
         setDeleteMcpDialog={actions.setDeleteMcpDialog}
         handleConfirmDeleteMcp={actions.handleConfirmDeleteMcp}
-        deleteSubAgentDialog={actions.deleteSubAgentDialog}
-        setDeleteSubAgentDialog={actions.setDeleteSubAgentDialog}
-        handleConfirmDeleteSubAgent={actions.handleConfirmDeleteSubAgent}
-        applySubAgentDialogState={actions.applySubAgentDialogState}
-        setApplySubAgentDialogState={actions.setApplySubAgentDialogState}
       />
     </div>
   );

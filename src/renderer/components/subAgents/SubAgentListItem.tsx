@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom'
 import type { SubAgentConfig } from '../../lib/userData/types'
 import { useToast } from '../ui/ToastProvider'
 import { subAgentApi } from '@/ipc/subAgent'
+import { DeleteSubAgentDialogAtom } from './subAgentCommands.atom'
+import { ApplySubAgentDialogAtom } from './ApplySubAgentToAgentsDialog'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -66,16 +68,15 @@ const SubAgentListItem: React.FC<SubAgentListItemProps> = ({
     navigate(`/settings/sub-agents/edit/${encodeURIComponent(config.name)}`)
   }
 
+  const requestDelete = DeleteSubAgentDialogAtom.useChange().requestDelete
+  const applyToAgents = ApplySubAgentDialogAtom.useChange().setSubAgent
+
   const handleDelete = () => {
-    window.dispatchEvent(new CustomEvent('subAgent:delete', {
-      detail: { subAgentName: config.name }
-    }))
+    void requestDelete(config.name)
   }
 
   const handleApplyToAgents = () => {
-    window.dispatchEvent(new CustomEvent('subAgents:applyToAgents', {
-      detail: { subAgentName: config.name }
-    }))
+    applyToAgents(config.name)
   }
 
   const handleExportAsClaudeCode = async () => {

@@ -19,6 +19,8 @@ import { tryResolveUriToPath } from '@/lib/internalUrls';
 import { IGNORE_PATTERNS, WATCH_EXCLUDES, isImageFile } from './workspaceConstants';
 import { usePasteToWorkspace } from './PasteToWorkspaceProvider';
 import { WorkspaceMenuActions } from './WorkspaceExplorerSidepane';
+import { ImageViewerAtom } from '@/components/ui/OverlayImageViewer';
+import { useOpenFilePreview } from '@/components/filePreview/filePreviewScope';
 
 export interface UseFileExplorerSectionParams {
   rootUri: string;
@@ -69,6 +71,8 @@ export function useFileExplorerSection({
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const { openPasteDialog } = usePasteToWorkspace();
+  const imageViewer = ImageViewerAtom.useChange();
+  const openFilePreview = useOpenFilePreview();
 
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const watchStartedRef = useRef(false);
@@ -239,19 +243,14 @@ export function useFileExplorerSection({
     } catch { /* ignore */ }
   }, [workspacePath]);
 
-  // 文件点击：图片走 imageViewer，其余走 fileViewer
+  // 文件点击：图片走 imageViewer atom，其余走就近作用域文件预览
   const handleFileClick = useCallback((node: FileTreeNode) => {
-    const detail = isImageFile(node.name)
-      ? {
-          event: 'imageViewer:open',
-          payload: { images: [{ id: node.path, url: `file://${node.path}`, alt: node.name }], initialIndex: 0 },
-        }
-      : {
-          event: 'fileViewer:open',
-          payload: { file: { name: node.name, url: node.path } },
-        };
-    window.dispatchEvent(new CustomEvent(detail.event, { detail: detail.payload }));
-  }, []);
+    if (isImageFile(node.name)) {
+      imageViewer.open([{ id: node.path, url: `file://${node.path}`, alt: node.name }], 0);
+      return;
+    }
+    openFilePreview({ name: node.name, url: node.path });
+  }, [imageViewer, openFilePreview]);
 
   // ========== 拖拽复制 ==========
 

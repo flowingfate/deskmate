@@ -7,6 +7,7 @@ import { Card } from '@/shadcn/card'
 import SkillListPanel from './SkillListPanel'
 import SkillViewPanel from './SkillViewPanel'
 import { SkillConfig } from '../../lib/userData/types'
+import { useAddSkillFromDevice } from './useAddSkillFromDevice'
 
 interface SkillsContentViewProps {
   skills: SkillConfig[]
@@ -23,13 +24,14 @@ const SkillsContentView: React.FC<SkillsContentViewProps> = ({
   onSelectSkill,
   onSkillMenuToggle
 }) => {
-  // Trigger add Skill event
+  const addSkillFromDevice = useAddSkillFromDevice()
+
   const handleAddFromDeviceArtifact = () => {
-    window.dispatchEvent(new CustomEvent('skills:addFromDeviceArtifact'))
+    void addSkillFromDevice('artifact')
   }
 
   const handleAddFromDeviceFolder = () => {
-    window.dispatchEvent(new CustomEvent('skills:addFromDeviceFolder'))
+    void addSkillFromDevice('folder')
   }
 
   // Show empty state when there are no Skills and not loading

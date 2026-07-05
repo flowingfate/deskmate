@@ -14,7 +14,7 @@
 | `message/MarkdownView.tsx` | 唯一的 Markdown 渲染器：无 state / 无 effect / 无打字机，输入即输出；封装 react-markdown + remark 插件 + Prism 语法高亮 + Mermaid + 本地路径检测；用 `React.memo` 包裹 | ~160 LOC |
 | `message/AssistantMessage.tsx` | 渲染单条 assistant 文本消息；消费 `render-items-manager` 预清洗好的 `cleanedText` / `scheduleIds`，装配 MarkdownView、GeneratedFileCards、GeneratedScheduleCards、CopyButton | ~140 LOC |
 | `message/UserMessage.tsx` | 渲染单条用户消息：MarkdownView + AttachmentList + Copy/Edit 按钮 | ~75 LOC |
-| `message/AttachmentList.tsx` | 用户消息附件列表（图片 / 文件 / Office / 其它）；sandbox 大图(`local://`+fileRef / opaque)经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) 构造 `media://` URL 由 `<img loading=lazy>` 字节直供（不读 base64），小图内联 dataURL；点击通过 `window.dispatchEvent('imageViewer:open' / 'fileViewer:open')` 唤起全局 viewer | ~215 LOC |
+| `message/AttachmentList.tsx` | 用户消息附件列表（图片 / 文件 / Office / 其它）；sandbox 大图(`local://`+fileRef / opaque)经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) 构造 `media://` URL 由 `<img loading=lazy>` 字节直供（不读 base64），小图内联 dataURL；点击图片走 `ImageViewerAtom.open`（`ui/OverlayImageViewer`），点击文件走 `useOpenFilePreview()`（就近作用域路由，聊天页 inline 预览） | ~215 LOC |
 | `message/CopyButton.tsx` | 复制到剪贴板按钮；`text` 支持字符串或惰性 getter | ~60 LOC |
 | `tool/ToolCallsSection.tsx` | 工具调用章节;两套视图共享同一外壳 + CSS transition(220ms): **collapsed** 紧凑 600px 卡片(chip 行 + 单选 detail);**expanded** (view all) 贴边浅灰条 max-h 60vh 内滚,所有工具纵向列出(每张白卡片复用 `ToolDetailView`)。水平 inset 模式:`!px-0` 这层豁免 `.chat-message-flow-reverse > *` 的默认 `--chat-pad-x` padding,由本组件正向控制 margin(collapsed 推内容对齐其他消息)或 padding(expanded bg 撑满 wrapper + 内 padding 拉回对齐) — **不用负 margin breakout**,bg 天然占满 chat 全宽;高度切换由 `AnimatedHeight` 平滑过渡,避免 column-reverse 上方兄弟闪动。`selectedId` 切 mode 时保留 | ~350 LOC |
 | `tool/ToolChip.tsx` | 单个工具胶囊；状态点 executing(琥珀脉动) / failed(红实心) / completed(无点)；选中态深色填充；接收 `label` props 由 ToolCallsSection 计算（renderer 的 `chipLabel` 覆盖优先） | ~75 LOC |
@@ -24,7 +24,7 @@
 | `tool/registerBuiltins.ts` | 集中注册三个内置 renderer（`app` / `shell` / `write`）。子命令分派由各 renderer 自己负责，不在本表 | ~25 LOC |
 | `tool/index.ts` | barrel；import 副作用触发 `registerBuiltinToolRenderers()`；导出 ToolCallsSection / ToolDetailView / registry helpers | ~25 LOC |
 | `tool/renderers/shell/index.tsx` | `shellRenderer` —— `chipLabel` (`shell: <cmd>`) + `InputBlock`（终端 prompt+command）+ `OutputSuccessBlock`（stdout/stderr/exit 终端块） | ~110 LOC |
-| `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，触发 `fileViewer:open` / `imageViewer:open`） | ~110 LOC |
+| `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，图片走 `ImageViewerAtom.open`、其余走 `useOpenFilePreview()`） | ~110 LOC |
 | `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；内部 `pickSubRenderer` 调子命令路由（subagent → spawn / spawn-many；未来 mcp / skill / web ...）；不命中时给出朴素兜底（chip = `app:<sub>`，input = cmd 字符串，output = result 文本） | ~95 LOC |
 | `tool/renderers/app/cmdline.ts` | App 子命令分派的 cmdline 工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
 | `tool/renderers/app/subagent/` | `app subagent spawn` / `spawn-many` 子命令的 renderer 实现包：`index.ts`（路由 spawn/spawn-many）+ `parse.ts`（cmdline 字段抽取）+ `helpers.tsx`（共享 timer / progress bar / steps list）+ `spawn.tsx`（单 task 三 slot）+ `spawnMany.tsx`（并行 task 三 slot）。订阅 `subAgent:stateUpdate` IPC 渲染实时进度 | — |
@@ -40,8 +40,9 @@
 | `chat-input/shared/transformMentions.ts` | 纯函数；把 `[@knowledge://...]`、`[@local://...]`、`[#skill:...]` 这些 mention bracket 形态转换为 markdown inline code（防止前后符号被解析为粗体/链接） | 小 |
 | `chat-input/ThinkingLevelSelector.tsx` | 单聊会话的 thinking level 选择器（pi-ai `ThinkingLevel` 枚举：`minimal/low/medium/high/xhigh`）；仅在活跃模型支持 ≥2 个等级时渲染；写入 `chat.agent.thinkingLevel`，通过 `updateAgent` 持久化到 AGENT.md front-matter。dropdown 顶部 "Auto" 项写入 `thinkingLevel: null` 清除字段，回到 provider 默认 —— 前端不假装知道默认值。运行时由 `pi.streamSimple({ reasoning })` 翻译给各 provider，不再走旧的"Claude→high / GPT→medium"启发式 | 小 |
 | `chat-input/ContextMenu.tsx` | @-提及下拉菜单，用于文件、技能和工作区项目 | — |
+| `chat-input/chatInputCommands.ts` | compose 聊天输入子树的**命令句柄注册表**（替代旧 `chatInput:selectFiles`/`chatInput:screenshot`/`agent:fillInput`/`context:mentionSelect`/`context:skillMentionSelect` window 事件）。consumer 挂载期用 `useRegisterComposeTextHandle`（compose Textarea，`enableContextMenu` 门控，edit 实例不注册）/ `useRegisterComposeFileHandle`（ComposeInput）注册自身方法到模块单例（内部经 ref 转发器，handler 闭包变化免重注册）；producer 直接调 `composeTextCommands.*`（insertMention/insertSkillMention/fillInput）/ `composeFileCommands.*`（selectFiles/screenshot）。**不是 state**——命令式句柄，无 atom/无 re-render/无 nonce diff，只把无类型 `CustomEvent` 换成编译期类型契约 + 可跳转引用。选注册表而非 context：producer 之一 `context-menu.atom.ts` 非 React 组件读不了 context | 小 |
 | `ErrorBar.tsx` | 聊天中的内联错误显示 | — |
-| `../filePreview/ChatFilePreviewOverlay.tsx` | 聊天页 inline 文件预览浮层;满铺 chat-content 区(连 ComposeInput 一起遮住),通过 `fileViewer:open` 事件触发。捕获阶段 + `chatFilePreviewCoordinator` 占用,让全局 `GlobalFilePreviewOverlay` 让出,避免同一事件被两处消费。**外壳薄,渲染共用 `filePreview/FilePreviewPanel`** | — |
+| `../filePreview/ChatFilePreviewOverlay.tsx` | 聊天页 inline 文件预览浮层;满铺 chat-content 区(连 ComposeInput 一起遮住),纯订阅 `ChatFilePreviewAtom` 渲染。聊天子树被 `ChatFilePreviewScope` 包裹，producer 经 `useOpenFilePreview()` 就近命中此 atom（不再监听 `fileViewer:open` 事件）。**外壳薄,渲染共用 `filePreview/FilePreviewPanel`** | — |
 | `chat-side.atom.ts` | `WorkspaceExplorerAtom`（右侧工作区侧栏可见性 + reveal）的 atom；`effectiveToggle` 打开侧栏时顺带 `ChatFilePreviewAtom.cancel()`。文件预览状态已迁到 `filePreview/filePreview.atom.ts` | — |
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
@@ -122,7 +123,7 @@ ChatView (路由同步, 会话操作)
 交互式请求是聊天会话原生的。待处理的请求通过 `InteractiveRequestCard` / `InteractiveSearchCard` / `InteractiveAuthCard` 在时间线中内联渲染，提交或解决后从 UI 中移除。审批请求在每个项目都有批准/拒绝决定后自动提交。选择请求和表单 select 类控件渲染为响应式的换行选项网格，带有 `Other` 回退卡片用于自定义文本输入。`interactive-search` 的网页浏览本体在独立 research window，聊天卡片只承载 focus/cancel 和状态摘要。
 
 ### 用户消息编辑
-内联用户消息编辑通过 `editMessageAtom` 管理。`ChatContainer` 为正在编辑的消息渲染 `EditInlineInput`；底部主输入则保持为 `ComposeInput`，必要时通过 `isInputLocked` 进入只读锁定态。编辑确认对话框由 `AgentLayout` 通过 window-event 桥接拥有；其跳过偏好持久化在 `profile.json` 的 `confirmationSettings.inlineEditRegenerate.skipConfirmation` 中。
+内联用户消息编辑通过 `editMessageAtom` 管理。`ChatContainer` 为正在编辑的消息渲染 `EditInlineInput`；底部主输入则保持为 `ComposeInput`，必要时通过 `isInputLocked` 进入只读锁定态。编辑确认对话框由 `AgentLayout` 挂载 `ModifyMsgConfimOverlay`；`EditInlineInput` 通过其导出的 **imperative confirm atom** `inlineEditConfirmAtom.request({title, description}): Promise<boolean>` 发起确认（旧的 `chatInput:confirmInlineEditRequest/Result` 两段式 window 事件已移除）；skip 逻辑在 `request` 内同步读 `confirmationSettings.inlineEditRegenerate.skipConfirmation`（持久化在 `profile.json`）。
 
 ### 侧边栏和编辑器
 Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `ChatView` 的子组件。Agent 编辑器（`agent-editor/`）在导航到 `/agent/:agentId/settings/*` 时出现。**定时任务（jobs / runs）UI 已搬迁到 [`components/agent-side/`](../agent-side/ai.prompt.md)**：alarm 切换 + jobs CRUD + runs 列表 + AddScheduleOverlay 全部走那条主从二级视图，URL 是真相源；`SchedulesSidepane` / `AgentSchedulesTab` / `SchedulesContentView` 已物理删除。
@@ -188,7 +189,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 - 时间线自动滚动不仅仅由消息数量变化驱动。如果插入了待处理的交互式请求或类似的非消息时间线项，`ChatContainer` 仍需要显式的最新滚动触发（当前由 `ResizeObserver` 稳定窗口兜底）。
 - Agent 编辑器标签页路由使用嵌套的 React Router `<Outlet>` — 添加标签页需要同时修改组件树和 `entries/main.routes.tsx`。
 - Mermaid 图表作为异步 webpack chunk 延迟加载；避免在同步加载的聊天文件中直接导入 `mermaid`。
-- AttachmentList 通过 `window.dispatchEvent('imageViewer:open' / 'fileViewer:open')` 与全局 viewer 解耦。新加附件类型时记得在两侧都注册（事件 detail 字段与 viewer 监听）。
+- 图片预览走 `ImageViewerAtom`（`ui/OverlayImageViewer`），文件预览走 `useOpenFilePreview()`（`filePreview/filePreviewScope`）——**均已从 `imageViewer:open` / `fileViewer:open` window 事件迁到就近作用域 atom 路由**。文件预览的「聊天 inline vs 全局弹窗」二选一由 React context（`ChatFilePreviewScope` 包住 `ChatViewContent` 子树）决定，替代旧的 capture/bubble + coordinator 单例。新增文件触发源：组件里 `const open = useOpenFilePreview()` 后 `open({name, url, ...})`。
 - `.chat-container-reverse` 本身**没有水平 padding** —— 已迁到 `.chat-message-flow-reverse > *` 的子选择器上,通过 `--chat-pad-x` 变量统一。`!px-0` 豁免该 padding,让 `ToolCallsSection` expanded 模式 bg 能天然铺满 chat 全宽。新增直接子元素时自动继承默认 padding;若要做"贴边铺满"效果,加上 `!px-0` 同款豁免类。
 
 ## 后续可做（Backlog）

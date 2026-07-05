@@ -1,17 +1,14 @@
 import { memo } from 'react';
 import { FilePreviewPanel } from './FilePreviewPanel';
 import { ChatFilePreviewAtom } from './filePreview.atom';
-import { useFilePreviewEvent } from './useFilePreviewEvent';
 
 /**
  * 聊天页 inline 文件预览浮层 —— 满铺 chat-content 区(连 ComposeInput 一起遮住)。
- * 触发源:任意位置 `dispatchEvent(new CustomEvent('fileViewer:open', { detail: { file } }))`。
- * 挂载期占用 coordinator,让全局兜底容器 `GlobalFilePreviewOverlay` 让出,避免同一事件被两处消费。
+ * 触发源:聊天子树里的 producer 经 `useOpenFilePreview()`(在 `ChatFilePreviewScope` 内绑定
+ * 到 `ChatFilePreviewAtom`)命令式打开;不再监听全局 `fileViewer:open` 事件。
  */
 function ChatFilePreviewOverlay() {
   const [preview, actions] = ChatFilePreviewAtom.use();
-
-  useFilePreviewEvent({ open: actions.open, isChat: true });
 
   if (!preview) return null;
 

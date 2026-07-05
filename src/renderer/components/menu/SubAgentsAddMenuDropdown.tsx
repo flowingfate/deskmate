@@ -7,6 +7,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/shadcn/dropdown-menu';
+import { SubAgentImportAtom } from '@/components/subAgents/subAgentCommands.atom';
 
 interface SubAgentsAddMenuDropdownProps {
   anchorElement: HTMLElement;
@@ -21,8 +22,9 @@ const SubAgentsAddMenuDropdown: React.FC<SubAgentsAddMenuDropdownProps> = ({
 
   const anchorRect = anchorElement.getBoundingClientRect();
 
+  const openImport = SubAgentImportAtom.useChange().open;
   const handleImportFromClaudeCode = () => {
-    window.dispatchEvent(new CustomEvent('subAgents:importFromClaudeCode'));
+    openImport();
   };
 
   const handleCreateCustom = () => {

@@ -10,7 +10,7 @@
  * 详见 src/main/lib/attachment/ai.prompt.md)。这类 opaque 若 mime 为图片,**UI 仍应
  * 出缩略图** —— 此处按 mime 把它归入图片一类,bytes 通过 `fsApi.readFile` 异步读盘。
  *
- * 点击图片或文件后通过 `window.dispatchEvent` 通知全局 viewer —— 与历史行为一致。
+ * 点击图片走 `ImageViewerAtom.open`；点击文件走 `useOpenFilePreview()`（就近作用域路由：聊天页 inline 预览）。
  */
 
 import React, { useMemo } from 'react';
@@ -22,6 +22,8 @@ import { useCurrentSession } from '@/states/currentSession.atom';
 import { toMediaUrl, type MediaUrlContext } from '@/lib/mediaUrl';
 import FileTypeIcon from '../../ui/FileTypeIcon';
 import { cn } from '@/lib/utilities/utils';
+import { ImageViewerAtom } from '../../ui/OverlayImageViewer';
+import { useOpenFilePreview } from '../../filePreview/filePreviewScope';
 
 type ImageAttachment = Extract<Attachment, { kind: 'image' }>;
 type FileLikeAttachment = Extract<Attachment, { kind: 'text' | 'office' | 'opaque' }>;
@@ -163,6 +165,8 @@ function useFiles(attachments: Attachment[]) {
 
 export const AttachmentList: React.FC<AttachmentListProps> = ({ message }) => {
   const { images, files, imageUrls } = useFiles(message.attachments);
+  const imageViewer = ImageViewerAtom.useChange();
+  const openFilePreview = useOpenFilePreview();
   const total = images.length + files.length;
   if (total === 0) return null;
 
@@ -173,24 +177,16 @@ export const AttachmentList: React.FC<AttachmentListProps> = ({ message }) => {
       url: imageUrls[idx] ?? '',
       alt: att.fileName || `Image ${idx + 1}`,
     }));
-    window.dispatchEvent(
-      new CustomEvent('imageViewer:open', { detail: { images: payload, initialIndex: clickedIndex } }),
-    );
+    imageViewer.open(payload, clickedIndex);
   };
 
   const openFileViewer = (att: FileLikeAttachment) => {
-    window.dispatchEvent(
-      new CustomEvent('fileViewer:open', {
-        detail: {
-          file: {
-            name: att.fileName,
-            url: att.fileUri,
-            mimeType: att.mimeType,
-            size: att.fileSize,
-          },
-        },
-      }),
-    );
+    openFilePreview({
+      name: att.fileName,
+      url: att.fileUri,
+      mimeType: att.mimeType,
+      size: att.fileSize,
+    });
   };
 
   const isSingle = total === 1;

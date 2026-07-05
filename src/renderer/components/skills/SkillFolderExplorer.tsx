@@ -20,6 +20,7 @@ import { Button } from '@/shadcn/button'
 import { ScrollArea } from '@/shadcn/scroll-area'
 import { SkillConfig } from '../../lib/userData/types'
 import { FileInfo } from './SkillViewPanel'
+import { SkillFolderRefreshAtom } from './skillCommands.atom'
 import { log } from '@/log';
 const logger = log.child({ mod: 'SkillFolderExplorer' });
 
@@ -113,28 +114,17 @@ const SkillFolderExplorer: React.FC<SkillFolderExplorerProps> = ({
     setPathHistory([])
   }, [skill.name, loadDirectory])
 
-  // Listen for skill-folder-explorer refresh events
+  // Subscribe to the folder-refresh signal (disk files changed after install/update).
+  // Guard with a nonce ref so navigation (currentPath change) never re-triggers a reload.
+  const [{ skillName: refreshSkillName, nonce: refreshNonce }] = SkillFolderRefreshAtom.use();
+  const lastRefreshNonce = React.useRef(refreshNonce);
   useEffect(() => {
-    const handleRefreshFolderExplorer = (event: CustomEvent) => {
-      const { skillName } = event.detail;
-      // Only refresh when the refreshed skill is the currently displayed skill
-      if (skillName === skill.name) {
-        loadDirectory(currentPath);
-      }
-    };
-
-    window.addEventListener(
-      'skills:refreshFolderExplorer',
-      handleRefreshFolderExplorer as EventListener
-    );
-
-    return () => {
-      window.removeEventListener(
-        'skills:refreshFolderExplorer',
-        handleRefreshFolderExplorer as EventListener
-      );
-    };
-  }, [skill.name, currentPath, loadDirectory]);
+    if (refreshNonce === lastRefreshNonce.current) return;
+    lastRefreshNonce.current = refreshNonce;
+    if (refreshSkillName === skill.name) {
+      loadDirectory(currentPath);
+    }
+  }, [refreshNonce, refreshSkillName, skill.name, currentPath, loadDirectory]);
 
   // Handle directory click
   const handleDirectoryClick = useCallback((item: DirectoryItem) => {

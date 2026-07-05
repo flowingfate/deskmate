@@ -15,6 +15,7 @@ import { traceContext } from '@renderer/lib/chat/traceContext';
 import { agentIpc } from '@renderer/lib/chat/agentIpc';
 import { EditAgentMenuAtom } from '../../menu/EditAgentMenuDropdown';
 import { AttachMenuAtom } from '../../menu/AttachMenuDropdown';
+import { useRegisterComposeFileHandle } from './chatInputCommands';
 import { Button } from '@/shadcn/button';
 import { useChatInputState } from './shared/useChatInputState';
 import { useFileHandling } from './shared/useFileHandling';
@@ -87,16 +88,11 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    const handleSelectFiles = () => handleElectronFileSelect();
-    const handleScreenshot = () => handleScreenshotCapture();
-    window.addEventListener('chatInput:selectFiles', handleSelectFiles);
-    window.addEventListener('chatInput:screenshot', handleScreenshot);
-    return () => {
-      window.removeEventListener('chatInput:selectFiles', handleSelectFiles);
-      window.removeEventListener('chatInput:screenshot', handleScreenshot);
-    };
-  }, [handleElectronFileSelect, handleScreenshotCapture]);
+  // 注册文件命令句柄（AttachMenuDropdown 触发 selectFiles/screenshot）。
+  useRegisterComposeFileHandle({
+    selectFiles: handleElectronFileSelect,
+    screenshot: handleScreenshotCapture,
+  });
 
   async function onCancelChat() {
     try {

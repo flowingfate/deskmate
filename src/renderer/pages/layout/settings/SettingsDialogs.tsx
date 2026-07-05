@@ -8,127 +8,29 @@ import {
   DialogFooter,
 } from '@/shadcn/dialog';
 import { Button } from '@/shadcn/button';
+import DeleteSkillConfirmDialog from '@/components/skills/DeleteSkillConfirmDialog';
 import ApplySkillToAgentsDialog from '@/components/skills/ApplySkillToAgentsDialog';
 import ApplySubAgentToAgentsDialog from '@/components/subAgents/ApplySubAgentToAgentsDialog';
+import DeleteSubAgentConfirmDialog from '@/components/subAgents/DeleteSubAgentConfirmDialog';
 import type { SettingsActions } from './useSettingsActions';
 
 type SettingsDialogsProps = Pick<
   SettingsActions,
-  | 'deleteSkillDialog'
-  | 'setDeleteSkillDialog'
-  | 'handleConfirmDeleteSkill'
   | 'deleteMcpDialog'
   | 'setDeleteMcpDialog'
   | 'handleConfirmDeleteMcp'
-  | 'deleteSubAgentDialog'
-  | 'setDeleteSubAgentDialog'
-  | 'handleConfirmDeleteSubAgent'
-  | 'applySubAgentDialogState'
-  | 'setApplySubAgentDialogState'
 >;
 
 const SettingsDialogs: React.FC<SettingsDialogsProps> = ({
-  deleteSkillDialog,
-  setDeleteSkillDialog,
-  handleConfirmDeleteSkill,
   deleteMcpDialog,
   setDeleteMcpDialog,
   handleConfirmDeleteMcp,
-  deleteSubAgentDialog,
-  setDeleteSubAgentDialog,
-  handleConfirmDeleteSubAgent,
-  applySubAgentDialogState,
-  setApplySubAgentDialogState,
 }) => {
   return (
     <>
-      {/* Delete Skill Confirmation Dialog */}
-      <Dialog
-        open={deleteSkillDialog.isOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeleteSkillDialog({ isOpen: false, skillName: null, usedByAgents: [] });
-          }
-        }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-left">Delete Skill</DialogTitle>
-            <DialogDescription className="text-left">
-              Are you sure you want to delete {deleteSkillDialog.skillName}?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            {deleteSkillDialog.usedByAgents.length > 0 && (
-              <p className="text-sm text-muted-foreground mb-4">
-                This skill is currently being used by {deleteSkillDialog.usedByAgents.length} agent(s): {deleteSkillDialog.usedByAgents.join(', ')}
-              </p>
-            )}
-            <p className="text-sm text-destructive">
-              This action cannot be undone. After deletion, agents will no longer be able to use this skill.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setDeleteSkillDialog({ isOpen: false, skillName: null, usedByAgents: [] })}
-            >
-              No
-            </Button>
-            <Button
-              variant="destructive"
-              className="bg-destructive hover:bg-destructive/90"
-              onClick={handleConfirmDeleteSkill}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteSkillConfirmDialog />
 
-      {/* Delete Sub-Agent Confirmation Dialog */}
-      <Dialog
-        open={deleteSubAgentDialog.isOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeleteSubAgentDialog({ isOpen: false, subAgentName: null, usedByAgents: [] });
-          }
-        }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-left">Delete Sub-Agent</DialogTitle>
-            <DialogDescription className="text-left">
-              Are you sure you want to delete {deleteSubAgentDialog.subAgentName}?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            {deleteSubAgentDialog.usedByAgents.length > 0 && (
-              <p className="text-sm text-muted-foreground mb-4">
-                This sub-agent is currently being used by {deleteSubAgentDialog.usedByAgents.length} agent(s): {deleteSubAgentDialog.usedByAgents.join(', ')}
-              </p>
-            )}
-            <p className="text-sm text-destructive">
-              This action cannot be undone. After deletion, agents will no longer be able to use this sub-agent.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setDeleteSubAgentDialog({ isOpen: false, subAgentName: null, usedByAgents: [] })}
-            >
-              No
-            </Button>
-            <Button
-              variant="destructive"
-              className="bg-destructive hover:bg-destructive/90"
-              onClick={handleConfirmDeleteSubAgent}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteSubAgentConfirmDialog />
 
       {/* Delete MCP Server Confirmation Dialog */}
       <Dialog
@@ -171,11 +73,7 @@ const SettingsDialogs: React.FC<SettingsDialogsProps> = ({
 
       <ApplySkillToAgentsDialog />
 
-      <ApplySubAgentToAgentsDialog
-        open={applySubAgentDialogState.open}
-        onOpenChange={(open) => setApplySubAgentDialogState(prev => ({ ...prev, open }))}
-        subAgentName={applySubAgentDialogState.subAgentName}
-      />
+      <ApplySubAgentToAgentsDialog />
     </>
   );
 };

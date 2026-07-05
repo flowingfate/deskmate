@@ -51,26 +51,6 @@ export const OverlayImageViewer: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isImageLoading, setIsImageLoading] = useState(true);
 
-  // Listen for imageViewer:open custom events
-  useEffect(() => {
-    const handleOpenImageViewer = (event: CustomEvent) => {
-      const { images, initialIndex } = event.detail;
-      actions.open(images, initialIndex);
-    };
-
-    window.addEventListener(
-      'imageViewer:open',
-      handleOpenImageViewer as EventListener,
-    );
-
-    return () => {
-      window.removeEventListener(
-        'imageViewer:open',
-        handleOpenImageViewer as EventListener,
-      );
-    };
-  }, []);
-
   useEffect(() => {
     if (isOpen) {
       setCurrentIndex(initialIndex);

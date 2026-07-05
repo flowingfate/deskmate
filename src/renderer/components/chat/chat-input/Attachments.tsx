@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import type { Attachment, FileUri, UserMessage } from '@shared/types/message';
+import type { Attachment, UserMessage } from '@shared/types/message';
 import { asFileUri } from '@shared/types/message';
 import { createUserMessage } from '@shared/utils/messageFactory';
 import { copyFileToSandbox, type AttachContext } from '@/lib/attachment/copyToSandbox';
@@ -15,6 +15,9 @@ import { currentSessionStore } from '@/states/currentSession.atom';
 import { toImageDisplaySrc } from '@/lib/mediaUrl';
 import { atom } from '@/atom';
 import type { Change } from '@/atom/unit';
+import { ImageViewerAtom } from '../../ui/OverlayImageViewer';
+import { useOpenFilePreview } from '../../filePreview/filePreviewScope';
+import type { FilePreviewDescriptor } from '../../filePreview/FilePreviewPanel';
 
 const logger = log.child({ mod: 'ChatAttachment' });
 
@@ -270,6 +273,8 @@ function renderAttachment(
   manager: AttachmentManagerForRender,
   att: Attachment,
   originalIndex: number,
+  onOpenImage: (url: string, alt: string, id: string) => void,
+  onOpenFile: (file: FilePreviewDescriptor) => void,
 ): React.ReactNode {
   if (att.kind === 'image') {
     const previewUrl = manager.getPreviewUrl(att);
@@ -279,20 +284,7 @@ function renderAttachment(
         className="group relative w-12 h-12 max-md:w-10.5 max-md:h-10.5 bg-[rgba(245,245,245,0.9)] border border-[rgba(220,220,220,0.8)] rounded-lg shadow-[0_2px_8px_rgba(0,0,0,0.1)] overflow-hidden cursor-pointer transition-all duration-200 ease hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)] hover:border-black/60"
         onClick={() => {
           if (previewUrl) {
-            window.dispatchEvent(
-              new CustomEvent('imageViewer:open', {
-                detail: {
-                  images: [
-                    {
-                      id: `attachment-${originalIndex}`,
-                      url: previewUrl,
-                      alt: att.fileName,
-                    },
-                  ],
-                  initialIndex: 0,
-                },
-              }),
-            );
+            onOpenImage(previewUrl, att.fileName, `attachment-${originalIndex}`);
           }
         }}
       >
@@ -339,22 +331,16 @@ function renderAttachment(
         className="group flex flex-col items-center justify-center relative w-12 h-12 max-md:w-10.5 max-md:h-10.5 px-2 py-1.5 max-md:px-1.5 max-md:py-1 bg-[rgba(245,245,245,0.8)] border border-[rgba(220,220,220,0.6)] rounded-lg shadow-[0_2px_6px_rgba(0,0,0,0.1)] cursor-pointer transition-all duration-200 ease hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:border-black/60 hover:bg-[rgba(245,245,245,0.95)]"
         onClick={() => {
           if (fileLike.fileUri) {
-            window.dispatchEvent(
-              new CustomEvent('fileViewer:open', {
-                detail: {
-                  file: {
-                    name: fileLike.fileName,
-                    url: fileLike.fileUri as unknown as FileUri,
-                    mimeType: fileLike.mimeType,
-                    size: fileLike.fileSize,
-                    lastModified:
-                      'lastModified' in fileLike && fileLike.lastModified
-                        ? new Date(fileLike.lastModified).toLocaleString()
-                        : undefined,
-                  },
-                },
-              }),
-            );
+            onOpenFile({
+              name: fileLike.fileName,
+              url: fileLike.fileUri,
+              mimeType: fileLike.mimeType,
+              size: fileLike.fileSize,
+              lastModified:
+                'lastModified' in fileLike && fileLike.lastModified
+                  ? new Date(fileLike.lastModified).toLocaleString()
+                  : undefined,
+            });
           }
         }}
       >
@@ -391,10 +377,18 @@ function renderAttachment(
 
 function List({ attachmentsStateAtom }: { attachmentsStateAtom: AttachmentsStateAtom }) {
   const [list, manager] = attachmentsStateAtom.use();
+  const imageViewer = ImageViewerAtom.useChange();
+  const openFilePreview = useOpenFilePreview();
 
   const nodes: React.ReactNode[] = [];
   list.forEach((att, index) => {
-    const node = renderAttachment(manager, att, index);
+    const node = renderAttachment(
+      manager,
+      att,
+      index,
+      (url, alt, id) => imageViewer.open([{ id, url, alt }], 0),
+      openFilePreview,
+    );
     if (node) nodes.push(node);
   });
   if (nodes.length === 0) return null;

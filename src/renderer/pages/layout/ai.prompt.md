@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-03 -->
+<!-- Last verified: 2026-07-05 -->
 # 布局
 
 > 渲染进程 SPA 的外壳：采用 AppShell（Sidebar + StatusBar + Titlebar） + AgentLayout（SessionPanel + 主内容区 + 右侧面板）两层架构。
@@ -9,9 +9,9 @@
 | `AppShell.tsx` | App 级 layout：titlebar + Sidebar + content slot + StatusBar | ~145 LOC |
 | `Sidebar.tsx` | 常驻 icon bar：agent 头像列表、新建 agent、用户头像、设置入口 | ~174 LOC |
 | `StatusBar.tsx` | 全局底部状态栏：DoctorStatusIndicator（运行/终点指示器 + done tooltip 内 View Issue）+ DoctorInquiry（诊断表单弹窗） | ~14 LOC |
-| `AgentLayout.tsx` | Agent 页面根组件 — 包装 providers（`PasteToWorkspaceProvider`、`SharePointSearchProvider` 等），拥有全局事件监听器 | ~312 LOC |
+| `AgentLayout.tsx` | Agent 页面根组件 — 包装 providers（`PasteToWorkspaceProvider` 等），拥有 KB/技能安装/debug-info toast 副作用 | ~130 LOC |
 | `AgentLayoutContent.tsx` | Agent 页面 UI 外壳 — `SessionPanel`（位于 [`components/agent-side/`](../../components/agent-side/ai.prompt.md)）+ ResizableDivider + ContentContainer + RightGlobalSidepane 布局 | ~107 LOC |
-| `ContentContainer.tsx` | `<main>` 包装器；渲染 `<Outlet>`（React Router），处理 `agent:newAgent` / `agent:editAgent` 事件 | ~80 LOC |
+| `ContentContainer.tsx` | `<main>` 包装器；仅渲染 `<Outlet>`（React Router） | ~20 LOC |
 | `UserMenu.tsx` | 用户菜单下拉框（设置、更新、登出等） | ~145 LOC |
 | `RightGlobalSidepane.tsx` | 右侧面板，用于 UserTask | ~59 LOC |
 | `WindowsTitleBar.tsx` | 仅 Windows 的自定义标题栏：应用图标、侧边栏切换、缩放指示器、最小化/最大化/关闭控件 | ~155 LOC |
@@ -44,7 +44,7 @@ RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
 - **SessionPanel**：搬迁到 [`components/agent-side/`](../../components/agent-side/ai.prompt.md)。在 sessions 模式渲染会话列表 + 搜索 + 新建按钮；在 jobs 模式渲染 schedule 主从二级视图（jobs CRUD ↔ runs 列表）。模式来自 URL（`/agent/:agentId/job/*`），不存在表示模式的 atom。
 - **状态所有权**：侧边栏宽度由 `LeftNavSizeAtom`（宽度、拖拽、持久化）管理，折叠状态由 `LeftNavCollapsedAtom` 管理，位于 `src/renderer/states/left-nav.atom.ts`。右面板使用 `RightPaneCollapsedAtom`（`src/renderer/states/right-pane.atom.ts`）。
 - **下拉框/覆盖层**：所有上下文菜单和覆盖层通过 atom 管理，在 `AgentLayout` 层级渲染，无需 props 逐层传递。
-- **Agent 导航事件**：`ContentContainer` 监听 `agent:newAgent` 和 `agent:editAgent` 自定义 DOM 事件。
+- **Agent 编辑命令**：改用普通函数 `lib/chat/editAgent.ts#editAgent(agentId?, tab?)`（不碰 atom，只用 `router` + `agentSessionCacheManager`），菜单/ChatView 直接 import 调用。ChatSession CRUD（删除/fork/重命名/收藏/下载）走 `states/chatSessionCommands.ts` 的 `chatSessionCommands`（`mutate` 无状态命令 dispatcher，组合既有 DeleteConfirm/Rename/toast atom）。**不再有 `agent:editAgent` / `chatSession:*` 自定义 DOM 事件**。
 
 ## 常见变更
 | 场景 | 需要修改的文件 | 备注 |
@@ -68,7 +68,7 @@ RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
 | `AppShell` 布局 | `Sidebar.tsx`、`StatusBar.tsx` 可能需要同步调整 |
 
 ## 反模式
-- 不要从布局子树外部的组件分发 `agent:newAgent` / `agent:editAgent` 事件，除非确认 `ContentContainer` 已挂载。
+- 打开 Agent 编辑页用 `lib/chat/editAgent.ts#editAgent(...)`，不要再造 `agent:editAgent` 之类的自定义 DOM 事件；跨组件命令：需读写 atom 状态用 `states/` 下 action atom / `mutate`，纯模块单例操作用普通函数（别为「统一」硬套空 state 的 atom）。
 - 不要绕过 `LeftNavSizeAtom` / `LeftNavCollapsedAtom` 而在叶子组件中直接从 storage 读取侧边栏状态；使用 atom 的 `.use()` 或 `.useData()`。
 - 不要在 `AgentLayoutContent` 中添加全局事件监听器或 provider 包装 — 这些属于 `AgentLayout`（逻辑层）。
 

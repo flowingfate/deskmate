@@ -6,13 +6,10 @@ import { BookMarked, Plus } from 'lucide-react';
 import { Badge } from '@/shadcn/badge';
 import { Button } from '@/shadcn/button';
 import { useSkills } from '../userData/userDataProvider';
-import { useToast } from '../ui/ToastProvider';
 import SettingsLayout from '../settings/SettingsLayout';
 import SkillsContentView from './SkillsContentView';
 import { SkillConfig } from '../../lib/userData/types';
 import { AgentContextType } from '../../types/agentContextTypes';
-import { ApplySkillDialogAtom } from './ApplySkillToAgentsDialog';
-import { skillsApi } from '@/ipc/skill';
 
 const SkillsView: React.FC = () => {
   const {
@@ -25,47 +22,9 @@ const SkillsView: React.FC = () => {
 
   // Use ProfileDataManager for Skills data
   const { skills, stats: skillsStats, isLoading } = useSkills();
-  const { showSuccess, showError, showInfo, showToast } = useToast();
 
   // Local state management
   const [selectedSkill, setSelectedSkill] = useState<SkillConfig | null>(null);
-  const installSkillActions = ApplySkillDialogAtom.useChange();
-
-  const handleAddFromDevice = useCallback(async (selectionMode?: 'artifact' | 'folder') => {
-    try {
-      const currentlySelectedSkillName = selectedSkill?.name;
-
-      const result = await skillsApi.addSkillFromDevice(undefined, {
-        requestSource: 'settings',
-        selectionMode,
-      });
-
-      if (result.success) {
-        showSuccess(result.message || `Skill "${result.skillName}" added successfully`);
-
-        if (result.skillName && currentlySelectedSkillName === result.skillName) {
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('skills:refreshFolderExplorer', {
-              detail: { skillName: result.skillName }
-            }));
-          }, 600);
-        }
-
-        if (result.skillName && !result.isOverwrite && result.resolution === 'installed_but_not_applied') {
-          installSkillActions.setSkill(result.skillName);
-        }
-      } else if (result.error && result.error !== 'File selection canceled' && result.error !== 'User cancelled the operation') {
-        showToast(result.error, 'error', undefined, { persistent: true });
-      }
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      showError(`Failed to add skill from device: ${errorMessage}`);
-    }
-  }, [selectedSkill?.name, showError, showSuccess, showToast]);
-
-
-
   // Ref to access latest skills without adding `skills` to effect deps
   const skillsRef = useRef(skills);
   skillsRef.current = skills;
@@ -117,49 +76,6 @@ const SkillsView: React.FC = () => {
     },
     [onSkillsAddMenuToggle],
   );
-
-  // Listen for Skills add menu events from AgentLayout
-  useEffect(() => {
-    const handleAddFromDeviceArtifact = () => {
-      void handleAddFromDevice('artifact');
-    };
-
-    const handleAddFromDeviceFolder = () => {
-      void handleAddFromDevice('folder');
-    };
-
-    const handleAddFromDeviceLegacy = () => {
-      void handleAddFromDevice();
-    };
-
-    window.addEventListener(
-      'skills:addFromDeviceArtifact',
-      handleAddFromDeviceArtifact as EventListener,
-    );
-    window.addEventListener(
-      'skills:addFromDeviceFolder',
-      handleAddFromDeviceFolder as EventListener,
-    );
-    window.addEventListener(
-      'skills:addFromDevice',
-      handleAddFromDeviceLegacy as EventListener,
-    );
-
-    return () => {
-      window.removeEventListener(
-        'skills:addFromDeviceArtifact',
-        handleAddFromDeviceArtifact as EventListener,
-      );
-      window.removeEventListener(
-        'skills:addFromDeviceFolder',
-        handleAddFromDeviceFolder as EventListener,
-      );
-      window.removeEventListener(
-        'skills:addFromDevice',
-        handleAddFromDeviceLegacy as EventListener,
-      );
-    };
-  }, [handleAddFromDevice]);
 
   return (
     <SettingsLayout

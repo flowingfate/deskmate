@@ -8,14 +8,14 @@ import {
 import ChatViewHeader from './ChatViewHeader';
 import ChatViewContent from './ChatViewContent';
 import { ContextMenu } from './chat-input/ContextMenu';
-import { useToast } from '../ui/ToastProvider';
 import { CurrentSessionStatus, useHasChatSessionCache, agentSessionCacheManager } from '../../lib/chat/agentSessionCacheManager';
 import { currentSessionStore } from '@/states/currentSession.atom';
 import { agentIpc } from '../../lib/chat/agentIpc';
 import { startNewSessionFor } from '../../lib/chat/startNewSessionFor';
 import { log } from '@/log';
-import { agentChatApi } from '@/ipc/agentChat';
 import AgentPane from '@/pages/layout/agent/agent-pane';
+import { editAgent as handleEditAgent } from '@/lib/chat/editAgent';
+import { composeTextCommands } from './chat-input/chatInputCommands';
 
 const logger = log.child({ mod: 'ChatView' });
 
@@ -51,15 +51,10 @@ const ChatView: React.FC<ChatViewProps> = memo(({ kind = 'regular' }) => {
     targetSessionId?: string;
   } | null) ?? null;
 
-  // Handle selectedText from navigation state
+  // Fill compose input from navigation state (selectedText)
   useEffect(() => {
     if (navigationState?.selectedText) {
-      // Dispatch event to fill input
-      const fillInputEvent = new CustomEvent('agent:fillInput', {
-        detail: { text: navigationState.selectedText },
-      });
-      window.dispatchEvent(fillInputEvent);
-
+      composeTextCommands.fillInput(navigationState.selectedText);
       // Clear state to prevent re-triggering
       navigate(location.pathname, { replace: true, state: {} });
     }
@@ -122,24 +117,9 @@ const ChatView: React.FC<ChatViewProps> = memo(({ kind = 'regular' }) => {
 
   const hasRouteSessionCache = useHasChatSessionCache(routeSessionId ?? null);
 
-  const handleEditAgent = useCallback(
-    (agentId: string, initialTab?: 'basic' | 'mcp' | 'prompt' | 'skills') => {
-      window.dispatchEvent(
-        new CustomEvent('agent:editAgent', {
-          detail: { agentId, initialTab },
-        }),
-      );
-    },
-    [],
-  );
-
-  const { showSuccess, showError } = useToast();
-
-
   const isSessionSwitching = Boolean(
     routeSessionId && (chatSessionId !== routeSessionId || !hasRouteSessionCache)
   );
-
 
   // MCP Tools handler - must be defined after agentId
   const handleOpenMcpTools = useCallback(() => {
@@ -155,69 +135,6 @@ const ChatView: React.FC<ChatViewProps> = memo(({ kind = 'regular' }) => {
     }
   }, [agentId, handleEditAgent]);
 
-  // Delete action is now event-triggered, with AgentLayout handling the confirmation dialog
-
-  // Handle fork chat session - uses the new backend IPC API
-  const handleForkChatSession = useCallback(
-    async (sessionId: string) => {
-      if (!agentId) {
-        showError('No current agent chat available');
-        return;
-      }
-
-      try {
-        // Call backend forkChatSession API
-        // Backend copies session data + directory, returns new sessionId.
-        // 渲染端负责显式 navigate 到新 session（主进程不再 echo current）。
-        const result = await agentChatApi.forkChatSession(
-          agentId,
-          sessionId,
-        );
-
-        if (!result.success) {
-          showError(`Failed to fork session: ${result.error}`);
-          return;
-        }
-
-        if (result.chatSessionId) {
-          navigate(`/agent/${agentId}/${result.chatSessionId}`, { replace: false });
-        }
-
-        logger.debug({ msg: "✅ Fork ChatSession completed:", agentId: agentId, sourceChatSessionId: sessionId, newChatSessionId: result.chatSessionId });
-
-        showSuccess('Session forked successfully, switched to new session');
-      } catch (error) {
-        showError(
-          `Failed to fork session: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`,
-        );
-      }
-    },
-    [agentId, showSuccess, showError, navigate],
-  );
-
-
-  // Listen for chatSession:fork events
-  useEffect(() => {
-    const handleForkChatSessionEvent = (e: CustomEvent) => {
-      const { sessionId } = e.detail;
-      if (sessionId) {
-        handleForkChatSession(sessionId);
-      }
-    };
-
-    window.addEventListener(
-      'chatSession:fork',
-      handleForkChatSessionEvent as EventListener,
-    );
-    return () => {
-      window.removeEventListener(
-        'chatSession:fork',
-        handleForkChatSessionEvent as EventListener,
-      );
-    };
-  }, [handleForkChatSession]);
 
   return (
     <>

@@ -11,6 +11,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/shadcn/dropdown-menu';
+import { DeleteSkillDialogAtom, SkillFolderRefreshAtom } from '../skills/skillCommands.atom';
 
 interface SkillDropdownMenuProps {
   skillName: string;
@@ -54,10 +55,11 @@ const SkillDropdownMenu: React.FC<SkillDropdownMenuProps> = ({
 
   const anchorRect = anchorElement.getBoundingClientRect();
 
+  const requestDeleteSkill = DeleteSkillDialogAtom.useChange().requestDelete;
+  const refreshFolder = SkillFolderRefreshAtom.useChange().refresh;
+
   const handleDelete = () => {
-    window.dispatchEvent(new CustomEvent('skill:delete', {
-      detail: { skillName }
-    }));
+    void requestDeleteSkill(skillName);
   };
 
   const handleUpdate = async () => {
@@ -75,9 +77,7 @@ const SkillDropdownMenu: React.FC<SkillDropdownMenuProps> = ({
         showSuccess(`Skill "${result.skillName}" updated successfully`);
 
         setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('skills:refreshFolderExplorer', {
-            detail: { skillName: result.skillName }
-          }));
+          refreshFolder(result.skillName ?? skillName);
         }, 600);
       } else if (result.error && result.error !== 'File selection canceled' && result.error !== 'User cancelled the operation') {
         showToast(result.error, 'error', undefined, { persistent: true });

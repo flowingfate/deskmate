@@ -3,6 +3,7 @@ import { ImageGalleryMenuAtom } from '../../menu/ImageGalleryContextMenu';
 import { log } from '@/log';
 import { useCurrentSession } from '@/states/currentSession.atom';
 import { toImageDisplaySrc } from '@/lib/mediaUrl';
+import { ImageViewerAtom } from '../../ui/OverlayImageViewer';
 
 const logger = log.child({ mod: 'ImageGallery' });
 
@@ -96,6 +97,7 @@ export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({
 
   // media:// 直供需要的 ctx(agent + session);assistant 消息总属当前打开 session。
   const { agentId, chatSessionId } = useCurrentSession();
+  const imageViewer = ImageViewerAtom.useChange();
 
   // 同步解析展示 src —— **必须在渲染期算出,绝不延迟到 effect**。否则首帧 `cachedUrls`
   // 为空,`<img src>` 回退成裸 `local://`:既违反 CSP img-src(控制台报错),又触发
@@ -167,12 +169,7 @@ export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({
       return;
     }
 
-    window.dispatchEvent(new CustomEvent('imageViewer:open', {
-      detail: {
-        images: galleryImages,
-        initialIndex: Math.min(clickedIndex, galleryImages.length - 1)
-      }
-    }));
+    imageViewer.open(galleryImages, Math.min(clickedIndex, galleryImages.length - 1));
   };
 
   return (

@@ -99,13 +99,9 @@ const EditSubAgentView: React.FC = () => {
       if (result.success) {
         showSuccess(`Sub-agent "${formData.display_name}" updated successfully`)
 
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('subAgents:refreshList', {
-            detail: { subAgentName: decodedName }
-          }))
-        }, 500)
-
-        navigate('/settings/sub-agents')
+        // 数据刷新由 subAgents.atom 通过 persist 通道自动完成；
+        // `?selected=` 让 SubAgentsView 在数据到位后自动选中该项。
+        navigate(`/settings/sub-agents?selected=${encodeURIComponent(decodedName)}`)
       } else {
         showError(`Failed to update sub-agent: ${result.error || 'Unknown error'}`)
       }

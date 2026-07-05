@@ -71,16 +71,6 @@ export const DeleteConfirmAtom = atom(zeroState, (get, set) => {
 
         logger.debug({ msg: "Delete agent check:", deletedAgentId: id, currentAgentId, isDeletingCurrentChat, currentPath, isOnDeletedAgentRoute, needsSwitch });
 
-        if (isDeletingCurrentChat) {
-          // Step 1: Notify AgentPage to clean up current Agent
-          window.dispatchEvent(
-            new CustomEvent('agent:cleanup', {
-              detail: { agentId: id, isDeletingCurrentChat: true },
-            }),
-          );
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-
         // Step 2: Execute delete operation
         const result = await deleteAgentConfig(id);
 

@@ -5,6 +5,7 @@ import { useCurrentChatSessionId, useMessagesWithStream, ChatStatus, CurrentSess
 import { sendUserMessage } from '@renderer/lib/chat/sendUserMessageOptimistically';
 import { editMessageAtom } from './message/edit-message.atom';
 import ChatFilePreviewOverlay from '../filePreview/ChatFilePreviewOverlay';
+import { ChatFilePreviewScope } from '../filePreview/filePreviewScope';
 import { ChatFilePreviewAtom } from '../filePreview/filePreview.atom';
 import { WorkspaceExplorerAtom } from './chat-side.atom';
 import WorkspaceExplorerSidepane from './workspace/WorkspaceExplorerSidepane';
@@ -100,24 +101,26 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
   }
 
   return (
-    <div className="relative flex flex-col flex-1 h-full overflow-hidden bg-(--bg-primary) min-w-0">
-      <div className="relative flex flex-col flex-1 overflow-hidden">
-        {renderContent()}
-        <ChatWorkspaceSideOverlay />
+    <ChatFilePreviewScope>
+      <div className="relative flex flex-col flex-1 h-full overflow-hidden bg-(--bg-primary) min-w-0">
+        <div className="relative flex flex-col flex-1 overflow-hidden">
+          {renderContent()}
+          <ChatWorkspaceSideOverlay />
+        </div>
+        <WithInteractive>
+          {/* <div className="bg-black/2 px-5 h-6">~</div> */}
+          <ComposeInput
+            onSendMessage={sendUserMessage}
+            chatStatus={chatStatus}
+            enableContextMenu
+            chatSessionId={currentChatSessionId}
+            isReadOnly={isReadOnly}
+            isInputLocked={!!editingMessageState || isSessionSwitching}
+          />
+        </WithInteractive>
+        <ChatFilePreviewOverlay />
       </div>
-      <WithInteractive>
-        {/* <div className="bg-black/2 px-5 h-6">~</div> */}
-        <ComposeInput
-          onSendMessage={sendUserMessage}
-          chatStatus={chatStatus}
-          enableContextMenu
-          chatSessionId={currentChatSessionId}
-          isReadOnly={isReadOnly}
-          isInputLocked={!!editingMessageState || isSessionSwitching}
-        />
-      </WithInteractive>
-      <ChatFilePreviewOverlay />
-    </div>
+    </ChatFilePreviewScope>
   );
 });
 

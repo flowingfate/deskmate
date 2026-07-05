@@ -16,7 +16,11 @@ import { toImageDisplaySrc, type MediaUrlContext } from '@/lib/mediaUrl';
 import { isInstallableSkillArtifact } from '../../../lib/skills/installableSkillArtifacts';
 import { log } from '@/log';
 import { ApplySkillDialogAtom } from '../../skills/ApplySkillToAgentsDialog';
+import { SkillFolderRefreshAtom } from '../../skills/skillCommands.atom';
 import { skillsApi } from '@/ipc/skill';
+import { ImageViewerAtom } from '../../ui/OverlayImageViewer';
+import { useOpenFilePreview } from '../../filePreview/filePreviewScope';
+import type { FilePreviewDescriptor } from '../../filePreview/FilePreviewPanel';
 const logger = log.child({ mod: 'GeneratedFileCards' });
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif', 'avif']);
@@ -53,32 +57,21 @@ function isImageFile(filePath: string): boolean {
   return IMAGE_EXTENSIONS.has(ext);
 }
 
-function previewGeneratedFile(filePath: string, ctx: MediaUrlContext): void {
+function previewGeneratedFile(
+  filePath: string,
+  ctx: MediaUrlContext,
+  openImage: (images: { id: string; url: string; alt?: string }[], index: number) => void,
+  openFile: (file: FilePreviewDescriptor) => void,
+): void {
   const fileName = getFileName(filePath);
   if (isImageFile(filePath)) {
     // `local://` / `knowledge://` → `media://`(同步直供);裸绝对路径 → `file://`。
     const src = toImageDisplaySrc(filePath, ctx);
-    window.dispatchEvent(
-      new CustomEvent('imageViewer:open', {
-        detail: {
-          images: [{ id: `generated-file-${filePath}`, url: src, alt: fileName }],
-          initialIndex: 0,
-        },
-      }),
-    );
+    openImage([{ id: `generated-file-${filePath}`, url: src, alt: fileName }], 0);
     return;
   }
 
-  window.dispatchEvent(
-    new CustomEvent('fileViewer:open', {
-      detail: {
-        file: {
-          name: fileName,
-          url: filePath,
-        },
-      },
-    }),
-  );
+  openFile({ name: fileName, url: filePath });
 }
 
 export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, chatStatus }) => {
@@ -108,6 +101,9 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
   const allFilePaths = useMemo(() => items.map(item => item.fileUri), [items]);
   const allFilePathsKey = useMemo(() => allFilePaths.join('\0'), [allFilePaths]);
   const installSkillActions = ApplySkillDialogAtom.useChange();
+  const imageViewer = ImageViewerAtom.useChange();
+  const openFilePreview = useOpenFilePreview();
+  const refreshFolder = SkillFolderRefreshAtom.useChange().refresh;
 
   // groupLabel 字段连带分组渲染随 `present_deliverables` 工具一起下线 —— 现在
   // items 直接就是平铺的文件卡片列表,没有 description / 标题分组。
@@ -321,11 +317,12 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
       if (result.success) {
         showToast(result.message || `Skill "${result.skillName}" installed successfully`, 'success');
 
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('skills:refreshFolderExplorer', {
-            detail: { skillName: result.skillName },
-          }));
-        }, 600);
+        if (result.skillName) {
+          const refreshedSkillName = result.skillName;
+          setTimeout(() => {
+            refreshFolder(refreshedSkillName);
+          }, 600);
+        }
 
         if (result.skillName && result.resolution === 'installed_but_needs_target_selection') {
           installSkillActions.setSkill(result.skillName);
@@ -354,7 +351,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
       <div
         key={`${filePath}-${index}`}
         className="box-border flex text-[13px] items-center gap-1 p-2 w-full min-w-0 bg-white border border-[#EFEAE7] rounded transition-all cursor-pointer relative hover:bg-[#FAFAFA] hover:border-[#E0DBD8] hover:translate-x-0.5 hover:shadow-[0_2px_4px_rgba(0,0,0,0.05)] active:translate-x-px active:bg-[#F5F5F5]"
-        onClick={() => isAvailable && previewGeneratedFile(filePath, mediaCtx)}
+        onClick={() => isAvailable && previewGeneratedFile(filePath, mediaCtx, imageViewer.open, openFilePreview)}
         title={!fileExists ? `File deleted: ${filePath}` : `Click to open: ${filePath}`}
         style={
           !isAvailable
@@ -421,7 +418,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
               className={MENU_ITEM}
               onClick={() => {
                 setFileMenuOpen({});
-                previewGeneratedFile(filePath, mediaCtx);
+                previewGeneratedFile(filePath, mediaCtx, imageViewer.open, openFilePreview);
               }}
             >
               <span className={MENU_ITEM_ICON}>

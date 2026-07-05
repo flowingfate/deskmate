@@ -5,6 +5,7 @@ import { SkillConfig } from '../../lib/userData/types'
 import { skillsApi } from '@/ipc/skill'
 import SkillFolderExplorer from './SkillFolderExplorer'
 import SkillFileViewer from './SkillFileViewer'
+import { SkillFolderRefreshAtom } from './skillCommands.atom'
 import { log } from '@/log';
 const logger = log.child({ mod: 'SkillViewPanel' });
 
@@ -51,42 +52,28 @@ const SkillViewPanel: React.FC<SkillViewPanelProps> = ({
     setSelectedFile(null)
   }, [skill?.name])
 
-  // Listen for skill refresh events to handle file viewing mode refresh
+  // Subscribe to the folder-refresh signal. In file mode, reload the open file's content;
+  // folder mode refresh is owned by SkillFolderExplorer. Nonce ref avoids reacting to
+  // its own state churn (viewMode / selectedFile changes).
+  const [{ skillName: refreshSkillName, nonce: refreshNonce }] = SkillFolderRefreshAtom.use();
+  const lastRefreshNonce = React.useRef(refreshNonce);
   React.useEffect(() => {
-    const handleRefreshFolderExplorer = async (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const { skillName } = customEvent.detail;
-
-      // Only process when the refreshed skill is the currently displayed skill
-      if (skill && skillName === skill.name) {
-        if (viewMode === 'file' && selectedFile) {
-          // If currently viewing a file, reload the file content
-          try {
-            const result = await skillsApi.getSkillFileContent(skill.name, selectedFile.path);
-
-            if (result?.success && result.data) {
-              setSelectedFile(result.data);
-            }
-          } catch (error) {
-            logger.error({ msg: "Error refreshing file content:", err: error });
+    if (refreshNonce === lastRefreshNonce.current) return;
+    lastRefreshNonce.current = refreshNonce;
+    if (!skill || refreshSkillName !== skill.name) return;
+    if (viewMode === 'file' && selectedFile) {
+      void (async () => {
+        try {
+          const result = await skillsApi.getSkillFileContent(skill.name, selectedFile.path);
+          if (result?.success && result.data) {
+            setSelectedFile(result.data);
           }
+        } catch (error) {
+          logger.error({ msg: "Error refreshing file content:", err: error });
         }
-        // Folder mode refresh is handled by SkillFolderExplorer itself
-      }
-    };
-
-    window.addEventListener(
-      'skills:refreshFolderExplorer',
-      handleRefreshFolderExplorer
-    );
-
-    return () => {
-      window.removeEventListener(
-        'skills:refreshFolderExplorer',
-        handleRefreshFolderExplorer
-      );
-    };
-  }, [skill, viewMode, selectedFile]);
+      })();
+    }
+  }, [refreshNonce, refreshSkillName, skill, viewMode, selectedFile]);
 
   if (!skill) {
     return (

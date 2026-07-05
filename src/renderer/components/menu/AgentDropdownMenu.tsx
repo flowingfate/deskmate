@@ -8,6 +8,7 @@ import { agentChatApi } from '@/ipc/agentChat';
 import { atom } from '@/atom';
 import { DuplicateAgentAtom } from '../overlay/DuplicateAgentOverlay';
 import { DeleteConfirmAtom } from '../overlay/DeleteOverlay';
+import { editAgent } from '@/lib/chat/editAgent';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -66,7 +67,7 @@ const AgentDropdownMenu: React.FC<InnerProps> = ({
   const isPrimaryAgent = primaryAgentId !== null && primaryAgentId === agentId;
 
   const handleEditAgentClick = (agentId: string) => {
-    window.dispatchEvent(new CustomEvent('agent:editAgent', { detail: { agentId } }));
+    editAgent(agentId);
   };
 
   const handleDeleteAgentClick = (agentId: string) => {

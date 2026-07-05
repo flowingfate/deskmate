@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { useSupportsImages } from '@/lib/models/useSupportsImages';
 import { ChatStatus } from '@/lib/chat/agentSessionCacheManager';
@@ -14,6 +14,7 @@ import { useFileHandling } from './shared/useFileHandling';
 import { transformMentions } from './shared/transformMentions';
 import type { AttachContext } from '@/lib/attachment/copyToSandbox';
 import { useToast } from '../../ui/ToastProvider';
+import { inlineEditConfirmAtom } from '../../overlay/ModifyMsgConfimOverlay';
 
 const logger = log.child({ mod: 'EditInlineInput' });
 
@@ -72,28 +73,7 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
     ? 'This will replace the response below and regenerate from your edited message. External actions already run will not be undone.'
     : 'This will replace the response below and regenerate from your edited message.';
 
-  const requestInlineEditConfirmation = useCallback(
-    (description: string): Promise<boolean> => {
-      const { promise, resolve } = Promise.withResolvers<boolean>();
-      const requestId = `inline-edit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-      const handleResult = (event: Event) => {
-        const customEvent = event as CustomEvent<{ requestId?: string; confirmed?: boolean }>;
-        if (customEvent.detail?.requestId !== requestId) return;
-        window.removeEventListener('chatInput:confirmInlineEditResult', handleResult as EventListener);
-        resolve(customEvent.detail?.confirmed === true);
-      };
-
-      window.addEventListener('chatInput:confirmInlineEditResult', handleResult as EventListener);
-      window.dispatchEvent(
-        new CustomEvent('chatInput:confirmInlineEditRequest', {
-          detail: { requestId, title: 'Regenerate response?', description },
-        }),
-      );
-      return promise;
-    },
-    [],
-  );
+  const inlineEditConfirm = inlineEditConfirmAtom.useChange();
 
   const isIdle = !chatStatus || chatStatus === 'idle';
 
@@ -106,7 +86,10 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
       }
       setIsAwaitingEditConfirmation(true);
       try {
-        const confirmed = await requestInlineEditConfirmation(editConfirmDescription);
+        const confirmed = await inlineEditConfirm.request({
+          title: 'Regenerate response?',
+          description: editConfirmDescription,
+        });
         if (!confirmed) return;
 
         // 确认后才物化附件 —— 取消重新生成不会留下落盘文件。

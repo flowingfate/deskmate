@@ -6,6 +6,7 @@ import SubAgentForm, { DEFAULT_FORM_DATA } from './SubAgentForm'
 import type { SubAgentFormData } from './SubAgentForm'
 import { Button } from '@/shadcn/button'
 import { subAgentApi } from '@/ipc/subAgent'
+import { ApplySubAgentDialogAtom } from './ApplySubAgentToAgentsDialog'
 
 /**
  * CreateSubAgentView - Sub-agent creation form
@@ -16,6 +17,7 @@ import { subAgentApi } from '@/ipc/subAgent'
 const CreateSubAgentView: React.FC = () => {
   const navigate = useNavigate()
   const { showSuccess, showError } = useToast()
+  const openApplyDialog = ApplySubAgentDialogAtom.useChange().setSubAgent
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState<SubAgentFormData>({ ...DEFAULT_FORM_DATA })
@@ -74,20 +76,10 @@ const CreateSubAgentView: React.FC = () => {
       if (result.success) {
         showSuccess(`Sub-agent "${formData.display_name}" created successfully`)
 
-        // Trigger list refresh（subAgents.atom 通过 persist 通道自动刷数据，
-        // 此 event 仅用于通知列表组件自动选中新建项）
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('subAgents:refreshList', {
-            detail: { subAgentName: formData.name }
-          }))
-        }, 500)
-
-        // Trigger Apply to Agents dialog
-        window.dispatchEvent(new CustomEvent('subAgents:applyToAgents', {
-          detail: { subAgentName: formData.name }
-        }))
-
-        navigate('/settings/sub-agents')
+        // 数据刷新由 subAgents.atom 通过 persist 通道自动完成；
+        // `?selected=` 让 SubAgentsView 在数据到位后自动选中新建项。
+        openApplyDialog(formData.name)
+        navigate(`/settings/sub-agents?selected=${encodeURIComponent(formData.name)}`)
       } else {
         showError(`Failed to create sub-agent: ${result.error || 'Unknown error'}`)
       }
@@ -97,7 +89,7 @@ const CreateSubAgentView: React.FC = () => {
     } finally {
       setIsSubmitting(false)
     }
-  }, [formData, navigate, showSuccess, showError])
+  }, [formData, navigate, showSuccess, showError, openApplyDialog])
 
   const updateField = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }))

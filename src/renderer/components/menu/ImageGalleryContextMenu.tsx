@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/shadcn/dropdown-menu';
+import { ImageViewerAtom } from '../ui/OverlayImageViewer';
 const logger = log.child({ mod: 'ImageGalleryContextMenu' });
 
 const zeroState: {
@@ -57,6 +58,7 @@ const ImageGalleryContextMenu: React.FC<InnerProps> = ({
   initialIndex,
 }) => {
   const { close: onClose } = ImageGalleryMenuAtom.useChange();
+  const imageViewer = ImageViewerAtom.useChange();
 
   const handleViewImage = React.useCallback(() => {
     const imagesToOpen = galleryImages && galleryImages.length > 0
@@ -71,13 +73,8 @@ const ImageGalleryContextMenu: React.FC<InnerProps> = ({
       ? initialIndex
       : 0;
 
-    window.dispatchEvent(new CustomEvent('imageViewer:open', {
-      detail: {
-        images: imagesToOpen,
-        initialIndex: indexToUse
-      }
-    }));
-  }, [imageData, galleryImages, initialIndex]);
+    imageViewer.open(imagesToOpen, indexToUse);
+  }, [imageData, galleryImages, initialIndex, imageViewer]);
 
   const convertToPNG = React.useCallback(async (imageUrl: string): Promise<Blob> => {
     return new Promise((resolve, reject) => {

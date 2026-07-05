@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from '@/shadcn/dialog';
 import { Button } from '@/shadcn/button';
+import { atom } from '@/atom';
 import { updateAgent } from '@/lib/chat/agentOps';
 import { useToast } from '../ui/ToastProvider';
 import {
@@ -23,17 +24,21 @@ import {
   useApplyToAgentsState,
 } from '../agentSelection';
 
-interface ApplySubAgentToAgentsDialogProps {
+interface DialogState {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
   subAgentName: string;
 }
 
-const ApplySubAgentToAgentsDialog: React.FC<ApplySubAgentToAgentsDialogProps> = ({
-  open,
-  onOpenChange,
-  subAgentName,
-}) => {
+const zeroState: DialogState = { open: false, subAgentName: '' };
+export const ApplySubAgentDialogAtom = atom(zeroState, (get, set) => {
+  const cancel = () => set(zeroState);
+  const setSubAgent = (subAgentName: string) => set({ open: true, subAgentName });
+  const setOpen = (open: boolean) => set({ ...get(), open });
+  return { cancel, setSubAgent, setOpen };
+});
+
+const ApplySubAgentToAgentsDialog: React.FC = () => {
+  const [{ open, subAgentName }, actions] = ApplySubAgentDialogAtom.use();
   const { showSuccess, showError } = useToast();
   const [isApplying, setIsApplying] = useState(false);
 
@@ -52,7 +57,7 @@ const ApplySubAgentToAgentsDialog: React.FC<ApplySubAgentToAgentsDialogProps> = 
       (item) => !item.alreadyApplied && selectedAgents.has(item.agentId),
     );
     if (toApply.length === 0) {
-      onOpenChange(false);
+      actions.setOpen(false);
       return;
     }
 
@@ -85,18 +90,18 @@ const ApplySubAgentToAgentsDialog: React.FC<ApplySubAgentToAgentsDialogProps> = 
       );
     }
 
-    onOpenChange(false);
-  }, [agentItems, selectedAgents, details, subAgentName, onOpenChange, showSuccess, showError]);
+    actions.setOpen(false);
+  }, [agentItems, selectedAgents, details, subAgentName, actions, showSuccess, showError]);
 
   const handleSkip = useCallback(() => {
-    onOpenChange(false);
-  }, [onOpenChange]);
+    actions.setOpen(false);
+  }, [actions]);
 
   if (!open) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[420px] max-w-[420px]">
+    <Dialog open={open} onOpenChange={actions.setOpen}>
+      <DialogContent className="w-105 max-w-105">
         <DialogHeader>
           <DialogTitle>Apply to Agents</DialogTitle>
           <DialogDescription>

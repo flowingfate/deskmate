@@ -11,7 +11,7 @@ interface SettingsLayoutProps {
 
 const BG = (
   <svg
-    className="absolute right-1.5 bottom-0 h-9 -z-50 pointer-events-none opacity-100"
+    className="absolute right-1 bottom-0 h-8 -z-50 pointer-events-none opacity-100"
     viewBox="0 0 307 358"
   >
     <path d="M165.441 120.229C164.651 124.609 161.951 133.859 153.231 133.629C150.02 133.48 146.998 132.07 144.822 129.705C142.645 127.34 141.492 124.21 141.611 120.999L144.131 30.3385L144.941 0.778531C144.941 0.778531 149.261 -7.40146 153.561 29.2685V29.3985L165.491 116.399C165.675 117.67 165.658 118.962 165.441 120.229Z" fill="#D6D6E3" />
