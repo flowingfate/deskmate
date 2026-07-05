@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Wrench, ExternalLink } from 'lucide-react';
 import { Checkbox } from '@/shadcn/checkbox';
 import { Button } from '@/shadcn/button';
@@ -10,7 +10,6 @@ import { Separator } from '@/shadcn/separator';
 import { TabComponentProps } from './types';
 import { useLocalTools, useLocalToolsLoading } from '@/states/tools.atom';
 import ListSearchBox from '../../ui/ListSearchBox';
-import { markSettingsCameFromApp } from '@/lib/navigation/settingsBackSentinel';
 
 /**
  * AgentToolsTab - Agent 本地工具白名单 tab(deskmate 原生 tools)。
@@ -38,7 +37,6 @@ const AgentToolsTab: React.FC<TabComponentProps> = ({
   const allTools = useLocalTools();
   const isLoading = useLocalToolsLoading();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set());
   const [initialSelected, setInitialSelected] = useState<Set<string>>(new Set());
@@ -116,9 +114,8 @@ const AgentToolsTab: React.FC<TabComponentProps> = ({
   }, [readOnly]);
 
   const handleManageTools = useCallback(() => {
-    markSettingsCameFromApp();
     navigate('/settings/tools');
-  }, [navigate, location.pathname]);
+  }, [navigate]);
 
   const filteredTools = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

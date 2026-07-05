@@ -88,7 +88,7 @@ const McpToolDetailView: React.FC<McpToolDetailViewProps> = ({
       </div>
 
       {tool.description && (
-        <p className="text-sm leading-relaxed text-sc-muted-foreground">
+        <p className="font-mono text-xs leading-relaxed text-sc-muted-foreground">
           {tool.description}
         </p>
       )}

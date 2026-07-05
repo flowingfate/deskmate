@@ -14,7 +14,7 @@
 | `message/MarkdownView.tsx` | 唯一的 Markdown 渲染器：无 state / 无 effect / 无打字机，输入即输出；封装 react-markdown + remark 插件 + Prism 语法高亮 + Mermaid + 本地路径检测；用 `React.memo` 包裹 | ~160 LOC |
 | `message/AssistantMessage.tsx` | 渲染单条 assistant 文本消息；消费 `render-items-manager` 预清洗好的 `cleanedText` / `scheduleIds`，装配 MarkdownView、GeneratedFileCards、GeneratedScheduleCards、CopyButton | ~140 LOC |
 | `message/UserMessage.tsx` | 渲染单条用户消息：MarkdownView + AttachmentList + Copy/Edit 按钮 | ~75 LOC |
-| `message/AttachmentList.tsx` | 用户消息附件列表（图片 / 文件 / Office / 其它）；sandbox 大图(`local://`+fileRef / opaque)经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) 构造 `media://` URL 由 `<img loading=lazy>` 字节直供（不读 base64），小图内联 dataURL；点击通过 `window.dispatchEvent('imageViewer:open' / 'fileViewer:open')` 唤起全局 viewer | ~215 LOC |
+| `message/AttachmentList.tsx` | 用户消息附件列表（图片 / 文件 / Office / 其它）；sandbox 大图(`local://`+fileRef / opaque)经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) 构造 `media://` URL 由 `<img loading=lazy>` 字节直供（不读 base64），小图内联 dataURL；点击图片走 `ImageViewerAtom.open`（`ui/OverlayImageViewer`），点击文件走 `useOpenFilePreview()`（就近作用域路由，聊天页 inline 预览） | ~215 LOC |
 | `message/CopyButton.tsx` | 复制到剪贴板按钮；`text` 支持字符串或惰性 getter | ~60 LOC |
 | `tool/ToolCallsSection.tsx` | 工具调用章节;两套视图共享同一外壳 + CSS transition(220ms): **collapsed** 紧凑 600px 卡片(chip 行 + 单选 detail);**expanded** (view all) 贴边浅灰条 max-h 60vh 内滚,所有工具纵向列出(每张白卡片复用 `ToolDetailView`)。水平 inset 模式:`!px-0` 这层豁免 `.chat-message-flow-reverse > *` 的默认 `--chat-pad-x` padding,由本组件正向控制 margin(collapsed 推内容对齐其他消息)或 padding(expanded bg 撑满 wrapper + 内 padding 拉回对齐) — **不用负 margin breakout**,bg 天然占满 chat 全宽;高度切换由 `AnimatedHeight` 平滑过渡,避免 column-reverse 上方兄弟闪动。`selectedId` 切 mode 时保留 | ~350 LOC |
 | `tool/ToolChip.tsx` | 单个工具胶囊；状态点 executing(琥珀脉动) / failed(红实心) / completed(无点)；选中态深色填充；接收 `label` props 由 ToolCallsSection 计算（renderer 的 `chipLabel` 覆盖优先） | ~75 LOC |
@@ -24,7 +24,7 @@
 | `tool/registerBuiltins.ts` | 集中注册三个内置 renderer（`app` / `shell` / `write`）。子命令分派由各 renderer 自己负责，不在本表 | ~25 LOC |
 | `tool/index.ts` | barrel；import 副作用触发 `registerBuiltinToolRenderers()`；导出 ToolCallsSection / ToolDetailView / registry helpers | ~25 LOC |
 | `tool/renderers/shell/index.tsx` | `shellRenderer` —— `chipLabel` (`shell: <cmd>`) + `InputBlock`（终端 prompt+command）+ `OutputSuccessBlock`（stdout/stderr/exit 终端块） | ~110 LOC |
-| `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，触发 `fileViewer:open` / `imageViewer:open`） | ~110 LOC |
+| `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，图片走 `ImageViewerAtom.open`、其余走 `useOpenFilePreview()`） | ~110 LOC |
 | `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；内部 `pickSubRenderer` 调子命令路由（subagent → spawn / spawn-many；未来 mcp / skill / web ...）；不命中时给出朴素兜底（chip = `app:<sub>`，input = cmd 字符串，output = result 文本） | ~95 LOC |
 | `tool/renderers/app/cmdline.ts` | App 子命令分派的 cmdline 工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
 | `tool/renderers/app/subagent/` | `app subagent spawn` / `spawn-many` 子命令的 renderer 实现包：`index.ts`（路由 spawn/spawn-many）+ `parse.ts`（cmdline 字段抽取）+ `helpers.tsx`（共享 timer / progress bar / steps list）+ `spawn.tsx`（单 task 三 slot）+ `spawnMany.tsx`（并行 task 三 slot）。订阅 `subAgent:stateUpdate` IPC 渲染实时进度 | — |
@@ -40,9 +40,10 @@
 | `chat-input/shared/transformMentions.ts` | 纯函数；把 `[@knowledge://...]`、`[@local://...]`、`[#skill:...]` 这些 mention bracket 形态转换为 markdown inline code（防止前后符号被解析为粗体/链接） | 小 |
 | `chat-input/ThinkingLevelSelector.tsx` | 单聊会话的 thinking level 选择器（pi-ai `ThinkingLevel` 枚举：`minimal/low/medium/high/xhigh`）；仅在活跃模型支持 ≥2 个等级时渲染；写入 `chat.agent.thinkingLevel`，通过 `updateAgent` 持久化到 AGENT.md front-matter。dropdown 顶部 "Auto" 项写入 `thinkingLevel: null` 清除字段，回到 provider 默认 —— 前端不假装知道默认值。运行时由 `pi.streamSimple({ reasoning })` 翻译给各 provider，不再走旧的"Claude→high / GPT→medium"启发式 | 小 |
 | `chat-input/ContextMenu.tsx` | @-提及下拉菜单，用于文件、技能和工作区项目 | — |
+| `chat-input/chatInputCommands.ts` | compose 聊天输入子树的**命令句柄注册表**（替代旧 `chatInput:selectFiles`/`chatInput:screenshot`/`agent:fillInput`/`context:mentionSelect`/`context:skillMentionSelect` window 事件）。consumer 挂载期用 `useRegisterComposeTextHandle`（compose Textarea，`enableContextMenu` 门控，edit 实例不注册）/ `useRegisterComposeFileHandle`（ComposeInput）注册自身方法到模块单例（内部经 ref 转发器，handler 闭包变化免重注册）；producer 直接调 `composeTextCommands.*`（insertMention/insertSkillMention/fillInput）/ `composeFileCommands.*`（selectFiles/screenshot）。**不是 state**——命令式句柄，无 atom/无 re-render/无 nonce diff，只把无类型 `CustomEvent` 换成编译期类型契约 + 可跳转引用。选注册表而非 context：producer 之一 `context-menu.atom.ts` 非 React 组件读不了 context | 小 |
 | `ErrorBar.tsx` | 聊天中的内联错误显示 | — |
-| `ChatInlinePreviewOverlay.tsx` | inline 文件预览的全屏浮层;铺满整个 chat-content 区域(连 ComposeInput 一起遮住),通过 `fileViewer:open` 自定义事件触发。导出的 `inlinePreviewCoordinator.mounted` 让 `OverlayFileViewer` 在本组件挂载时让出处理权,避免同一事件被两个 viewer 同时打开 | — |
-| `chat-side.atom.ts` | `WorkspaceExplorerAtom` 和 `InlinePreviewAtom` 的 atom | — |
+| `../filePreview/ChatFilePreviewOverlay.tsx` | 聊天页 inline 文件预览浮层;满铺 chat-content 区(连 ComposeInput 一起遮住),纯订阅 `ChatFilePreviewAtom` 渲染。聊天子树被 `ChatFilePreviewScope` 包裹，producer 经 `useOpenFilePreview()` 就近命中此 atom（不再监听 `fileViewer:open` 事件）。**外壳薄,渲染共用 `filePreview/FilePreviewPanel`** | — |
+| `chat-side.atom.ts` | `WorkspaceExplorerAtom`（右侧工作区侧栏可见性 + reveal）的 atom；`effectiveToggle` 打开侧栏时顺带 `ChatFilePreviewAtom.cancel()`。文件预览状态已迁到 `filePreview/filePreview.atom.ts` | — |
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
 | `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（基本信息、上下文增强、知识库、MCP 服务器、技能、子 agent、系统提示词） | — |
@@ -75,7 +76,7 @@ ChatView (路由同步, 会话操作)
        │         └─ EditInlineInput (内联编辑模式)
        ├─ ComposeInput (主编辑器)
        ├─ ChatWorkspaceSideOverlay (右侧工作区浮层, 覆盖消息区; ChatViewContent 本地组件)
-       └─ ChatInlinePreviewOverlay (全屏 inline 文件预览, 覆盖整个 chat-content)
+       └─ ChatFilePreviewOverlay (满铺 inline 文件预览, 覆盖整个 chat-content; 复用 filePreview/FilePreviewPanel)
 
 `ChatView` 位于 `/agent/:agentId/:sessionId` 与 `/agent/:agentId/job/:jobId/:sessionId` 路由下。两条路由在 `entries/main.routes.tsx` 用同一个 `ChatView` 组件渲染，由路由显式注入 `kind?: 'regular' | 'job-run'` prop（默认 `'regular'`）；ChatView 据此决定快照拉取走 `loadChatSessionSnapshot/markSessionRead`（regular，命中 `regular_sessions` + `Agent.getSession()`）还是 `loadJobRunSnapshot/markJobRunRead`（job-run，命中 `job_runs` + `Agent.getJob().getRun()`）。两条 IPC 路径在主进程 persist 层完全物理隔离，禁止写"按 sessionId 万能取" 的混查 helper。它通过 `agentSessionCacheManager` 将路由与后端会话状态同步，处理会话分叉/选择，并分发 agent 编辑的导航事件。
 
@@ -122,7 +123,7 @@ ChatView (路由同步, 会话操作)
 交互式请求是聊天会话原生的。待处理的请求通过 `InteractiveRequestCard` / `InteractiveSearchCard` / `InteractiveAuthCard` 在时间线中内联渲染，提交或解决后从 UI 中移除。审批请求在每个项目都有批准/拒绝决定后自动提交。选择请求和表单 select 类控件渲染为响应式的换行选项网格，带有 `Other` 回退卡片用于自定义文本输入。`interactive-search` 的网页浏览本体在独立 research window，聊天卡片只承载 focus/cancel 和状态摘要。
 
 ### 用户消息编辑
-内联用户消息编辑通过 `editMessageAtom` 管理。`ChatContainer` 为正在编辑的消息渲染 `EditInlineInput`；底部主输入则保持为 `ComposeInput`，必要时通过 `isInputLocked` 进入只读锁定态。编辑确认对话框由 `AgentLayout` 通过 window-event 桥接拥有；其跳过偏好持久化在 `profile.json` 的 `confirmationSettings.inlineEditRegenerate.skipConfirmation` 中。
+内联用户消息编辑通过 `editMessageAtom` 管理。`ChatContainer` 为正在编辑的消息渲染 `EditInlineInput`；底部主输入则保持为 `ComposeInput`，必要时通过 `isInputLocked` 进入只读锁定态。编辑确认对话框由 `AgentLayout` 挂载 `ModifyMsgConfimOverlay`；`EditInlineInput` 通过其导出的 **imperative confirm atom** `inlineEditConfirmAtom.request({title, description}): Promise<boolean>` 发起确认（旧的 `chatInput:confirmInlineEditRequest/Result` 两段式 window 事件已移除）；skip 逻辑在 `request` 内同步读 `confirmationSettings.inlineEditRegenerate.skipConfirmation`（持久化在 `profile.json`）。
 
 ### 侧边栏和编辑器
 Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `ChatView` 的子组件。Agent 编辑器（`agent-editor/`）在导航到 `/agent/:agentId/settings/*` 时出现。**定时任务（jobs / runs）UI 已搬迁到 [`components/agent-side/`](../agent-side/ai.prompt.md)**：alarm 切换 + jobs CRUD + runs 列表 + AddScheduleOverlay 全部走那条主从二级视图，URL 是真相源；`SchedulesSidepane` / `AgentSchedulesTab` / `SchedulesContentView` 已物理删除。
@@ -138,7 +139,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 修改两种输入共享的附件/截图逻辑 | `chat-input/shared/useFileHandling.ts` + `chat-input/Attachments.tsx`(atom) | 同时影响 compose 和 inline edit,两边都要回归。物化推迟到发送:新增 attach 路径(自定义来源等)只需把原始 `File` 交给 `attachmentManager.addXxx`,`createMessage` 发送时统一走 `copyFileToSandbox` 落盘;**切勿在 attach 阶段调 `copyFileToSandbox`**,否则又会未发送先落盘 |
 | 修改用户消息附件展示 | `message/AttachmentList.tsx` | image / file / office / others 共用 |
 | 更改 approval / choice / form 交互 | `interactive/RequestCard.tsx`、`ChatRenderItem.tsx`、`agentSessionCacheManager.ts` | 待处理请求经 `render-items-manager` 进入渲染流水线，由 `ChatRenderItemComponent` 分发 |
-| 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`AppRoutes.tsx` 中的路由、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS`、`agent-area/AgentEditingView.tsx` 的 Tab 渲染分支 | 遵循现有标签页外壳模式 |
+| 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`entries/main.routes.tsx` 中的路由、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS`、`agent-area/AgentEditingView.tsx` 的 Tab 渲染分支 | 遵循现有标签页外壳模式 |
 | 修改滚动行为 | `ChatContainer.tsx` — `useAutoScroll` hook | 始终验证基于 `chatSessionId` 的重置；流式跟随由 `streamingMessageTextLength` effect 驱动 |
 
 ## 联动变更映射
@@ -148,11 +149,11 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 新渲染项类型 | `lib/chat/render-items-manager.ts`（类型联合 + `computeRenderItems` + `isSameRenderItem` + `getChatRenderItemStableKey`）+ `ChatRenderItem.tsx`（分发） |
 | 聊天输入中的新附件类型 | `chat-input/shared/useFileHandling.ts` + `contentUtils.ts`(`ContentPartFactory`)+ `@shared/types/chatTypes`(`UnifiedContentPart`)+ shared constants 中的 `FILE_ATTACHMENT_LIMITS` + `message/AttachmentList.tsx`(渲染分支)+ [`src/main/lib/attachment/`](../../../main/lib/attachment/ai.prompt.md)(若新来源需要新的 main 端 attach 入口) |
 | 新交互式请求控件类型 | `interactive/RequestCard.tsx` 或专用卡片 + `@shared/types/interactiveRequestTypes` + `agentSessionCacheManager.ts` + `ChatViewContent.tsx` 分发 |
-| 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `AppRoutes.tsx`（嵌套路由）+ `agent-editor/AgentSettingsNav.tsx`（`NAV_ITEMS`）+ `agent-area/AgentEditingView.tsx`（Tab 渲染分支） |
-| 会话滚动/布局变更 | `ChatContainer.tsx` + `ChatContainer.css` — 始终验证基于 `chatSessionId` 的重置，而非基于 `agentId` |
+| 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `entries/main.routes.tsx`（嵌套路由）+ `agent-editor/AgentSettingsNav.tsx`（`NAV_ITEMS`）+ `agent-area/AgentEditingView.tsx`（Tab 渲染分支） |
+| 会话滚动/布局变更 | `ChatContainer.tsx`(容器几何已 Tailwind 化) + `styles/biz/_chat.scss`(scrollbar/inset/data-mode/`:has()` 等无法 Tailwind 化的规则,原 `ChatContainer.scss` 已删,曾暂存于 `globals.css` 尾部,现归入 biz 层) — 始终验证基于 `chatSessionId` 的重置，而非基于 `agentId` |
 | Markdown 渲染变更 | `message/MarkdownView.tsx` + `message/MarkdownView.scss`（全局生效） |
 | 发送门控逻辑 | `chat-input/ComposeInput.tsx` + `chat-input/EditInlineInput.tsx`（显式 `chatStatus === 'idle'` 守卫）+ 渲染进程发送入口点缓存状态重新检查 |
-| `.chat-container-reverse` 左右 inset 改动 | `ChatContainer.scss` 的 `--chat-pad-x` CSS 变量是唯一写入点 — 水平 inset 由 `.chat-message-flow-reverse > *` 选择器统一加给所有直接子项(替代旧的 `.chat-container-reverse` 自带 padding);`ToolCallsSection` 通过 className 豁免该 padding 自己控制。改值只能改 `--chat-pad-x`;**禁止**删除该变量或在其它地方 hardcode 36px |
+| `.chat-container-reverse` 左右 inset 改动 | `--chat-pad-x` CSS 变量是唯一写入点(现由 `ChatContainer.tsx` 容器上的 `[--chat-pad-x:36px]` 任意值设定) — 水平 inset 由 `styles/biz/_chat.scss` 里 `.chat-message-flow-reverse > *` 选择器统一加给所有直接子项(替代旧的 `.chat-container-reverse` 自带 padding);`ToolCallsSection` 通过 className 豁免该 padding 自己控制。改值只能改 `--chat-pad-x`;**禁止**删除该变量或在其它地方 hardcode 36px |
 
 ## 反模式
 - **在 `ChatContainer` 内部读取 `useMessages()`**：会导致会话切换时的过时渲染。消息列表必须由 `ChatViewContent` 拥有并通过 props 传递。
@@ -186,9 +187,9 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 - 聊天输入的发送可用性必须在 `ComposeInput` 和 `EditInlineInput` 两侧保持一致，且都应基于显式的 `chatStatus === 'idle'`。将缺失的状态视为 idle 会重新打开编辑器在会话状态水合前提交的竞态条件。
 - 内联编辑提交失败是可恢复的聊天错误。如果 `onSubmitEditedMessage` 被拒绝，将消息捕获到 chat-session cache 中，以便 `ErrorBar` 能够渲染它。
 - 时间线自动滚动不仅仅由消息数量变化驱动。如果插入了待处理的交互式请求或类似的非消息时间线项，`ChatContainer` 仍需要显式的最新滚动触发（当前由 `ResizeObserver` 稳定窗口兜底）。
-- Agent 编辑器标签页路由使用嵌套的 React Router `<Outlet>` — 添加标签页需要同时修改组件树和 `AppRoutes.tsx`。
+- Agent 编辑器标签页路由使用嵌套的 React Router `<Outlet>` — 添加标签页需要同时修改组件树和 `entries/main.routes.tsx`。
 - Mermaid 图表作为异步 webpack chunk 延迟加载；避免在同步加载的聊天文件中直接导入 `mermaid`。
-- AttachmentList 通过 `window.dispatchEvent('imageViewer:open' / 'fileViewer:open')` 与全局 viewer 解耦。新加附件类型时记得在两侧都注册（事件 detail 字段与 viewer 监听）。
+- 图片预览走 `ImageViewerAtom`（`ui/OverlayImageViewer`），文件预览走 `useOpenFilePreview()`（`filePreview/filePreviewScope`）——**均已从 `imageViewer:open` / `fileViewer:open` window 事件迁到就近作用域 atom 路由**。文件预览的「聊天 inline vs 全局弹窗」二选一由 React context（`ChatFilePreviewScope` 包住 `ChatViewContent` 子树）决定，替代旧的 capture/bubble + coordinator 单例。新增文件触发源：组件里 `const open = useOpenFilePreview()` 后 `open({name, url, ...})`。
 - `.chat-container-reverse` 本身**没有水平 padding** —— 已迁到 `.chat-message-flow-reverse > *` 的子选择器上,通过 `--chat-pad-x` 变量统一。`!px-0` 豁免该 padding,让 `ToolCallsSection` expanded 模式 bg 能天然铺满 chat 全宽。新增直接子元素时自动继承默认 padding;若要做"贴边铺满"效果,加上 `!px-0` 同款豁免类。
 
 ## 后续可做（Backlog）

@@ -20,10 +20,7 @@ export const BASE_CDN_URL: string = isDev
  */
 export const RELEASE_CDN_URL: string = `${BASE_CDN_URL}/releases`;
 
-/**
- * Relay service URL — backend that proxies GitHub Issue creation, etc.
- */
-export const RELAY_SERVICE_URL: string = isDev
-  ? 'https://relay-test.deskmate.top'
-  : 'https://relay.deskmate.top';
 
+export const ONELINE_API_URL_BASE = "https://api.deskmate.top";
+export const GIT_REPO_URL_BASE = "https://github.com/flowingfate/deskmate";
+export const GIT_REPO_API_URL_BASE = "https://api.github.com/repos/flowingfate/deskmate";

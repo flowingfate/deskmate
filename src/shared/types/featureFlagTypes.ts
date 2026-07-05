@@ -9,7 +9,6 @@ export type FeatureFlagName =
   | 'deskmateFeatureScheduler'          // Cron-based scheduled task system
   | 'deskmateFeatureSubAgent'           // Sub-Agent system
 
-  | 'deskmateFeatureDoctor'            // Doctor (in-app self-diagnosis) entry in UserMenu
   // Add more feature flags here...
   ;
 

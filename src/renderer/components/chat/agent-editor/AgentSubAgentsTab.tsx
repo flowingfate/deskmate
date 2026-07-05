@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Settings, Loader2 } from 'lucide-react';
 import { Button } from '@/shadcn/button'
 import { Checkbox } from '@/shadcn/checkbox'
@@ -8,7 +8,6 @@ import { cn } from '@/lib/utilities/utils';
 
 import { TabComponentProps } from './types';
 import { useSubAgents } from '../../userData/userDataProvider';
-import { markSettingsCameFromApp } from '@/lib/navigation/settingsBackSentinel';
 
 /**
  * AgentSubAgentsTab - Agent Sub-Agents configuration tab
@@ -35,7 +34,6 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
 }) => {
   const { subAgents: globalSubAgents, isLoading } = useSubAgents();
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Store selected sub-agent names
   const [selectedSubAgents, setSelectedSubAgents] = useState<Set<string>>(new Set());
@@ -124,30 +122,18 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
     return availableSelected.length;
   }, [selectedSubAgents, globalSubAgents]);
 
-  // Navigate to Sub-Agents management page
+  // 跳到 Settings 的 Sub-Agents 管理页。意图（是否预选某 sub-agent）由 URL query 承载：
+  // `?selected=<name>` 让 SubAgentsView 自行选中，无需事件/定时器/sessionStorage。
+  // 导航是 PUSH，SettingsPage 的 Back 依据 history.state.idx 判断可回退性。
   const handleManageAll = useCallback(() => {
-    markSettingsCameFromApp();
     navigate('/settings/sub-agents');
-  }, [navigate, location.pathname]);
+  }, [navigate]);
 
-  // Navigate to Sub-Agents management page and select the corresponding sub-agent
   const handleManageSubAgent = useCallback(
     (subAgentName: string) => {
-      markSettingsCameFromApp();
-
-      // Close Agent Editor first
-      window.dispatchEvent(new CustomEvent('agent:closeEditor'));
-
-      setTimeout(() => {
-        window.dispatchEvent(
-          new CustomEvent('subAgents:selectSubAgent', {
-            detail: { subAgentName },
-          }),
-        );
-        navigate('/settings/sub-agents');
-      }, 100);
+      navigate(`/settings/sub-agents?selected=${encodeURIComponent(subAgentName)}`);
     },
-    [navigate, location.pathname],
+    [navigate],
   );
 
   return (
@@ -249,7 +235,7 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
                       </div>
                     </div>
                     {subAgent.description && (
-                      <div className="sub-agent-card-description" style={{
+                      <div style={{
                         padding: '0 12px 8px 36px',
                         fontSize: '12px',
                         color: 'var(--text-secondary, #6b7280)',

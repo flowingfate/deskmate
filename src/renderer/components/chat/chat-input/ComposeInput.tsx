@@ -4,7 +4,6 @@ import { agentSessionCacheManager, ChatStatus, CurrentSessionError } from '@/lib
 import type { UserMessage } from '@shared/types/message';
 import ErrorBar from '../ErrorBar';
 import { getChatInputShortcutHint } from '@/lib/chat/chatInputKeyboard';
-import '../ChatInput.scss';
 import { log } from '@/log';
 import { AttachmentList, AttachmentsStatus } from './Attachments';
 import { TextArea } from './Textarea';
@@ -16,6 +15,7 @@ import { traceContext } from '@renderer/lib/chat/traceContext';
 import { agentIpc } from '@renderer/lib/chat/agentIpc';
 import { EditAgentMenuAtom } from '../../menu/EditAgentMenuDropdown';
 import { AttachMenuAtom } from '../../menu/AttachMenuDropdown';
+import { useRegisterComposeFileHandle } from './chatInputCommands';
 import { Button } from '@/shadcn/button';
 import { useChatInputState } from './shared/useChatInputState';
 import { useFileHandling } from './shared/useFileHandling';
@@ -88,16 +88,11 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    const handleSelectFiles = () => handleElectronFileSelect();
-    const handleScreenshot = () => handleScreenshotCapture();
-    window.addEventListener('chatInput:selectFiles', handleSelectFiles);
-    window.addEventListener('chatInput:screenshot', handleScreenshot);
-    return () => {
-      window.removeEventListener('chatInput:selectFiles', handleSelectFiles);
-      window.removeEventListener('chatInput:screenshot', handleScreenshot);
-    };
-  }, [handleElectronFileSelect, handleScreenshotCapture]);
+  // 注册文件命令句柄（AttachMenuDropdown 触发 selectFiles/screenshot）。
+  useRegisterComposeFileHandle({
+    selectFiles: handleElectronFileSelect,
+    screenshot: handleScreenshotCapture,
+  });
 
   async function onCancelChat() {
     try {
@@ -165,7 +160,7 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
 
   return (
     <div
-      className={`chat-input-container p-0! h-auto ${isDragOver ? 'drag-over' : ''}`}
+      className={`chat-input-container relative shrink-0 overflow-visible p-0! h-auto ${isDragOver ? 'drag-over' : ''}`}
       onDragOver={dragHandlers.handleDragOver}
       onDragEnter={dragHandlers.handleDragEnter}
       onDragLeave={dragHandlers.handleDragLeave}
@@ -176,18 +171,7 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
       )}
 
       {isInputLocked && (
-        <div
-          style={{
-            margin: '0 4px 10px',
-            padding: '10px 12px',
-            borderRadius: '12px',
-            border: '1px solid rgba(0,0,0, 0.28)',
-            background: 'rgba(0,0,0, 0.08)',
-            color: 'rgba(45, 45, 45, 0.92)',
-            fontSize: '12px',
-            lineHeight: 1.4,
-          }}
-        >
+        <div className="bg-black/8 border-black/28 text-gray-800 text-xs py-1 px-4">
           Inline message editing is active above. Save or cancel that edit to continue composing here.
         </div>
       )}
@@ -208,7 +192,7 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
           textareaStateAtom={textareaStateAtom}
         />
 
-        <div className="button-area">
+        <div className="flex items-center justify-between p-3.5 pt-1 gap-3">
           <Button
             variant="outline"
             size="icon-sm"
@@ -241,7 +225,7 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
             multiple
           />
 
-          <div className="right-buttons-group">
+          <div className="order-3 ml-auto flex items-center gap-3">
             <ModelSelector
               currentAgentId={currentAgentId}
               shouldLockComposeUi={isInputLocked}

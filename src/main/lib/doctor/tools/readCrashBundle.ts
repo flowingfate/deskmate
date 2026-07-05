@@ -10,27 +10,26 @@
  * Hard cap on output (~12KB) so this never blows up the LLM context. Path traversal is rejected.
  */
 
+import type { Tool } from '@earendil-works/pi-ai';
+import { jsonSchema } from '@main/pi/tools/schema';
 import * as fs from 'fs';
 import * as path from 'path';
 import { crashCaptureManager } from '../../crash/CrashCaptureManager';
 import { truncateMiddle } from '../chatSession/truncate';
 
-export const readCrashBundleToolDef = {
-  type: 'function' as const,
-  function: {
-    name: 'read_crash_bundle',
-    description: `Read one crash bundle in detail and return a compact markdown digest containing manifest, event payload (error message + stack), host/memory snapshot, and the last 30 breadcrumbs as a table. Use this only after get_crash_status, on the bundle most relevant to the bug. Output is hard-capped to ~12KB.`,
-    parameters: {
-      type: 'object',
-      properties: {
-        bundleName: {
-          type: 'string',
-          description: `The bundle directory name as returned by get_crash_status (e.g. "20260323-144328-791-recovered-unclean-exit-session-...").`,
-        },
+export const readCrashBundleToolDef: Tool = {
+  name: 'read_crash_bundle',
+  description: `Read one crash bundle in detail and return a compact markdown digest containing manifest, event payload (error message + stack), host/memory snapshot, and the last 30 breadcrumbs as a table. Use this only after get_crash_status, on the bundle most relevant to the bug. Output is hard-capped to ~12KB.`,
+  parameters: jsonSchema({
+    type: 'object',
+    properties: {
+      bundleName: {
+        type: 'string',
+        description: `The bundle directory name as returned by get_crash_status (e.g. "20260323-144328-791-recovered-unclean-exit-session-...").`,
       },
-      required: ['bundleName'],
     },
-  },
+    required: ['bundleName'],
+  }),
 };
 
 const MAX_OUTPUT_CHARS = 12 * 1024;

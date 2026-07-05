@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import SettingsSidepanel from '@renderer/components/settings/sidepanel';
 import { AgentContextType } from '@/types/agentContextTypes';
@@ -9,31 +9,10 @@ import {
   SettingsFloatingMenus,
   SettingsDialogs,
 } from './layout/settings';
-import {
-  consumeSettingsCameFromApp,
-  resolveSettingsBackFallbackPath,
-} from '@/lib/navigation/settingsBackSentinel';
 
 const SettingsPage: React.FC = () => {
-  const navigate = useNavigate();
-
   const menus = useSettingsMenus();
   const actions = useSettingsActions();
-
-  // Drop legacy keys written by older revisions; the sentinel above is the
-  // single source of truth now.
-  useEffect(() => {
-    sessionStorage.removeItem('previousPath');
-    sessionStorage.removeItem('settingsReturnPath');
-  }, []);
-
-  const handleBack = () => {
-    if (consumeSettingsCameFromApp()) {
-      navigate(-1);
-      return;
-    }
-    navigate(resolveSettingsBackFallbackPath());
-  };
 
   const settingsContext: AgentContextType = {
     onMcpServerConnect: actions.handleMcpServerConnect,
@@ -51,7 +30,7 @@ const SettingsPage: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 flex min-h-0">
-        <SettingsSidepanel onBack={handleBack} />
+        <SettingsSidepanel />
         <ResizableDivider />
         <div className="flex-1 flex flex-col min-w-0 mr-2 mb-2 overflow-hidden rounded-lg border border-black/7 shadow-[0px_2px_6px_rgba(0,0,0,0.05)]">
           <Outlet context={settingsContext} />
@@ -68,17 +47,9 @@ const SettingsPage: React.FC = () => {
       />
 
       <SettingsDialogs
-        deleteSkillDialog={actions.deleteSkillDialog}
-        setDeleteSkillDialog={actions.setDeleteSkillDialog}
-        handleConfirmDeleteSkill={actions.handleConfirmDeleteSkill}
         deleteMcpDialog={actions.deleteMcpDialog}
         setDeleteMcpDialog={actions.setDeleteMcpDialog}
         handleConfirmDeleteMcp={actions.handleConfirmDeleteMcp}
-        deleteSubAgentDialog={actions.deleteSubAgentDialog}
-        setDeleteSubAgentDialog={actions.setDeleteSubAgentDialog}
-        handleConfirmDeleteSubAgent={actions.handleConfirmDeleteSubAgent}
-        applySubAgentDialogState={actions.applySubAgentDialogState}
-        setApplySubAgentDialogState={actions.setApplySubAgentDialogState}
       />
     </div>
   );

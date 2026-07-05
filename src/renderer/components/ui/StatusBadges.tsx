@@ -98,7 +98,7 @@ export const StatusBadges: React.FC<StatusBadgesProps> = ({
   onOpenSkills
 }) => {
   return (
-    <div className="status-badges">
+    <div className="flex items-center gap-1 flex-nowrap">
       <AvailableSkillsBadge
         onOpenSkills={onOpenSkills}
       />

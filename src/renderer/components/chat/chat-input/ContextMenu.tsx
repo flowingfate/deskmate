@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ContextOption, ContextMenuOptionType } from '@/lib/chat/contextMentions';
 import { ContextMenuAtom } from './context-menu.atom';
-import './ContextMenu.scss';
 
 export const ContextMenu: React.FC = () => {
   const [state, actions] = ContextMenuAtom.use();
@@ -13,7 +12,7 @@ export const ContextMenu: React.FC = () => {
   // Auto-scroll to selected item
   useEffect(() => {
     if (menuRef.current && options.length > 0) {
-      const items = menuRef.current.querySelectorAll('.context-menu-item');
+      const items = menuRef.current.querySelectorAll('[data-context-menu-item]');
       const selectedElement = items[selectedIndex] as HTMLElement;
       if (selectedElement) {
         selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -251,7 +250,7 @@ export const ContextMenu: React.FC = () => {
           return (
             <div
               key={`${option.type}-${option.value || option.relativePath || index}`}
-              className="context-menu-item"
+              data-context-menu-item=""
               onClick={() => {
                 if (isOptionSelectable(option)) {
                   onSelect(option);

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Settings, RotateCw, Loader2 } from 'lucide-react';
 import { Checkbox } from '@/shadcn/checkbox'
 import { Button } from '@/shadcn/button';
@@ -10,7 +10,6 @@ import { TabComponentProps } from './types';
 import { useSkills } from '../../userData/userDataProvider';
 import { isBuiltinSkill } from '../../../../shared/constants/builtinSkills';
 import ListSearchBox from '../../ui/ListSearchBox';
-import { markSettingsCameFromApp } from '@/lib/navigation/settingsBackSentinel';
 import { log } from '@/log';
 const logger = log.child({ mod: 'AgentSkillsTab' });
 
@@ -35,7 +34,6 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
 }) => {
   const { skills: globalSkills, isLoading } = useSkills();
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Store selected skill names
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
@@ -138,35 +136,18 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
     return globalSkills?.length || 0;
   }, [globalSkills]);
 
-  // Navigate to Skills management page (settings page)
+  // 跳到 Settings 的 Skills 管理页。意图（是否预选某技能）由 URL query 承载：
+  // `?selected=<name>` 让 SkillsView 自行选中，无需事件/定时器/sessionStorage。
+  // 导航是 PUSH，SettingsPage 的 Back 依据 history.state.idx 判断可回退性。
   const handleManageSkills = useCallback(() => {
-    // Save current path to sessionStorage
-    markSettingsCameFromApp();
     navigate('/settings/skills');
-  }, [navigate, location.pathname]);
+  }, [navigate]);
 
-  // Navigate to Skills management page (settings page) and select the corresponding skill
   const handleManageSkill = useCallback(
     (skillName: string) => {
-      // Save current path to sessionStorage
-      markSettingsCameFromApp();
-
-      // First close the Agent Editor
-      window.dispatchEvent(new CustomEvent('agent:closeEditor'));
-
-      // Wait briefly to ensure the editor is closed, then switch view and select the skill
-      setTimeout(() => {
-        // Dispatch custom event to notify SkillsView to select this skill
-        window.dispatchEvent(
-          new CustomEvent('skills:selectSkill', {
-            detail: { skillName },
-          }),
-        );
-        // Switch to the skills view on the settings page
-        navigate('/settings/skills');
-      }, 100);
+      navigate(`/settings/skills?selected=${encodeURIComponent(skillName)}`);
     },
-    [navigate, location.pathname],
+    [navigate],
   );
 
 

@@ -40,7 +40,7 @@ const ScreenshotSettingsContentView: React.FC<ScreenshotSettingsContentViewProps
         {/* Settings Form */}
         <div className="transition-all duration-300 max-h-500 opacity-100 px-6 pb-6 space-y-6">
           {/* Enable Screenshot */}
-          <div className="bg-white rounded-md p-3 border border-(--shadow-md) gap-2 flex items-center justify-between">
+          <div className="bg-white rounded-md p-3 border border-black/7 gap-2 flex items-center justify-between">
             <div className="flex-1">
               <label className="block text-(--text-primary) text-base font-normal">Enable Screenshot</label>
             </div>
@@ -56,7 +56,7 @@ const ScreenshotSettingsContentView: React.FC<ScreenshotSettingsContentViewProps
           </div>
 
           {/* Shortcut Configuration */}
-          <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
+          <div className="bg-white rounded-md p-2 border border-black/7 flex flex-col gap-2">
             <div className="flex items-center justify-between px-1 py-2.5 mb-2">
               <div className="flex-1">
                 <label className="block text-(--text-primary) text-base font-normal">Enable Shortcut</label>
@@ -81,7 +81,7 @@ const ScreenshotSettingsContentView: React.FC<ScreenshotSettingsContentViewProps
           </div>
 
           {/* Save Path Configuration */}
-          <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
+          <div className="bg-white rounded-md p-2 border border-black/7 flex flex-col gap-2">
             <div className="px-1 py-2.5">
               <label className="block text-(--text-primary) text-base font-normal mb-2">Save Path</label>
               <div className="flex items-center gap-2">

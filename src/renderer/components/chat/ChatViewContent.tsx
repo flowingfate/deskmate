@@ -4,8 +4,10 @@ import { ComposeInput } from './chat-input';
 import { useCurrentChatSessionId, useMessagesWithStream, ChatStatus, CurrentSessionInteractiveRequests } from '../../lib/chat/agentSessionCacheManager';
 import { sendUserMessage } from '@renderer/lib/chat/sendUserMessageOptimistically';
 import { editMessageAtom } from './message/edit-message.atom';
-import ChatInlinePreviewOverlay from './ChatInlinePreviewOverlay';
-import { InlinePreviewAtom, WorkspaceExplorerAtom } from './chat-side.atom';
+import ChatFilePreviewOverlay from '../filePreview/ChatFilePreviewOverlay';
+import { ChatFilePreviewScope } from '../filePreview/filePreviewScope';
+import { ChatFilePreviewAtom } from '../filePreview/filePreview.atom';
+import { WorkspaceExplorerAtom } from './chat-side.atom';
 import WorkspaceExplorerSidepane from './workspace/WorkspaceExplorerSidepane';
 import InteractiveAuthCard from './interactive/AuthCard';
 import InteractiveRequestCard from './interactive/RequestCard';
@@ -65,18 +67,18 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
   const [editingMessageState, editMessageActions] = editMessageAtom.use();
 
   const currentChatSessionId = useCurrentChatSessionId();
-  const InlinePreviewActions = InlinePreviewAtom.useChange();
+  const filePreviewActions = ChatFilePreviewAtom.useChange();
   // Close preview when switching chat sessions
   useEffect(() => {
-    InlinePreviewActions.cancel();
+    filePreviewActions.cancel();
     editMessageActions.cancel();
   }, [currentChatSessionId]);
 
   function renderContent() {
     if (isSessionSwitching) {
       return (
-        <div className="chat-session-transition-state" role="status" aria-live="polite">
-          <div className="chat-session-transition-copy">
+        <div className="chat-session-transition-state w-full mx-auto flex-1 flex items-center justify-center min-h-0" role="status" aria-live="polite">
+          <div className="px-6 py-4.5 border border-[rgba(28,28,28,0.08)] rounded-full bg-[linear-gradient(180deg,rgba(250,250,250,0.96)_0%,rgba(245,245,245,0.98)_100%)] text-[#585858] text-sm leading-normal shadow-[0_10px_30px_rgba(28,28,28,0.06)]">
             Opening chat history...
           </div>
         </div>
@@ -99,23 +101,26 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
   }
 
   return (
-    <div className="chat-content relative flex flex-col flex-1 h-full overflow-hidden">
-      <div className="relative flex flex-col flex-1 overflow-hidden">
-        {renderContent()}
-        <ChatWorkspaceSideOverlay />
+    <ChatFilePreviewScope>
+      <div className="relative flex flex-col flex-1 h-full overflow-hidden bg-(--bg-primary) min-w-0">
+        <div className="relative flex flex-col flex-1 overflow-hidden">
+          {renderContent()}
+          <ChatWorkspaceSideOverlay />
+        </div>
+        <WithInteractive>
+          {/* <div className="bg-black/2 px-5 h-6">~</div> */}
+          <ComposeInput
+            onSendMessage={sendUserMessage}
+            chatStatus={chatStatus}
+            enableContextMenu
+            chatSessionId={currentChatSessionId}
+            isReadOnly={isReadOnly}
+            isInputLocked={!!editingMessageState || isSessionSwitching}
+          />
+        </WithInteractive>
+        <ChatFilePreviewOverlay />
       </div>
-      <WithInteractive>
-        <ComposeInput
-          onSendMessage={sendUserMessage}
-          chatStatus={chatStatus}
-          enableContextMenu
-          chatSessionId={currentChatSessionId}
-          isReadOnly={isReadOnly}
-          isInputLocked={!!editingMessageState || isSessionSwitching}
-        />
-      </WithInteractive>
-      <ChatInlinePreviewOverlay />
-    </div>
+    </ChatFilePreviewScope>
   );
 });
 

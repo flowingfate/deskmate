@@ -1,6 +1,7 @@
 import React, { createElement } from 'react';
 import { SlidersHorizontal, CheckCircle, SquarePen } from 'lucide-react';
 import { atom } from '@/atom';
+import { editAgent } from '@/lib/chat/editAgent';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -38,30 +39,15 @@ const EditAgentMenuDropdown: React.FC<InnerProps> = ({ anchorElement }) => {
   const anchorRect = anchorElement.getBoundingClientRect();
 
   const handleSelectMcpTools = () => {
-    window.dispatchEvent(new CustomEvent('agent:editAgent', {
-      detail: {
-        agentId: null,
-        initialTab: 'mcp'
-      }
-    }));
+    editAgent(null, 'mcp');
   };
 
   const handleSelectSkills = () => {
-    window.dispatchEvent(new CustomEvent('agent:editAgent', {
-      detail: {
-        agentId: null,
-        initialTab: 'skills'
-      }
-    }));
+    editAgent(null, 'skills');
   };
 
   const handleEditSystemPrompt = () => {
-    window.dispatchEvent(new CustomEvent('agent:editAgent', {
-      detail: {
-        agentId: null,
-        initialTab: 'prompt'
-      }
-    }));
+    editAgent(null, 'prompt');
   };
 
   return (

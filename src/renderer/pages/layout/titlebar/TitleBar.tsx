@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useHistoryNav } from './useHistoryNav';
 import { Menu, Minus, Square, X, Copy, ZoomIn, ZoomOut, PanelRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import { APP_NAME } from '@shared/constants/branding';
@@ -8,7 +9,6 @@ import { RightPaneCollapsedAtom } from '@/states/right-pane.atom';
 import appIcon from '../../../assets/deskmate/app.svg';
 import { appApi } from '@/ipc/app';
 import { windowApi, windowEvents } from '@/ipc/window';
-import './TitleBar.scss';
 
 type Platform = 'mac' | 'windows' | null;
 
@@ -45,46 +45,7 @@ function useMacFullScreen(isMac: boolean): boolean {
 }
 
 function HistoryNav() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const historyRef = useRef<string[]>([location.pathname + location.search]);
-  const cursorRef = useRef(0);
-  const isNavRef = useRef(false);
-
-  const [canGoBack, setCanGoBack] = useState(false);
-  const [canGoForward, setCanGoForward] = useState(false);
-
-  const updateButtons = useCallback(() => {
-    setCanGoBack(cursorRef.current > 0);
-    setCanGoForward(cursorRef.current < historyRef.current.length - 1);
-  }, []);
-
-  useEffect(() => {
-    const path = location.pathname + location.search;
-    if (isNavRef.current) {
-      isNavRef.current = false;
-      updateButtons();
-      return;
-    }
-    const cursor = cursorRef.current;
-    historyRef.current = [...historyRef.current.slice(0, cursor + 1), path];
-    cursorRef.current = historyRef.current.length - 1;
-    updateButtons();
-  }, [location, updateButtons]);
-
-  const goBack = useCallback(() => {
-    if (cursorRef.current <= 0) return;
-    isNavRef.current = true;
-    cursorRef.current--;
-    navigate(historyRef.current[cursorRef.current]);
-  }, [navigate]);
-
-  const goForward = useCallback(() => {
-    if (cursorRef.current >= historyRef.current.length - 1) return;
-    isNavRef.current = true;
-    cursorRef.current++;
-    navigate(historyRef.current[cursorRef.current]);
-  }, [navigate]);
+  const { canGoBack, canGoForward, goBack, goForward } = useHistoryNav();
 
   return (
     <>
@@ -149,18 +110,17 @@ export const TitleBar: React.FC = () => {
   };
 
   return (
-    <div className="titlebar" style={isMac && !isMacFullScreen ? { paddingLeft: 80 } : undefined}>
-      <div className="titlebar-left">
+    <div className="flex w-full h-9.5 items-center justify-between shrink-0 z-50 pointer-events-auto relative py-0 pr-2 pl-3 [-webkit-app-region:drag]" style={isMac && !isMacFullScreen ? { paddingLeft: 80 } : undefined}>
+      <div className="flex items-center gap-2 h-full">
         {isWindows && (
           <>
-            <img src={appIcon} alt={APP_NAME} className="titlebar-app-icon" />
-            <div className="titlebar-app-name">{APP_NAME}</div>
+            <img src={appIcon} alt={APP_NAME} className="w-5 h-5 object-contain" />
+            <div className="text-xs text-slate-500 font-medium pointer-events-auto">{APP_NAME}</div>
           </>
         )}
       </div>
 
-      <div className="titlebar-right">
-        <HistoryNav />
+      <div className="flex items-center h-full ml-auto [-webkit-app-region:no-drag]">
         {showTogglePanel && (
           <Button
             variant={rightCollapsed ? 'ghost' : 'secondary'}
@@ -189,12 +149,13 @@ export const TitleBar: React.FC = () => {
           </Button>
         )}
 
+        <HistoryNav />
         <Button variant="ghost" size="icon-sm"  onClick={handleMenuClick} title="Menu">
           <Menu size={14} />
         </Button>
 
         {isWindows && (
-          <div className="titlebar-window-controls">
+          <div className="flex h-full items-center">
             <Button variant="ghost" size="icon-sm"  onClick={() => windowApi.minimize()} title="Minimize">
               <Minus size={14} />
             </Button>

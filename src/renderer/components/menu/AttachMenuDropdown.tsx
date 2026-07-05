@@ -9,6 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/shadcn/dropdown-menu';
+import { composeFileCommands } from '../chat/chat-input/chatInputCommands';
 
 const zeroState: {
   isOpen: boolean;
@@ -42,11 +43,11 @@ const AttachMenuDropdown: React.FC<InnerProps> = ({ anchorElement }) => {
   const anchorRect = anchorElement.getBoundingClientRect();
 
   const handleSelectFiles = () => {
-    window.dispatchEvent(new CustomEvent('chatInput:selectFiles'));
+    composeFileCommands.selectFiles();
   };
 
   const handleScreenshot = () => {
-    window.dispatchEvent(new CustomEvent('chatInput:screenshot'));
+    composeFileCommands.screenshot();
   };
 
   return (

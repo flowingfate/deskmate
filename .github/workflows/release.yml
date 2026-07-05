@@ -97,4 +97,4 @@ jobs:
         run: |
           notes=$(gh api -X POST repos/${{ github.repository }}/releases/generate-notes \
             -f tag_name="$TAG" --jq '.body')
-          gh release edit "$TAG" --notes "$notes"
+          gh release edit "$TAG" -R ${{ github.repository }} --notes "$notes"

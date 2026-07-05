@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { promptHistory } from '@/lib/chat/promptHistory';
 import { validateImageFile } from '@shared/types/chatTypes';
 import {
@@ -14,6 +14,7 @@ import {
 import { MentionHighlight } from '../MentionHighlight';
 import { getChatInputEnterAction } from '@/lib/chat/chatInputKeyboard';
 import { ContextMenuAtom, zeroContextMenuState } from './context-menu.atom';
+import { useRegisterComposeTextHandle } from './chatInputCommands';
 import { atom } from '@/atom';
 
 const NOOP = () => {};
@@ -63,7 +64,6 @@ export function TextArea(props: TextAreaProps) {
     onContextMenuTrigger,
     onContextMenuClose,
     onContextMenuNavigate,
-    onContextMenuHover,
     onContextMenuSelect,
   }] = useContextMenu(enableContextMenu);
   const [message, { set: setMessage }] = textareaStateAtom.use();
@@ -154,124 +154,52 @@ export function TextArea(props: TextAreaProps) {
     }, 0);
   };
 
-  // Listen for mention selection events from ChatView
-  useEffect(() => {
-    const handleMentionSelectEvent = (e: CustomEvent) => {
-      const { option } = e.detail;
-      handleMentionSelect(option);
-    };
+  // 把 skill mention 插入抽成函数（键盘选中与命令句柄复用同一逻辑）。
+  const handleSkillMentionInsert = (skillName: string) => {
+    if (!textareaRef.current || !skillName) return;
 
-    window.addEventListener(
-      'context:mentionSelect',
-      handleMentionSelectEvent as EventListener,
+    // FIX: Read the current text from the DOM directly to avoid React state / DOM desync.
+    const currentText = textareaRef.current.value;
+    const cursorPos = textareaRef.current.selectionStart;
+    const { newText, newCursorPos } = insertSkillMention(
+      currentText,
+      cursorPos,
+      skillName,
     );
-    return () => {
-      window.removeEventListener(
-        'context:mentionSelect',
-        handleMentionSelectEvent as EventListener,
-      );
-    };
-  }, []);
 
+    setMessage(newText);
+    onContextMenuClose();
 
-  // Listen for skill mention selection events from ChatView
-  useEffect(() => {
-    const handleSkillMentionSelectEvent = (e: CustomEvent) => {
-      const { skillName } = e.detail;
-      if (!textareaRef.current || !skillName) return;
-
-      // FIX: Read the current text from the DOM directly to avoid React state / DOM desync.
-      // When the user types quickly, React state (message) may not yet reflect the DOM value.
-      // Using the DOM value ensures cursorPos and text always agree.
-      const currentText = textareaRef.current.value;
-      const cursorPos = textareaRef.current.selectionStart;
-      const { newText, newCursorPos } = insertSkillMention(
-        currentText,
-        cursorPos,
-        skillName,
-      );
-
-      setMessage(newText);
-      onContextMenuClose();
-
-      // Restore focus and set the cursor position
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      }, 0);
-    };
-
-    window.addEventListener(
-      'context:skillMentionSelect',
-      handleSkillMentionSelectEvent as EventListener,
-    );
-    return () => {
-      window.removeEventListener(
-        'context:skillMentionSelect',
-        handleSkillMentionSelectEvent as EventListener,
-      );
-    };
-  }, []);
-
-  // Listen for fill-input-box events from AgentPage
-  useEffect(() => {
-    const handleFillInputEvent = (e: CustomEvent) => {
-      const { text } = e.detail;
-
-      if (text && typeof text === 'string') {
-        setMessage(text);
-
-        // Focus the input and move the cursor to the end
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.focus();
-            textareaRef.current.setSelectionRange(text.length, text.length);
-          }
-        }, 0);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
       }
-    };
+    }, 0);
+  };
 
-    window.addEventListener(
-      'agent:fillInput',
-      handleFillInputEvent as EventListener,
-    );
-    return () => {
-      window.removeEventListener(
-        'agent:fillInput',
-        handleFillInputEvent as EventListener,
-      );
-    };
-  }, []);
+  // 用导航态文本填充输入框（来自 ChatView 的 selectedText）。
+  const handleFillInput = (text: string) => {
+    if (!text || typeof text !== 'string') return;
+    setMessage(text);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(text.length, text.length);
+      }
+    }, 0);
+  };
 
-  // Listen for triggerMention events — insert '@' and open context menu
-  useEffect(() => {
-    const handleTriggerMention = (e: Event) => {
-      const focusIndex = (e as CustomEvent)?.detail?.focusIndex;
-      setMessage('@');
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          textareaRef.current.setSelectionRange(1, 1);
-          const inputRect = getInputContainerRect();
-          if (inputRect) {
-            onContextMenuTrigger?.('', inputRect, ContextMenuTriggerType.Workspace);
-            // If a focusIndex was requested, dispatch it after menu opens
-            if (typeof focusIndex === 'number') {
-              setTimeout(() => {
-                onContextMenuHover(focusIndex);
-              }, 50);
-            }
-          }
-        }
-      }, 50);
-    };
-    window.addEventListener('chatInput:triggerMention', handleTriggerMention);
-    return () => {
-      window.removeEventListener('chatInput:triggerMention', handleTriggerMention);
-    };
-  }, []);
+  // 注册文本命令句柄：仅 compose 输入框（enableContextMenu）注册，
+  // edit 实例不注册，消除旧全局事件在 compose/edit 两个 Textarea 上并存监听的隐患。
+  useRegisterComposeTextHandle(
+    {
+      insertMention: (option) => handleMentionSelect(option),
+      insertSkillMention: handleSkillMentionInsert,
+      fillInput: handleFillInput,
+    },
+    !!enableContextMenu,
+  );
 
   // Handle history navigation
   const handleHistoryNavigation = (direction: 'up' | 'down') => {
@@ -333,12 +261,9 @@ export function TextArea(props: TextAreaProps) {
         e.preventDefault();
         const selectedOption = contextMenuState.options[contextMenuState.selectedIndex];
 
-        // Handle Skill-type options (triggered by #)
+        // Handle Skill-type options (triggered by #): 直接调用插入函数（同组件内，无需绕命令总线）
         if (selectedOption.type === ContextMenuOptionType.Skill && selectedOption.value) {
-          // Fire the skill mention selection event
-          window.dispatchEvent(new CustomEvent('context:skillMentionSelect', {
-            detail: { skillName: selectedOption.value }
-          }));
+          handleSkillMentionInsert(selectedOption.value);
           return;
         }
 
@@ -520,7 +445,7 @@ export function TextArea(props: TextAreaProps) {
 
 
   return (
-    <div className="textarea-layer-container">
+    <div className="textarea-layer-container relative mt-2.5">
       {/* Highlight layer (below the textarea) */}
       <MentionHighlight text={message} textareaRef={textareaRef} />
 
@@ -538,7 +463,7 @@ export function TextArea(props: TextAreaProps) {
             ? 'Type a message, drag files/images, paste screenshot, @ to mention files, # for skills...'
             : 'Type a message, drag files, @ to mention files, # for skills...'
         }
-        className="chat-textarea"
+        className="w-full resize-none border-none px-5 py-0 m-0 text-[13px] leading-[1.6] bg-transparent text-[#1a1a1a] outline-none font-[inherit] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden relative z-2 field-sizing-content min-h-[3lh] max-h-[8lh] placeholder:text-[#a3a3a3] disabled:opacity-50 disabled:cursor-not-allowed"
       />
     </div>
   );

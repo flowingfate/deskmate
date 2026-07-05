@@ -82,8 +82,8 @@ export function isFileUri(value: string): boolean {
 
 /**
  * 把 `{ name, url, ... }` 形态的 file descriptor 的 URL 字段从 URI 翻成
- * 绝对路径(URI 才翻,非 URI 原样返回)。`OverlayFileViewer` /
- * `InlineFilePreviewPanel` 等"viewer 接 URI" 调用方用这个保留下游路径语义不变。
+ * 绝对路径(URI 才翻,非 URI 原样返回)。`FilePreviewPanel`(聊天 inline 与全局弹窗共用)
+ * 等"viewer 接 URI" 调用方用这个保留下游路径语义不变。
  *
  * 解析失败 → 抛错;调用方按需 catch 退化(例如 toast 提示)。
  */

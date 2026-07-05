@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import ListSearchBox from '@/components/ui/ListSearchBox';
 import { SessionList } from './SessionList';
+import { chatSessionCommands } from '@/states/chatSessionCommands';
 
 interface SessionsViewProps {
   /** Always defined here — `SessionPanel` only mounts this view when a agentId exists. */
@@ -13,8 +14,7 @@ interface SessionsViewProps {
 
 /**
  * Sessions sub-screen: search box + scrollable session list + new-conversation button.
- * Delete/fork events bubble through the existing `chatSession:*` window events;
- * `ChatView` owns the actual handlers.
+ * Delete/fork 通过 `chatSessionCommands`（mutate 命令 dispatcher）触发（删除确认框 / fork 跳转在命令内处理）。
  */
 const SessionsView: React.FC<SessionsViewProps> = ({ agentId, currentChatSessionId }) => {
   const navigate = useNavigate();
@@ -29,13 +29,15 @@ const SessionsView: React.FC<SessionsViewProps> = ({ agentId, currentChatSession
     navigate(`/agent/${agentId}/${sessionId}`);
   }, [navigate]);
 
+  const runChatSessionCommand = chatSessionCommands.use();
+
   const handleDeleteChatSession = useCallback((_agentId: string, sessionId: string) => {
-    window.dispatchEvent(new CustomEvent('chatSession:delete', { detail: { sessionId } }));
-  }, []);
+    runChatSessionCommand({ type: 'delete', sessionId });
+  }, [runChatSessionCommand]);
 
   const handleForkChatSession = useCallback((_agentId: string, sessionId: string) => {
-    window.dispatchEvent(new CustomEvent('chatSession:fork', { detail: { sessionId } }));
-  }, []);
+    runChatSessionCommand({ type: 'fork', sessionId });
+  }, [runChatSessionCommand]);
 
   const handleNewConversation = useCallback(() => {
     navigate(`/agent/${agentId}`, {

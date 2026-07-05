@@ -39,6 +39,8 @@ import { resolveUriToPath } from '@/lib/internalUrls';
 import { usePasteToWorkspace } from '../workspace/PasteToWorkspaceProvider';
 import { log } from '@/log';
 import { FileTreeNodeMenuAtom } from '@renderer/components/menu/FileTreeNodeContextMenu';
+import { ImageViewerAtom } from '@/components/ui/OverlayImageViewer';
+import { useOpenFilePreview } from '@/components/filePreview/filePreviewScope';
 const logger = log.child({ mod: 'AgentKnowledgeBaseTab' });
 
 // Shared ignore directory patterns for all features
@@ -60,7 +62,7 @@ const isImageFile = (filename: string): boolean => {
  * - Display and manage the Agent's Knowledge Base directory
  * - File/folder browsing and navigation
  * - Style kept consistent with SkillFolderExplorer
- * - Image files open with OverlayImageViewer; other files open with OverlayFileViewer
+ * - Image files open with OverlayImageViewer; other files open via useOpenFilePreview() (无 chat scope → 全局居中弹窗)
  * - Folder watching sync kept consistent with WorkspaceExplorerSidepane
  * - Shows different empty-state messages based on brand
  */
@@ -140,6 +142,8 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
 
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const { openPasteDialog } = usePasteToWorkspace();
+  const imageViewer = ImageViewerAtom.useChange();
+  const openFilePreview = useOpenFilePreview();
   const watchStartedRef = useRef(false);
   const fileChangeListenerRef = useRef<(() => void) | null>(null);
   const childrenCache = useRef<Map<string, FileTreeNode[]>>(new Map());
@@ -457,7 +461,7 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
     setDirectoryStack(prev => [...prev, node]);
   }, [directoryStack, markNavigationChanged]);
 
-  // Handle file click - use OverlayImageViewer for images, OverlayFileViewer for other files
+  // Handle file click - images → OverlayImageViewer; other files → 就近作用域文件预览（无 chat scope → 全局居中弹窗）
   const handleFileClick = useCallback((item: { path: string; name: string; size?: number }) => {
     if (isImageFile(item.name)) {
       // Collect all image files in current directory
@@ -468,21 +472,11 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
         alt: i.name,
       }));
       const index = imageItems.findIndex(i => i.path === item.path);
-      window.dispatchEvent(new CustomEvent('imageViewer:open', {
-        detail: { images, initialIndex: index >= 0 ? index : 0 },
-      }));
+      imageViewer.open(images, index >= 0 ? index : 0);
     } else {
-      window.dispatchEvent(new CustomEvent('fileViewer:open', {
-        detail: {
-          file: {
-            name: item.name,
-            url: item.path,
-            size: item.size,
-          },
-        },
-      }));
+      openFilePreview({ name: item.name, url: item.path, size: item.size });
     }
-  }, [currentItems]);
+  }, [currentItems, imageViewer, openFilePreview]);
 
   // ========== Drag and drop feature - consistent with WorkspaceExplorerSidepane ==========
 

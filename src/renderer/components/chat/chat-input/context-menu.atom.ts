@@ -6,6 +6,7 @@ import { ensureAgentDetail, getAgentDetailSync } from '@/states/agentDetail.atom
 import { getSkills as getSkillsAtom } from '@/states/skills.atom';
 import { currentSessionStore } from '@/states/currentSession.atom';
 import type { SkillConfig } from '@shared/types/profileTypes';
+import { composeTextCommands } from './chatInputCommands';
 
 /**
  * 取当前 agentId（与老 `profileDataManager.getCurrentChat()` 语义一致）。
@@ -164,21 +165,11 @@ export const ContextMenuAtom = atom(zeroContextMenuState, (get, set) => {
         return;
       }
     } else {
-      // Options with actual values — dispatch corresponding event for ChatInput to handle insertion
+      // Options with actual values — route insertion command to the compose Textarea
       if (option.type === ContextMenuOptionType.Skill) {
-        // 🆕 Skill option: dispatch skill mention event
-        window.dispatchEvent(
-          new CustomEvent('context:skillMentionSelect', {
-            detail: { skillName: option.value },
-          }),
-        );
+        composeTextCommands.insertSkillMention(option.value ?? '');
       } else {
-        // KnowledgeBase/ChatSession/File/Folder options: dispatch mention event
-        window.dispatchEvent(
-          new CustomEvent('context:mentionSelect', {
-            detail: { option },
-          }),
-        );
+        composeTextCommands.insertMention(option);
       }
       // Close menu
       closeMenu();

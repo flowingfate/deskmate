@@ -1,0 +1,37 @@
+// ===========================
+// Message 气泡业务样式
+//
+// 从 globals.css 抽出。均为无法纯 Tailwind 表达的规则：:has()/:not() 空
+// 气泡守卫、作用于 markdown 生成裸子元素(p/div/span/.overflow-x-auto)的
+// 后代覆盖。其余几何已内联到组件。
+//
+// `assistant-message` / `message-content` 类名在组件里保留，仅作这些选择器
+// 的 hook。全部 un-layered，层叠优先级对齐原 SCSS。
+// ===========================
+
+// assistant 气泡 + 纯 tool-section(无正文)时收紧 gap
+.assistant-message:has(.tool-calls-section):not(:has(.message-content p, .message-content code, .message-content pre)) {
+  gap: 0;
+}
+
+// 空气泡守卫：正文容器无实质内容时整体隐藏(避免空 gap / 空行)
+.message-content:has(.flex-1:empty):not(:has(.message-attachments, .attachments-grid)),
+.message-content:not(:has(p, code, pre, ul, ol, h1, h2, h3, h4, h5, h6, blockquote, table, img, .streaming-text, .image-gallery-new, .message-attachments, .attachments-grid)) {
+  display: none;
+}
+
+// markdown 生成的裸子节点：长词换行 + 表格/代码块横向溢出收敛
+.message-content {
+  p,
+  div,
+  span {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .overflow-x-auto {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+}

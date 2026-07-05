@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { useOutletContext, useNavigate } from 'react-router-dom'
+import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom'
 import { Users, RefreshCw, Plus } from 'lucide-react'
 import { Badge } from '@/shadcn/badge'
 import { Button } from '@/shadcn/button'
@@ -13,7 +13,7 @@ import SubAgentListItem from './SubAgentListItem'
 import { AgentContextType } from '../../types/agentContextTypes'
 import type { SubAgentConfig } from '../../lib/userData/types'
 import { subAgentApi } from '@/ipc/subAgent'
-import './SubAgentsView.scss'
+import { SubAgentImportAtom } from './subAgentCommands.atom'
 import { log } from '@/log';
 const logger = log.child({ mod: 'SubAgentsView' });
 
@@ -31,6 +31,7 @@ const SubAgentsView: React.FC = () => {
   } = useOutletContext<AgentContextType>()
 
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Data fetching (via useSubAgents hook, not direct IPC)
   const { subAgents, stats, isLoading } = useSubAgents()
@@ -57,31 +58,32 @@ const SubAgentsView: React.FC = () => {
     }
   }, [subAgents, selectedSubAgent])
 
-  // Listen for refresh events (来源：内部 dispatch，仅传 subAgentName 用于自动选中；
-  // 数据刷新由 subAgents.atom 通过 persist 通道自动完成，无需手动 refresh)
+  // 外部入口（AgentSubAgentsTab / Create·Edit 提交后跳转）通过 `?selected=<name>` 表达
+  // “进来并预选某 sub-agent”的意图。命中后清掉该 query（replace，不新增历史条目）。
+  // subAgents 首帧可能还在加载、或新建项经 persist 通道回灌尚未到位，此时 target 还不在
+  // 列表里——保留 query 等数据到位再选中，避免意图丢失。放在自动选首项 effect 之后，
+  // 故 selected 优先级更高。
   useEffect(() => {
-    const handleRefresh = (event: CustomEvent<{ subAgentName?: string } | null>) => {
-      if (event.detail?.subAgentName) {
-        setSelectedSubAgent(event.detail.subAgentName)
-      }
-    }
+    const target = searchParams.get('selected')
+    if (!target) return
+    if (!subAgents.some((s) => s.name === target)) return
+    setSelectedSubAgent(target)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('selected')
+        return next
+      },
+      { replace: true },
+    )
+  }, [searchParams, subAgents, setSearchParams])
 
-    window.addEventListener('subAgents:refreshList', handleRefresh as EventListener)
-    return () => {
-      window.removeEventListener('subAgents:refreshList', handleRefresh as EventListener)
-    }
-  }, [])
-
-  // Listen for "Import from Claude Code" event (from SubAgentsAddMenuDropdown)
+  // 「Import from Claude Code」隐藏 file input 注册进 atom，菜单项调 open() 触发。
+  const importActions = SubAgentImportAtom.useChange()
   useEffect(() => {
-    const handleImport = () => {
-      importFileInputRef.current?.click()
-    }
-    window.addEventListener('subAgents:importFromClaudeCode', handleImport)
-    return () => {
-      window.removeEventListener('subAgents:importFromClaudeCode', handleImport)
-    }
-  }, [])
+    importActions.register(() => importFileInputRef.current?.click())
+    return () => importActions.unregister()
+  }, [importActions])
 
   // Handle import after file selection
   const handleImportFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,20 +168,20 @@ const SubAgentsView: React.FC = () => {
         <>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             onClick={handleSyncFromDisk}
             disabled={isSyncing}
             title="Sync from Disk"
           >
-            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             onClick={(e) => handleAddClick(e.currentTarget)}
             title="Add Sub-Agent"
           >
-            <Plus size={16} />
+            <Plus size={14} />
           </Button>
         </>
       }
@@ -194,19 +196,19 @@ const SubAgentsView: React.FC = () => {
       />
 
       {/* Content - based on SkillsContentView */}
-      <div className="sub-agents-content-view">
+      <div className="p-6 bg-white flex-1 min-h-0 flex flex-col box-border overflow-y-auto custom-scrollbar">
         {isLoading ? (
-          <div className="sub-agent-list-loading">
-            <div className="loading-spinner" />
+          <div className="flex flex-col items-center justify-center py-10 px-5 gap-3 text-[#6c6c70] text-sm">
+            <div className="w-6 h-6 rounded-full border-2 border-border border-t-accent animate-spin opacity-60" />
           </div>
         ) : subAgents.length === 0 ? (
-          <div className="sub-agents-empty-state">
-            <div className="sub-agents-empty-content">
-              <p className="sub-agents-empty-text">No sub-agents configured yet.</p>
-              <p className="sub-agents-empty-hint">
+          <div className="flex items-center justify-center w-full h-full min-h-[400px]">
+            <div className="flex flex-col items-center justify-center gap-6 text-center max-w-[500px] p-10">
+              <p className="m-0 text-base font-medium leading-6 text-[#6c6c70]">No sub-agents configured yet.</p>
+              <p className="m-0 text-[13px] text-[#9c9c9c] leading-[1.5]">
                 Sub-agents allow your agents to delegate specialized tasks to other configured agents.
               </p>
-              <div className="sub-agents-empty-actions">
+              <div className="flex gap-3 items-center">
                 <Button
                   variant="outline"
                   onClick={() => navigate('/settings/sub-agents/new')}
@@ -223,7 +225,7 @@ const SubAgentsView: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="sub-agent-cards">
+          <div className="flex flex-col gap-3">
             {subAgents.map(sa => (
               <SubAgentListItem
                 key={sa.name}

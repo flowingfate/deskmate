@@ -6,6 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/shadcn/dropdown-menu';
+import { useAddSkillFromDevice } from '../skills/useAddSkillFromDevice';
 
 interface SkillsAddMenuDropdownProps {
   anchorElement: HTMLElement;
@@ -18,12 +19,14 @@ const SkillsAddMenuDropdown: React.FC<SkillsAddMenuDropdownProps> = ({
 }) => {
   const anchorRect = anchorElement.getBoundingClientRect();
 
+  const addSkillFromDevice = useAddSkillFromDevice();
+
   const handleAddFromDeviceArtifact = () => {
-    window.dispatchEvent(new CustomEvent('skills:addFromDeviceArtifact'));
+    void addSkillFromDevice('artifact');
   };
 
   const handleAddFromDeviceFolder = () => {
-    window.dispatchEvent(new CustomEvent('skills:addFromDeviceFolder'));
+    void addSkillFromDevice('folder');
   };
 
 

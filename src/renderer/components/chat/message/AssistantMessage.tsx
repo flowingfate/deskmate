@@ -16,7 +16,6 @@ import GeneratedFileCards, {
 } from './GeneratedFileCards';
 import GeneratedScheduleCards from './GeneratedScheduleCards';
 import { hasNewImageFormat, parseNewFormatMessage, ImageGalleryNew, MessageSegment } from './ImageGallery';
-import './Message.scss';
 
 interface AssistantMessageProps {
   message: RenderAssistantMessage;
@@ -64,7 +63,7 @@ const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
           <GeneratedScheduleCards scheduleIds={scheduleIds} />
         </>
       )}
-      <div className="message-actions">
+      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
         <CopyButton text={cleanedText} />
       </div>
     </>
@@ -73,13 +72,13 @@ const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
   if (segments) {
     const lastIndex = segments.length - 1;
     return (
-      <div className="segmented-message">
+      <div data-dbg="assistant-message" className="group animate-[fadeIn_0.3s_ease-out] mb-7 flex flex-col">
         {segments.map((segment, index) => {
           const streaming = index === lastIndex && isStreaming;
           return (
             <div
               key={segment.id}
-              className={`segment segment-${segment.type} message-content markdown-body ${streaming ? 'streaming' : ''}`}
+              className={`message-content relative wrap-break-word flex flex-col markdown-body ${index > 0 ? 'mt-7 ' : ''}${streaming ? 'streaming contain-[layout_style_paint] will-change-contents' : ''}`.trim()}
             >
               {segment.type === 'image-gallery' && segment.imageRegistry ? (
                 <ImageGalleryNew imageRegistry={segment.imageRegistry} />
@@ -89,17 +88,17 @@ const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
             </div>
           );
         })}
-        {meta && <div className="message-meta mb-1">{meta}</div>}
+        {meta && <div className="text-xs text-[#737373] mt-2 flex flex-col items-stretch gap-2 mb-1">{meta}</div>}
       </div>
     );
   }
 
   return (
-    <div className="message-container assistant-message-container">
-      <div className={`message assistant-message message-content markdown-body ${isStreaming ? 'streaming' : ''}`}>
+    <div data-dbg="assistant-message" className="group flex flex-col gap-2 min-w-0 contain-[layout_style] items-start">
+      <div className={`animate-[fadeIn_0.3s_ease-out] flex flex-col gap-2 assistant-message p-0 w-full message-content relative wrap-break-word markdown-body ${isStreaming ? 'streaming contain-[layout_style_paint] will-change-contents' : ''}`}>
         <MarkdownView text={cleanedText} />
       </div>
-      {meta && <div className="message-metadata mb-2">{meta}</div>}
+      {meta && <div className="text-xs text-[#737373] flex flex-col items-stretch gap-2 mb-2">{meta}</div>}
     </div>
   );
 };

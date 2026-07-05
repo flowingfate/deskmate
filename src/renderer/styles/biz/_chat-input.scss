@@ -1,0 +1,51 @@
+// ===========================
+// ChatInput 业务样式
+//
+// 从 globals.css 抽出。均为无法纯 Tailwind 表达的规则：drag-over 拖拽浮层
+// 伪元素、以及作用于 MentionHighlight dangerouslySetInnerHTML 生成的 <mark>
+// 的类。全部 un-layered，层叠优先级对齐原 SCSS。
+// ===========================
+
+// 拖拽到输入区时的虚线浮层 + 提示文案（伪元素 content，无法 Tailwind 化）
+.chat-input-container.drag-over {
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.1);
+    border: 2px dashed #404040;
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  &::after {
+    content: 'Drop files here to attach';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    pointer-events: none;
+    z-index: 11;
+    white-space: nowrap;
+  }
+}
+
+// MentionHighlight 生成的 <mark>(dangerouslySetInnerHTML，DOM 无法挂 Tailwind 类)
+.mention-highlight {
+  background-color: rgba(188, 209, 255, 0.15);
+  border-radius: 3px;
+  color: transparent;
+  box-shadow: 0 0 0 1px rgba(188, 209, 255, 0.5);
+
+  &.skill-mention {
+    background-color: rgba(255, 220, 151, 0.15);
+    box-shadow: 0 0 0 1px rgba(255, 220, 151, 0.5);
+  }
+}

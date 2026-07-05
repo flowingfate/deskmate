@@ -64,7 +64,7 @@ const AlarmToggleButton: React.FC<AlarmToggleButtonProps> = ({ agentId, mode, se
       <AlarmClock size={14} />
       <UnreadCountBadge
         count={scheduledUnreadCount}
-        className="absolute top-[2px] right-0 border-2 border-surface-primary shadow-[0_2px_6px_rgba(0,0,0,0.16)]"
+        className="absolute top-0.5 right-0 border-2 border-surface-primary shadow-[0_2px_6px_rgba(0,0,0,0.16)]"
         ariaLabel={`Schedules has ${scheduledUnreadCount} unread sessions`}
       />
     </Button>

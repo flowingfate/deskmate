@@ -18,6 +18,8 @@ export interface DoctorInquiryPayload {
   chatSessionId?: string;
   /** Optional: raw screenshot bytes (structured-clone friendly). */
   screenshots?: ScreenshotAttachment[];
+  /** Required: pi composite model key `${provider}::${modelId}` chosen by the user. */
+  modelKey: string;
 }
 
 export interface ScreenshotAttachment {

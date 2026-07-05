@@ -6,6 +6,7 @@ import type {
   DoctorInquiryPayload,
 } from '@shared/ipc/doctor';
 import { doctorApi, doctorEvents } from '../ipc/doctor';
+import { parseAgentModel } from '@shared/utils/agentModelId';
 
 // ─────────────────────────────────────────────
 // Step 1: Inquiry form
@@ -24,12 +25,16 @@ export interface InquiryForm {
   chatSessionId: string | undefined;
   /** F: screenshots (we hold the raw File and read bytes only at submit time). */
   screenshots: File[];
+  /** G: pi composite model key `${provider}::${modelId}` for the doctor agent; '' = fall back to main default. Persisted in localStorage. */
+  modelKey: string;
 }
 
 export const NONE_OPTION = '__none__';
 export const UNSURE_TEXT = "I'm not sure";
 export const TIME_AGNOSTIC_TEXT = 'Not time-related';
 
+// modelKey 由 DoctorModelField 组件负责 localStorage 持久化 + 挂载水合；
+// atom 只保存当前 form 内的纯值。零态为模块级常量单例，保证重置时引用稳定。
 const zeroInquiryForm: InquiryForm = {
   description: '',
   reproSteps: '',
@@ -37,6 +42,7 @@ const zeroInquiryForm: InquiryForm = {
   agentId: undefined,
   chatSessionId: undefined,
   screenshots: [],
+  modelKey: '',
 };
 
 interface InquiryState {
@@ -81,6 +87,11 @@ export const doctorInquiryAtom = atom(zeroInquiryState, (get, set, use) => {
     set(produce((draft) => { change(draft.form); }));
   }
 
+  /** Update the doctor model selection (persistence handled by DoctorModelField). */
+  function setModelKey(modelKey: string) {
+    set(produce((draft) => { draft.form.modelKey = modelKey; }));
+  }
+
   function isAllValid(): boolean {
     const { form } = get();
     if (!form.description.trim()) return false;
@@ -88,6 +99,7 @@ export const doctorInquiryAtom = atom(zeroInquiryState, (get, set, use) => {
     if (!form.occurredAt.trim()) return false;
     if (!form.agentId) return false;
     if (form.agentId !== NONE_OPTION && !form.chatSessionId) return false;
+    if (!parseAgentModel(form.modelKey)) return false;
     return true;
   }
 
@@ -135,6 +147,7 @@ export const doctorInquiryAtom = atom(zeroInquiryState, (get, set, use) => {
             ? undefined
             : form.chatSessionId,
         screenshots: screenshots.length > 0 ? screenshots : undefined,
+        modelKey: form.modelKey,
       };
 
       await doctorApi.submitDoctorInquiry(payload);
@@ -147,8 +160,7 @@ export const doctorInquiryAtom = atom(zeroInquiryState, (get, set, use) => {
       });
     }
   }
-
-  return { show, hide, discard, updateForm, submit, isAllValid, hasValidField, _onAnalyzeFinished };
+  return { show, hide, discard, updateForm, setModelKey, submit, isAllValid, hasValidField, _onAnalyzeFinished };
 });
 
 // ─────────────────────────────────────────────

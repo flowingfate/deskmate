@@ -19,7 +19,7 @@ const UnreadCountBadge: React.FC<UnreadCountBadgeProps> = ({
 
   return (
     <span
-      className={`unread-count-badge ${className}`.trim()}
+      className={`min-w-4 h-4.5 px-1 inline-flex items-center justify-center rounded-full bg-[#d92d20] text-white text-[10px] font-bold leading-none whitespace-nowrap pointer-events-none ${className}`.trim()}
       aria-label={ariaLabel}
     >
       {formatUnreadBadgeCount(count)}

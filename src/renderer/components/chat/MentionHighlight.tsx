@@ -61,7 +61,7 @@ export const MentionHighlight: React.FC<MentionHighlightProps> = ({ text, textar
   return (
     <div
       ref={highlightRef}
-      className="mention-highlight-layer"
+      className="absolute inset-0 px-5 m-0 font-[inherit] text-[13px] leading-[1.6] whitespace-pre-wrap wrap-break-word overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pointer-events-none text-transparent z-1"
     >
       <div
         ref={contentRef}

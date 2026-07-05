@@ -1,14 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react'
 
 import { TabComponentProps } from './types'
-import { Button } from '@/shadcn/button'
-import { Popover, PopoverTrigger, PopoverContent } from '@/shadcn/popover'
-import { Badge } from '@/shadcn/badge'
-import { AlertTriangle, Cpu, ChevronDown } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import EmojiPicker from './EmojiPicker'
 import { useAgents } from '@/states/agents.atom'
 import { AgentAvatar } from '../../common/AgentAvatar'
-import { GroupedModelPicker, useModelDisplayLabel } from '../GroupedModelPicker'
+import { ModelSelectPopover } from '../ModelSelectPopover'
 
 const EMPTY_MODEL = '' // Step 9+：不再默认填一个 GHC modelId；让用户主动选
 
@@ -42,7 +39,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
 
   // UI state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [isInitialized, setIsInitialized] = useState(false)
   const [loadedAgentId, setLoadedAgentId] = useState<string | null>(null)
@@ -63,9 +59,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
     role: '',
     model: EMPTY_MODEL
   })
-
-  // Available model list 由 GroupedModelPicker 内部 hook 拉取
-  const { label: modelDisplayLabel, invalid: modelInvalid } = useModelDisplayLabel(formData.model)
 
   // Load existing data - only runs on initial component mount or when explicit re-sync is needed
   useEffect(() => {
@@ -220,7 +213,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
   // Handle model selection
   const handleModelSelect = useCallback((modelId: string) => {
     handleInputChange('model', modelId)
-    setModelPickerOpen(false)
   }, [handleInputChange])
 
   // Dynamically determine the current effective mode
@@ -237,7 +229,7 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
       {/* Tab Body */}
       <div className="flex-1 overflow-y-auto overflow-x-visible p-5 custom-scrollbar">
         {/* Avatar Section */}
-        <div className="mb-[18px]">
+        <div className="mb-4.5">
           <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Avatar</label>
           <div className="flex items-center gap-4">
             <div
@@ -261,7 +253,7 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
         </div>
 
         {/* Agent Name */}
-        <div className="mb-[18px]">
+        <div className="mb-4.5">
           <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Name</label>
           <input
             type="text"
@@ -286,46 +278,23 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
         </div>
 
         {/* Model Selection */}
-        <div className="mb-[18px]">
+        <div className="mb-4.5">
           <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Model</label>
-          <Popover open={modelPickerOpen} onOpenChange={(o) => !isModelDisabled && setModelPickerOpen(o)}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                type="button"
-                disabled={isModelDisabled}
-                className={`w-full justify-start gap-2 h-auto px-3 py-2 font-normal ${validationErrors.model ? 'border-destructive' : ''}`}
-              >
-                <Cpu size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
-                <span className="flex-1 text-left truncate">
-                  {modelInvalid ? <><AlertTriangle size={12} className="inline mr-1 text-amber-500" />Select Model</> : modelDisplayLabel}
-                </span>
-                <ChevronDown
-                  size={16}
-                  strokeWidth={1.75}
-                  className={`shrink-0 opacity-50 transition-transform ${modelPickerOpen ? 'rotate-180' : ''}`}
-                />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              className="w-[var(--radix-popover-trigger-width)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overflow-x-hidden p-1"
-              align="start"
-              sideOffset={4}
-            >
-              <GroupedModelPicker
-                value={formData.model}
-                onChange={handleModelSelect}
-                variant="popover"
-              />
-            </PopoverContent>
-          </Popover>
+          <ModelSelectPopover
+            value={formData.model}
+            onChange={handleModelSelect}
+            disabled={isModelDisabled}
+            smallTigger
+            triggerClassName={validationErrors.model ? 'border-destructive' : undefined}
+            contentClassName="max-h-(--radix-popover-content-available-height)"
+          />
           {validationErrors.model && (
             <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-md text-[13px] bg-[#FEE2E2] border-l-2 border-status-error text-red-900">{validationErrors.model}</div>
           )}
         </div>
 
         {agentMeta.version && (
-          <div className="mb-[18px] mt-2 pt-4 border-t border-slate-300/50">
+          <div className="mb-4.5 mt-2 pt-4 border-t border-slate-300/50">
             <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Info</label>
             <div className="flex flex-wrap gap-6">
               <div className="flex items-center gap-2">

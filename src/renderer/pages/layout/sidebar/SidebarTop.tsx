@@ -55,7 +55,7 @@ export const SidebarTop: React.FC = () => {
     isAgentRoute && currentAgentId === agentId && !isCreationRoute;
 
   return (
-    <div className="app-sidebar-top">
+    <div className="flex flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden pt-1.5 pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
       {agents.map(agent => (
         <SidebarAgentItem
           key={agent.id}
@@ -69,7 +69,7 @@ export const SidebarTop: React.FC = () => {
       <Button
         variant="ghost"
         size="icon"
-        className={`sidebar-item sidebar-item-add ${isCreationRoute ? 'active' : ''}`}
+        className={`relative flex items-center justify-center w-7 h-7 p-0 shrink-0 rounded-[7px] border-[1.5px] transition-[background-color,border-color] duration-150 text-black/40 hover:text-black/70 ${isCreationRoute ? 'border-black/12 bg-black/[0.07]' : 'border-transparent bg-transparent hover:bg-black/5'}`}
         onClick={handleNewAgent}
         title="New Agent"
       >

@@ -1,7 +1,7 @@
-<!-- Last verified: 2026-07-02 (runJobNow force 参数：UI 手动运行可强制跑禁用 job) -->
+<!-- Last verified: 2026-07-03 (完成通知分流：主窗口前台走 in-app toast，后台走系统通知) -->
 # Scheduler
 
-> 注册并触发基于时间的任务（cron 或一次性）。每次触发由 `ScheduleJob.startRun` 在 persist 内开一个独立的 schedule_run session，`pi.JobRun` 跑静默 turn loop，跑完 `finishRun` 落 runState 并发系统通知。
+> 注册并触发基于时间的任务（cron 或一次性）。每次触发由 `ScheduleJob.startRun` 在 persist 内开一个独立的 schedule_run session，`pi.JobRun` 跑静默 turn loop，跑完 `finishRun` 落 runState 并发完成通知（`notifyOnCompletion !== false`）。完成通知分流：主窗口前台聚焦时经 `notification` IPC 通道让 renderer 弹 in-app toast（macOS 会静默丢弃前台 App 自发的系统通知），否则回落系统级 `new Notification`。
 >
 > **数据源**：`src/main/persist`（`Profile.listJobsFlat` / `Profile.findJob` / `Agent.getJob` / `ScheduleJob.startRun|finishRun|listRunsOnDisk` / `Profile.schedulerState`）。
 
@@ -35,6 +35,8 @@ executeJob(job, triggerSource, onReady?)
   → new pi.JobRun(runId, profileId, agentId, runSession).run(userMsg)
   → job.finishRun(runId, completed|failed) # 写 data.json + runState=completed/failed
   → showSessionCompletionNotification(...) if notifyOnCompletion !== false
+     ├─ 主窗口前台聚焦 → notification IPC → renderer in-app toast（macOS 抑制前台系统通知，故走这条）
+     └─ 否则           → 系统级 new Notification + 点击跳转
   → once: unregisterTask('once-job-completed' | 'once-job-failed')
 ```
 

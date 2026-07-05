@@ -142,7 +142,10 @@ const MarkdownViewInner: React.FC<MarkdownViewProps> = ({ text, className }) => 
   }
 
   return (
-    <div className={`markdown-view markdown-body relative min-w-0 w-full max-w-full wrap-break-word transition-[min-height] duration-200 ease-out contain-[layout_style] [&_strong]:font-bold [&_em]:italic [&.markdown-body_*]:transition-opacity [&.markdown-body_*]:duration-100 [&_.code-block-wrapper]:transition-opacity [&_.code-block-wrapper]:duration-100 motion-reduce:transition-none **:motion-reduce:transition-none [&_.code-block-wrapper]:motion-reduce:transition-none ${className ?? ''}`.trim()}>
+    <div
+      data-dbg="markdown-view"
+      className={`markdown-view markdown-body relative min-w-0 w-full max-w-full wrap-break-word transition-[min-height] duration-200 ease-out contain-[layout_style] [&_strong]:font-bold [&_em]:italic [&.markdown-body_*]:transition-opacity [&.markdown-body_*]:duration-100 [&_.code-block-wrapper]:transition-opacity [&_.code-block-wrapper]:duration-100  ${className ?? ''}`.trim()}
+    >
       <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={markdownComponents}>
         {encoded}
       </ReactMarkdown>

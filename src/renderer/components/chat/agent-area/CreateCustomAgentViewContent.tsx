@@ -6,10 +6,9 @@ import { addAgentConfig } from '../../../lib/chat/agentOps'
 import EmojiPicker from '../agent-editor/EmojiPicker'
 import { BUILTIN_SKILL_NAMES } from '../../../../shared/constants/builtinSkills'
 import { Button } from '@/shadcn/button'
-import { Popover, PopoverTrigger, PopoverContent } from '@/shadcn/popover'
-import { AlertTriangle, Cpu, ChevronDown } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { log } from '@/log';
-import { GroupedModelPicker, useModelDisplayLabel } from '../GroupedModelPicker'
+import { ModelSelectPopover } from '../ModelSelectPopover'
 const logger = log.child({ mod: 'CreateCustomAgentViewContent' });
 
 interface CreateCustomAgentViewContentProps {
@@ -37,12 +36,11 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
   const [isCreating, setIsCreating] = useState(false)
 
   // UI state
-  const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [isFormValid, setIsFormValid] = useState(false)
   const [nameWarning, setNameWarning] = useState<string>('')
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const { label: modelDisplayLabel, invalid: modelInvalid } = useModelDisplayLabel(formData.model)
+
 
   // 模型列表由 GroupedModelPicker 内部 hook 拉取，无需在此 effect 同步
 
@@ -88,7 +86,6 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
   // Handle model selection
   const handleModelSelect = useCallback((modelId: string) => {
     handleInputChange('model', modelId)
-    setModelPickerOpen(false)
   }, [handleInputChange])
 
   // Handle Emoji selection
@@ -230,36 +227,12 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
       {/* Agent Model section */}
       <div className="mb-6">
         <label className="mb-2 block text-sm font-semibold leading-5 text-[#272320]">Agent Model</label>
-        <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              type="button"
-              className="w-full justify-start gap-2 h-auto px-3 py-2 font-normal"
-            >
-              <Cpu size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
-              <span className="flex-1 text-left truncate">
-                {modelInvalid ? <><AlertTriangle size={12} className="inline mr-1 text-amber-500" />Select Model</> : modelDisplayLabel}
-              </span>
-              <ChevronDown
-                size={16}
-                strokeWidth={1.75}
-                className={`shrink-0 opacity-50 transition-transform ${modelPickerOpen ? 'rotate-180' : ''}`}
-              />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="w-[var(--radix-popover-trigger-width)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overflow-x-hidden p-1"
-            align="start"
-            sideOffset={4}
-          >
-            <GroupedModelPicker
-              value={formData.model}
-              onChange={handleModelSelect}
-              variant="popover"
-            />
-          </PopoverContent>
-        </Popover>
+        <ModelSelectPopover
+          value={formData.model}
+          onChange={handleModelSelect}
+          smallTigger
+          contentClassName="max-h-(--radix-popover-content-available-height)"
+        />
       </div>
 
       {/* Action buttons */}

@@ -88,14 +88,14 @@ const FileExplorerSection: React.FC<FileExplorerSectionProps> = ({
     >
       {/* Section Header */}
       <div
-        className="group/header box-border flex justify-between items-center self-stretch flex-none h-11 px-3 gap-2 cursor-pointer select-none transition-colors bg-surface-subtle"
+        className="group/header box-border flex justify-between items-center self-stretch flex-none h-10 px-3 gap-2 cursor-pointer select-none transition-colors bg-black/2 hover:bg-surface-subtle"
         onClick={handleToggleCollapse}
       >
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <span className="flex items-center justify-center shrink-0 text-content-tertiary transition-transform">
             {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
           </span>
-          <span className="truncate text-[13px] font-semibold tracking-tight text-content-heading">{title}</span>
+          <span className="truncate text-[11px] font-bold uppercase tracking-[0.05em] text-content-tertiary group-hover/header:text-content-secondary transition-colors">{title}</span>
         </div>
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           {!isCollapsed && isValid && (

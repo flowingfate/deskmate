@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Cable, Loader2 } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import { Separator } from '@/shadcn/separator';
@@ -18,7 +18,6 @@ import {
   type SelectionsMap,
 } from './toolConflictHelper';
 import AgentMcpServerCard from './AgentMcpServerCard';
-import { markSettingsCameFromApp } from '@/lib/navigation/settingsBackSentinel';
 import { log } from '@/log';
 
 const logger = log.child({ mod: 'AgentMcpServersTab' });
@@ -44,7 +43,6 @@ const AgentMcpServersTab: React.FC<TabComponentProps> = ({
   const servers = useMcpRuntimeServers();
   const isLoading = false;
   const navigate = useNavigate();
-  const location = useLocation();
   const { showToast } = useToast();
 
   // 选中状态:serverName → 已勾工具名集合。空 Set ⇒ "全选该 server"。
@@ -273,9 +271,8 @@ const AgentMcpServersTab: React.FC<TabComponentProps> = ({
   }, []);
 
   const handleManageServers = useCallback(() => {
-    markSettingsCameFromApp();
     navigate('/settings/mcp');
-  }, [navigate, location.pathname]);
+  }, [navigate]);
 
 
 

@@ -5,30 +5,29 @@
  * to read specific indices.
  */
 
+import type { Tool } from '@earendil-works/pi-ai';
+import { jsonSchema } from '@main/pi/tools/schema';
 import type { DoctorSessionFile } from '../chatSession/types';
 import { Profiles } from '../../../persist';
 import { formatSkeleton } from '../chatSession/skeletonFormatter';
 
-export const readChatSessionToolDef = {
-  type: 'function' as const,
-  function: {
-    name: 'read_chat_session',
-    description: `Return a compact markdown skeleton of the chat session: header KV, plus tables for messages, with contextState summary. All fields are preserved; long content (text, thinking, image base64, tool_call arguments) is replaced by length numbers only. Use this first to understand shape and locate suspicious messages, then call get_chat_messages with specific indices to read them.`,
-    parameters: {
-      type: 'object',
-      properties: {
-        agentId: {
-          type: 'string',
-          description: 'The chat (agent) id the session belongs to.',
-        },
-        chatSessionId: {
-          type: 'string',
-          description: 'The chat session id to read.',
-        },
+export const readChatSessionToolDef: Tool = {
+  name: 'read_chat_session',
+  description: `Return a compact markdown skeleton of the chat session: header KV, plus tables for messages, with contextState summary. All fields are preserved; long content (text, thinking, image base64, tool_call arguments) is replaced by length numbers only. Use this first to understand shape and locate suspicious messages, then call get_chat_messages with specific indices to read them.`,
+  parameters: jsonSchema({
+    type: 'object',
+    properties: {
+      agentId: {
+        type: 'string',
+        description: 'The chat (agent) id the session belongs to.',
       },
-      required: ['agentId', 'chatSessionId'],
+      chatSessionId: {
+        type: 'string',
+        description: 'The chat session id to read.',
+      },
     },
-  },
+    required: ['agentId', 'chatSessionId'],
+  }),
 };
 
 export async function executeReadChatSession(args: {

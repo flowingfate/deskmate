@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useCallback, memo, useMemo, useState, useLayo
 import type { RenderMessage } from '@/lib/chat/renderMessage';
 import { fsApi } from '@/ipc/fs';
 import { type ChatStatus, getRenderItems } from '../../lib/chat/agentSessionCacheManager';
-import './ChatContainer.scss';
 import { useToast } from '../ui/ToastProvider';
 import { EditingMessageState, editMessageAtom } from './message/edit-message.atom';
 import { getChatRenderItemStableKey, isVisibleChatRenderItem, ChatRenderItemComponent, type ChatRenderItem, hasTextContent } from './ChatRenderItem';
@@ -498,9 +497,9 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
 
     if (loadingText) {
       return (
-        <div className={`loading-text ${className || ''}`.trim()}>
+        <div className={`flex items-center text-sm text-[#a3a3a3] font-medium min-h-5.5 ${className || ''}`.trim()}>
           {loadingText}&nbsp;
-          <div className="typing-indicator inline">
+          <div className="inline-flex items-center ml-2">
             <div className="dots">
               <span></span>
               <span></span>
@@ -512,7 +511,7 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
     }
 
     return (
-      <div className={`typing-indicator ${className || ''}`.trim()}>
+      <div className={`flex items-center justify-start min-h-5.5 ${className || ''}`.trim()}>
         <div className="dots">
           <span></span>
           <span></span>
@@ -528,15 +527,15 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
   }, [chatSessionId, isWithinLatestScrollStabilizationWindow, messages.length, renderItemsWithActivity.length, scrollToLatestPosition]);
 
   return (
-    <div className="chat-container-with-overlay">
-      <div className={'flex-1 ' + CHAT_SCROLL_BOX_CLS} ref={containerRef} onScroll={handleContainerScroll}>
-        <div className="chat-message-flow-reverse" ref={messageFlowRef}>
+    <div className="relative flex-1 flex flex-col min-h-0">
+      <div className={`flex-1 ${CHAT_SCROLL_BOX_CLS} [--chat-pad-x:36px] overflow-y-auto [overflow-anchor:none] pt-6`} ref={containerRef} onScroll={handleContainerScroll}>
+        <div className="chat-message-flow-reverse flex flex-col-reverse justify-start min-h-full" ref={messageFlowRef}>
           {/* Fixed boundary container */}
           {shouldShowBoundaryContainer() && (
             <div className={`message-boundary-container ${shouldShowTopLevelLoading() ? 'has-loading' : ''}`}>
               {shouldShowTopLevelLoading() && (
-                <div className="message assistant-message loading-message fixed-boundary">
-                  <div className="message-content">
+                <div className="animate-[fadeIn_0.3s_ease-out] min-w-0 max-w-full flex flex-col gap-2 assistant-message p-0 w-full loading-message fixed-boundary">
+                  <div className="message-content relative min-w-0 max-w-full wrap-break-word flex flex-col text-[15px] leading-[1.7]">
                     <div className="flex w-full min-w-0 max-w-full items-start">
                       <div className="min-w-0 max-w-full flex-1">
                         {renderLoadingIndicator()}

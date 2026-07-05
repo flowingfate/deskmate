@@ -18,6 +18,9 @@ import type {
 import FileTypeIcon from '../../../../ui/FileTypeIcon';
 import { useCurrentSession } from '@/states/currentSession.atom';
 import { toImageDisplaySrc, type MediaUrlContext } from '@/lib/mediaUrl';
+import { ImageViewerAtom } from '../../../../ui/OverlayImageViewer';
+import { useOpenFilePreview } from '../../../../filePreview/filePreviewScope';
+import type { FilePreviewDescriptor } from '../../../../filePreview/FilePreviewPanel';
 
 const coerceWriteArgs = (args: Record<string, unknown> | undefined): WriteToolArgs | null => {
   if (!args || typeof (args as unknown as WriteToolArgs).fileUri !== 'string') return null;
@@ -47,32 +50,20 @@ const isImage = (name: string): boolean => {
   return ext ? IMAGE_EXT[ext] === true : false;
 };
 
-const handleOpenFile = (filePath: string, ctx: MediaUrlContext) => {
+const handleOpenFile = (
+  filePath: string,
+  ctx: MediaUrlContext,
+  openImage: (images: { id: string; url: string; alt?: string }[], index: number) => void,
+  openFile: (file: FilePreviewDescriptor) => void,
+) => {
   const name = getFileName(filePath);
   if (isImage(name)) {
     // write 目标是 `local://` / `knowledge://` URI → `media://` 直供;裸路径 → `file://`。
     const src = toImageDisplaySrc(filePath, ctx);
-    window.dispatchEvent(
-      new CustomEvent('imageViewer:open', {
-        detail: {
-          images: [
-            {
-              id: filePath,
-              url: src,
-              alt: name,
-            },
-          ],
-          initialIndex: 0,
-        },
-      }),
-    );
+    openImage([{ id: filePath, url: src, alt: name }], 0);
     return;
   }
-  window.dispatchEvent(
-    new CustomEvent('fileViewer:open', {
-      detail: { file: { name, url: filePath } },
-    }),
-  );
+  openFile({ name, url: filePath });
 };
 
 const inputArgsText = (toolCall: ToolCall): string => {
@@ -85,6 +76,8 @@ const OutputSuccessBlock: React.FC<ToolOutputSuccessSlotProps> = ({ toolCall, re
   // hooks 必须在任何 early-return 前调用。
   const { agentId, chatSessionId } = useCurrentSession();
   const mediaCtx: MediaUrlContext = { agentId, sessionId: chatSessionId };
+  const imageViewer = ImageViewerAtom.useChange();
+  const openFilePreview = useOpenFilePreview();
   const parsed = parseWriteResult(result);
   if (!parsed || parsed.success !== true) {
     return (
@@ -99,7 +92,7 @@ const OutputSuccessBlock: React.FC<ToolOutputSuccessSlotProps> = ({ toolCall, re
   return (
     <div
       className="flex items-center gap-2 px-3 py-2 rounded-[4px] bg-gray-50 border-1 border-black/7 cursor-pointer hover:bg-gray-100 transition-colors"
-      onClick={() => handleOpenFile(fileUri, mediaCtx)}
+      onClick={() => handleOpenFile(fileUri, mediaCtx, imageViewer.open, openFilePreview)}
     >
       <FileTypeIcon fileName={fileName} size={20} />
       <span className="flex-1 min-w-0 truncate font-mono text-[12px] text-gray-800">

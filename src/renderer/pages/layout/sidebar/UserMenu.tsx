@@ -3,7 +3,6 @@ import { Settings, LogIn, RotateCw, MessageSquareText, Hospital } from 'lucide-r
 import { useNavigate } from 'react-router-dom';
 import { useUpdate } from '@/components/autoUpdate/UpdateProvider';
 import { doctorInquiryAtom } from '@/states/doctor.atom';
-import { useFeatureFlag } from '@/lib/featureFlags/useFeatureFlag';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -11,12 +10,11 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/shadcn/dropdown-menu';
+import { GIT_REPO_URL_BASE } from '@shared/constants/endpoints';
 
 function ReportBugItem(props: { onClose: () => void }) {
   const [state, actions] = doctorInquiryAtom.use();
-  const doctorEnabled = useFeatureFlag('deskmateFeatureDoctor');
 
-  if (!doctorEnabled) return null;
   if (state.type !== 'idle') return null;
 
   return (
@@ -55,6 +53,7 @@ function Menu({ children }: UserMenuProps) {
   }
 
   function onSendFeedback() {
+    window.open(GIT_REPO_URL_BASE + '/issues/new', '_blank');
   }
 
   return (

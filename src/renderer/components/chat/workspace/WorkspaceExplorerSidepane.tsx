@@ -46,7 +46,7 @@ const WorkspaceExplorerSidepane: React.FC = () => {
       <div className="flex flex-col">
         {/* Agent Knowledge — knowledge:// (空 path = KB 根目录) */}
         <FileExplorerSection
-          title="Agent Knowledge Files"
+          title="Knowledge Files"
           rootUri="knowledge://"
           currentAgentId={currentAgentId}
           currentChatSessionId={currentChatSessionId}
@@ -57,7 +57,7 @@ const WorkspaceExplorerSidepane: React.FC = () => {
 
         {/* Session Deliverables — local:// (空 path = session sandbox 根目录) */}
         <FileExplorerSection
-          title="Current Chat Session Deliverables"
+          title="Session Files"
           className="border-t border-black/7"
           emptyMessage="Files generated during the current chat session will appear here."
           readOnly

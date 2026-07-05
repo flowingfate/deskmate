@@ -11,6 +11,7 @@ import { Button } from '@/shadcn/button';
 import { Input } from '@/shadcn/input';
 import { Textarea } from '@/shadcn/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/shadcn/select';
+import { DoctorModelField } from './DoctorModelField';
 import {
   doctorInquiryAtom,
   doctorAnalyzeAtom,
@@ -36,7 +37,6 @@ function DoctorInquiry() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const agents = useAgents();
-
   const sessions = useAgentSessions(
     form.agentId && form.agentId !== NONE_OPTION ? form.agentId : '',
   );
@@ -105,7 +105,7 @@ function DoctorInquiry() {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) actions.hide(); }}>
       <DialogContent  data-dbg="doctor-inquiry-dialog" className="max-w-xl max-h-[88vh] p-0 flex flex-col overflow-hidden">
-        <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-neutral-100 bg-gradient-to-r from-neutral-50 to-neutral-50 shrink-0">
+        <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-neutral-100 bg-linear-to-r from-neutral-50 to-neutral-50 shrink-0">
           {doctor_icon}
           <DialogHeader className="flex-1 min-w-0">
             <DialogTitle className="text-base font-semibold text-neutral-900 mb-0">
@@ -198,6 +198,11 @@ function DoctorInquiry() {
               )}
             </Field>
           )}
+
+          <Field label="Diagnosis Model" required>
+            <DoctorModelField value={form.modelKey} onChange={actions.setModelKey} />
+            <p className="mt-1.5 text-xs text-neutral-400">Choose the provider/model the Doctor Agent uses for diagnosis.</p>
+          </Field>
 
           <Field label="Screenshots (optional)">
             <div className="flex gap-2 mb-2">

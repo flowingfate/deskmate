@@ -6,12 +6,12 @@ import { TitleBar } from './titlebar';
 
 export const AppShell: React.FC = () => {
   return (
-    <div className="app-shell">
+    <div className="h-full flex flex-col overflow-hidden">
       <TitleBar />
 
-      <div className="app-shell-body">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         <Sidebar />
-        <div className="app-shell-content">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           <Outlet />
         </div>
       </div>

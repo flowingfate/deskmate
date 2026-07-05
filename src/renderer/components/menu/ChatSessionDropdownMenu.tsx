@@ -3,6 +3,7 @@ import { Trash2, Download, Pencil, Star, Copy, GitFork } from 'lucide-react';
 import { atom } from '@/atom';
 import { log } from '@/log';
 import { chatSessionApi } from '@/ipc/chatSession';
+import { chatSessionCommands } from '@/states/chatSessionCommands';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -74,6 +75,7 @@ const ChatSessionDropdownMenu: React.FC<InnerProps> = ({
   anchorElement,
 }) => {
   const { close: onClose } = ChatSessionMenuAtom.useChange();
+  const runCommand = chatSessionCommands.use();
 
   const anchorRect = anchorElement.getBoundingClientRect();
 
@@ -82,9 +84,7 @@ const ChatSessionDropdownMenu: React.FC<InnerProps> = ({
     if (!agentId || isScheduleMenu) {
       return;
     }
-    window.dispatchEvent(new CustomEvent('chatSession:toggleStar', {
-      detail: { agentId, sessionId, starred: !starred }
-    }));
+    runCommand({ type: 'toggleStar', agentId, sessionId, starred: !starred });
   };
 
   const handleCopyFilePath = async () => {
@@ -103,27 +103,21 @@ const ChatSessionDropdownMenu: React.FC<InnerProps> = ({
   };
 
   const handleRenameChatSession = () => {
-    window.dispatchEvent(new CustomEvent('chatSession:rename', {
-      detail: { agentId, sessionId, title }
-    }));
+    if (!agentId) return;
+    runCommand({ type: 'rename', agentId, sessionId, title: title ?? '' });
   };
 
   const handleForkChatSession = () => {
-    window.dispatchEvent(new CustomEvent('chatSession:fork', {
-      detail: { sessionId }
-    }));
+    runCommand({ type: 'fork', sessionId });
   };
 
   const handleDownloadChatSession = () => {
-    window.dispatchEvent(new CustomEvent('chatSession:download', {
-      detail: { agentId, sessionId, title }
-    }));
+    if (!agentId) return;
+    runCommand({ type: 'download', agentId, sessionId, title: title ?? '' });
   };
 
   const handleDeleteChatSession = () => {
-    window.dispatchEvent(new CustomEvent('chatSession:delete', {
-      detail: { sessionId }
-    }));
+    runCommand({ type: 'delete', sessionId });
   };
 
   return (
