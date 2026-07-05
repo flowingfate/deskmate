@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { newTraceId, newSpanId, Tracer, type TraceContext } from '../trace';
 
 const CROCKFORD = /^[0-9abcdefghjkmnpqrstvwxyz]+$/;
@@ -67,16 +67,27 @@ describe('Tracer — serialize / deserialize', () => {
     expect(turnFields.psid).toBe(ipcFields.sid);
   });
 
-  it('rootDur 跨 deserialize 仍以 ctx.startAt 起算', async () => {
-    const upstream = Tracer.startWithSpan();
-    // 等几 ms 模拟传输延迟
-    await new Promise((r) => setTimeout(r, 5));
-    const received = Tracer.deserialize(upstream.serialize());
-    const child = received.derive();
-    // child.rootDur 应近似 = Date.now() - upstream.startAt，会 ≥ 5
-    expect(child.rootDur).toBeGreaterThanOrEqual(5);
-    // child.dur (self) 是 derive 时刻起算的本地 dur，不能算上传输延迟
-    expect(child.dur).toBeLessThan(child.rootDur);
+  it('rootDur 跨 deserialize 仍以 ctx.startAt 起算', () => {
+    // 用 fake timer 精确推进时钟，避免真实 setTimeout 让 rootDur 卡在临界值上 flake
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(0);
+      const upstream = Tracer.startWithSpan(); // startAt = 0
+      const ctx = upstream.serialize();
+      // 前进 5ms 模拟跨进程传输延迟
+      vi.setSystemTime(5);
+      const received = Tracer.deserialize(ctx); // startAt 保留 = 0
+      const child = received.derive();           // child.startAt = 5，root().startAt = 0
+      // 再前进 3ms，让 self dur / rootDur 都是确定值
+      vi.setSystemTime(8);
+      // child.rootDur = now(8) - root.startAt(0) = 8，含传输延迟
+      expect(child.rootDur).toBe(8);
+      // child.dur (self) = now(8) - child.startAt(5) = 3，不含传输延迟
+      expect(child.dur).toBe(3);
+      expect(child.dur).toBeLessThan(child.rootDur);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('deserialize 带 psid 时 stub parent 不污染下游字段', () => {
