@@ -6,6 +6,7 @@ import {
   Cable,
   Camera,
   ChevronLeft,
+  HardDrive,
   Info,
   ShieldCheck,
   Terminal,
@@ -42,6 +43,7 @@ const SettingsSidepanel: React.FC = () => {
     if (path.includes('/settings/about')) return 'about';
     if (path.includes('/settings/provider')) return 'provider';
     if (path.includes('/settings/archived-agents')) return 'archived-agents';
+    if (path.includes('/settings/persist')) return 'persist';
     return 'mcp'; // Default: show mcp
   };
 
@@ -116,8 +118,6 @@ const SettingsSidepanel: React.FC = () => {
           ariaLabel="Runtime Environment"
         />
 
-
-
         {screenshotEnabled && (
           <NavItem
             icon={<Camera size={18} />}
@@ -134,6 +134,14 @@ const SettingsSidepanel: React.FC = () => {
           isActive={activeView === 'archived-agents'}
           onClick={() => navigate('/settings/archived-agents')}
           ariaLabel="Archived Agents"
+        />
+
+        <NavItem
+          icon={<HardDrive size={16} />}
+          label="Local Data"
+          isActive={activeView === 'persist'}
+          onClick={() => navigate('/settings/persist')}
+          ariaLabel="Local Data Storage"
         />
 
         <NavItem

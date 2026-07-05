@@ -26,6 +26,7 @@ import ScreenshotSettingsView from '../components/settings/screenshot/Screenshot
 import AboutAppView from '../components/settings/about/AboutAppView';
 import ArchivedAgentsView from '../components/settings/ArchivedAgentsView';
 import ProviderList from '../components/settings/auth/ProviderList';
+import PersistSettingsView from '../components/settings/persist/PersistSettingsView';
 import AgentEditingView from '../components/chat/agent-area/AgentEditingView';
 import AgentCreationView from '../components/chat/agent-area/AgentCreationView';
 import CreateCustomAgentView from '../components/chat/agent-area/CreateCustomAgentView';
@@ -184,6 +185,7 @@ const routes: RouteObject[] = [
               { path: 'about', Component: AboutAppView },
               { path: 'provider', Component: ProviderList },
               { path: 'archived-agents', Component: ArchivedAgentsView },
+              { path: 'persist', Component: PersistSettingsView },
             ],
           },
         ],

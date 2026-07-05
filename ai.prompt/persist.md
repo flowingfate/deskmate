@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-06-30 (新增 updateWebSearchSettings 通道) -->
+<!-- Last verified: 2026-07-05 (新增 getStorageOverview / revealStoragePath 通道 + /settings/persist 本地数据透明页) -->
 
 ## 1. 范围
 
@@ -154,6 +154,8 @@ Profiles.get().active()        → Profile
 | `getUnreadSummary(agentId)` | 未读统计(regular 全量 + schedule_run 窗口),两条 SQL |
 | `updateConfirmationSettings` | confirmation settings 写入 |
 | `updateWebSearchSettings` | webSearch settings 写入(Tavily API key) |
+| `getStorageOverview` | 本地数据透明:**以 agent 为组**统计私有数据(会话/定时/知识/配置 → `AgentStorageGroup`)+ profile 级共享分类(skills/subAgents/mcp/models/搜索索引/归档/设置 → `StorageCategory`)。返回 `StorageOverview`。`/settings/persist` 页用 |
+| `revealStoragePath(absPath)` | 在系统文件管理器中打开 profile 目录树内的路径(越界拒绝) |
 
 ### 6.2 Main → Renderer(send / on,按域 150ms 防抖)
 

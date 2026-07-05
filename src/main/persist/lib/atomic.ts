@@ -96,6 +96,35 @@ export async function listDirs(dir: string): Promise<string[]> {
   }
 }
 
+/**
+ * 递归统计目录占用的字节总数（含所有子目录/文件）。目录不存在返回 0。
+ * 用于"本地数据透明"页展示各资源占盘大小。走 `withFileTypes` 深度优先遍历，
+ * 单个子项 stat / readdir 失败静默跳过（例如遍历途中文件被删），不让局部错误拖垮整体统计。
+ */
+export async function dirBytes(dir: string): Promise<number> {
+  let total = 0;
+  let entries: fs.Dirent[];
+  try {
+    entries = await fsp.readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+    throw err;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    try {
+      if (entry.isDirectory()) {
+        total += await dirBytes(full);
+      } else if (entry.isFile()) {
+        total += (await fsp.stat(full)).size;
+      }
+    } catch {
+      /* 遍历途中被删 / 权限问题：跳过该项 */
+    }
+  }
+  return total;
+}
+
 /** 移动目录或文件；目标父目录会自动创建。 */
 export async function move(from: string, to: string): Promise<void> {
   await ensureDir(path.dirname(to));

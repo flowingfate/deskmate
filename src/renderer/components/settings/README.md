@@ -405,6 +405,7 @@ export const FEATURE_FLAGS = {
 | Runtime | `/settings/runtime` | — |
 | Provider | `/settings/provider` | — |
 | About | `/settings/about` | — |
+| Local Data | `/settings/persist` | — |
 | Archived Agents | `/settings/archived-agents` | — |
 
 ---
