@@ -50,7 +50,7 @@ import { createRedactor, isTextFile, redactFileContent } from './lib/utilities/r
 import { featureFlagManager, isFeatureEnabled } from './lib/featureFlags';
 import { PRELOAD_PATH } from './lib/buildPaths';
 
-import { getAppCacheManager } from './startup/lazy';
+import { appCacheManager } from './lib/appCache';
 import { restoreBounds, trackBounds } from './startup/windowState';
 import { Profiles } from './persist/profiles';
 import { setUpIPC } from './startup/ipc';
@@ -364,7 +364,7 @@ class ElectronApp {
 
       // 🚀 Highest priority: warm up AppCacheManager (read app.json / migrate runtimeConfig.json)
       // Fire-and-forget, fully parallel with all subsequent tasks, ensure earlier than profile.json initialization
-      getAppCacheManager().catch((e) => {
+      appCacheManager.initialize().catch((e) => {
         safeConsole.warn('[Startup] AppCacheManager pre-warm failed:', e);
       });
 
@@ -711,8 +711,8 @@ class ElectronApp {
 
     const persistMainWindowMaximized = async (maximized: boolean) => {
       try {
-        const acm = await getAppCacheManager();
-        await acm.updateConfig({ mainWindowMaximized: maximized });
+        await appCacheManager.initialize();
+        await appCacheManager.updateConfig({ mainWindowMaximized: maximized });
       } catch (e) {
         safeConsole.error('[WindowState] Failed to persist maximized state:', e);
       }
@@ -771,8 +771,8 @@ class ElectronApp {
 
       if (this.mainWindow) {
         try {
-          const acm = await getAppCacheManager();
-          const config = acm.getConfig();
+          await appCacheManager.initialize();
+          const config = appCacheManager.getConfig();
           if (config.mainWindowMaximized) {
             this.mainWindow.maximize();
           }
@@ -905,8 +905,8 @@ class ElectronApp {
   }
 
   private async getPersistedWindowZoomLevel(): Promise<number> {
-    const acm = await getAppCacheManager();
-    const zoomLevel = acm.getConfig().zoomLevel;
+    await appCacheManager.initialize();
+    const zoomLevel = appCacheManager.getConfig().zoomLevel;
     return typeof zoomLevel === 'number' ? this.normalizeWindowZoomLevel(zoomLevel) : 0;
   }
 
@@ -923,8 +923,8 @@ class ElectronApp {
 
   private async persistWindowZoomLevel(level: number): Promise<void> {
     try {
-      const acm = await getAppCacheManager();
-      await acm.updateConfig({ zoomLevel: level });
+      await appCacheManager.initialize();
+      await appCacheManager.updateConfig({ zoomLevel: level });
     } catch (e) {
       safeConsole.error('[Zoom] Failed to persist zoom level:', e);
     }

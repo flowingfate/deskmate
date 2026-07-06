@@ -14,7 +14,7 @@ const logger = log;
  * (not via `spawn(process.execPath, …)`) because in packaged Electron apps
  * `process.execPath` points at the Electron binary, not Node.js.
  *
- * All functions take `binPath` (`{userData}/bin/`) explicitly so this module
+ * All functions take `binPath` (`{userData}/env/bin/`) explicitly so this module
  * stays free of singleton coupling.
  */
 
@@ -70,8 +70,6 @@ const BUN_PACKAGES: Record<string, string> = {
   'darwin-x64': 'bun-darwin-x64.zip',
   'win32-x64': 'bun-windows-x64.zip',
   'win32-arm64': 'bun-windows-x64.zip',
-  'linux-x64': 'bun-linux-x64.zip',
-  'linux-arm64': 'bun-linux-aarch64.zip',
 };
 
 /**
@@ -150,9 +148,6 @@ const UV_PACKAGES: Record<string, string> = {
   'win32-arm64': 'uv-aarch64-pc-windows-msvc.zip',
   'win32-ia32': 'uv-i686-pc-windows-msvc.zip',
   'win32-x64': 'uv-x86_64-pc-windows-msvc.zip',
-  'linux-arm64': 'uv-aarch64-unknown-linux-gnu.tar.gz',
-  'linux-ia32': 'uv-i686-unknown-linux-gnu.tar.gz',
-  'linux-x64': 'uv-x86_64-unknown-linux-gnu.tar.gz',
 };
 
 /**

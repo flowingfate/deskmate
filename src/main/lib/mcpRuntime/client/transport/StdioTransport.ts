@@ -6,8 +6,8 @@
 import { EventEmitter } from 'events';
 import { homedir } from 'os';
 import * as path from 'path';
-import { getTerminalManager } from '../../../terminalManager';
-import { ITerminalInstance, TerminalConfig, TerminalState } from '../../../terminalManager/types';
+import { terminalManager, type McpTransportInstance } from '../../../terminal'
+import { TerminalConfigBase, TerminalState } from '../../../terminal/types'
 import { log } from '@main/log';
 
 export interface StdioTransportConfig {
@@ -29,9 +29,8 @@ export interface ConnectionState {
  * Uses unified terminal manager while preserving the original interface and behavior
  */
 export class StdioTransport extends EventEmitter {
-  private terminalInstance: ITerminalInstance | null = null;
+  private terminalInstance: McpTransportInstance | null = null;
   private currentState: ConnectionState = { state: 'stopped' };
-  private terminalManager = getTerminalManager();
   private logger = log;
   private instanceId: string;
   // Collect stderr output for error reporting
@@ -82,30 +81,28 @@ export class StdioTransport extends EventEmitter {
       // Create terminal configuration
       // Environment variables are managed by TerminalInstance (decides whether to add bin directory based on runtime mode)
       // Only pass env and envFile specified in the configuration; let TerminalInstance handle the rest
-      const terminalConfig: TerminalConfig = {
+      const terminalConfig: TerminalConfigBase = {
         command: this.expandTildePath(this.config.command),
         args: this.config.args.map(arg => this.expandTildePath(arg)),
         cwd,
         env: this.config.env as Record<string, string> | undefined,
         envFile: this.config.envFile,
-        type: 'mcp_transport',
-        persistent: true,
         instanceId: `mcp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
       };
 
       this.logger.info({ msg: `Creating MCP transport terminal instance`, mod: 'StdioTransport', instanceId: this.instanceId, terminalInstanceId: terminalConfig.instanceId, expandedCommand: terminalConfig.command, expandedArgs: terminalConfig.args, cwd: terminalConfig.cwd, envVarsCount: Object.keys(this.config.env || {}).length });
 
-      // Create instance using terminal manager
-      this.terminalInstance = await this.terminalManager.createMcpTransport(terminalConfig);
-
-      // Set up event handlers
+      // 造实例（未启动）→ 先挂事件监听 → 再 start：保证 spawn 前监听就位，
+      // 首帧 stdout / exit 不会丢。
+      this.terminalInstance = await terminalManager.createTransport(terminalConfig);
       this.setupEventHandlers();
-
-      const startupTime = Date.now() - startTime;
 
       this.emit('log', 'debug', `Starting MCP server: ${terminalConfig.command} ${terminalConfig.args.join(' ')}`);
 
-      // Instance was already started during creation; set state to running directly
+      await this.terminalInstance.start();
+
+      const startupTime = Date.now() - startTime;
+
       this.setState({ state: 'running' });
 
       this.logger.info({ msg: `StdioTransport started successfully`, mod: 'StdioTransport', instanceId: this.instanceId, terminalInstanceId: this.terminalInstance.id, startupTimeMs: startupTime });

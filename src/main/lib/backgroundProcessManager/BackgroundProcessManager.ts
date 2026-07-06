@@ -3,8 +3,8 @@
  * Singleton pattern, wraps TerminalManager for non-blocking command execution
  */
 
-import { getTerminalManager } from '../terminalManager';
-import { TerminalConfig, ITerminalInstance } from '../terminalManager/types';
+import { terminalManager, type BaseTerminalInstance } from '../terminal'
+import { TerminalConfigBase } from '../terminal/types'
 import { log } from '@main/log';
 import {
   BackgroundSessionData,
@@ -52,19 +52,16 @@ export class BackgroundProcessManager {
 
     this.logger.info({ msg: 'Spawning background process', mod: 'BackgroundProcessManager', sessionId, command, cwd: options.cwd });
 
-    const terminalManager = getTerminalManager();
-
-    const terminalConfig: TerminalConfig = {
+    const terminalConfig: TerminalConfigBase = {
       command,
       args: [],
       cwd: options.cwd,
-      type: 'command',
       shell: options.shell,
       env: options.env,
       persistent: true
     };
 
-    const instance = await terminalManager.createInstance(terminalConfig);
+    const instance = await terminalManager.createCommand(terminalConfig);
 
     const sessionData: BackgroundSessionData = {
       sessionId,
@@ -171,7 +168,6 @@ export class BackgroundProcessManager {
     this.logger.info({ msg: 'Killing background session', mod: 'BackgroundProcessManager', sessionId });
 
     try {
-      const terminalManager = getTerminalManager();
       session.killedByUser = true;
       await terminalManager.stopInstance(session.terminalInstanceId, true);
 
@@ -234,8 +230,6 @@ export class BackgroundProcessManager {
   public async dispose(): Promise<void> {
     this.logger.info({ msg: 'Disposing BackgroundProcessManager', mod: 'BackgroundProcessManager', activeSessions: this.sessions.size });
 
-    const terminalManager = getTerminalManager();
-
     for (const [sessionId, session] of this.sessions) {
       // Clear cleanup timers
       if (session.cleanupTimerId) {
@@ -263,7 +257,7 @@ export class BackgroundProcessManager {
     return `bg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   }
 
-  private setupOutputListeners(instance: ITerminalInstance, session: BackgroundSessionData): void {
+  private setupOutputListeners(instance: BaseTerminalInstance, session: BackgroundSessionData): void {
     const appendLine = (line: string) => {
       const truncated = line.length > MAX_LINE_LENGTH
         ? line.slice(0, MAX_LINE_LENGTH) + '...'
@@ -328,7 +322,6 @@ export class BackgroundProcessManager {
       this.logger.info({ msg: 'Cleaning up expired session', mod: 'BackgroundProcessManager', sessionId });
 
       // Dispose terminal instance to release event listeners and resources
-      const terminalManager = getTerminalManager();
       terminalManager.stopInstance(session.terminalInstanceId, true).catch(err => {
         this.logger.warn({ msg: 'Failed to dispose terminal instance during session cleanup', mod: 'BackgroundProcessManager', sessionId, err: err });
       });

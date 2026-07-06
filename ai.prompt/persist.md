@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-05 (新增 getStorageOverview / revealStoragePath 通道 + /settings/persist 本地数据透明页) -->
+<!-- Last verified: 2026-07-08 (运行时目录收进顶层 env/：bin/python-venv 等移入 ~/.deskmate/env/) -->
 
 ## 1. 范围
 
@@ -47,7 +47,7 @@
 
 ```
 ~/.deskmate/
-├── app.json, device-id, state/, cache/, logs/, bin/, ...   # 不属于 persist
+├── app.json, device-id, state/, cache/, logs/, env/, ...   # 不属于 persist
 └── profiles/
     ├── profiles.json                              # 索引 + activeProfileId(guest / signed_in)
     └── p_{ulid}/

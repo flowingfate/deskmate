@@ -23,52 +23,28 @@ vi.mock('electron', async () => ({
   }
 }));
 
-// Mock RuntimeManager
-vi.mock('../../runtime/RuntimeManager', async () => ({
-  runtimeManager: {
-    getMode: vi.fn().mockReturnValue('system'),
-    isInternal: vi.fn().mockReturnValue(false),
-    getBinPath: vi.fn().mockReturnValue('C:\\test\\bin'),
-    resolveCommand: vi.fn((cmd: string) => cmd)
-  }
+// Mock platformConfigs for testing —— 提供 prepareCommand 需要的纯函数
+vi.mock('../platformConfigs', async () => ({
+  getRunnableShellProfile: async (shell?: string) => ({
+    shellType: shell || 'powershell',
+    profile: {
+      command: 'powershell.exe',
+      args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
+      supportsPersistent: true
+    }
+  }),
+  getShellProfile: (_shell?: string) => ({
+    command: 'powershell.exe',
+    args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
+    supportsPersistent: true
+  }),
+  getDefaultShell: () => 'powershell',
+  getEnhancedEnvironment: () => ({ Path: 'C:\\test\\bin;C:\\Windows' })
 }));
 
-// Mock PlatformConfigManager for testing
-vi.mock('../PlatformConfigManager', async () => ({
-  PlatformConfigManager: {
-    getInstance: () => ({
-      getRunnableShellProfile: async (shell?: string) => ({
-        shellType: shell || 'powershell',
-        profile: {
-          command: 'powershell.exe',
-          args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
-          supportsPersistent: true
-        }
-      }),
-      getShellProfile: (shell?: string) => ({
-        command: 'powershell.exe',
-        args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
-        supportsPersistent: true
-      }),
-      getDefaultShell: () => 'powershell',
-      getConfig: () => ({
-        shells: {
-          powershell: {
-            command: 'powershell.exe',
-            args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
-            supportsPersistent: true
-          }
-        },
-        defaultShell: 'powershell',
-        pathSeparator: ';',
-        executableExtensions: ['.exe', '.cmd', '.bat', '.com']
-      })
-    })
-  }
-}));
-
-import { TerminalInstance } from '../TerminalInstance';
+import { CommandInstance } from '../CommandInstance';
 import { TerminalConfig } from '../types';
+import { parseCommandString, createShellWrapper, createMissingCwdPrefix } from '../commandBuilder';
 
 // Helper to create a valid TerminalConfig
 function createConfig(command: string, shell: 'powershell' | 'cmd' | 'bash' = 'powershell'): TerminalConfig {
@@ -82,7 +58,7 @@ function createConfig(command: string, shell: 'powershell' | 'cmd' | 'bash' = 'p
 }
 
 // Test helper to extract the prepared command
-class TestableTerminalInstance extends TerminalInstance {
+class TestableTerminalInstance extends CommandInstance {
   public async testPrepareCommand(): Promise<{ executable: string; args: string[]; shell: boolean }> {
     // Access the private method via reflection for testing
     return (this as any).prepareCommand('');
@@ -93,15 +69,15 @@ class TestableTerminalInstance extends TerminalInstance {
   }
 
   public testCreateMissingCwdPrefix(originalCwd: string, shellCommand: string): string {
-    return (this as any).createMissingCwdPrefix(originalCwd, shellCommand);
+    return createMissingCwdPrefix(originalCwd, shellCommand);
   }
 
   public testParseCommandString(command: string): { executable: string; inlineArgs: string } {
-    return (this as any).parseCommandString(command);
+    return parseCommandString(command);
   }
 
-  public testCreateShellWrapper(command: string, shellType?: string): string {
-    return (this as any).createShellWrapper(command, shellType);
+  public testCreateShellWrapper(command: string, shellType: string): string {
+    return createShellWrapper(command, shellType, []);
   }
 }
 
@@ -273,7 +249,7 @@ describe('TerminalInstance PowerShell command handling', () => {
 
   describe('shell wrapper fallback environment', () => {
     it('uses the effective fallback shell when building Unix shell wrappers', () => {
-      Object.defineProperty(process, 'platform', { value: 'linux' });
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
 
       const config = createConfig('node -v', 'bash');
       const instance = new TestableTerminalInstance(config);

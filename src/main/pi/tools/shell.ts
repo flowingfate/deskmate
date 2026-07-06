@@ -37,8 +37,8 @@ import {
   getDeviceAuthTitle,
 } from '@shared/types/interactiveRequestTypes';
 import { buildCommandLine as buildCommandLineShared } from '@main/lib/backgroundProcessManager/commandLineUtils';
-import { getTerminalManager } from '@main/lib/terminalManager';
-import type { TerminalConfig } from '@main/lib/terminalManager/types';
+import { terminalManager } from '@main/lib/terminal'
+import type { TerminalConfigBase } from '@main/lib/terminal/types'
 import { CancellationError } from '@main/lib/utilities/errors';
 
 import { jsonSchema } from './schema';
@@ -254,22 +254,18 @@ async function runForeground(
   startTime: number,
   ctx: ToolContext,
 ): Promise<ShellToolResult> {
-  const terminalManager = getTerminalManager();
-  const terminalConfig: TerminalConfig = {
+  const terminalConfig: TerminalConfigBase = {
     command: commandLine,
     args: [], // command 已含参数。
     cwd: args.cwd,
-    type: 'command',
     shell: args.shell,
     timeoutMs,
     maxOutputLength: MAX_OUTPUT_CHARS,
     persistent: false,
+    instanceId: `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
   };
 
-  const instance = await terminalManager.createInstance({
-    ...terminalConfig,
-    instanceId: `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-  });
+  const instance = await terminalManager.createCommand(terminalConfig);
 
   let liveStdout = '';
   let liveStderr = '';
@@ -381,7 +377,6 @@ async function runForeground(
 
   let result;
   try {
-    await instance.start();
     result = await instance.execute();
   } finally {
     ctx.signal.removeEventListener('abort', cancelOnAbort);

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { log } from '@main/log';
-import { getTerminalManager } from '../terminalManager';
+import { terminalManager } from '../terminal'
 
 const logger = log;
 
@@ -19,7 +19,7 @@ const logger = log;
  * lazy install path when the user has a pinned Python.
  *
  * Environment compatibility:
- *   The venv lives in `{userData}/python-venv/`, which is always writable in
+ *   The venv lives in `{userData}/env/python-venv/`, which is always writable in
  *   both dev and packaged (production) environments on macOS and Windows. This
  *   eliminates the need for `process.cwd()` writability checks.
  *
@@ -93,12 +93,10 @@ async function recreateVenv(venvDir: string, pythonVersion: string): Promise<voi
   // Recreate venv using uv — explicitly specify the venv path so uv doesn't
   // rely on cwd-based discovery. This works in both dev and packaged environments.
   try {
-    const terminalManager = getTerminalManager();
-    const result = await terminalManager.executeCommand({
+    const result = await terminalManager.run({
       command: 'uv',
       args: ['venv', '--python', pythonVersion, venvDir],
       cwd: path.dirname(venvDir),
-      type: 'command',
       timeoutMs: 60_000,
     });
 

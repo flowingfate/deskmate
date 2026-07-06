@@ -68,7 +68,7 @@ function getElectronApp(): Electron.App {
 // ─── AppCacheManager ──────────────────────────────────────────────────────────
 
 /**
- * AppCacheManager — singleton
+ * AppCacheManager — 模块级单例（`appCacheManager`），管理 {userData}/app.json
  *
  * Responsibilities:
  * 1. Read / write {userData}/app.json
@@ -78,22 +78,12 @@ function getElectronApp(): Electron.App {
  * 5. Notify the frontend AppDataManager via IPC after data updates
  */
 export class AppCacheManager {
-  private static instance: AppCacheManager;
-
   private cache: AppConfig = {};
   private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
   // Debounce timer for batched frontend notifications
   private notifyTimer: NodeJS.Timeout | null = null;
-
-  private constructor() {}
-
-  static getInstance(): AppCacheManager {
-    if (!AppCacheManager.instance) {
-      AppCacheManager.instance = new AppCacheManager();
-    }
-    return AppCacheManager.instance;
-  }
 
   // ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -114,22 +104,28 @@ export class AppCacheManager {
    */
   public async initialize(): Promise<void> {
     if (this.initialized) return;
+    // 记忆化：并发调用共享同一次初始化，避免重复读盘 / 双写。
+    if (this.initPromise) return this.initPromise;
 
-    try {
-      const raw = this.readRawConfig();
-      const ensured = this.integrityEnsure(raw);
-      this.cache = ensured;
+    this.initPromise = (async () => {
+      try {
+        const raw = this.readRawConfig();
+        const ensured = this.integrityEnsure(raw);
+        this.cache = ensured;
 
-      // Persist synchronously if the integrity check produced changes
-      if (this.needsWrite(raw, ensured)) {
-        await this.writeConfigToDisk(ensured);
+        // Persist synchronously if the integrity check produced changes
+        if (this.needsWrite(raw, ensured)) {
+          await this.writeConfigToDisk(ensured);
+        }
+
+        this.initialized = true;
+        logger.info({ msg: '[AppCacheManager] Initialization complete', mod: 'AppCacheManager', config: this.cache });
+      } catch (error) {
+        logger.error({ msg: '[AppCacheManager] Initialization failed', mod: 'AppCacheManager', err: error });
       }
+    })();
 
-      this.initialized = true;
-      logger.info({ msg: '[AppCacheManager] Initialization complete', mod: 'AppCacheManager', config: this.cache });
-    } catch (error) {
-      logger.error({ msg: '[AppCacheManager] Initialization failed', mod: 'AppCacheManager', err: error });
-    }
+    return this.initPromise;
   }
 
   /**
@@ -397,5 +393,8 @@ export class AppCacheManager {
   }
 }
 
-/** Global singleton export */
-export const appCacheManager = AppCacheManager.getInstance();
+/**
+ * 全局单例。模块加载即构造（零成本，仅初始化字段）；`initialize()` 记忆化幂等，
+ * 启动时 fire-and-forget 预热，任意消费者也可安全 `await`。
+ */
+export const appCacheManager = new AppCacheManager();

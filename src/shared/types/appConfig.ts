@@ -17,15 +17,15 @@ export type { ScreenshotSettings };
  * Legacy configuration was stored in {userData}/runtimeConfig.json and is auto-migrated on read.
  */
 export interface RuntimeEnvironment {
-  /** Built-in bun version number, e.g., "1.3.6" */
+  /** Built-in bun version number, e.g., "1.3.14" */
   bunVersion: string;
-  /** Built-in uv version number, e.g., "0.6.17" */
+  /** Built-in uv version number, e.g., "0.11.27" */
   uvVersion: string;
   /**
    * Pinned Python version
    * Supports two formats:
-   * - Short version: "3.10.12"
-   * - Full platform identifier: "cpython-3.10.12-macos-aarch64-none"
+   * - Short version: "3.12.13"
+   * - Full platform identifier: "cpython-3.12.13-macos-aarch64-none"
    * null means no lock, use the latest installed version
    */
   pinnedPythonVersion?: string | null;
@@ -35,9 +35,9 @@ export interface RuntimeEnvironment {
  * Default Runtime Environment configuration
  */
 export const DEFAULT_RUNTIME_ENVIRONMENT: RuntimeEnvironment = {
-  bunVersion: '1.3.6',
-  uvVersion: '0.6.17',
-  pinnedPythonVersion: '3.10.12',
+  bunVersion: '1.3.14',
+  uvVersion: '0.11.27',
+  pinnedPythonVersion: '3.12.13',
 };
 
 // ─── Screenshot ──────────────────────────────────────────────────────────────

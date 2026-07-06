@@ -120,7 +120,7 @@ consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
 
 ## 相关模块
 
-- 依赖:[Terminal Manager](../terminalManager/) —— stdio MCP server 作为受管终端进程生成。
+- 依赖:[Terminal Manager](../terminal/) —— stdio MCP server 作为受管终端进程生成。
 - 被依赖:[`src/main/pi/`](../../pi/ai.prompt.md) —— `pi/mcp.ts::executeMcpToolOnServer`
   调本子系统;`pi/toolCatalog.ts` 用 `getAllTools()` 列举 external MCP server 工具。
 - 被依赖:[`src/main/pi/tools/`](../../pi/tools/ai.prompt.md) —— 本地工具子系统

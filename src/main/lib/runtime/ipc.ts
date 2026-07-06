@@ -25,11 +25,7 @@ export function registerRuntimeIpcHandlers(manager: RuntimeManager): void {
     try {
       await manager.installRuntime(tool, version);
 
-      if (tool === 'bun') {
-        await manager.setVersion('bun', version);
-      } else {
-        await manager.setVersion('uv', version);
-      }
+      await manager.setVersion(tool, version);
 
       const duration = Date.now() - startTime;
       logger.info({ msg: `[FRE] IPC: runtime:install-component completed`, mod: 'RuntimeManager', tool, version, duration });

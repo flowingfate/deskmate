@@ -24,15 +24,15 @@ const createMockTerminalInstance = (id: string, pid: number) => {
   };
 };
 
-let mockCreateInstance: Mock;
+let mockCreateCommand: Mock;
 let mockStopInstance: Mock;
 let lastCreatedInstance: ReturnType<typeof createMockTerminalInstance> | null = null;
 
-vi.mock('../../terminalManager', async () => ({
-  getTerminalManager: () => ({
-    createInstance: mockCreateInstance,
-    stopInstance: mockStopInstance,
-  }),
+vi.mock('../../terminal', async () => ({
+  terminalManager: {
+    createCommand: (...args: unknown[]) => mockCreateCommand(...args),
+    stopInstance: (...args: unknown[]) => mockStopInstance(...args),
+  },
 }));
 
 import { BackgroundProcessManager, getBackgroundProcessManager } from '../BackgroundProcessManager';
@@ -47,7 +47,7 @@ describe('BackgroundProcessManager', () => {
     instanceCounter = 0;
     lastCreatedInstance = null;
 
-    mockCreateInstance = vi.fn().mockImplementation(() => {
+    mockCreateCommand = vi.fn().mockImplementation(() => {
       instanceCounter++;
       const instance = createMockTerminalInstance(`term-${instanceCounter}`, 1000 + instanceCounter);
       lastCreatedInstance = instance;
@@ -79,7 +79,7 @@ describe('BackgroundProcessManager', () => {
 
       expect(result.sessionId).toMatch(/^bg_\d+_[a-z0-9]+$/);
       expect(result.pid).toBe(1001);
-      expect(mockCreateInstance).toHaveBeenCalledTimes(1);
+      expect(mockCreateCommand).toHaveBeenCalledTimes(1);
       expect(lastCreatedInstance?.start).toHaveBeenCalled();
     });
 
@@ -92,10 +92,10 @@ describe('BackgroundProcessManager', () => {
       expect(result1.sessionId).not.toBe(result2.sessionId);
     });
 
-    it('propagates error when createInstance throws', async () => {
+    it('propagates error when createCommand throws', async () => {
       const manager = getBackgroundProcessManager();
 
-      mockCreateInstance.mockRejectedValueOnce(new Error('Terminal creation failed'));
+      mockCreateCommand.mockRejectedValueOnce(new Error('Terminal creation failed'));
 
       await expect(manager.spawn('cmd', { cwd: '/tmp' })).rejects.toThrow(
         'Terminal creation failed'

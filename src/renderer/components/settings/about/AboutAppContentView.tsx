@@ -31,11 +31,7 @@ const AboutAppContentView: React.FC<AboutAppContentViewProps> = () => {
 
         // Get platform info
         const platformInfo = await appApi.getPlatformInfo();
-        const platformName = platformInfo.platform === 'darwin'
-          ? 'macOS'
-          : platformInfo.platform === 'win32'
-          ? 'Windows'
-          : 'Linux';
+        const platformName = platformInfo.platform === 'darwin' ? 'macOS' : 'Windows';
         setPlatform(platformName);
         setArch(platformInfo.arch);
 

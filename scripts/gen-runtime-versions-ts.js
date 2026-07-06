@@ -31,9 +31,9 @@ function toEntries(versions: string[]): RuntimeVersionEntry[] {
 }
 
 // ─── Default versions bundled with the app ───────────────────────────────────
-export const DEFAULT_BUN_VERSION = '1.3.6';
-export const DEFAULT_UV_VERSION = '0.6.17';
-export const DEFAULT_PYTHON_VERSION = '3.10.12';
+export const DEFAULT_BUN_VERSION = '1.3.14';
+export const DEFAULT_UV_VERSION = '0.11.27';
+export const DEFAULT_PYTHON_VERSION = '3.12.13';
 
 // ─── Available versions (newest first) ───────────────────────────────────────
 export const BUN_VERSIONS: RuntimeVersionEntry[] = toEntries(${JSON.stringify(bunVersions, null, 2)});

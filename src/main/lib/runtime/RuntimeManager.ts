@@ -1,17 +1,20 @@
-import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { log } from '@main/log';
-import { LocalPythonMirror } from './LocalPythonMirror';
-import { appCacheManager } from '../appCache';
 import type { RuntimeEnvironment } from '@shared/types/appConfig';
-import { DEFAULT_RUNTIME_ENVIRONMENT } from '@shared/types/appConfig';
-import { getTerminalManager } from '../terminalManager';
+import type { InternalToolType, PythonVersionInfo } from '@shared/types/runtimeTypes';
+import {
+  getBinDir,
+  getPythonVenvDir,
+  getUvCacheDir,
+  getUvToolDir,
+  getUvPythonInstallDir,
+  getBunInstallDir,
+  getRuntimeBinDir,
+} from '@main/persist/lib/path';
 import { ensureShims } from './shim';
 import { InstallLockMap } from './lock';
 import { ensureVenvMatchesPinnedPython } from './venv';
-import { installBunDirectly, installUvDirectly } from './download';
-import { registerRuntimeIpcHandlers } from './ipc';
 import {
   listPythonVersionsFast,
   doInstallPythonVersion,
@@ -19,113 +22,100 @@ import {
   doCleanUvCache,
   type UvSpawnContext,
 } from './pythonInstall';
-import type { PythonVersionInfo } from '@shared/types/runtimeTypes';
-import { getBinDir, getPythonVenvDir } from '@main/persist/lib/path';
+import { detectRuntimeNeed } from './commandClassifier';
+import { buildInternalEnv, applyManagedRuntimeDirs, type ManagedRuntimeDirs } from './internalEnv';
+import { installTool } from './install';
+import { readRuntimeConfig, writeToolVersion, applyPinnedPythonVersion } from './runtimeConfig';
 
 const logger = log;
 
-export type InternalToolType = 'bun' | 'uv';
+export type { InternalToolType };
 
+/**
+ * 内置运行时（bun / uv / Python）的协调者。单例。
+ *
+ * 只持有三块真正需要跨调用共享的状态：安装路径、安装锁、以及惰性安装的
+ * 去重 promise 缓存。所有无状态的重活（命令分类、环境构建、下载安装、配置读写）
+ * 都下沉到同目录的纯函数模块，类本身只做编排。
+ *
+ * 安装模型是「惰性」的：boot 时不下载任何东西，第一次真正 spawn 需要某工具的
+ * MCP transport 时才按需安装（见 {@link ensureRuntimeForCommand}）。
+ */
 export class RuntimeManager {
   private static instance: RuntimeManager;
-  private binPath: string;
-  private venvPath: string;
-  // Installation locks to prevent concurrent installations of the same component
-  private installLocks = new InstallLockMap();
 
-  // Lazy install — coalesces concurrent first-spawn requests for the same tool.
-  // Populated by ensureRuntimeForCommand(); not awaited at boot.
-  private toolReadyPromises: Map<InternalToolType, Promise<void>> = new Map();
+  private readonly binPath: string;
+  private readonly venvPath: string;
+
+  /** 防止同一组件并发安装。 */
+  private readonly installLocks = new InstallLockMap();
+
+  /**
+   * 惰性安装的去重缓存：合并同一工具的并发首次 spawn 请求。
+   * 由 ensureRuntimeForCommand() 填充，boot 时不 await。
+   */
+  private readonly toolReadyPromises: Map<InternalToolType, Promise<void>> = new Map();
 
   private constructor() {
     this.binPath = getBinDir();
     this.venvPath = getPythonVenvDir();
-
     logger.info({ msg: `Initialized. Bin path: ${this.binPath}, Venv path: ${this.venvPath}` });
-
-    // Register IPC handlers
-    registerRuntimeIpcHandlers(this);
-
-    // Initialize internal mode if configured (check and repair shims)
     this.initializeInternalMode();
-
   }
 
   public static getInstance(): RuntimeManager {
-    if (!RuntimeManager.instance) {
-      RuntimeManager.instance = new RuntimeManager();
-    }
-    return RuntimeManager.instance;
+    return RuntimeManager.instance || (RuntimeManager.instance = new RuntimeManager());
   }
 
-  // --- Configuration Management ---
+  // --- 配置 ---
 
-  /**
-   * Returns the current RuntimeEnvironment configuration (read from AppCacheManager).
-   */
   public getRunTimeConfig(): RuntimeEnvironment {
-    return appCacheManager.getConfig().runtimeEnvironment ?? { ...DEFAULT_RUNTIME_ENVIRONMENT };
+    return readRuntimeConfig();
   }
+
+  /** 持久化某个内置工具的版本号。 */
+  public setVersion(tool: InternalToolType, version: string): Promise<void> {
+    return writeToolVersion(tool, version);
+  }
+
+  /** 更新锁定的 Python 版本，必要时重建 venv。 */
+  public setPinnedPythonVersion(version: string | null): Promise<void> {
+    return applyPinnedPythonVersion(version, this.venvPath);
+  }
+
   /**
-   * Lazy ensure the runtime needed for a given command is installed.
+   * Python 虚拟环境目录的绝对路径，位于 {userData}/env/python-venv/。
    *
-   * Called by TerminalInstance.prepareEnvironment before spawning MCP transports.
-   * Replaces the old eager install-at-boot model: instead of downloading bun + uv
-   * during FRE, we wait until the user actually configures an MCP that needs them.
+   * 刻意不放在 process.cwd()/.venv：打包后 cwd 在 macOS 是 "/"、Windows 是
+   * "C:\Windows\System32"，均不可写；而 userData 恒可写。managedRuntimeDirs()
+   * 会把它经 applyManagedRuntimeDirs 写入 VIRTUAL_ENV，令 uv/python 及子进程无视 cwd 都能发现该 venv。
+   */
+  public getVenvPath(): string {
+    return this.venvPath;
+  }
+
+  // --- 惰性安装 ---
+
+  /**
+   * 按命令惰性确保所需运行时就绪。由 TerminalInstance.prepareEnvironment 在
+   * spawn MCP transport 前调用
    *
-   * - System mode → noop. The user owns runtimes; we never install.
-   * - JS commands (node/npm/npx/bun)        → ensure `bun` is installed.
-   * - Python commands (python/pip/uv/uvx …) → ensure `uv` is installed + venv ready.
-   * - Anything else → noop. We don't speculatively install for unknown commands.
-   *
-   * Concurrent calls for the same tool reuse the in-flight install promise.
-   * Failures are logged and rethrown; cached promise is dropped so a retry can
-   * be attempted on the next spawn.
+   * - JS 命令 → 确保 bun 就绪；Python 命令 → 确保 uv 就绪 + venv ready；其它 → noop。
+   * - 同一工具的并发调用复用同一 in-flight promise。
+   * - 失败会记录并抛出，同时丢弃缓存，使下次 spawn 可重试。
    */
   public async ensureRuntimeForCommand(command: string, args: readonly string[] = []): Promise<void> {
-
-    const need = this.detectRuntimeNeed(command, args);
-    if (!need) {
-      return;
+    const need = detectRuntimeNeed(command, args);
+    if (need) {
+      await this.ensureToolReady(need);
     }
-
-    await this.ensureToolReady(need);
-  }
-
-  private detectRuntimeNeed(command: string, args: readonly string[]): InternalToolType | null {
-    const norm = (s: string): string => path.basename(s).toLowerCase().replace(/\.(exe|cmd)$/, '');
-
-    const isJsCommand = (s: string): boolean => {
-      const n = norm(s);
-      return n === 'node' || n === 'npm' || n === 'npx' || n === 'bun';
-    };
-    const isPyCommand = (s: string): boolean => {
-      const n = norm(s);
-      return n === 'python' || n === 'python3' || n === 'pip' || n === 'pip3' || n === 'uv' || n === 'uvx';
-    };
-
-    if (isJsCommand(command)) return 'bun';
-    if (isPyCommand(command)) return 'uv';
-
-    // Windows: `cmd /c <real-command> ...`
-    const cmdNorm = norm(command);
-    if ((cmdNorm === 'cmd') && args.length >= 2 && args[0].toLowerCase() === '/c') {
-      if (isJsCommand(args[1])) return 'bun';
-      if (isPyCommand(args[1])) return 'uv';
-    }
-    return null;
   }
 
   private async ensureToolReady(tool: InternalToolType): Promise<void> {
     if (this.isInstalled(tool)) {
-      // Tool is present — just verify shims are wired (cheap idempotent op).
+      // 已安装 —— 只做一次廉价的幂等 shim 校验，uv 额外对齐锁定的 Python。
       ensureShims(this.binPath);
-      if (tool === 'uv') {
-        const pinned = this.getRunTimeConfig().pinnedPythonVersion;
-        if (pinned) {
-          await ensureVenvMatchesPinnedPython(this.venvPath, pinned);
-        }
-      }
+      await this.ensurePinnedVenv(tool);
       return;
     }
 
@@ -136,7 +126,6 @@ export class RuntimeManager {
 
     const rt = this.getRunTimeConfig();
     const version = tool === 'bun' ? rt.bunVersion : rt.uvVersion;
-
     logger.info({
       msg: `[Runtime] Lazy-installing ${tool} v${version} on demand (first MCP request)`,
       mod: 'RuntimeManager',
@@ -147,17 +136,12 @@ export class RuntimeManager {
     const promise = (async () => {
       try {
         await this.installRuntime(tool, version);
-        ensureShims(this.binPath, true);
-        if (tool === 'uv') {
-          const pinned = this.getRunTimeConfig().pinnedPythonVersion;
-          if (pinned) {
-            await ensureVenvMatchesPinnedPython(this.venvPath, pinned);
-          }
-        }
+        ensureShims(this.binPath, true, tool);
+        await this.ensurePinnedVenv(tool);
         logger.info({ msg: `[Runtime] ${tool} ready`, mod: 'RuntimeManager', tool });
       } catch (err) {
         logger.error({ msg: `[Runtime] Lazy install of ${tool} failed`, mod: 'RuntimeManager', tool, err });
-        // Drop cache so the next spawn retries instead of resolving to a failed install.
+        // 丢弃缓存，让下次 spawn 重试，而非拿到一个已失败的 promise。
         this.toolReadyPromises.delete(tool);
         throw err;
       }
@@ -167,110 +151,35 @@ export class RuntimeManager {
     return promise;
   }
 
-
-  public async setVersion(tool: InternalToolType, version: string): Promise<void> {
-    const current = appCacheManager.getConfig();
-    const rt = current.runtimeEnvironment ?? DEFAULT_RUNTIME_ENVIRONMENT;
-    await appCacheManager.updateConfig({
-      runtimeEnvironment: {
-        ...rt,
-        ...(tool === 'bun' ? { bunVersion: version } : { uvVersion: version }),
-      },
-    });
-  }
-
-  public async setPinnedPythonVersion(version: string | null): Promise<void> {
-    const current = appCacheManager.getConfig();
-    const rt = current.runtimeEnvironment ?? DEFAULT_RUNTIME_ENVIRONMENT;
-    logger.info({ msg: `[FRE] Setting pinned Python version`, mod: 'RuntimeManager', newVersion: version, oldVersion: rt.pinnedPythonVersion });
-
-    if (rt.pinnedPythonVersion !== version) {
-      logger.debug({ msg: `[FRE] Saving runtime config with new pinned version`, mod: 'RuntimeManager' });
-      await appCacheManager.updateConfig({
-        runtimeEnvironment: {
-          ...rt,
-          pinnedPythonVersion: version,
-        },
-      });
-      // Note: We no longer clean uv cache here as it doesn't help with venv issues
-      // and can cause FRE to hang for a long time if cache is large
-      logger.info({ msg: `[FRE] Pinned Python version set to ${version}`, mod: 'RuntimeManager' });
-
-      // Auto-rebuild .venv if the existing venv's Python version doesn't match.
-      // uv pip refuses to operate when the venv was created with a different Python.
-      if (version) {
-        await ensureVenvMatchesPinnedPython(this.venvPath, version);
-      }
-    } else {
-      logger.debug({ msg: `[FRE] Pinned Python version unchanged, skipping`, mod: 'RuntimeManager' });
+  /** uv 就绪后，若用户锁定了 Python 版本则确保 venv 与之匹配。 */
+  private async ensurePinnedVenv(tool: InternalToolType): Promise<void> {
+    if (tool !== 'uv') return;
+    const pinned = this.getRunTimeConfig().pinnedPythonVersion;
+    if (pinned) {
+      await ensureVenvMatchesPinnedPython(this.venvPath, pinned);
     }
   }
 
-  /**
-   * Returns the absolute path to the Python virtual environment directory.
-   *
-   * The venv lives under {userData}/python-venv/ (e.g.
-   * ~/.deskmate/python-venv/ on macOS).
-   *
-   * This is deliberately NOT in process.cwd()/.venv because:
-   *   - process.cwd() is "/" on packaged macOS apps and "C:\Windows\System32"
-   *     on packaged Windows apps — both are not writable.
-   *   - app.getPath('userData') is always writable, in both dev and production.
-   *   - Other app-managed resources (native modules, playwright profiles)
-   *     already live under userData.
-   *
-   * The VIRTUAL_ENV environment variable is set in getEnvWithInternalPath()
-   * so that `uv pip install`, `python`, and any subprocess automatically
-   * discover this venv regardless of their working directory.
-   */
-  public getVenvPath(): string {
-    return this.venvPath;
-  }
-
-
-  // --- Path & Environment ---
+  // --- 路径与环境 ---
 
   public getBinaryPath(tool: InternalToolType): string {
     const isWin = process.platform === 'win32';
-
-    if (tool === 'bun') {
-      return path.join(this.binPath, isWin ? 'bun.exe' : 'bun');
-    } else {
-      // uv usually installs 'uv' and 'uvx'. We return the path to the executable.
-      return path.join(this.binPath, isWin ? 'uv.exe' : 'uv');
-    }
+    const exe = tool === 'bun' ? 'bun' : 'uv';
+    return path.join(this.binPath, isWin ? `${exe}.exe` : exe);
   }
 
   public isInstalled(tool: InternalToolType): boolean {
-      const binPath = this.getBinaryPath(tool);
-      return fs.existsSync(binPath);
+    return fs.existsSync(this.getBinaryPath(tool));
   }
 
   /**
-   * ============================================================================
-   * INTERNAL MODE INITIALIZATION (lazy-install model)
-   * ============================================================================
+   * 内置模式初始化（惰性安装模型）：创建 bin 目录，并为「已安装」的工具刷新 shims。
    *
-   * Called automatically when RuntimeManager is instantiated and mode is 'internal'.
-   *
-   * INITIALIZATION FLOW:
-   * ┌─────────────────────────────────────────────────────────────────┐
-   * │ 1. Create bin directory (if not exists)                        │
-   * │    └─> {userData}/bin/                                         │
-   * │                                                                 │
-   * │ 2. Refresh shims for ALREADY-installed tools                   │
-   * │    └─> Skipped shims (missing dependency) wait until install   │
-   * └─────────────────────────────────────────────────────────────────┘
-   *
-   * IMPORTANT: We do NOT download bun / uv / Python here. New users with no
-   * MCPs configured pay zero install cost at boot. The first MCP transport
-   * spawn calls ensureRuntimeForCommand(), which installs the relevant runtime
-   * on demand and surfaces install duration as MCP "connecting" status.
-   *
-   * Settings → Runtime still exposes explicit Install buttons for users who
-   * want to pre-install before using MCPs.
+   * 刻意不在此下载 bun / uv / Python —— 未配置任何 MCP 的新用户 boot 期零安装成本。
+   * 首次 MCP transport spawn 会走 ensureRuntimeForCommand() 按需安装。
+   * Settings → Runtime 仍提供显式 Install 按钮供想预装的用户使用。
    */
-  public initializeInternalMode() {
+  public initializeInternalMode(): void {
     logger.info({ msg: 'Initializing internal mode (lazy install)', mod: 'RuntimeManager' });
 
     if (!fs.existsSync(this.binPath)) {
@@ -278,111 +187,54 @@ export class RuntimeManager {
       logger.info({ msg: `Created bin directory: ${this.binPath}`, mod: 'RuntimeManager' });
     }
 
-    // Refresh shims so commands resolved through {userData}/bin work for any
-    // tools that are already installed from a previous run.
+    // 刷新 shims，让上次运行已安装的工具能通过 {userData}/env/bin 解析到。
     ensureShims(this.binPath, true);
-
     logger.debug({ msg: 'Internal mode initialization completed (no eager install)', mod: 'RuntimeManager' });
   }
 
-
-  /**
-   * Returns environment variables with Internal Bin path prepended to PATH
-   */
-  public getEnvWithInternalPath(baseEnv = process.env): NodeJS.ProcessEnv {
-      // Ensure shims exist whenever we use the internal environment
-      ensureShims(this.binPath);
-
-      const env = { ...baseEnv };
-      const pathKey = Object.keys(env).find(k => k.toLowerCase() === 'path') || 'PATH';
-
-      const currentPath = env[pathKey] || '';
-      env[pathKey] = `${this.binPath}${path.delimiter}${currentPath}`;
-
-      // Ensure Python uses UTF-8 to avoid encoding issues in subprocesses
-      // This is especially important for tools running on Windows
-      env['PYTHONUTF8'] = '1';
-      env['PYTHONIOENCODING'] = 'utf-8';
-
-      // If a specific python version is pinned, force uv to use it
-      const pinnedPythonVersion = this.getRunTimeConfig().pinnedPythonVersion;
-      if (pinnedPythonVersion && pinnedPythonVersion.trim().length > 0) {
-         // UV_PYTHON sets the Python interpreter for uv commands (run, tool run, pip, etc.)
-         // It can accept a path or a version request like "3.12"
-         env['UV_PYTHON'] = pinnedPythonVersion;
-      }
-
-      // Point VIRTUAL_ENV to {userData}/python-venv so that `uv pip install`,
-      // `python`, and any subprocess discover the venv regardless of cwd.
-      // This replaces the previous reliance on process.cwd()/.venv discovery.
-      env['VIRTUAL_ENV'] = this.venvPath;
-
-      // Remove npm_config_prefix to avoid conflicts with nvm in subprocesses.
-      // Homebrew node sets this, but it's incompatible with nvm and unnecessary
-      // for our internal runtime environment.
-      delete env['npm_config_prefix'];
-
-      // Check if mirror is running and inject environment variable
-      const mirrorUrl = LocalPythonMirror.getInstance().getBaseUrlIfRunning();
-      if (mirrorUrl) {
-           env['UV_PYTHON_INSTALL_MIRROR'] = mirrorUrl;
-      }
-
-      return env;
+  /** 在给定 base 环境上叠加内置 bin 路径与运行时相关变量（PATH 前插 + managed dir 环境变量）。 */
+  public getEnvWithInternalPath(baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+    // 每次使用内置环境时确保 shims 存在。
+    ensureShims(this.binPath);
+    const env = buildInternalEnv(baseEnv, this.binPath);
+    // 路径 A（设置页按钮）：与路径 B（terminalBridge）共用同一「喂目录变量」实现，杜绝只改一边。
+    applyManagedRuntimeDirs(env, this.managedRuntimeDirs());
+    return env;
   }
 
-  // --- Installation ---
+  /** 组装自带运行时的 managed dir 集合（供 A/B 两路的 applyManagedRuntimeDirs 共用）。 */
+  public managedRuntimeDirs(): ManagedRuntimeDirs {
+    return {
+      uvCacheDir: getUvCacheDir(),
+      uvToolDir: getUvToolDir(),
+      uvPythonInstallDir: getUvPythonInstallDir(),
+      bunInstallDir: getBunInstallDir(),
+      runtimeBinDir: getRuntimeBinDir(),
+      venvPath: this.venvPath,
+      pinnedPythonVersion: this.getRunTimeConfig().pinnedPythonVersion,
+    };
+  }
 
-  public async installRuntime(tool: InternalToolType, version: string): Promise<void> {
+  // --- 安装 ---
+
+  /** 在安装锁下安装某个内置工具（同一 tool+version 并发调用复用一次安装）。 */
+  public installRuntime(tool: InternalToolType, version: string): Promise<void> {
     const lockKey = `${tool}-${version}`;
     const existing = this.installLocks.get(lockKey);
     if (existing) {
       logger.info({ msg: `[FRE] ${tool} v${version} installation already in progress, waiting for it to complete...`, mod: 'RuntimeManager' });
       return existing;
     }
-    return this.installLocks.run(lockKey, () => this.doInstallRuntime(tool, version));
+    return this.installLocks.run(lockKey, () => installTool(this.binPath, tool, version));
   }
 
-  private async doInstallRuntime(tool: InternalToolType, version: string): Promise<void> {
-    const startTime = Date.now();
-    logger.info({ msg: `[FRE] Starting installation of ${tool} v${version}...`, mod: 'RuntimeManager', tool, version, isPackaged: app.isPackaged, platform: process.platform, arch: process.arch, binPath: this.binPath });
-
-    // Ensure bin directory exists
-    if (!fs.existsSync(this.binPath)) {
-      fs.mkdirSync(this.binPath, { recursive: true });
-    }
-
-    // Run installation directly in main process (not as subprocess)
-    // This is critical because in packaged Electron apps, process.execPath
-    // points to the Electron app itself, not Node.js runtime
-    if (tool === 'bun') {
-      await installBunDirectly(this.binPath, version);
-    } else if (tool === 'uv') {
-      await installUvDirectly(this.binPath, version);
-    } else {
-      throw new Error(`Unknown tool: ${tool}`);
-    }
-
-    const duration = Date.now() - startTime;
-    logger.info({ msg: `[FRE] Successfully installed ${tool} v${version} in ${duration}ms`, mod: 'RuntimeManager', tool, version, duration });
-
-    // Refresh shims after installation to ensure new tools have their corresponding shims
-    logger.debug({ msg: `[FRE] Ensuring shims after ${tool} installation...`, mod: 'RuntimeManager' });
-    ensureShims(this.binPath);
-  }
-
-  // --- Python Management ---
+  // --- Python 管理 ---
 
   public listPythonVersionsFast(): PythonVersionInfo[] {
     return listPythonVersionsFast();
   }
 
-  /**
-   * List installed Python versions.
-   *
-   * Uses fast directory scanning only (< 100ms, typically 1-50ms).
-   * Directly scans UV's Python installation directory without spawning any subprocess.
-   */
+  /** 列出已安装的 Python 版本（快速目录扫描，通常 < 50ms，不 spawn 子进程）。 */
   public async listPythonVersions(): Promise<PythonVersionInfo[]> {
     return listPythonVersionsFast();
   }
@@ -400,21 +252,7 @@ export class RuntimeManager {
       throw new Error('uv is not installed');
     }
 
-    // Start global mirror before installation; stop it after — succeed or fail.
-    const mirror = LocalPythonMirror.getInstance();
-    try {
-      await mirror.start();
-    } catch (e) {
-      logger.warn({ msg: `[FRE] Failed to start local python mirror, proceeding without it`, mod: 'RuntimeManager', err: e });
-    }
-
-    const ctx: UvSpawnContext = { uvPath: this.getBinaryPath('uv'), env: this.getEnvWithInternalPath() };
-
-    try {
-      await this.installLocks.run(lockKey, () => doInstallPythonVersion(ctx, version));
-    } finally {
-      mirror.stop();
-    }
+    return this.installLocks.run(lockKey, () => doInstallPythonVersion(this.uvContext(), version));
   }
 
   public async uninstallPythonVersion(version: string): Promise<void> {
@@ -422,19 +260,15 @@ export class RuntimeManager {
       throw new Error('uv is not installed');
     }
 
-    // If we're uninstalling the pinned version, unpin it first.
-    // pinnedPythonVersion may be stored as a short semver ("3.10.12") while
-    // version is the full uv directory name ("cpython-3.10.12-macos-aarch64-none"),
-    // so match both forms.
+    // 若卸载的是锁定版本，先解除锁定。pinnedPythonVersion 可能存为短 semver
+    // ("3.10.12")，而 version 是 uv 目录全名 ("cpython-3.10.12-macos-aarch64-none")，两种形态都比对。
     const pinned = this.getRunTimeConfig().pinnedPythonVersion;
-    const semverMatch = version.match(/^(?:cpython|pypy)-(\d+\.\d+\.\d+)/);
-    const versionSemver = semverMatch ? semverMatch[1] : null;
+    const versionSemver = version.match(/^(?:cpython|pypy)-(\d+\.\d+\.\d+)/)?.[1] ?? null;
     if (pinned && (pinned === version || (versionSemver && pinned === versionSemver))) {
       await this.setPinnedPythonVersion(null);
     }
 
-    const ctx: UvSpawnContext = { uvPath: this.getBinaryPath('uv'), env: this.getEnvWithInternalPath() };
-    return doUninstallPythonVersion(ctx, version);
+    return doUninstallPythonVersion(this.uvContext(), version);
   }
 
   public async cleanUvCache(): Promise<void> {
@@ -443,7 +277,11 @@ export class RuntimeManager {
       logger.debug({ msg: '[FRE] uv not installed, skipping cache clean', mod: 'RuntimeManager' });
       return;
     }
-    const ctx: UvSpawnContext = { uvPath: this.getBinaryPath('uv'), env: this.getEnvWithInternalPath() };
-    return doCleanUvCache(ctx);
+    return doCleanUvCache(this.uvContext());
+  }
+
+  /** 构造 uv 子命令所需的 spawn 上下文（uv 路径 + 内置环境）。 */
+  private uvContext(): UvSpawnContext {
+    return { uvPath: this.getBinaryPath('uv'), env: this.getEnvWithInternalPath() };
   }
 }
