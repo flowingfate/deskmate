@@ -187,7 +187,7 @@ async function loadImpl() {
 - 依赖:[MCP Runtime](../../lib/mcpRuntime/ai.prompt.md) —— external MCP 工具的
   连接生命周期与执行入口 `executeToolOnServer(serverName, ...)`。本子系统
   **不**依赖 MCPClientManager 的任何"内置"分支。
-- 依赖:[Terminal Manager](../../lib/terminalManager/) —— `shell` 工具用。
+- 依赖:[Terminal Manager](../../lib/terminal/) —— `shell` 工具用。
 - 依赖:[Playwright Manager](../../lib/playwright/) —— `appcmd/builtins/web/kernel/`
   的 `BingImageSearchTool`(`web image`)通过 `PlaywrightManager.getInstance()`
   拉 headless Chromium 跑图片搜索。`web search` 已改走 Tavily REST API

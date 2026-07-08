@@ -1,6 +1,6 @@
 # DESKMATE AI Studio — 主进程架构
 
-<!-- Last verified: 2026-07-02 -->
+<!-- Last verified: 2026-07-08 -->
 ## 1. 范围
 
 本文档覆盖**主进程**（`src/main/`）和**预加载脚本**（`src/preload/`）。渲染进程架构见 [arch-render.md](arch-render.md)。
@@ -32,7 +32,7 @@
 | Research window | `src/main/lib/research/` + `src/main/startup/ipc/research.ts` | `web research` 的可见研究窗口管理；Electron `BrowserWindow` + 多个 `WebContentsView` tab 展示外部网页，live DOM 抽取用户确认来源 | — |
 | 媒体协议 | `src/main/lib/media/` | `media://` 字节直供 protocol,渲染层展示 sandbox/knowledge 图片 | [ai.prompt.md](../src/main/lib/media/ai.prompt.md) |
 | Skills | `src/main/lib/skill/` | .zip/.skill 归档，CDN 目录，SKILL.md YAML 前置内容 | — |
-| 终端管理器 | `src/main/lib/terminalManager/` | 池化的 `command`（临时）和 `mcp_transport`（持久）终端 | — |
+| 终端管理器 | `src/main/lib/terminal/` | 池化的 `command`（临时）和 `mcp_transport`（持久）终端 | — |
 | 后台进程管理器 | `src/main/lib/backgroundProcessManager/` | 异步后台进程执行，环形缓冲区输出 | [ai.prompt.md](../src/main/lib/backgroundProcessManager/ai.prompt.md) |
 | 运行时管理器 | `src/main/lib/runtime/` | 内嵌 bun + uv，Python shim，内部/外部模式 | — |
 | 上下文压缩 | `src/main/lib/compression/` | 基于 LLM 的压缩，截断兜底 | — |
@@ -66,7 +66,7 @@
 | 模型、provider | Chat 引擎（pi） / GHC 注册表 | `src/main/pi/model.ts` / `src/main/pi/providers/ghc/` |
 | 文件树、ripgrep | 工作区 | `src/main/lib/workspace/` |
 | .skill 归档 | Skills | `src/main/lib/skill/` |
-| shell、命令执行 | 终端管理器 | `src/main/lib/terminalManager/` |
+| shell、命令执行 | 终端管理器 | `src/main/lib/terminal/` |
 | 异步执行 | 后台进程管理器 | `src/main/lib/backgroundProcessManager/` |
 | bun、uv、Python | 运行时管理器 | `src/main/lib/runtime/` |
 | 上下文窗口 | 上下文压缩 | `src/main/lib/compression/` |
@@ -96,49 +96,24 @@
 
 ## 6. 数据存储布局
 
-详细 schema 见 [persist.md](persist.md)。简略示意：
+`~/.deskmate/` 顶层地图。`profiles/` 子树的完整 schema（profile / agent / session / schedule 的目录结构、已消失的旧文件/类型）是 persist 层的**权威来源**，见 [persist.md §3 磁盘布局](persist.md)；此处只塌成一行、不重画。`env/` 运行时地盘是本文档的地界（persist 明确不管运行时产物）。
 
 ```
 ~/.deskmate/
-├── app.json, device-id, state/, cache/
-├── profiles/
-│   ├── profiles.json                              # 索引 + activeProfileId（guest / signed_in）
-│   └── p_{ulid}/                                  # profile 目录用 ULID 主键，alias 仅展示
-│       ├── settings.json                           # < 2 KB；旧 profile.json + skill_snapshot 已删
-│       ├── auth.json, auth.pi.json                # 未登录态不存在
-│       ├── index.db                                # Step 9：SQLite 派生缓存（regular_sessions + job_runs）
-│       ├── agents/
-│       │   ├── agents.json
-│       │   └── a_{ulid}/
-│       │       ├── AGENT.md                       # front-matter + body 即 system prompt
-│       │       ├── knowledge/                     # agent 级共享：手动归档参考资料 + 动态 skill
-│       │       ├── sessions/
-│       │       │   └── {YYYYMM}/{s_ulid}/         # Step 9：索引切 index.db；月份桶仍是物理布局
-│       │       │       ├── data.json              # 源真值，含 contextState（压缩栈）
-│       │       │       ├── messages.jsonl         # append-only
-│       │       │       └── files/                 # session 私有 sandbox（按需创建）
-│       │       └── schedules/
-│       │           ├── jobs.json
-│       │           └── {j_ulid}/
-│       │               ├── job.json
-│       │               └── runs/{YYYYMM}/{s_ulid}/   # 同 sessions 结构（含 files/）
-│       ├── sub-agents/   skills/   mcp/   models/
-│       └── archive/                               # 软删归档
-├── bin/                                            # bun, uv + shim
+├── app.json, device-id, state/, cache/             # 顶层应用数据
+├── profiles/                                        # 用户态数据全集 —— 完整 schema 详见 persist.md §3
+│   └── p_{ulid}/                                    #   settings/auth/index.db/agents/{sessions,schedules}/sub-agents/skills/mcp/models/archive
+├── env/                                             # 运行时地盘（bun/uv/Python 装机产物，删了能整个重装）
+│   ├── bin/                                         # 真 bun/uv/uvx + python/uvx/bunx shim
+│   │   └── node-shims/                             # node/npm/npx shim（仅 MCP 前插；shell 走系统）
+│   ├── python-venv/                                # 共享 venv（VIRTUAL_ENV 指向）
+│   ├── uv-cache/  uv-tools/  python/  bun/         # uv/bun 缓存 + 全局包 + uv 装的 Python
+│   └── runtime-bin/                                # 全局 CLI 入口（bun add -g / uvx 装的工具）
 ├── logs/{dev,app}.db                               # pino + sqlite
 └── installation-device-id
 ```
 
-**关键变化（vs 旧 `profiles/{alias}/` 布局）**：
-
-- profile 目录用 `p_{ulid}` 而非 alias，登录/登出只翻 `kind: guest|signed_in` 标记；alias 重命名不动盘
-- Agent 取代 Chat 成为一等公民：磁盘从 `chat_sessions/{chat_id}/` 改为 `agents/{a_ulid}/sessions/{ym}/{s_ulid}/`；`chats[]` / `ChatConfig` / `ChatAgent` 已消失
-- agent 配置写在 `AGENT.md` 的 front-matter + body，与 sub-agent 对齐
-- schedule run 物理隔离到 `agents/{a}/schedules/{j}/runs/`，与常规 session 互不污染
-- `profile.json` 整体取消：`agentOrder` 折入 `agents.json#items` 顺序，`primaryAgent` 折入同文件 `primaryAgentId`（按 id 而非 name 引用）；`skill_snapshot`（旧占 profile.json 73% 体积）运行时按 binding signature 内存重算
-- ULID 取代 UUIDv7（4 层嵌套下 Windows 260 字符上限留余量）
-
-旧 chat_sessions / `Profile['starred-chat-sessions']` / `chat.skill_snapshot` / `agent.workspace` / `chat.interaction_history` / `profile.syncSettings` 等已完全消失，详见 [persist.md §3 "已消失的文件 / 类型"](persist.md)。
+「Chat → Agent 一等公民」重构要点（`p_{ulid}` + `kind: guest|signed_in`、Agent 取代 Chat、`AGENT.md` 配置载体、ULID vs UUIDv7、schedule run 物理隔离、`profile.json` 取消）及所有已消失的旧文件/类型，见 [persist.md §2 核心范式](persist.md) 与 [§3 已消失的文件 / 类型](persist.md) —— 不在此重复。
 
 ---
 

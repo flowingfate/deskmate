@@ -207,6 +207,8 @@ const RuntimeSettingsView: React.FC = () => {
       <RuntimeSettingsContentView
         config={configForView}
         status={status}
+        installedBunVersion={runtimeEnv?.bunVersion ?? ''}
+        installedUvVersion={runtimeEnv?.uvVersion ?? ''}
         gitVersion={gitVersion}
         pythonVersions={pythonVersions}
         isLoading={isLoading}

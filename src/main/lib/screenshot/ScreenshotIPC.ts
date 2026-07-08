@@ -13,17 +13,12 @@ const logger = log;
 
 let isRegistered = false;
 
-async function getAppCacheManager() {
-  return appCacheManager;
-}
-
 export interface ScreenshotIPCOptions {
   // No options currently; kept as an empty interface for future extension.
 }
 
 async function getSettings(): Promise<ScreenshotSettings> {
-  const acManager = await getAppCacheManager();
-  const settings = acManager.getScreenshotSettings();
+  const settings = appCacheManager.getScreenshotSettings();
   // When the feature flag is disabled, force enabled=false
   if (!isFeatureEnabled('deskmateFeatureScreenshot')) {
     return { ...settings, enabled: false };
@@ -74,8 +69,7 @@ export const registerScreenshotIPC = (options: ScreenshotIPCOptions): void => {
   });
 
   handle.updateSettings(async (_event, newSettings) => {
-    const acManager = await getAppCacheManager();
-    const success = await acManager.updateScreenshotSettings(newSettings);
+    const success = await appCacheManager.updateScreenshotSettings(newSettings);
     if (!success) return { success: false, error: 'Failed to update screenshot settings' };
     registerScreenshotShortcut(options);
     return { success: true };
@@ -103,8 +97,7 @@ export const registerScreenshotIPC = (options: ScreenshotIPCOptions): void => {
   });
 
   handle.rejectFre(async () => {
-    const acManager = await getAppCacheManager();
-    const success = await acManager.updateScreenshotSettings({ freRejected: true });
+    const success = await appCacheManager.updateScreenshotSettings({ freRejected: true });
     if (!success) return { success: false, error: 'Failed to update settings' };
     return { success: true };
   });

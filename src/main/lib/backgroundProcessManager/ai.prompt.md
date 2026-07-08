@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-09 -->
+<!-- Last verified: 2026-07-07 -->
 # 后台进程管理器
 
 > 用于异步后台进程执行的单例生命周期封装器。封装 TerminalManager 以实现非阻塞命令执行，支持输出捕获和会话管理。
@@ -19,7 +19,7 @@
 ## 架构
 
 ### 设计决策
-- **薄封装层**：不重新发明进程管理。将所有实际的进程生成/管理委托给 `TerminalManager`（使用 `persistent: true`）。
+- **薄封装层**：不重新发明进程管理。进程生成/管理全部委托 `TerminalManager.createCommand`（`persistent: true`）。
 - **环形缓冲区输出**：每个会话最多存储 1000 行（每行最多 500 字符）。缓冲区满时淘汰最旧的行。
 - **按行存储**：输出按换行符分割并作为独立行存储，而非原始字符块。这使得通过 offset/limit 进行高效分页成为可能。
 - **自动清理**：进程退出后会话数据保留 5 分钟，然后被垃圾回收。清理定时器使用 `.unref()` 以不阻塞进程退出。
@@ -48,11 +48,11 @@ spawn() → running → (exit event) → exited/error → (5 min) → garbage co
 | 向 LLM 重新暴露后台进程能力 | 走 `appcmd/builtins/<domain>/` 加一个新子命令(参照 `mcp/` 模板),把 `getBackgroundProcessManager()` 封进 kernel —— 不要复活老 `manage_process` LocalTool wrapper |
 
 ## 注意事项
-- ⚠️ `TerminalManager.createInstance()` 使用 `persistent: true` 会自动启动进程。`spawn()` 中的 `start()` 调用是为了一致性，但对于持久化实例可能是多余的。
+- ✅ **构造与启动已分离**：`terminalManager.createCommand()` 只造实例入池、**不启动**。`spawn()` 先 `setupOutputListeners` 挂 stdout/stderr/exit 监听，**再** `await instance.start()` —— 保证 spawn 前监听就位，首帧输出不丢，且只启动一次（旧版 `createInstance(persistent)` 自动启动 + 再手动 start 的双重启动已消除）。
 - ⚠️ 会话清理定时器使用 `.unref()` — 如果需要保证清理执行，考虑使用显式的 dispose 逻辑。
 - ⚠️ 环形缓冲区淘汰策略为 FIFO。如果进程产生输出的速度快于 LLM 读取速度，旧行会丢失。
 - ⚠️ `poll()` 在会话未找到时返回 `status: 'error'`（`durationMs: 0`）— 调用方应检查此情况。
 
 ## 相关模块
-- 依赖：[TerminalManager](../terminalManager/)、[日志系统](../../log/)
+- 依赖：[TerminalManager](../terminal/)、[日志系统](../../log/)
 - 被依赖:[shell tool (执行端)](../../pi/tools/executeCommand.ts) 只用 `buildCommandLine` / `quoteArg`(不再走 spawn 路径)

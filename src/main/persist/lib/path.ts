@@ -57,12 +57,72 @@ export function getLogsDir(): string {
   return path.join(getAppDataPath(), 'logs');
 }
 
+/**
+ * 运行时地盘基点：~/.deskmate/env/
+ *
+ * 自带运行时（bun/uv/Python）的一切「装机产物」——二进制、shim、venv、下载缓存、
+ * 全局包、uv 装的 Python——统一收进这个命名空间。判据：「删了能整个重装出来」= 运行时
+ * 产物 = 进 env/；用户账号/对话/日志 = 应用数据 = 留顶层。所有 managed dir helper 都从此派生，
+ * 换基点只此一处。老 ~/.deskmate/bin、python-venv 变孤儿（不迁不删），下次 lazy install 在 env/ 重建。
+ */
+export function getRuntimeEnvDir(): string {
+  return path.join(getAppDataPath(), 'env');
+}
+
 export function getBinDir(): string {
-  return path.join(getAppDataPath(), 'bin');
+  return path.join(getRuntimeEnvDir(), 'bin');
+}
+
+/**
+ * node 生态 shim 子目录：~/.deskmate/env/bin/node-shims/
+ *
+ * 存放 node/npm/npx shim（冒充系统命令名者）。刻意与 root bin 分开：shell 工具只前插 root bin
+ * （python/pip shim + 真 bun/uv/uvx + uvx/bunx shim 可见，node/npm/npx 落系统），MCP 额外前插本目录
+ * 拿到全套 node shim。真二进制 bun 仍在 root bin，shim 内以 `../bun` 反向引用。
+ */
+export function getNodeShimsDir(): string {
+  return path.join(getBinDir(), 'node-shims');
 }
 
 export function getPythonVenvDir(): string {
-  return path.join(getAppDataPath(), 'python-venv');
+  return path.join(getRuntimeEnvDir(), 'python-venv');
+}
+
+/** uv 下载缓存目录：~/.deskmate/env/uv-cache/（喂 UV_CACHE_DIR，收编原 ~/.cache/uv）。 */
+export function getUvCacheDir(): string {
+  return path.join(getRuntimeEnvDir(), 'uv-cache');
+}
+
+/** uvx CLI 工具环境目录：~/.deskmate/env/uv-tools/（喂 UV_TOOL_DIR，收编原 ~/.local/share/uv/tools）。 */
+export function getUvToolDir(): string {
+  return path.join(getRuntimeEnvDir(), 'uv-tools');
+}
+
+/**
+ * uv 装的 Python 本体目录：~/.deskmate/env/python/（喂 UV_PYTHON_INSTALL_DIR）。
+ *
+ * 列表读取的单一来源：设置页 Python 版本列表直接 fs.readdir 此目录（不 spawn uv），
+ * 环境变量注入与列表扫描都从这里取值，杜绝漂移。
+ */
+export function getUvPythonInstallDir(): string {
+  return path.join(getRuntimeEnvDir(), 'python');
+}
+
+/** bun 全局包 + 下载缓存根：~/.deskmate/env/bun/（喂 BUN_INSTALL，收编原 ~/.bun/install）。 */
+export function getBunInstallDir(): string {
+  return path.join(getRuntimeEnvDir(), 'bun');
+}
+
+/**
+ * 全局 CLI 可执行入口统一收口：~/.deskmate/env/runtime-bin/
+ *
+ * uvx 装的工具入口、python3.x 入口、bun 全局包入口都落这里（喂 UV_TOOL_BIN_DIR /
+ * UV_PYTHON_BIN_DIR / BUN_INSTALL_BIN）。刻意与 bin/ 分开：bin/ 里住着冒充系统命令名的 shim
+ * （python/node/npm），若全局装了同名 CLId 链进 bin/ 会跟 shim 撞名互相遮蔽。单开干净目录专收
+ * 全局入口，且前插进路径 B 的 PATH → LLM `bun add -g foo` 后下一条 `foo` 直接命中。
+ */
+export function getRuntimeBinDir(): string {
+  return path.join(getRuntimeEnvDir(), 'runtime-bin');
 }
 
 export function getCrashesDir(): string {

@@ -100,13 +100,6 @@ module.exports = {
     // The wrapper package "playwright" is a thin re-export and can stay in asar.
     'node_modules/playwright-core/**',
   ],
-  extraResources: [
-    {
-      from: 'resources/scripts',
-      to: 'scripts',
-      filter: ['**/*'],
-    },
-  ],
   npmRebuild: false,
   nodeGypRebuild: false,
   buildDependenciesFromSource: false,

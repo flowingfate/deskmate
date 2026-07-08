@@ -1,28 +1,11 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
 import { log } from '@main/log';
+import { getUvPythonInstallDir } from '@main/persist/lib/path';
 import type { PythonVersionInfo } from '@shared/types/runtimeTypes';
 
 const logger = log;
-
-/**
- * Get the UV Python installation directory path (cross-platform).
- *
- * UV stores managed Python installations in:
- * - Linux/macOS: ~/.local/share/uv/python/
- * - Windows: %APPDATA%\uv\python\ (Roaming, not Local!)
- */
-export function getUvPythonDir(): string {
-  if (process.platform === 'win32') {
-    // UV uses Roaming AppData on Windows, not Local AppData
-    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-    return path.join(appData, 'uv', 'python');
-  }
-  // Linux / macOS
-  return path.join(os.homedir(), '.local', 'share', 'uv', 'python');
-}
 
 /**
  * Fast Python version discovery by directly scanning UV's Python directory.
@@ -46,7 +29,7 @@ export function getUvPythonDir(): string {
  */
 export function listPythonVersionsFast(): PythonVersionInfo[] {
   const startTime = Date.now();
-  const uvPythonDir = getUvPythonDir();
+  const uvPythonDir = getUvPythonInstallDir();
 
   logger.debug({ msg: `[FRE][python] Fast scanning UV Python directory: ${uvPythonDir}`, mod: 'RuntimeManager' });
 
@@ -102,7 +85,7 @@ export function listPythonVersionsFast(): PythonVersionInfo[] {
 }
 
 export interface UvSpawnContext {
-  /** Absolute path to the `uv` binary in `{userData}/bin/`. */
+  /** Absolute path to the `uv` binary in `{userData}/env/bin/`. */
   uvPath: string;
   /** Environment derived from `getEnvWithInternalPath()`. */
   env: NodeJS.ProcessEnv;
@@ -110,7 +93,7 @@ export interface UvSpawnContext {
 
 /**
  * Run `uv python install <version>` directly with logging. Caller is
- * responsible for the install lock and any LocalPythonMirror lifecycle.
+ * responsible for the install lock.
  */
 export async function doInstallPythonVersion(ctx: UvSpawnContext, version: string): Promise<void> {
   const startTime = Date.now();

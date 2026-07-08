@@ -1,4 +1,4 @@
-import { getTerminalManager } from '../terminalManager';
+import { terminalManager } from '../terminal'
 import type { GitVersionInfo } from '@shared/types/runtimeTypes';
 
 /**
@@ -9,15 +9,12 @@ import type { GitVersionInfo } from '@shared/types/runtimeTypes';
  * the version is still reported even if `which` / `where` fails.
  */
 export async function checkGitVersion(): Promise<GitVersionInfo> {
-  const terminalManager = getTerminalManager();
-
   try {
     // Try to get git version
-    const versionResult = await terminalManager.executeCommand({
+    const versionResult = await terminalManager.run({
       command: 'git',
       args: ['--version'],
       cwd: process.cwd(),
-      type: 'command',
       timeoutMs: 5000,
     });
 
@@ -36,11 +33,10 @@ export async function checkGitVersion(): Promise<GitVersionInfo> {
     try {
       // On Windows, use where.exe explicitly (not 'where' which is a PowerShell alias for Where-Object)
       const whereCommand = process.platform === 'win32' ? 'where.exe' : 'which';
-      const pathResult = await terminalManager.executeCommand({
+      const pathResult = await terminalManager.run({
         command: whereCommand,
         args: ['git'],
         cwd: process.cwd(),
-        type: 'command',
         timeoutMs: 5000,
       });
 

@@ -26,8 +26,8 @@ vi.mock('electron', async () => ({
   ipcMain: { handle: vi.fn(), on: vi.fn(), removeHandler: vi.fn() },
 }));
 
-vi.mock('../../terminalManager', async () => ({
-  getTerminalManager: vi.fn().mockReturnValue(null),
+vi.mock('../../terminal', async () => ({
+  terminalManager: { run: vi.fn() },
 }));
 
 vi.mock('node-stream-zip', async () => ({}));
@@ -42,6 +42,7 @@ vi.mock('../shim', () => ({
 }));
 
 import { RuntimeManager } from '../RuntimeManager';
+import { detectRuntimeNeed } from '../commandClassifier';
 
 afterAll(() => {
   fs.rmSync(testUserData, { recursive: true, force: true });
@@ -49,7 +50,6 @@ afterAll(() => {
 
 interface RuntimeManagerInternals {
   toolReadyPromises: Map<InternalToolType, Promise<void>>;
-  detectRuntimeNeed(command: string, args: readonly string[]): InternalToolType | null;
   installRuntime(tool: InternalToolType, version: string): Promise<void>;
   binPath: string;
 }
@@ -58,24 +58,16 @@ interface SingletonHolder {
   instance: RuntimeManagerClass | undefined;
 }
 
-describe('RuntimeManager.detectRuntimeNeed', () => {
-  let manager: RuntimeManagerClass;
-  let detect: (command: string, args?: readonly string[]) => InternalToolType | null;
+describe('detectRuntimeNeed', () => {
+  const detect = (command: string, args: readonly string[] = []): InternalToolType | null =>
+    detectRuntimeNeed(command, args);
 
-  beforeEach(() => {
-    (RuntimeManager as unknown as SingletonHolder).instance = undefined;
-    manager = RuntimeManager.getInstance();
-    const internals = manager as unknown as RuntimeManagerInternals;
-    // Captured callback bound to the current manager instance — kept as a
-    // closure so each `it` reads naturally without an extra cast inside.
-    detect = (cmd, args = []) => internals.detectRuntimeNeed(cmd, args);
-  });
-
-  it('classifies node/npm/npx/bun as bun', () => {
+  it('classifies node/npm/npx/bun/bunx as bun', () => {
     expect(detect('node')).toBe('bun');
     expect(detect('npm')).toBe('bun');
     expect(detect('npx')).toBe('bun');
     expect(detect('bun')).toBe('bun');
+    expect(detect('bunx')).toBe('bun');
     // Path-prefixed and Windows variants normalize correctly.
     expect(detect('/usr/local/bin/node')).toBe('bun');
     expect(detect('npm.cmd')).toBe('bun');

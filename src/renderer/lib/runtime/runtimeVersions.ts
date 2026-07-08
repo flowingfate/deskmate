@@ -2,7 +2,7 @@
 // Auto-generated — do not edit manually.
 // Re-generate: node scripts/gen-runtime-versions-ts.js
 // Source:      scripts/runtime-versions.json  (updated via: node scripts/fetch-runtime-versions.js --json > scripts/runtime-versions.json)
-// Last updated: 2026-02-21T05:48:25.418Z
+// Last updated: 2026-07-07T08:22:57.788Z
 
 export interface RuntimeVersionEntry {
   version: string;
@@ -14,12 +14,17 @@ function toEntries(versions: string[]): RuntimeVersionEntry[] {
 }
 
 // ─── Default versions bundled with the app ───────────────────────────────────
-export const DEFAULT_BUN_VERSION = '1.3.6';
-export const DEFAULT_UV_VERSION = '0.6.17';
-export const DEFAULT_PYTHON_VERSION = '3.10.12';
+export const DEFAULT_BUN_VERSION = '1.3.14';
+export const DEFAULT_UV_VERSION = '0.11.27';
+export const DEFAULT_PYTHON_VERSION = '3.12.13';
 
 // ─── Available versions (newest first) ───────────────────────────────────────
 export const BUN_VERSIONS: RuntimeVersionEntry[] = toEntries([
+  "1.3.14",
+  "1.3.13",
+  "1.3.12",
+  "1.3.11",
+  "1.3.10",
   "1.3.9",
   "1.3.8",
   "1.3.7",
@@ -114,15 +119,46 @@ export const BUN_VERSIONS: RuntimeVersionEntry[] = toEntries([
   "1.0.25",
   "1.0.24",
   "1.0.23",
-  "1.0.22",
-  "1.0.21",
-  "1.0.20",
-  "1.0.19",
-  "1.0.18",
-  "1.0.17"
+  "1.0.22"
 ]);
 
 export const UV_VERSIONS: RuntimeVersionEntry[] = toEntries([
+  "0.11.27",
+  "0.11.26",
+  "0.11.25",
+  "0.11.24",
+  "0.11.23",
+  "0.11.22",
+  "0.11.21",
+  "0.11.20",
+  "0.11.19",
+  "0.11.18",
+  "0.11.17",
+  "0.11.16",
+  "0.11.15",
+  "0.11.14",
+  "0.11.13",
+  "0.11.12",
+  "0.11.11",
+  "0.11.10",
+  "0.11.9",
+  "0.11.8",
+  "0.11.7",
+  "0.11.6",
+  "0.11.5",
+  "0.11.4",
+  "0.11.3",
+  "0.11.2",
+  "0.11.1",
+  "0.11.0",
+  "0.10.12",
+  "0.10.11",
+  "0.10.10",
+  "0.10.9",
+  "0.10.8",
+  "0.10.7",
+  "0.10.6",
+  "0.10.5",
   "0.10.4",
   "0.10.3",
   "0.10.2",
@@ -186,50 +222,19 @@ export const UV_VERSIONS: RuntimeVersionEntry[] = toEntries([
   "0.7.22",
   "0.7.21",
   "0.7.20",
-  "0.7.19",
-  "0.7.18",
-  "0.7.17",
-  "0.7.16",
-  "0.7.15",
-  "0.7.14",
-  "0.7.13",
-  "0.7.12",
-  "0.7.11",
-  "0.7.10",
-  "0.7.9",
-  "0.7.8",
-  "0.7.7",
-  "0.7.6",
-  "0.7.5",
-  "0.7.4",
-  "0.7.3",
-  "0.7.2",
-  "0.7.1",
-  "0.7.0",
-  "0.6.17",
-  "0.6.16",
-  "0.6.15",
-  "0.6.14",
-  "0.6.13",
-  "0.6.12",
-  "0.6.11",
-  "0.6.10",
-  "0.6.9",
-  "0.6.8",
-  "0.6.7",
-  "0.6.6",
-  "0.6.5",
-  "0.6.4",
-  "0.6.3",
-  "0.6.2",
-  "0.6.1"
+  "0.7.19"
 ]);
 
 export const PYTHON_VERSIONS: RuntimeVersionEntry[] = toEntries([
+  "3.14.6",
+  "3.14.5",
+  "3.14.4",
   "3.14.3",
   "3.14.2",
   "3.14.1",
   "3.14.0",
+  "3.13.14",
+  "3.13.13",
   "3.13.12",
   "3.13.11",
   "3.13.10",
@@ -243,6 +248,7 @@ export const PYTHON_VERSIONS: RuntimeVersionEntry[] = toEntries([
   "3.13.2",
   "3.13.1",
   "3.13.0",
+  "3.12.13",
   "3.12.12",
   "3.12.11",
   "3.12.10",
@@ -256,6 +262,7 @@ export const PYTHON_VERSIONS: RuntimeVersionEntry[] = toEntries([
   "3.12.2",
   "3.12.1",
   "3.12.0",
+  "3.11.15",
   "3.11.14",
   "3.11.13",
   "3.11.12",
@@ -271,6 +278,7 @@ export const PYTHON_VERSIONS: RuntimeVersionEntry[] = toEntries([
   "3.11.2",
   "3.11.1",
   "3.11.0",
+  "3.10.20",
   "3.10.19",
   "3.10.18",
   "3.10.17",

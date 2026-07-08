@@ -1,4 +1,4 @@
-import {  app, shell } from 'electron';
+import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as https from 'https';
@@ -1095,22 +1095,6 @@ export class UpdateManager {
             app.quit();
           }, 1000);
         });
-      } else {
-        // Linux: use shell.openPath as a fallback
-        shell
-          .openPath(filePath)
-          .then(() => {
-            setTimeout(() => {
-              app.quit();
-            }, 1000);
-          })
-          .catch((error) => {
-            this.logger.error({ msg: 'Linux failed to open installer', mod: 'UpdateManager', err: error, filePath });
-            this.sendToRenderer(
-              'updateError',
-              `Unable to open installer: ${error.message}`,
-            );
-          });
       }
     } catch (error) {
       this.logger.error({ msg: 'Failed to install update package', mod: 'UpdateManager', filePath, err: error });

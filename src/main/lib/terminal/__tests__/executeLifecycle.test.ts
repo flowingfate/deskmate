@@ -12,18 +12,8 @@ vi.mock('electron', async () => ({
   }
 }));
 
-vi.mock('../../runtime/RuntimeManager', async () => ({
-  RuntimeManager: {
-    getInstance: vi.fn().mockReturnValue({
-      getRunTimeConfig: vi.fn().mockReturnValue({ bunVersion: '1.3.6', uvVersion: '0.6.17', pinnedPythonVersion: null }),
-      getBinPath: vi.fn().mockReturnValue('C:\\test\\bin'),
-      resolveCommand: vi.fn((cmd: string) => cmd),
-    }),
-  },
-}));
-
 import { EventEmitter } from 'events';
-import { TerminalInstance } from '../TerminalInstance';
+import { CommandInstance } from '../CommandInstance';
 import { TerminalConfig } from '../types';
 
 class MockChildProcess extends EventEmitter {
@@ -36,7 +26,7 @@ class MockChildProcess extends EventEmitter {
   });
 }
 
-class TestableTerminalInstance extends TerminalInstance {
+class TestableTerminalInstance extends CommandInstance {
   public attachMockProcess(process: MockChildProcess): void {
     (this as any)._process = process;
     (this as any)._state = 'running';

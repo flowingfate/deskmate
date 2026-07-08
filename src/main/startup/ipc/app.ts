@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron';
 
 import { crashCaptureManager } from '../../lib/crash/CrashCaptureManager';
-import { getAppCacheManager } from '../lazy';
+import { appCacheManager } from '../../lib/appCache';
 import { renderToMain } from '@shared/ipc/app';
 import { APP_VERSION } from '@shared/constants/branding';
 
@@ -44,8 +44,8 @@ export default function(ctx: Context) {
 
   handle.getAppConfig(async () => {
     try {
-      const manager = await getAppCacheManager();
-      return { success: true as const, data: manager.getConfig() };
+      await appCacheManager.initialize();
+      return { success: true as const, data: appCacheManager.getConfig() };
     } catch (error) {
       return { success: false as const, error: error instanceof Error ? error.message : String(error) };
     }
@@ -53,8 +53,8 @@ export default function(ctx: Context) {
 
   handle.updateAppConfig(async (_event, updates) => {
     try {
-      const manager = await getAppCacheManager();
-      await manager.updateConfig(updates);
+      await appCacheManager.initialize();
+      await appCacheManager.updateConfig(updates);
       return { success: true as const };
     } catch (error) {
       return { success: false as const, error: error instanceof Error ? error.message : String(error) };

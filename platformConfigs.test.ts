@@ -12,7 +12,14 @@ vi.mock('../../runtime/RuntimeManager', async () => ({
   RuntimeManager: vi.fn(),
 }));
 
-describe('PlatformConfigManager shell fallback', () => {
+// `which`/`where` 探测统一失败，让 shell 可用性只由确定性的平台分支决定。
+vi.mock('child_process', async () => ({
+  execSync: vi.fn(() => {
+    throw new Error('command not found');
+  }),
+}));
+
+describe('platformConfigs shell fallback', () => {
   const originalPlatform = process.platform;
 
   beforeEach(() => {
@@ -25,37 +32,29 @@ describe('PlatformConfigManager shell fallback', () => {
   });
 
   it('falls back to the default shell when bash.exe is unavailable on Windows', async () => {
-    const module = await import('../PlatformConfigManager');
-    const manager = module.PlatformConfigManager.getInstance();
+    // 动态 import：每个用例先 resetModules 再按当前 platform 重新加载模块（模块加载边界，测试专属）。
+    const { getRunnableShellProfile } = await import('../platformConfigs');
 
-    const availabilitySpy = vi.spyOn(manager, 'isShellCommandAvailable');
-    availabilitySpy.mockImplementation(async (command: string) => command !== 'bash.exe');
+    const result = await getRunnableShellProfile('bash');
 
-    const result = await manager.getRunnableShellProfile('bash');
-
+    // bash.exe 不在已知内置之列且 where 探测失败 → 回退到 powershell（win32 内置视为可用）。
     expect(result.shellType).toBe('powershell');
     expect(result.profile.command).toBe('powershell.exe');
     expect(result.fallbackReason).toContain("falling back to 'powershell'");
-
-    availabilitySpy.mockRestore();
   });
 
   it('reports unavailable commands as unavailable on non-Windows platforms', async () => {
     vi.resetModules();
-    Object.defineProperty(process, 'platform', { value: 'linux' });
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
 
-    const module = await import('../PlatformConfigManager');
-    const manager = module.PlatformConfigManager.getInstance();
+    const { isShellCommandAvailable } = await import('../platformConfigs');
 
-    const resolveSpy = vi.spyOn(manager, 'resolveCommandPath').mockResolvedValue('missing-shell');
-
-    await expect(manager.isShellCommandAvailable('missing-shell')).resolves.toBe(false);
-
-    resolveSpy.mockRestore();
+    // 非 win32 且 which 探测失败 → 命令不可用。
+    await expect(isShellCommandAvailable('missing-shell')).resolves.toBe(false);
   });
 });
 
-describe('PlatformConfigManager.getEnhancedEnvironment - npm_config_prefix sanitization', () => {
+describe('platformConfigs.getEnhancedEnvironment - npm_config_prefix sanitization', () => {
   const originalPlatform = process.platform;
   const originalEnv = { ...process.env };
 
@@ -74,19 +73,17 @@ describe('PlatformConfigManager.getEnhancedEnvironment - npm_config_prefix sanit
 
   it('strips npm_config_prefix in internal mode (includeBinPath=true)', async () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
-    const module = await import('../PlatformConfigManager');
-    const manager = module.PlatformConfigManager.getInstance();
+    const { getEnhancedEnvironment } = await import('../platformConfigs');
 
-    const env = manager.getEnhancedEnvironment(true);
+    const env = getEnhancedEnvironment(true);
     expect(env['npm_config_prefix']).toBeUndefined();
   });
 
   it('preserves npm_config_prefix in system mode (includeBinPath=false)', async () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
-    const module = await import('../PlatformConfigManager');
-    const manager = module.PlatformConfigManager.getInstance();
+    const { getEnhancedEnvironment } = await import('../platformConfigs');
 
-    const env = manager.getEnhancedEnvironment(false);
+    const env = getEnhancedEnvironment(false);
     expect(env['npm_config_prefix']).toBe('/opt/homebrew/Cellar/node/25.9.0_2');
   });
 });

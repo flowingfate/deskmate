@@ -6,9 +6,11 @@
  * runtimes, so the gate now drives `ensureRuntimeForCommand(command, args)`
  * which classifies the spawn and ensures only the runtime that command needs.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { TerminalInstance } from '../TerminalInstance';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CommandInstance } from '../CommandInstance';
+import { McpTransportInstance } from '../McpTransportInstance';
 import { TerminalConfig } from '../types';
+import { setTerminalRuntimeBridge, type TerminalRuntimeBridge } from '../runtimeBridge';
 
 vi.mock('electron', async () => ({
   app: {
@@ -21,42 +23,29 @@ vi.mock('electron', async () => ({
   ipcMain: { handle: vi.fn(), on: vi.fn() },
 }));
 
-const { mockEnsureRuntimeForCommand, mockGetRunTimeConfig } = vi.hoisted(() => ({
-  mockEnsureRuntimeForCommand: vi.fn().mockResolvedValue(undefined),
-  mockGetRunTimeConfig: vi.fn(),
-}));
+const mockEnsureRuntimeForCommand = vi.fn<TerminalRuntimeBridge['ensureRuntimeForCommand']>().mockResolvedValue(undefined);
 
-vi.mock('../../runtime/RuntimeManager', async () => ({
-  RuntimeManager: {
-    getInstance: vi.fn().mockReturnValue({
-      getRunTimeConfig: mockGetRunTimeConfig,
-      getBinPath: vi.fn().mockReturnValue('C:\\test\\bin'),
-      ensureRuntimeForCommand: mockEnsureRuntimeForCommand,
-    }),
-  },
-}));
+const bridge: TerminalRuntimeBridge = {
+  ensureRuntimeForCommand: mockEnsureRuntimeForCommand,
+  applyRuntimeEnv: vi.fn(),
+};
 
-vi.mock('../PlatformConfigManager', async () => ({
-  PlatformConfigManager: {
-    getInstance: () => ({
-      getRunnableShellProfile: async () => ({
-        shellType: 'powershell',
-        profile: {
-          command: 'powershell.exe',
-          args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
-          supportsPersistent: true,
-        },
-      }),
-      getShellProfile: () => ({
-        command: 'powershell.exe',
-        args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
-        supportsPersistent: true,
-      }),
-      getEnhancedEnvironment: vi.fn().mockReturnValue({ Path: 'C:\\test\\bin;C:\\Windows' }),
-      parseEnvFile: vi.fn().mockReturnValue([]),
-      getConfig: () => ({ pathSeparator: ';', executableExtensions: ['.exe', '.cmd'] }),
-    }),
-  },
+vi.mock('../platformConfigs', async () => ({
+  getRunnableShellProfile: async () => ({
+    shellType: 'powershell',
+    profile: {
+      command: 'powershell.exe',
+      args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
+      supportsPersistent: true,
+    },
+  }),
+  getShellProfile: () => ({
+    command: 'powershell.exe',
+    args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass'],
+    supportsPersistent: true,
+  }),
+  getDefaultShell: () => 'powershell',
+  getEnhancedEnvironment: vi.fn().mockReturnValue({ Path: 'C:\\test\\bin;C:\\Windows' }),
 }));
 
 function createMcpConfig(): TerminalConfig {
@@ -86,11 +75,11 @@ interface PreparableTerminal {
 describe('TerminalInstance prepareEnvironment lazy-runtime gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setTerminalRuntimeBridge(bridge);
   });
 
   it('triggers ensureRuntimeForCommand for mcp_transport (app-managed runtime)', async () => {
-    mockGetRunTimeConfig.mockReturnValue({});
-    const instance = new TerminalInstance(createMcpConfig());
+    const instance = new McpTransportInstance(createMcpConfig());
     const env = await (instance as unknown as PreparableTerminal).prepareEnvironment();
 
     expect(mockEnsureRuntimeForCommand).toHaveBeenCalledTimes(1);
@@ -99,17 +88,15 @@ describe('TerminalInstance prepareEnvironment lazy-runtime gate', () => {
   });
 
   it('does NOT trigger ensureRuntimeForCommand for command type (non-mcp)', async () => {
-    mockGetRunTimeConfig.mockReturnValue({});
-    const instance = new TerminalInstance(createCommandConfig());
+    const instance = new CommandInstance(createCommandConfig());
     await (instance as unknown as PreparableTerminal).prepareEnvironment();
 
     expect(mockEnsureRuntimeForCommand).not.toHaveBeenCalled();
   });
 
   it('proceeds when ensureRuntimeForCommand rejects (install failure)', async () => {
-    mockGetRunTimeConfig.mockReturnValue({});
     mockEnsureRuntimeForCommand.mockRejectedValueOnce(new Error('install failed'));
-    const instance = new TerminalInstance(createMcpConfig());
+    const instance = new McpTransportInstance(createMcpConfig());
 
     // Should not throw — the catch in prepareEnvironment swallows the error
     // so a botched install does not strand the whole MCP connect.

@@ -260,8 +260,6 @@ export class CdnUpdateChecker {
         return 'darwin';
       case 'win':
         return 'win32';
-      case 'linux':
-        return 'linux';
       default:
         return platform;
     }

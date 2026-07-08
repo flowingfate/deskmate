@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/shadcn/select';
 import { BUN_VERSIONS, UV_VERSIONS, PYTHON_VERSIONS } from '../../../lib/runtime/runtimeVersions';
+import { resolveInstallAction, installActionLabel } from '../../../lib/runtime/versionActions';
 import type { RuntimeEnvironment } from '../../../lib/userData/types';
 import RuntimeSystemDependenciesCard from './RuntimeSystemDependenciesCard';
 
@@ -29,6 +30,10 @@ export interface PythonVersion {
 interface RuntimeSettingsContentViewProps {
   config: RuntimeEnvironment;
   status: RuntimeStatus;
+  /** 已安装的 bun 版本（用于与下拉选中版本比较，推导按钮语义） */
+  installedBunVersion: string;
+  /** 已安装的 uv 版本 */
+  installedUvVersion: string;
   gitVersion: GitVersion | null;
   pythonVersions: PythonVersion[];
   isLoading: boolean;
@@ -63,6 +68,8 @@ function truncatePath(path: string | null, maxLen = 48): string {
 const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
   config,
   status,
+  installedBunVersion,
+  installedUvVersion,
   gitVersion,
   pythonVersions,
   isLoading,
@@ -77,6 +84,11 @@ const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
   onPinPythonVersion,
   onCleanUvCache,
 }) => {
+  const bunAction = resolveInstallAction(status.bun, installedBunVersion, config.bunVersion);
+  const uvAction = resolveInstallAction(status.uv, installedUvVersion, config.uvVersion);
+  const selectedPythonInstalled = pythonVersions.some(
+    (py) => py.status === 'installed' && (py.semver === newPythonVersion || py.version === newPythonVersion),
+  );
   return (
     <div className="flex flex-col p-6 bg-surface-primary h-full overflow-auto" data-dbg="runtime-settings">
       <div className="max-w-4xl mx-auto w-full transition-all duration-300 max-h-500 opacity-100 px-6 pb-6 space-y-6">
@@ -101,23 +113,22 @@ const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-0.5 bg-surface-secondary border border-border rounded-md px-2 h-8">
-                  <Select value={config.bunVersion} onValueChange={(v) => onVersionChange('bun', v)}>
-                    <SelectTrigger className="w-16 bg-transparent border-none outline-none text-sm text-content"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {BUN_VERSIONS.map((entry) => (
-                        <SelectItem key={entry.version} value={entry.version}>{entry.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select value={config.bunVersion} onValueChange={(v) => onVersionChange('bun', v)}>
+                  <SelectTrigger className="w-28 h-8 px-3 text-sm bg-surface-secondary border border-border rounded-md text-content"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {BUN_VERSIONS.map((entry) => (
+                      <SelectItem key={entry.version} value={entry.version}>{entry.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
-                  variant="default"
+                  variant={bunAction === 'installed' ? 'secondary' : 'default'}
                   size="sm"
-                  disabled={isLoading}
+                  disabled={isLoading || bunAction === 'installed'}
                   onClick={() => onInstall('bun')}
+                  title={bunAction === 'installed' ? `bun ${installedBunVersion} is already installed` : undefined}
                 >
-                  {status.bun ? 'Update' : 'Install'}
+                  {installActionLabel(bunAction)}
                 </Button>
               </div>
             </div>
@@ -133,23 +144,22 @@ const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-0.5 bg-surface-secondary border border-border rounded-md px-2 h-8">
-                  <Select value={config.uvVersion} onValueChange={(v) => onVersionChange('uv', v)}>
-                    <SelectTrigger className="w-16 bg-transparent border-none outline-none text-sm text-content"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {UV_VERSIONS.map((entry) => (
-                        <SelectItem key={entry.version} value={entry.version}>{entry.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select value={config.uvVersion} onValueChange={(v) => onVersionChange('uv', v)}>
+                  <SelectTrigger className="w-28 h-8 px-3 text-sm bg-surface-secondary border border-border rounded-md text-content"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {UV_VERSIONS.map((entry) => (
+                      <SelectItem key={entry.version} value={entry.version}>{entry.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
-                  variant="default"
+                  variant={uvAction === 'installed' ? 'secondary' : 'default'}
                   size="sm"
-                  disabled={isLoading}
+                  disabled={isLoading || uvAction === 'installed'}
                   onClick={() => onInstall('uv')}
+                  title={uvAction === 'installed' ? `uv ${installedUvVersion} is already installed` : undefined}
                 >
-                  {status.uv ? 'Update' : 'Install'}
+                  {installActionLabel(uvAction)}
                 </Button>
               </div>
             </div>
@@ -194,12 +204,13 @@ const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
                   </SelectContent>
                 </Select>
                 <Button
-                  variant="default"
+                  variant={selectedPythonInstalled ? 'secondary' : 'default'}
                   size="sm"
-                  disabled={isPythonLoading}
+                  disabled={isPythonLoading || selectedPythonInstalled}
                   onClick={onInstallPython}
+                  title={selectedPythonInstalled ? `Python ${newPythonVersion} is already installed` : undefined}
                 >
-                  {isPythonLoading ? 'Installing…' : 'Install Python'}
+                  {isPythonLoading ? 'Installing…' : selectedPythonInstalled ? 'Installed' : 'Install Python'}
                 </Button>
               </div>
 
