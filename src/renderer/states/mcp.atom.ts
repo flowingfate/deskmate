@@ -50,6 +50,10 @@ async function hydrate(): Promise<void> {
   const items = res.data.mcp;
   change({ items, hydrated: true });
   applyToClientCache(items);
+  // main 只在连接状态"变化"时 push serverStatesUpdated。renderer 冷启动 / location.reload()
+  // 后 main 已处于稳定连接态（不会再 push），必须主动 pull 一次，否则 runtime 状态一直停在
+  // updateServerConfigs 播种的 disconnected。
+  void mcpClientCacheManager.refresh();
 }
 
 persistEvents['profile:switched'](() => {

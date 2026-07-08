@@ -24,8 +24,6 @@ export const DESKMATE_DEFAULT_OAUTH_CALLBACK_PORT = 33420;
 const CALLBACK_PATH = '/callback';
 const DEFAULT_CALLBACK_TIMEOUT_MS = 5 * 60_000;
 
-const logger = log;
-
 interface Waiter {
   resolve: (code: string) => void;
   reject: (error: Error) => void;
@@ -115,7 +113,7 @@ class CallbackServer {
         // Re-attach a permanent error handler so post-startup errors don't
         // crash the process; we only log them.
         server.on('error', (err) => {
-          logger.warn({ msg: '[McpOAuth] CallbackServer post-startup error', mod: 'CallbackServer', err: err });
+          log.warn({ msg: '[McpOAuth] CallbackServer post-startup error', mod: 'CallbackServer', err: err });
         });
         this.server = server;
         // When `port === 0` the OS assigned an ephemeral port — read the
@@ -127,7 +125,7 @@ class CallbackServer {
             ? addr.port
             : port;
         this.port = actualPort;
-        logger.info({ msg: `[McpOAuth] Callback server listening on http://127.0.0.1:${actualPort}${CALLBACK_PATH}` });
+        log.info({ msg: `[McpOAuth] Callback server listening on http://127.0.0.1:${actualPort}${CALLBACK_PATH}`, mod: 'CallbackServer' });
         resolve();
       });
     });
@@ -198,13 +196,10 @@ class CallbackServer {
    * code keeps the singleton alive for the application lifetime.
    */
   async stop(): Promise<void> {
-    for (const [state, waiter] of this.waiters) {
-      clearTimeout(waiter.timer);
-      if (waiter.signal && waiter.abortHandler) {
-        waiter.signal.removeEventListener('abort', waiter.abortHandler);
-      }
-      waiter.reject(new Error('CallbackServer stopped'));
-      this.waiters.delete(state);
+    // 先定值，防止一边迭代，一边删
+    const keys = Array.from(this.waiters.keys());
+    for (const state of keys) {
+      this.cleanupWaiter(state)?.reject(new Error('CallbackServer stopped'));
     }
     if (!this.server) return;
     const server = this.server;

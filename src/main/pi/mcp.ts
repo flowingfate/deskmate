@@ -9,7 +9,7 @@
  * Phase 3 一并删。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime/mcpClientManager';
+import { mcpClientManager } from '@main/lib/mcpRuntime'
 
 export interface McpToolDef {
   name: string;

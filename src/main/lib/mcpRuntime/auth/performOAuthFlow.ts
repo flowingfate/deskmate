@@ -16,8 +16,6 @@ import type { DeskmateOAuthProvider } from './DeskmateOAuthProvider';
 import { createSyntheticMetadataFetch } from './wellKnownOAuthProviders';
 import { log } from '@main/log';
 
-const logger = log;
-
 export interface PerformOAuthFlowOptions {
   signal?: AbortSignal;
 }
@@ -64,7 +62,7 @@ export async function performOAuthFlow(
       throw createMcpAuthCancelledError(serverName);
     }
     if (isDcrUnsupportedError(e)) {
-      logger.info({ msg: `[McpOAuth] DCR not supported by ${serverName}; surfacing fallback dialog`, mod: 'performOAuthFlow', underlying: errorMessage(e) });
+      log.info({ msg: `[McpOAuth] DCR not supported by ${serverName}; surfacing fallback dialog`, mod: 'McpOAuth', underlying: errorMessage(e) });
       throw createMcpDcrRequiresUserClientIdError(serverName);
     }
     throw createMcpOAuthFlowFailedError(serverName, errorMessage(e));
@@ -73,7 +71,7 @@ export async function performOAuthFlow(
   if (firstResult === 'AUTHORIZED') {
     // Cached refresh token was still valid; the SDK has already called
     // saveTokens internally.
-    logger.info({ msg: `[McpOAuth] ${serverName}: cached tokens reused (no browser redirect needed)` });
+    log.info({ msg: `[McpOAuth] ${serverName}: cached tokens reused (no browser redirect needed)`, mod: 'McpOAuth' });
     return;
   }
 
@@ -106,7 +104,7 @@ export async function performOAuthFlow(
     );
   }
 
-  logger.info({ msg: `[McpOAuth] ${serverName}: authorization complete` });
+  log.info({ msg: `[McpOAuth] ${serverName}: authorization complete`, mod: 'McpOAuth' });
 }
 
 /**
@@ -158,7 +156,7 @@ export async function runRefreshOnly(
     throw new Error(`REFRESH_ONLY: unexpected SDK result "${result}"`);
   }
 
-  logger.info({ msg: `[McpOAuth] ${serverName}: proactive refresh succeeded` });
+  log.info({ msg: `[McpOAuth] ${serverName}: proactive refresh succeeded`, mod: 'McpOAuth' });
 }
 
 /**

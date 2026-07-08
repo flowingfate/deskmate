@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.79.10",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@vscode/ripgrep": "^1.15.14",
     "better-sqlite3": "^12.9.0",
     "cron-parser": "^5.5.0",

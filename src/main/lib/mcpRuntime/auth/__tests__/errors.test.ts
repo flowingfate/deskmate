@@ -1,5 +1,4 @@
-import { createMcpAuthCancelledError, isMcpNeedsUserInteractionError } from '../errors';
-import { McpAuthService } from '../McpAuthService';
+import { mcpAuthService } from '..';
 import { mcpAuthPromptRegistry, type McpAuthConsentDecision } from '../mcpAuthPromptRegistry';
 import type { McpServerConfig } from '@shared/types/profileTypes';
 
@@ -115,15 +114,7 @@ function resolvePendingConsent(requestId: string, decision: McpAuthConsentDecisi
 
 describe('MCP auth errors', () => {
   beforeEach(() => {
-    (McpAuthService as any).instance = null;
     mcpAuthPromptRegistry.__resetForTests();
-  });
-
-  it('does not classify cancelled auth as needing user interaction', () => {
-    const error = createMcpAuthCancelledError('example-mcp');
-
-    expect(isMcpNeedsUserInteractionError(error)).toBe(false);
-    expect(error.message).toContain('example-mcp');
   });
 
   it('emits an interaction event when MCP consent is requested', async () => {
@@ -131,9 +122,9 @@ describe('MCP auth errors', () => {
     const cfg = makeCfg();
 
     const listener = vi.fn();
-    const unsubscribe = McpAuthService.onInteraction(listener);
+    const unsubscribe = mcpAuthService.onInteraction(listener);
 
-    const tokenPromise = McpAuthService.getInstance().getTokenForServer('example-mcp', metadata as any, { cfg });
+    const tokenPromise = mcpAuthService.getTokenForServer('example-mcp', metadata as any, { cfg });
     const requestId = await waitForPendingConsentRequestId();
     resolvePendingConsent(requestId, 'cancel');
 

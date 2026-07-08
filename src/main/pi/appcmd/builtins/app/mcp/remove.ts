@@ -9,7 +9,7 @@
  * 看看会做什么)。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime/mcpClientManager';
+import { mcpClientManager } from '@main/lib/mcpRuntime'
 import { Profiles } from '@main/persist';
 
 import { COMMON_FLAGS, isDryRun, isHelp, isJson, isYes } from '../../../_commonFlags';

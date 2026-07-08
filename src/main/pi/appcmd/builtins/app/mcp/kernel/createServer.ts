@@ -13,7 +13,7 @@
  * mcpClientManager 自己异步推进。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime/mcpClientManager';
+import { mcpClientManager } from '@main/lib/mcpRuntime'
 import type { McpServerConfig } from '@shared/types/profileTypes';
 
 export interface CreateServerArgs {

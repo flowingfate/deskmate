@@ -23,8 +23,6 @@ import type { McpServerConfig } from '@shared/types/profileTypes';
 import { getCallbackServer, DESKMATE_DEFAULT_OAUTH_CALLBACK_PORT } from './CallbackServer';
 import { getMcpOAuthServerKey } from './serverKey';
 
-const logger = log;
-
 /** When the cached access token has less validity than this, surface it as
  *  expiring so the SDK's `auth()` switches to refresh-token grant. */
 export const PROACTIVE_REFRESH_WINDOW_SEC = 300;
@@ -58,14 +56,13 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
   }
 
   get clientMetadata(): OAuthClientMetadata {
-    const meta: OAuthClientMetadata = {
+    return {
       client_name: `${APP_NAME} (${this.serverName})`,
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
     };
-    return meta;
   }
 
   /** CSRF-resistant `state` per RFC 6749 §10.12, idempotent within an instance. */
@@ -102,7 +99,7 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
       clientId: info.client_id,
       clientSecret: info.client_secret,
     });
-    logger.info({ msg: `[McpOAuth] Persisted DCR client information for ${this.serverName}` });
+    log.info({ msg: `[McpOAuth] Persisted DCR client information for ${this.serverName}`, mod: 'DeskmateOAuthProvider' });
   }
 
   async tokens(): Promise<OAuthTokens | undefined> {
@@ -153,17 +150,17 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
     const expiryNote = expiresAt - Date.now() >= NON_EXPIRING_SENTINEL_MS
       ? 'no expiry advertised; treating as non-expiring'
       : `expires in ~${expiresInSec}s`;
-    logger.info({ msg: `[McpOAuth] Persisted access token for ${this.serverName} (${expiryNote})` });
+    log.info({ msg: `[McpOAuth] Persisted access token for ${this.serverName} (${expiryNote})`, mod: 'DeskmateOAuthProvider' });
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
-    logger.info({ msg: `[McpOAuth] Opening browser for ${this.serverName} → ${authorizationUrl.host}${authorizationUrl.pathname}` });
+    log.info({ msg: `[McpOAuth] Opening browser for ${this.serverName} → ${authorizationUrl.host}${authorizationUrl.pathname}`, mod: 'DeskmateOAuthProvider' });
     try {
       await shell.openExternal(authorizationUrl.toString());
     } catch (e) {
       // OS launch failure isn't fatal — user can still complete sign-in
       // by copy-pasting the URL.
-      logger.warn({ msg: `[McpOAuth] Failed to open browser for ${this.serverName}`, mod: 'DeskmateOAuthProvider', err: e });
+      log.warn({ msg: `[McpOAuth] Failed to open browser for ${this.serverName}`, mod: 'DeskmateOAuthProvider', err: e });
     }
   }
 
@@ -209,7 +206,7 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
         });
         break;
     }
-    logger.info({ msg: `[McpOAuth] Invalidated credentials for ${this.serverName} (scope=${scope})` });
+    log.info({ msg: `[McpOAuth] Invalidated credentials for ${this.serverName} (scope=${scope})`, mod: 'DeskmateOAuthProvider' });
   }
 
   /**
@@ -228,7 +225,7 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
       ...data,
       expiresAt: 0,
     });
-    logger.info({ msg: `[McpOAuth] Marked access token as expired for ${this.serverName} (force-refresh)` });
+    log.info({ msg: `[McpOAuth] Marked access token as expired for ${this.serverName} (force-refresh)`, mod: 'DeskmateOAuthProvider' });
   }
 
   /** Cache key, exposed for tests and diagnostics. */

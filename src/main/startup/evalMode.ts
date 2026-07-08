@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { Profiles } from '../persist/profiles';
 import { getPiAuthManager } from '../pi/auth';
-import { mcpClientManager } from "../lib/mcpRuntime/mcpClientManager";
+import { mcpClientManager } from "../lib/mcpRuntime"
 
 /**
  * Load .env.local synchronously for eval mode.
@@ -79,7 +79,7 @@ export async function startEvalMode(): Promise<void> {
 
     // 4. Initialize MCPClientManager (for tool execution)
     try {
-      await mcpClientManager.initialize(profileId);
+      await mcpClientManager.initialize();
       console.error('[EvalMode] MCPClientManager initialized');
     } catch (error) {
       console.error('[EvalMode] WARNING: MCPClientManager init failed, tools may not work:', error);

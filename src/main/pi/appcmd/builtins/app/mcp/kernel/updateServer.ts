@@ -7,7 +7,7 @@
  * 给了就用新的,没给就保留(或清空 env)。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime/mcpClientManager';
+import { mcpClientManager } from '@main/lib/mcpRuntime'
 import { Profiles } from '@main/persist';
 import type { McpServerConfig } from '@shared/types/profileTypes';
 

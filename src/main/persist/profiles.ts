@@ -12,7 +12,7 @@ import { emit } from './lib/emit';
 import { getAppRoot } from './lib/root';
 import { readJsonOrNull, writeJson } from './lib/atomic';
 import { nowIso } from '@shared/persist/time';
-import { mcpClientManager } from '@main/lib/mcpRuntime/mcpClientManager';
+import { mcpClientManager } from '@main/lib/mcpRuntime'
 
 const PROFILES_FILE_VERSION = 1 as const;
 
@@ -113,7 +113,7 @@ export class Profiles {
     }
 
     this.bootstrapped = true;
-    await mcpClientManager.initialize(this.activeProfileId);
+    await mcpClientManager.initialize();
     return { warnings };
   }
 
@@ -171,6 +171,7 @@ export class Profiles {
     if (!entry) throw new Error(`Profiles.switch: unknown profile id ${id}`);
     const previous = this.activeProfileId;
     if (previous && previous !== id) {
+      await mcpClientManager.disposeAllClients();
       const prevInstance = Profile.get(previous);
       if (prevInstance) {
         await prevInstance.shutdown(); // 内部已 ProfileDb.close(previous)
@@ -182,7 +183,7 @@ export class Profiles {
     const profile = await Profile.getOrLoad(id);
     await this.persist();
     emit('profile:switched', { profileId: id, previous });
-    await mcpClientManager.initialize(this.activeProfileId);
+    await mcpClientManager.initialize();
     return profile;
   }
 

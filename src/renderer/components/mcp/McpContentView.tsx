@@ -138,7 +138,7 @@ const McpContentView: React.FC<McpContentViewProps> = ({
         />
       </div>
 
-      <div className="flex flex-1 p-3">
+      <div className="flex min-w-0 flex-1 p-3">
         {viewMode === 'list' ? (
           <ScrollArea className="min-h-0 flex-1">
             <McpToolListView

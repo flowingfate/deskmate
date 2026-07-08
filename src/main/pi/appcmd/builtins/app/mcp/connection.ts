@@ -14,7 +14,7 @@
 import {
   mcpClientManager,
   type MCPServerRuntimeState,
-} from '@main/lib/mcpRuntime/mcpClientManager';
+} from '@main/lib/mcpRuntime';
 import { Profiles } from '@main/persist';
 import type { McpServerConfig } from '@shared/types/profileTypes';
 

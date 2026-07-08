@@ -64,7 +64,7 @@ vi.mock('@main/pi/appcmd/builtins/app/mcp/kernel/getStatus', () => ({
 }));
 
 
-vi.mock('@main/lib/mcpRuntime/mcpClientManager', () => ({
+vi.mock('@main/lib/mcpRuntime', () => ({
   mcpClientManager: {
     delete: mcpMocks.mcpDelete,
     connect: mcpMocks.mcpConnect,
