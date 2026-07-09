@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-08 -->
+<!-- Last verified: 2026-07-09 -->
 # MCP Runtime
 
 > 仅管理 **外部 MCP server** 的连接生命周期、OAuth、工具元数据缓存与
@@ -85,7 +85,8 @@ Renderer 侧 prompt(`requestConsent` / `requestClientIdFromUser`)受
 的稳定 hash。重命名 server、改 URL、调整 auth-related headers 都会自动失效旧槽。
 Token 条目存 `accessToken / refreshToken / expiresAt / scope` + 可选
 `clientId / clientSecret`(让 DCR 颁发的 client 跨会话保持)。缓存文件位于
-profile 级 `{profile}/credentials/browserAuthTokenCache(.enc)` —— 切 profile 就是
+profile 级 `{profile}/credentials/mcp.auth.json`(明文,与 `auth.json`
+主身份凭据落盘形态一致)—— 切 profile 就是
 干净缓存。删 MCP server / 卸载插件触发 `MCPClientManager.delete()`,内部调
 `McpAuthService.clearOAuthForServer(name, cfg, 'all')` 清整槽(token + DCR client
 info),保证后续重新添加同名 server 走干净 OAuth。
@@ -139,7 +140,7 @@ consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
   global map 的 API —— 否则"多 server 同名工具静默覆盖"bug 会复现。
 - **运行时状态仅在内存。** `MCPServerRuntimeState` 永不写盘;应用重启所有 server 一律
   `disconnected`,与上次会话无关。
-- **OAuth 凭据写盘前加密**(`DeskmateTokenCache` 提供 .enc 形态),profile 级隔离。
+- **OAuth 凭据明文写盘**(`DeskmateTokenCache` 产出 `.json`,与 `auth.json` 一致),profile 级隔离。
 - **`tool_result` 并非总是终态。** 本地工具 `shell` 在
   命令退出前可推 `isPartial: true` chunk(详见
   [`pi/tools/ai.prompt.md`](../../pi/tools/ai.prompt.md))。MCP runtime 本身不发

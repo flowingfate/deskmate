@@ -11,10 +11,11 @@
  *   - `tool-calls-section`  : tool 调用集合。**连续 assistant 消息的 tool_calls
  *                              会合并到同一个 section,即便中间夹着带文本的
  *                              assistant**;带文本的 assistant 会先把当前积累
- *                              的 tool 段冲出来,然后它自己的 tools 进入下一个
- *                              merge 链 —— 这样文本前后的工具分别落在各自的时
- *                              间段里,不会被回写到错误的视觉位置。只有 user
- *                              消息真正切断所有上下文。
+ *                              的 tool 段冲出来,再把自己的 tools 起成新的
+ *                              merge 链 —— 后续相邻的 empty-only tool 链会并入
+ *                              这条链(视觉上文本已在 section 上方,紧邻的工具段
+ *                              合并更自然)。user 消息或下一条带文本 assistant
+ *                              才切断 merge 链。
  *   - `user`                : 用户消息。
  *   - `activity-loading` / `activity-placeholder` : UI 占位。
  *
@@ -170,15 +171,14 @@ export function computeRenderItems(messages: RenderMessage[]): ChatRenderItem[] 
         extractedFilePaths: derived.extractedFilePaths,
         scheduleIds: derived.scheduleIds,
       });
-      // text+tools：本条 tools 属于这次"有文本"的 turn，自己单独成段，
-      // 不与后续 empty-only assistant 合并（merge 仅限纯 tool-only 链）。
+      // text+tools：本条 tools 起一个可继续合并的段；后续相邻的 empty-only
+      // tool 链会并入同一 section（截断点是 user 消息或下一条带文本 assistant）。
       if (hasTools) {
         pending = {
           toolCalls: [...message.tool_calls],
           firstOwnerId: message.id,
           lastOwnerId: message.id,
         };
-        flushPending();
       }
       continue;
     }

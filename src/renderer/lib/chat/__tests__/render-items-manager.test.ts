@@ -70,21 +70,20 @@ describe('render-items-manager.computeRenderItems — merging', () => {
     expect(sections[0].toolCalls.map((tc) => tc.id)).toEqual(['tc1', 'tc2']);
   });
 
-  it('text+tools assistant 不参与 merge — 自己单独成块,后续 empty-only chain 重新起头', () => {
+  it('text+tools assistant 起新 merge 链 — 后续 empty-only tool 链并入同一 section', () => {
     const items = computeRenderItems([
       user('u1', 'go'),
       assistantWithTool('a1', 'tc1', true), // empty + tools
-      assistantWithTool('a2', 'tc2', true, 'reply text'), // text + tools — 截断
-      assistantWithTool('a3', 'tc3', false), // empty + tools
-      assistantWithTool('a4', 'tc4', false), // empty + tools (与 a3 合并)
+      assistantWithTool('a2', 'tc2', true, 'reply text'), // text + tools — 截断前链, 起新链
+      assistantWithTool('a3', 'tc3', false), // empty + tools (并入 a2 链)
+      assistantWithTool('a4', 'tc4', false), // empty + tools (并入 a2 链)
     ]);
     const sections = getSections(items);
     expect(sections.map((s) => s.sectionKey)).toEqual([
       'tool-section-a1__a1',
-      'tool-section-a2__a2',
-      'tool-section-a3__a4',
+      'tool-section-a2__a4',
     ]);
-    expect(sections[2].toolCalls.map((tc) => tc.id)).toEqual(['tc3', 'tc4']);
+    expect(sections[1].toolCalls.map((tc) => tc.id)).toEqual(['tc2', 'tc3', 'tc4']);
   });
 
   it('text-only assistant (无 tool_calls) 截断 merge 链 → 前后各 1 个 section', () => {

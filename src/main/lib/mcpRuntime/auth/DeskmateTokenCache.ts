@@ -2,16 +2,15 @@
  * DeskmateTokenCache
  *
  * Per-server MCP OAuth credential cache with an in-memory mirror plus
- * profile-scoped persistence. Written under
- * `{userData}/profiles/<id>/credentials/browserAuthTokenCache{.enc,.json}` —
- * `.enc` when Electron's `safeStorage` is available, plain JSON otherwise.
- * Concurrent writers are serialized on a single promise chain to prevent
- * read-modify-write loss on parallel MCP OAuth flows.
+ * profile-scoped persistence. Written as plain JSON under
+ * `{userData}/profiles/<id>/credentials/mcp.auth.json` —
+ * 落盘形态与 `auth.json`(主身份凭据)一致,均为明文。Concurrent writers
+ * are serialized on a single promise chain to prevent read-modify-write
+ * loss on parallel MCP OAuth flows.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { safeStorage } from 'electron';
 import { log } from '@main/log';
 // profile 永远存在;token cache 只关心写盘根目录,认证态由 pi/auth 自己管。
 import { Profiles } from '@main/persist';
@@ -19,8 +18,7 @@ import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
 
 const CACHE_VERSION = 1 as const;
-const CACHE_FILE_NAME = 'browserAuthTokenCache';
-const FALLBACK_FILE_NAME = `${CACHE_FILE_NAME}.json`;
+const CACHE_FILE = 'mcp.auth.json';
 
 /**
  * OAuth credential record for a single MCP server.
@@ -146,30 +144,22 @@ export class DeskmateTokenCache {
     }
   }
 
-  private cachePaths(): { encrypted: string; fallback: string; directory: string } | null {
+  private cacheFile(): { file: string; directory: string } | null {
     const directory = this.getStorageDirectory();
     if (!directory) return null;
-    return {
-      directory,
-      encrypted: path.join(directory, `${CACHE_FILE_NAME}.enc`),
-      fallback: path.join(directory, FALLBACK_FILE_NAME),
-    };
+    return { directory, file: path.join(directory, CACHE_FILE) };
   }
 
   private async readPersistedCache(): Promise<DeskmateTokenCacheData | null> {
-    const paths = this.cachePaths();
+    const paths = this.cacheFile();
     if (!paths) {
       log.warn({ msg: '[DeskmateTokenCache] Skipping persisted MCP OAuth cache load — no active profile', mod: 'DeskmateTokenCache' });
       return null;
     }
 
     try {
-      if (safeStorage.isEncryptionAvailable() && fs.existsSync(paths.encrypted)) {
-        const encrypted = await fs.promises.readFile(paths.encrypted);
-        return normalizeCacheData(JSON.parse(safeStorage.decryptString(encrypted)));
-      }
-      if (fs.existsSync(paths.fallback)) {
-        const raw = await fs.promises.readFile(paths.fallback, 'utf-8');
+      if (fs.existsSync(paths.file)) {
+        const raw = await fs.promises.readFile(paths.file, 'utf-8');
         return normalizeCacheData(JSON.parse(raw));
       }
     } catch (error) {
@@ -179,21 +169,14 @@ export class DeskmateTokenCache {
   }
 
   private async persistCache(data: DeskmateTokenCacheData): Promise<void> {
-    const paths = this.cachePaths();
+    const paths = this.cacheFile();
     if (!paths) {
       log.warn({ msg: '[DeskmateTokenCache] Skipping persisted MCP OAuth cache save — no active profile', mod: 'DeskmateTokenCache' });
       return;
     }
 
     await fs.promises.mkdir(paths.directory, { recursive: true });
-    const serialized = JSON.stringify(data, null, 2);
-
-    if (safeStorage.isEncryptionAvailable()) {
-      await fs.promises.writeFile(paths.encrypted, safeStorage.encryptString(serialized));
-      await fs.promises.rm(paths.fallback, { force: true });
-      return;
-    }
-    await fs.promises.writeFile(paths.fallback, serialized, 'utf-8');
+    await fs.promises.writeFile(paths.file, JSON.stringify(data, null, 2), 'utf-8');
   }
 
   async load(): Promise<DeskmateTokenCacheData | null> {

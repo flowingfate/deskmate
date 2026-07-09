@@ -56,13 +56,14 @@ const SettingsDialogs: React.FC<SettingsDialogsProps> = ({
           <DialogFooter>
             <Button
               variant="secondary"
+              size="sm"
               onClick={() => setDeleteMcpDialog({ isOpen: false, serverName: null })}
             >
               No
             </Button>
             <Button
               variant="destructive"
-              className="bg-destructive hover:bg-destructive/90"
+              size="sm"
               onClick={handleConfirmDeleteMcp}
             >
               Delete

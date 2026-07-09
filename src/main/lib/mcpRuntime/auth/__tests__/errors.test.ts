@@ -14,11 +14,6 @@ vi.mock('electron', async () => ({
   shell: {
     openExternal: vi.fn(),
   },
-  safeStorage: {
-    isEncryptionAvailable: vi.fn(() => false),
-    encryptString: vi.fn((s: string) => Buffer.from(s)),
-    decryptString: vi.fn((b: Buffer) => b.toString('utf-8')),
-  },
 }));
 
 vi.mock('../authWindowSelector', async () => ({

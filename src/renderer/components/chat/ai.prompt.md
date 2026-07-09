@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-01 -->
+<!-- Last verified: 2026-07-09 -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -97,7 +97,7 @@ ChatView (路由同步, 会话操作)
 - dim / live 这类位置派生量由 iterator(`ChatContainer`) 在 render-items 坐标系里现算,以 props 形式下发,**不再 bake 进 item**。
 
 该模块还集中处理:
-- **合并连续的 "空文本 + 仅 tool_calls" 的 assistant** 成单个 `tool-calls-section`(一段连续操作流);`sectionKey = tool-section-${firstOwnerId}__${lastOwnerId}` 编码端点 owner,owner 链变 → key 变 → 自动失效复用。带文本的 assistant 截断 merge 链;它的 section(若有 tool_calls)单独成块。
+- **合并连续的 "空文本 + 仅 tool_calls" 的 assistant** 成单个 `tool-calls-section`(一段连续操作流);`sectionKey = tool-section-${firstOwnerId}__${lastOwnerId}` 编码端点 owner,owner 链变 → key 变 → 自动失效复用。带文本的 assistant 会先冲掉前一条 merge 链,再把自己的 tools 起成**新的可合并链** —— 后续相邻的 empty-only tool 链会并入这条链(视觉上文本已在 section 上方,紧邻工具段合并更自然)。只有 user 消息或下一条带文本 assistant 才切断 merge 链。
 - 把 assistant message 的 derived 文本与 schedule job id 提前抽出并缓存(WeakMap by message reference),喂给 `AssistantMessage` 的 `cleanedText` / `scheduleIds` props
 - 通过 `extractFilePathsFromText` 扫描 assistant 收尾文字里的 `local://` / `knowledge://` URI 与绝对路径,作为产出文件卡片的唯一数据源
 
