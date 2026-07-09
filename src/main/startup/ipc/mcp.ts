@@ -3,13 +3,9 @@ import { ipcMain } from 'electron';
 import { Profiles } from '../../persist/profiles';
 import { log } from '@main/log';
 import type { Context } from './shared';
-import { mcpClientManager } from "../../lib/mcpRuntime/mcpClientManager";
-import { McpAuthService } from "../../lib/mcpRuntime/auth/McpAuthService";
-import { mcpAuthPromptRegistry } from "../../lib/mcpRuntime/auth/mcpAuthPromptRegistry";
-import {
-  mcpRenderToMain,
-  mcpAuthRenderToMain,
-} from '@shared/ipc/mcp';
+import { mcpClientManager } from "../../lib/mcpRuntime"
+import { mcpAuthPromptRegistry, mcpAuthService } from "../../lib/mcpRuntime/auth";
+import { mcpRenderToMain, mcpAuthRenderToMain } from '@shared/ipc/mcp';
 
 export default function(ctx: Context) {
   const handleMcp = mcpRenderToMain.bindMain(ipcMain);
@@ -133,7 +129,7 @@ export default function(ctx: Context) {
         logger.warn({ msg: '[MCP-IPC] Disconnect before OAuth reset failed (continuing)', mod: 'mcp:resetOAuth', serverName, err: e });
       }
 
-      await McpAuthService.getInstance().clearOAuthForServer(
+      await mcpAuthService.clearOAuthForServer(
         serverName,
         config,
         scope,

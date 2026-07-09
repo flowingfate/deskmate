@@ -8,7 +8,7 @@
  * Error / Disconnecting / Connecting / NeedsUserInteraction。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime/mcpClientManager';
+import { mcpClientManager } from '@main/lib/mcpRuntime'
 import { Profiles } from '@main/persist';
 
 /** MCP server status type。 */

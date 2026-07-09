@@ -120,4 +120,71 @@ describe('mcp status', () => {
     const optsArg = mcpMocks.getStatusInternal.mock.calls[0][1];
     expect(optsArg).toEqual({ signal: aborter.signal });
   });
+
+  it('--wait 轮询过渡态直到 connected → 多次调用 + exit 0', async () => {
+    mcpMocks.getStatusInternal
+      .mockResolvedValueOnce({
+        success: true,
+        mcp_name: 'fs',
+        status: 'Connecting',
+        message: 'connecting',
+        details: { transport: 'stdio', tools_count: 0 },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        mcp_name: 'fs',
+        status: 'Connecting',
+        message: 'connecting',
+        details: { transport: 'stdio', tools_count: 0 },
+      })
+      .mockResolvedValue({
+        success: true,
+        mcp_name: 'fs',
+        status: 'Connected',
+        message: 'ok',
+        details: { transport: 'stdio', tools_count: 14 },
+      });
+
+    const r = await runMcp('status fs --wait');
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain('connected (running)');
+    expect(r.stdout).toContain('tools_count: 14');
+    expect(mcpMocks.getStatusInternal.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('--timeout 隐含 wait;始终 connecting → 超时后打 note + exit 0', async () => {
+    mcpMocks.getStatusInternal.mockResolvedValue({
+      success: true,
+      mcp_name: 'fs',
+      status: 'Connecting',
+      message: 'connecting',
+      details: { transport: 'stdio', tools_count: 0 },
+    });
+
+    const r = await runMcp('status fs --timeout 0.5');
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain('still not settled after 0.5s wait');
+    expect(mcpMocks.getStatusInternal.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('无 --wait → 单次快照,不轮询过渡态', async () => {
+    mcpMocks.getStatusInternal.mockResolvedValue({
+      success: true,
+      mcp_name: 'fs',
+      status: 'Connecting',
+      message: 'connecting',
+      details: { transport: 'stdio', tools_count: 0 },
+    });
+
+    const r = await runMcp('status fs');
+    expect(r.exitCode).toBe(0);
+    expect(mcpMocks.getStatusInternal).toHaveBeenCalledTimes(1);
+  });
+
+  it('--timeout 非数字 → exit 2', async () => {
+    const r = await runMcp('status fs --timeout abc');
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain('--timeout must be a positive number');
+    expect(mcpMocks.getStatusInternal).not.toHaveBeenCalled();
+  });
 });

@@ -23,7 +23,6 @@ export interface WellKnownOAuthProvider {
    * `undefined` → unknown; OAuth flow probes naturally.
    */
   dcrSupported?: boolean;
-  defaultScope?: string;
 }
 
 const PROVIDERS: WellKnownOAuthProvider[] = [
@@ -76,15 +75,17 @@ const PROVIDERS: WellKnownOAuthProvider[] = [
   },
 ];
 
-/** Find the catalog entry whose `matchHosts` substring is in the issuer/AS URL. */
-export function findWellKnownProvider(metadata: McpResolvedAuthMetadata): WellKnownOAuthProvider | undefined {
-  const haystack = `${metadata.authorizationServerUrl} ${metadata.authorizationServerMetadata.issuer ?? ''}`.toLowerCase();
+/** Find the catalog entry whose `matchHosts` substring is in `haystack`. */
+function findByHaystack(haystack: string): WellKnownOAuthProvider | undefined {
+  const lower = haystack.toLowerCase();
   for (const provider of PROVIDERS) {
-    if (provider.matchHosts.some((host) => haystack.includes(host))) {
-      return provider;
-    }
+    if (provider.matchHosts.some((host) => lower.includes(host))) return provider;
   }
   return undefined;
+}
+
+export function findWellKnownProvider(metadata: McpResolvedAuthMetadata): WellKnownOAuthProvider | undefined {
+  return findByHaystack(`${metadata.authorizationServerUrl} ${metadata.authorizationServerMetadata.issuer ?? ''}`);
 }
 
 export function isKnownToNotSupportDcr(metadata: McpResolvedAuthMetadata): boolean {
@@ -110,7 +111,7 @@ export function createSyntheticMetadataFetch(
       return innerFetch(input, init);
     }
 
-    const provider = findProviderByMetadataUrl(urlString);
+    const provider = findByHaystack(urlString);
     if (!provider) {
       return innerFetch(input, init);
     }
@@ -138,16 +139,6 @@ function isWellKnownMetadataPath(url: string): boolean {
     url.includes('/.well-known/oauth-authorization-server') ||
     url.includes('/.well-known/openid-configuration')
   );
-}
-
-function findProviderByMetadataUrl(url: string): WellKnownOAuthProvider | undefined {
-  const lower = url.toLowerCase();
-  for (const provider of PROVIDERS) {
-    if (provider.matchHosts.some((host) => lower.includes(host))) {
-      return provider;
-    }
-  }
-  return undefined;
 }
 
 /** Strip the well-known suffix to get a usable `issuer` value. */

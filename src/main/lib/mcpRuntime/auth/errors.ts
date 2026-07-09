@@ -27,16 +27,3 @@ export function isMcpAuthCancelledError(error: Error | null | undefined): boolea
 export function isMcpDcrRequiresUserClientIdError(error: Error | null | undefined): boolean {
   return !!error && error.message.startsWith(`[${MCP_DCR_REQUIRES_USER_CLIENT_ID_CODE}]`);
 }
-
-export function isMcpOAuthFlowFailedError(error: Error | null | undefined): boolean {
-  return !!error && error.message.startsWith(`[${MCP_OAUTH_FLOW_FAILED_CODE}]`);
-}
-
-export function isMcpNeedsUserInteractionError(error: Error | null | undefined): boolean {
-  if (!error) {
-    return false;
-  }
-
-  // OAuth needs user to provide credentials we couldn't auto-discover.
-  return isMcpDcrRequiresUserClientIdError(error);
-}

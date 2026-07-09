@@ -27,7 +27,7 @@ function isUsableWindow(window: AuthUiWindowCandidate): boolean {
   return !window.isDestroyed() && !!window.webContents;
 }
 
-export function isPrimaryAuthUiWindow(window: AuthUiWindowCandidate): boolean {
+function isPrimaryAuthUiWindow(window: AuthUiWindowCandidate): boolean {
   if (!isUsableWindow(window)) {
     return false;
   }

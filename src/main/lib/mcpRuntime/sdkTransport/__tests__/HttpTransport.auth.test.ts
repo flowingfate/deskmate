@@ -1,9 +1,9 @@
-import { HttpTransport } from '../transport/HttpTransport';
+import { HttpTransport } from '../wire/HttpTransport';
 
 const mockResolveMetadata = vi.fn();
 const mockGetTokenForServer = vi.fn();
 
-vi.mock('../../auth/McpAuthMetadataService', async () => ({
+vi.mock('../../auth', async () => ({
   McpAuthMetadataService: {
     resolve: (...args: unknown[]) => mockResolveMetadata(...args),
     updateFromHeaders: (existing: unknown, responseHeaders: Headers) => {
@@ -19,13 +19,8 @@ vi.mock('../../auth/McpAuthMetadataService', async () => ({
       };
     },
   },
-}));
-
-vi.mock('../../auth/McpAuthService', async () => ({
-  McpAuthService: {
-    getInstance: vi.fn(() => ({
-      getTokenForServer: (...args: unknown[]) => mockGetTokenForServer(...args),
-    })),
+  mcpAuthService: {
+    getTokenForServer: (...args: unknown[]) => mockGetTokenForServer(...args),
   },
 }));
 

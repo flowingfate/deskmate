@@ -23,8 +23,13 @@ export const DESKMATE_DEFAULT_OAUTH_CALLBACK_PORT = 33420;
 
 const CALLBACK_PATH = '/callback';
 const DEFAULT_CALLBACK_TIMEOUT_MS = 5 * 60_000;
-
-const logger = log;
+/**
+ * TTL for remembering a just-completed `state`. Browsers frequently issue
+ * the OAuth redirect twice (navigation prefetch / retry), so the second
+ * hit arrives after the waiter is gone. Within this window we replay the
+ * success page instead of the alarming "no pending sign-in" error.
+ */
+const RECENTLY_COMPLETED_TTL_MS = 60_000;
 
 interface Waiter {
   resolve: (code: string) => void;
@@ -38,6 +43,12 @@ class CallbackServer {
   private server: Server | null = null;
   private port = 0;
   private waiters = new Map<string, Waiter>();
+  /**
+   * `state`s whose flow just resolved, kept for `RECENTLY_COMPLETED_TTL_MS`
+   * so a duplicate browser redirect replays the success page instead of an
+   * error. Value = timer that evicts the entry.
+   */
+  private recentlyCompleted = new Map<string, NodeJS.Timeout>();
   private startPromise: Promise<void> | null = null;
   private startingPort: number | null = null;
 
@@ -115,7 +126,7 @@ class CallbackServer {
         // Re-attach a permanent error handler so post-startup errors don't
         // crash the process; we only log them.
         server.on('error', (err) => {
-          logger.warn({ msg: '[McpOAuth] CallbackServer post-startup error', mod: 'CallbackServer', err: err });
+          log.warn({ msg: '[McpOAuth] CallbackServer post-startup error', mod: 'CallbackServer', err: err });
         });
         this.server = server;
         // When `port === 0` the OS assigned an ephemeral port — read the
@@ -127,7 +138,7 @@ class CallbackServer {
             ? addr.port
             : port;
         this.port = actualPort;
-        logger.info({ msg: `[McpOAuth] Callback server listening on http://127.0.0.1:${actualPort}${CALLBACK_PATH}` });
+        log.info({ msg: `[McpOAuth] Callback server listening on http://127.0.0.1:${actualPort}${CALLBACK_PATH}`, mod: 'CallbackServer' });
         resolve();
       });
     });
@@ -198,14 +209,15 @@ class CallbackServer {
    * code keeps the singleton alive for the application lifetime.
    */
   async stop(): Promise<void> {
-    for (const [state, waiter] of this.waiters) {
-      clearTimeout(waiter.timer);
-      if (waiter.signal && waiter.abortHandler) {
-        waiter.signal.removeEventListener('abort', waiter.abortHandler);
-      }
-      waiter.reject(new Error('CallbackServer stopped'));
-      this.waiters.delete(state);
+    // 先定值，防止一边迭代，一边删
+    const keys = Array.from(this.waiters.keys());
+    for (const state of keys) {
+      this.cleanupWaiter(state)?.reject(new Error('CallbackServer stopped'));
     }
+    for (const timer of this.recentlyCompleted.values()) {
+      clearTimeout(timer);
+    }
+    this.recentlyCompleted.clear();
     if (!this.server) return;
     const server = this.server;
     this.server = null;
@@ -251,11 +263,21 @@ class CallbackServer {
 
     const waiter = this.cleanupWaiter(state);
     if (!waiter) {
-      // Unknown state — could be a stale callback from a previous flow.
+      // Duplicate redirect for a flow we just finished (browser prefetch /
+      // retry): replay the success page instead of alarming the user.
+      if (this.recentlyCompleted.has(state)) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(this.renderHtml(
+          'Authentication successful',
+          `<p>You can close this window and return to ${escapeHtml(APP_NAME)}.</p>`,
+        ));
+        return;
+      }
+      // Unknown state — stale callback from a previous flow or app restart.
       res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(this.renderHtml(
         'Authentication error',
-        `<p>This OAuth callback does not match any pending sign-in. You can close this window.</p>`,
+        `<p>This sign-in has expired or the app was restarted. Please return to ${escapeHtml(APP_NAME)} and start the connection again. You can close this window.</p>`,
       ));
       return;
     }
@@ -288,7 +310,19 @@ class CallbackServer {
       'Authentication successful',
       `<p>You can close this window and return to ${escapeHtml(APP_NAME)}.</p>`,
     ));
+    this.markCompleted(state);
     waiter.resolve(code);
+  }
+
+  /** Remember a just-resolved `state` so a duplicate redirect replays success. */
+  private markCompleted(state: string): void {
+    const existing = this.recentlyCompleted.get(state);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.recentlyCompleted.delete(state);
+    }, RECENTLY_COMPLETED_TTL_MS);
+    timer.unref();
+    this.recentlyCompleted.set(state, timer);
   }
 
   private renderHtml(title: string, bodyHtml: string): string {

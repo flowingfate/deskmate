@@ -195,6 +195,6 @@ export async function runAdd(argv: string[], ctx: AppCmdContext): Promise<void> 
 
   ctx.print(
     `Added MCP server "${name}" (transport=${tport}). Connection is starting.\n` +
-      'Run "app mcp status ' + name + '" to check progress.\n',
+      'Run "app mcp status ' + name + ' --wait" to block until it settles.\n',
   );
 }

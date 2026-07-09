@@ -2,30 +2,23 @@
  * DeskmateTokenCache
  *
  * Per-server MCP OAuth credential cache with an in-memory mirror plus
- * profile-scoped persistence. The cache is written under the active Deskmate
- * profile so the next app launch can reuse access/refresh tokens and DCR
- * client information before re-entering the interactive OAuth flow.
+ * profile-scoped persistence. Written as plain JSON under
+ * `{userData}/profiles/<id>/credentials/mcp.auth.json` —
+ * 落盘形态与 `auth.json`(主身份凭据)一致,均为明文。Concurrent writers
+ * are serialized on a single promise chain to prevent read-modify-write
+ * loss on parallel MCP OAuth flows.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { log } from '@main/log';
-// profile 永远存在；token cache 只关心写盘根目录，认证态由 pi/auth 自己管。
+// profile 永远存在;token cache 只关心写盘根目录,认证态由 pi/auth 自己管。
 import { Profiles } from '@main/persist';
 import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
 
-const logger = log;
-
 const CACHE_VERSION = 1 as const;
-const CACHE_FILE_NAME = 'browserAuthTokenCache';
-const FALLBACK_FILE_NAME = `${CACHE_FILE_NAME}.json`;
-
-type SafeStorageLike = {
-  isEncryptionAvailable(): boolean;
-  encryptString(value: string): Buffer;
-  decryptString(value: Buffer): string;
-};
+const CACHE_FILE = 'mcp.auth.json';
 
 /**
  * OAuth credential record for a single MCP server.
@@ -50,13 +43,6 @@ export interface PersistedMcpOAuthEntry {
   clientId?: string;
   /** Optional client secret for confidential clients. */
   clientSecret?: string;
-  /** Cached OAuth metadata to skip re-discovery on refresh. URL-only to avoid keychain bloat. */
-  discoveryState?: {
-    authorizationServerUrl: string;
-    resourceMetadataUrl?: string;
-  };
-  /** Scope cached from a 403 insufficient_scope response, used on the next interactive flow. */
-  stepUpScope?: string;
 }
 
 export interface DeskmateTokenCacheData {
@@ -67,36 +53,6 @@ export interface DeskmateTokenCacheData {
    */
   mcpOAuth?: Record<string, PersistedMcpOAuthEntry>;
   updatedAt: number;
-}
-
-function resolveSafeStorage(): SafeStorageLike | null {
-  try {
-    // Use a runtime require so Jest/node tests can load this module without Electron.
-    return require('electron').safeStorage as SafeStorageLike;
-  } catch {
-    return null;
-  }
-}
-
-function cloneCache(data: DeskmateTokenCacheData): DeskmateTokenCacheData {
-  return JSON.parse(JSON.stringify(data)) as DeskmateTokenCacheData;
-}
-
-function normalizeCacheData(value: unknown): DeskmateTokenCacheData | null {
-  if (!value || typeof value !== 'object') return null;
-  const raw = value as Partial<DeskmateTokenCacheData>;
-  if (raw.version !== CACHE_VERSION) return null;
-  if (typeof raw.updatedAt !== 'number' || !Number.isFinite(raw.updatedAt)) return null;
-
-  const normalized: DeskmateTokenCacheData = {
-    version: CACHE_VERSION,
-    updatedAt: raw.updatedAt,
-  };
-
-  const mcpOAuth = normalizeMcpOAuthMap(raw.mcpOAuth);
-  if (mcpOAuth) normalized.mcpOAuth = mcpOAuth;
-
-  return normalized;
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -130,32 +86,33 @@ function normalizeMcpOAuthEntry(value: unknown): PersistedMcpOAuthEntry | undefi
   if (isNonEmptyString(entry.scope)) normalized.scope = entry.scope;
   if (isNonEmptyString(entry.clientId)) normalized.clientId = entry.clientId;
   if (isNonEmptyString(entry.clientSecret)) normalized.clientSecret = entry.clientSecret;
-  if (isNonEmptyString(entry.stepUpScope)) normalized.stepUpScope = entry.stepUpScope;
-
-  if (entry.discoveryState && typeof entry.discoveryState === 'object') {
-    const ds = entry.discoveryState as { authorizationServerUrl?: unknown; resourceMetadataUrl?: unknown };
-    if (isNonEmptyString(ds.authorizationServerUrl)) {
-      normalized.discoveryState = {
-        authorizationServerUrl: ds.authorizationServerUrl,
-      };
-      if (isNonEmptyString(ds.resourceMetadataUrl)) {
-        normalized.discoveryState.resourceMetadataUrl = ds.resourceMetadataUrl;
-      }
-    }
-  }
-
   return normalized;
 }
 
-function normalizeMcpOAuthMap(value: unknown): Record<string, PersistedMcpOAuthEntry> | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const out: Record<string, PersistedMcpOAuthEntry> = {};
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (!isNonEmptyString(key)) continue;
-    const entry = normalizeMcpOAuthEntry(raw);
-    if (entry) out[key] = entry;
+/** Read-side validation only — anything writen from within this module is
+ *  already well-typed, so we skip re-normalization on persist. */
+function normalizeCacheData(value: unknown): DeskmateTokenCacheData | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Partial<DeskmateTokenCacheData>;
+  if (raw.version !== CACHE_VERSION) return null;
+  if (typeof raw.updatedAt !== 'number' || !Number.isFinite(raw.updatedAt)) return null;
+
+  const normalized: DeskmateTokenCacheData = {
+    version: CACHE_VERSION,
+    updatedAt: raw.updatedAt,
+  };
+
+  if (raw.mcpOAuth && typeof raw.mcpOAuth === 'object') {
+    const out: Record<string, PersistedMcpOAuthEntry> = {};
+    for (const [key, rawEntry] of Object.entries(raw.mcpOAuth)) {
+      if (!isNonEmptyString(key)) continue;
+      const entry = normalizeMcpOAuthEntry(rawEntry);
+      if (entry) out[key] = entry;
+    }
+    if (Object.keys(out).length > 0) normalized.mcpOAuth = out;
   }
-  return Object.keys(out).length > 0 ? out : undefined;
+
+  return normalized;
 }
 
 export class DeskmateTokenCache {
@@ -163,7 +120,6 @@ export class DeskmateTokenCache {
 
   /** In-memory mirror of the profile-scoped persisted cache. */
   private cache: DeskmateTokenCacheData | null = null;
-  private loadedCachePath: string | null = null;
   /**
    * Serialization chain for cache writes. Required because read-modify-write
    * (`load → mutate → persist`) on N parallel MCP-OAuth flows would otherwise
@@ -178,164 +134,65 @@ export class DeskmateTokenCache {
     return DeskmateTokenCache.instance;
   }
 
-  private getCurrentProfileId(): string | null {
+  private getStorageDirectory(): string | null {
     try {
-      // profile 在 Profiles.bootstrap() 后总是存在；只要有 active profile
-      // 就可以写 cache，认证态由 pi/auth 自行管理。
       const profileId = Profiles.get().activeProfileId;
-      return isNonEmptyString(profileId) ? profileId : null;
+      if (!isNonEmptyString(profileId)) return null;
+      return path.join(PERSIST_PATH.profileDir(getAppRoot(), profileId), 'credentials');
     } catch {
       return null;
     }
   }
 
-  private getStorageDirectory(): string | null {
-    const profileId = this.getCurrentProfileId();
-    if (!profileId) {
-      return null;
-    }
-    return path.join(PERSIST_PATH.profileDir(getAppRoot(), profileId), 'credentials');
-  }
-
-  private getEncryptedCachePath(): string | null {
+  private cacheFile(): { file: string; directory: string } | null {
     const directory = this.getStorageDirectory();
-    return directory ? path.join(directory, `${CACHE_FILE_NAME}.enc`) : null;
-  }
-
-  private getFallbackCachePath(): string | null {
-    const directory = this.getStorageDirectory();
-    return directory ? path.join(directory, FALLBACK_FILE_NAME) : null;
-  }
-
-  private logMissingAlias(operation: 'load' | 'save' | 'clear'): void {
-    logger.warn({ msg: '[DeskmateTokenCache] Skipping persisted MCP OAuth cache operation because no active profile is available', mod: operation });
+    if (!directory) return null;
+    return { directory, file: path.join(directory, CACHE_FILE) };
   }
 
   private async readPersistedCache(): Promise<DeskmateTokenCacheData | null> {
-    const encryptedPath = this.getEncryptedCachePath();
-    const fallbackPath = this.getFallbackCachePath();
-    const safeStorage = resolveSafeStorage();
-
-    if (!encryptedPath || !fallbackPath) {
-      this.logMissingAlias('load');
-      this.loadedCachePath = null;
+    const paths = this.cacheFile();
+    if (!paths) {
+      log.warn({ msg: '[DeskmateTokenCache] Skipping persisted MCP OAuth cache load — no active profile', mod: 'DeskmateTokenCache' });
       return null;
     }
 
     try {
-      if (safeStorage?.isEncryptionAvailable() && fs.existsSync(encryptedPath)) {
-        const encrypted = await fs.promises.readFile(encryptedPath);
-        const decrypted = safeStorage.decryptString(encrypted);
-        const parsed = normalizeCacheData(JSON.parse(decrypted));
-        if (parsed) {
-          this.loadedCachePath = encryptedPath;
-        }
-        return parsed;
-      }
-
-      if (fs.existsSync(fallbackPath)) {
-        const raw = await fs.promises.readFile(fallbackPath, 'utf-8');
-        const parsed = normalizeCacheData(JSON.parse(raw));
-        if (parsed) {
-          this.loadedCachePath = fallbackPath;
-        }
-        return parsed;
+      if (fs.existsSync(paths.file)) {
+        const raw = await fs.promises.readFile(paths.file, 'utf-8');
+        return normalizeCacheData(JSON.parse(raw));
       }
     } catch (error) {
-      logger.warn({ msg: '[DeskmateTokenCache] Failed to read persisted MCP OAuth cache', mod: 'readPersistedCache', err: error });
+      log.warn({ msg: '[DeskmateTokenCache] Failed to read persisted MCP OAuth cache', mod: 'DeskmateTokenCache', err: error });
     }
-
-    this.loadedCachePath = null;
     return null;
   }
 
   private async persistCache(data: DeskmateTokenCacheData): Promise<void> {
-    const directory = this.getStorageDirectory();
-    const encryptedPath = this.getEncryptedCachePath();
-    const fallbackPath = this.getFallbackCachePath();
-    const safeStorage = resolveSafeStorage();
-    const serialized = JSON.stringify(data, null, 2);
-
-    if (!directory || !encryptedPath || !fallbackPath) {
-      this.logMissingAlias('save');
+    const paths = this.cacheFile();
+    if (!paths) {
+      log.warn({ msg: '[DeskmateTokenCache] Skipping persisted MCP OAuth cache save — no active profile', mod: 'DeskmateTokenCache' });
       return;
     }
 
-    await fs.promises.mkdir(directory, { recursive: true });
-
-    if (safeStorage?.isEncryptionAvailable()) {
-      const encrypted = safeStorage.encryptString(serialized);
-      await fs.promises.writeFile(encryptedPath, encrypted);
-      await fs.promises.rm(fallbackPath, { force: true });
-      this.loadedCachePath = encryptedPath;
-      return;
-    }
-
-    await fs.promises.writeFile(fallbackPath, serialized, 'utf-8');
-    this.loadedCachePath = fallbackPath;
-  }
-
-  private async deletePersistedCache(): Promise<void> {
-    const encryptedPath = this.getEncryptedCachePath();
-    const fallbackPath = this.getFallbackCachePath();
-
-    if (!encryptedPath || !fallbackPath) {
-      this.logMissingAlias('clear');
-      this.loadedCachePath = null;
-      return;
-    }
-
-    await Promise.all([
-      fs.promises.rm(encryptedPath, { force: true }),
-      fs.promises.rm(fallbackPath, { force: true }),
-    ]);
-    this.loadedCachePath = null;
+    await fs.promises.mkdir(paths.directory, { recursive: true });
+    await fs.promises.writeFile(paths.file, JSON.stringify(data, null, 2), 'utf-8');
   }
 
   async load(): Promise<DeskmateTokenCacheData | null> {
-    if (this.cache) {
-      return cloneCache(this.cache);
-    }
-
+    if (this.cache) return structuredClone(this.cache);
     const persisted = await this.readPersistedCache();
-    this.cache = persisted ? cloneCache(persisted) : null;
-    return this.cache ? cloneCache(this.cache) : null;
-  }
-
-  async save(data: DeskmateTokenCacheData): Promise<void> {
-    return this.runSerialized(async () => {
-      const normalized = normalizeCacheData({ ...data, version: CACHE_VERSION, updatedAt: Date.now() });
-      if (!normalized) {
-        throw new Error('Invalid MCP OAuth cache payload');
-      }
-
-      this.cache = cloneCache(normalized);
-      await this.persistCache(normalized);
-      logger.info({ msg: '[DeskmateTokenCache] Token cache updated (memory + persisted profile cache)' });
-    });
-  }
-
-  async clear(): Promise<void> {
-    return this.runSerialized(async () => {
-      this.cache = null;
-      await this.deletePersistedCache();
-      logger.info({ msg: '[DeskmateTokenCache] Token cache cleared (memory + persisted profile cache)' });
-    });
-  }
-
-  async getCache(): Promise<DeskmateTokenCacheData | null> {
-    return await this.load();
+    this.cache = persisted ? structuredClone(persisted) : null;
+    return this.cache ? structuredClone(this.cache) : null;
   }
 
   // ────────────────── MCP OAuth ──────────────────
 
   /**
-   * Read the OAuth credential entry for a single MCP server.
-   * Returns `null` if the server has never been authenticated.
-   *
-   * Note: an entry with `accessToken === ''` is valid — it represents a
-   * server that has completed Dynamic Client Registration but has not yet
-   * exchanged an authorization code for an access token. Callers should
+   * Read the OAuth credential entry for a single MCP server. Returns `null`
+   * if the server has never been authenticated. An entry with
+   * `accessToken === ''` represents a server that completed DCR but has not
+   * yet exchanged an authorization code for an access token — callers should
    * treat that case as "not authenticated yet".
    */
   async getMcpOAuth(serverKey: string): Promise<PersistedMcpOAuthEntry | null> {
@@ -352,20 +209,12 @@ export class DeskmateTokenCache {
     return this.runSerialized(async () => {
       const existing = (await this.load()) ?? { version: CACHE_VERSION, updatedAt: Date.now() };
       const next: DeskmateTokenCacheData = {
-        ...existing,
         version: CACHE_VERSION,
         updatedAt: Date.now(),
-        mcpOAuth: {
-          ...(existing.mcpOAuth ?? {}),
-          [serverKey]: entry,
-        },
+        mcpOAuth: { ...existing.mcpOAuth, [serverKey]: entry },
       };
-      const normalized = normalizeCacheData(next);
-      if (!normalized) {
-        throw new Error('Invalid MCP OAuth cache payload');
-      }
-      this.cache = cloneCache(normalized);
-      await this.persistCache(normalized);
+      this.cache = structuredClone(next);
+      await this.persistCache(next);
     });
   }
 
@@ -376,22 +225,16 @@ export class DeskmateTokenCache {
   async deleteMcpOAuth(serverKey: string): Promise<void> {
     return this.runSerialized(async () => {
       const existing = await this.load();
-      if (!existing?.mcpOAuth || !existing.mcpOAuth[serverKey]) return;
+      if (!existing?.mcpOAuth?.[serverKey]) return;
       const { [serverKey]: _removed, ...rest } = existing.mcpOAuth;
       void _removed;
       const next: DeskmateTokenCacheData = {
-        ...existing,
         version: CACHE_VERSION,
         updatedAt: Date.now(),
         mcpOAuth: Object.keys(rest).length > 0 ? rest : undefined,
       };
-      const normalized = normalizeCacheData(next);
-      // normalizeCacheData drops mcpOAuth when empty; that is the desired
-      // outcome (clean schema), so we tolerate `normalized.mcpOAuth` being
-      // undefined here.
-      if (!normalized) return;
-      this.cache = cloneCache(normalized);
-      await this.persistCache(normalized);
+      this.cache = structuredClone(next);
+      await this.persistCache(next);
     });
   }
 

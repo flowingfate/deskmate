@@ -57,7 +57,7 @@ import { setUpIPC } from './startup/ipc';
 import { startEvalMode } from './startup/evalMode';
 import { ghcModelsManager } from "./pi/providers/ghc";
 import { schedulerManager } from "./lib/scheduler/SchedulerManager";
-import { mcpClientManager } from "./lib/mcpRuntime/mcpClientManager";
+import { mcpClientManager } from "./lib/mcpRuntime"
 import { registerMediaProtocol } from './lib/media/mediaProtocol';
 import { getAppDataPath, getLogsDir, getProfileDirectoryPath } from "@main/persist/lib/path";
 

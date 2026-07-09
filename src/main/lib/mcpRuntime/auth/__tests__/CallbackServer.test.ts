@@ -58,6 +58,27 @@ describe('CallbackServer', () => {
     await expect(codePromise).resolves.toBe('AUTH_CODE_123');
   });
 
+  it('duplicate redirect after success replays the success page (200), not an error', async () => {
+    const cs = getCallbackServer();
+    const codePromise = cs.waitForCode('STATE_DUP', { timeoutMs: 1000 });
+    // First redirect resolves the flow.
+    const first = await call(port, { state: 'STATE_DUP', code: 'AUTH_CODE_DUP' });
+    expect(first.status).toBe(200);
+    await expect(codePromise).resolves.toBe('AUTH_CODE_DUP');
+    // Browser re-issues the same redirect (prefetch/retry): waiter is gone,
+    // but the just-completed state must replay success rather than the
+    // alarming "no pending sign-in" error.
+    const second = await call(port, { state: 'STATE_DUP', code: 'AUTH_CODE_DUP' });
+    expect(second.status).toBe(200);
+    expect(second.body).toContain('Authentication successful');
+  });
+
+  it('unknown state (never completed) still returns the expired-sign-in error (400)', async () => {
+    const res = await call(port, { state: 'NEVER_SEEN', code: 'X' });
+    expect(res.status).toBe(400);
+    expect(res.body).toContain('expired');
+  });
+
   it('state mismatch: callback responds 400, waiter unaffected', async () => {
     const cs = getCallbackServer();
     const codePromise = cs.waitForCode('GOOD', { timeoutMs: 100 });

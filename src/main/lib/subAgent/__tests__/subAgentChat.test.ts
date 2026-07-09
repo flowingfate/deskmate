@@ -19,7 +19,7 @@ vi.mock('electron', async () => ({
   app: { getPath: vi.fn(() => '/mock/userData') },
 }));
 
-vi.mock('../../mcpRuntime/mcpClientManager', async () => ({
+vi.mock('../../mcpRuntime', async () => ({
   // Mock 整个模块,wrapper 测试不触达任何 mcpClientManager 方法;
   // 留一个空对象避免 import 阶段炸。Phase 3 移除已废弃的 getToolsForSubAgent。
   mcpClientManager: {},
