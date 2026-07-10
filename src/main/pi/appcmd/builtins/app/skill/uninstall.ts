@@ -39,8 +39,7 @@ DESCRIPTION
   "skill unbind". Conversely, "skill unbind" alone does not delete the
   local skill package.
 
-  Always requires --yes. Without it, the command refuses. Built-in skills
-  cannot be uninstalled.
+  Always requires --yes. Without it, the command refuses.
 
 OPTIONS
   --yes, -y     Confirm the uninstall. REQUIRED for the real op.

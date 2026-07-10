@@ -141,6 +141,7 @@ describe('Agent.persist + load round-trip', () => {
       systemPrompt: 'You are helpful.\n',
     });
     expect(agent.id).toMatch(/^a_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(await agent.knowledge.exists()).toBe(true);
 
     const fresh = await freshModules();
     const reg2 = fresh.Profiles.get();
@@ -277,7 +278,7 @@ describe('Agent rename via patchFront', () => {
     });
     await agent.patchFront({
       thinkingLevel: 'high',
-      skills: ['s1'],
+      skills: { s1: 'live' },
       subAgents: ['sa1'],
       tools: ['read', 'write'],
       mcpServers: [{ name: 'mcp1', tools: ['t1'] }],
@@ -289,7 +290,7 @@ describe('Agent rename via patchFront', () => {
       systemPrompt: 'sp',
       tools: ['read', 'write'],
       mcpServers: [{ name: 'mcp1', tools: ['t1'] }],
-      skills: ['s1'],
+      skills: { s1: 'live' },
       subAgents: ['sa1'],
     });
     // 不带 record 字段（避免回归：列表展示 stale 时不该用 detail 兜底）

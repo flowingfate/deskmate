@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-05 (新增 storageOverview.ts + getStorageOverview/revealStoragePath 通道) -->
+<!-- Last verified: 2026-07-13 (新建与复制 agent 均保证 knowledge/ 目录存在) -->
 
 # Persist 模块（新布局 store 层）
 
@@ -104,6 +104,7 @@ Profiles.get().active()          → Profile
 - ⚠️ messages.jsonl 是 append-only。常态走 `Session.appendDomainMessage(m)` / `appendToolResponse(id, result)` 进 buffer,`flushMessages` 才落盘;`Session.persist()` 内部会同时 flush。**整段覆盖**走 `rewriteMessages(messages)`(edit / retry / 导入路径,emit `session:messages:rewritten`),不要单独覆盖写 messages.jsonl。
 - ⚠️ Session 删除走 `Agent.deleteSession(id)`（RegularSession）或 `Agent.deleteJob(id)`（JobRun 整 job 目录一锅端），会同时删 dir + 通过 `sessionIdx.remove` / `jobRunIdx.removeByJob` 删 SQL 行 + emit 相应 `*:index:updated`(op='remove')/`schedule:removed`。**不要**直接 `session.deleteFromDisk()`。
 - ⚠️ Agent 软删走 `Profile.archiveAgent(id)`：写顺序是 archive move dir → agents.json 剔除（含 `primaryAgentId` 命中清空）。若中途崩溃，下次启动 `reconcileAgents()` 会发现 items 指向不存在的目录并自愈。
+- ⚠️ `knowledge/` 是每个 agent 的基础目录：`Profile.createAgent` 在将 record 发布到 `agents.json` 前创建它；`duplicateAgent` 复制源目录，旧 source 缺目录时创建空目录；`Agent.load` 会为已登记的旧 agent 懒创建目录。渲染器文件树会校验物理目录存在，不能把空知识库当作缺失目录。
 - ⚠️ `markdown.ts` 允许 `model: ''`（空字符串），便于刚 create 的 agent 立刻 round-trip。**不要**收紧成非空校验，否则会破坏 reconcile / restore 流程。
 - ⚠️ 测试 mock fs 时 helper 不能单放 `_*.ts` —— vitest 的 include 模式 `__tests__/**/*.ts` 全扫；要么内嵌进 test 文件，要么改后缀。`session-schedule.test.ts` 整文件改走 tmp 真盘（Step 9）—— `better-sqlite3` 是 native，无法被 `vi.mock('node:fs')` 拦截。
 - ⚠️ `Agent.createSession({ id?, title?, overrides?, contextState? })` 可接收外部 `id`。供 `pi.Agent.getOrCreateSession` 的 lazy create 路径使用：renderer 在 "New Chat" 按钮按下时本地 `newEntityId('s')` 生成 id 并 navigate，但**直到首次 streamMessage 走 pi 才真正落盘**，避免空壳 session。不传 id 走默认 ULID 生成，保持向后兼容。

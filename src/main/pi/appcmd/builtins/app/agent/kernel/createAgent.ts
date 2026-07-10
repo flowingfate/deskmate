@@ -13,6 +13,7 @@
 
 import { Profiles } from '@main/persist';
 import type { AgentMcpServer } from '@shared/persist/types';
+import type { SkillBindings } from '@shared/types/profileTypes';
 
 export interface CreateAgentArgs {
   name: string;
@@ -90,9 +91,13 @@ export async function createAgentInternal(
         }))
       : undefined;
 
+    // CLI `--skill foo` 语义 = 第一档 自动启用。转成 SkillBindings 落盘。
+    const skillBindings: SkillBindings | undefined = args.skills?.length
+      ? Object.fromEntries(args.skills.map((n) => [n, 'live' as const]))
+      : undefined;
     await agent.patchFront({
       mcpServers,
-      skills: args.skills,
+      skills: skillBindings,
     });
 
     return {

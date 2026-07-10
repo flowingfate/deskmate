@@ -173,6 +173,7 @@ describe('toPiContext 出境', () => {
     });
   });
 
+
   it('user 带 image attachment → text + image content', () => {
     const ctx = toPiContext(
       [
@@ -255,6 +256,7 @@ describe('toPiContext 出境', () => {
     expect(txt).toContain('local://uploads/big.png');
     expect(txt).toContain('2000×1500');
   });
+
 
   it('assistant 1→N 展开: assistant 紧跟其 tool_calls 中已 response 的 toolResult', () => {
     const messages: Message[] = [

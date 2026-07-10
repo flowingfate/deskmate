@@ -27,7 +27,7 @@ import { Tracer } from '@shared/log/trace';
 
 import { wrapInSystemReminder } from '@main/pi/utils/systemReminderUtils';
 import { getProfileSkillsDir } from '@main/persist/lib/path';
-import { skillManager } from '../skill/skillManager';
+import { skillManager } from '../skill';
 import { runUtilityCompletion } from '@main/pi/utility';
 import { createUserMessage } from '@shared/utils/messageFactory';
 

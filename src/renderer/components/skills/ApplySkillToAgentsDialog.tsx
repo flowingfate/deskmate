@@ -50,7 +50,7 @@ const ApplySkillToAgentsDialog: React.FC = () => {
     open,
     resourceKey: skillName,
     isAlreadyApplied: useCallback(
-      (detail) => (detail.skills ?? []).includes(skillName),
+      (detail) => (detail.skills ?? {})[skillName] !== undefined,
       [skillName],
     ),
   });

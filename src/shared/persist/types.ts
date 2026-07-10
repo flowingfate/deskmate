@@ -5,6 +5,7 @@
  */
 
 import type { ThinkingLevel } from '../types/thinkingLevel';
+import type { AgentMcpServer as ProfileAgentMcpServer, McpServerConfig, ModelConfig, SkillConfig, SkillBindings } from '../types/profileTypes';
 
 // ---------------------------------------------------------------------------
 // profiles.json —— 跨 profile 索引
@@ -124,8 +125,8 @@ interface AgentRecordBase {
   emoji?: string;
   avatar?: string;
   /**
-   * 受保护标记。`true` ⇒ 该 agent 的身份(name/emoji/avatar)、system prompt、
-   * 内置 skill 绑定不可在 UI 修改,且不可归档/删除。源真值在 AGENT.md front-matter,
+   * 受保护标记。`true` ⇒ 该 agent 的身份(name/emoji/avatar)、system prompt
+   * 不可在 UI 修改,且不可归档/删除。源真值在 AGENT.md front-matter,
    * 派生到 record(hot)供 sidebar/menu 无需 cold fetch 即可判定。缺席 ⇒ 普通可编辑 agent。
    */
   locked?: boolean;
@@ -162,7 +163,15 @@ interface AgentMarkdownFrontBase {
    */
   tools?: string[];
   mcpServers?: AgentMcpServer[];
-  skills?: string[];
+  /**
+   * Skill 启用档位映射（key = skill name，value = 档位）。单一真值，结构上
+   * 保证每个 skill 只有一个档位（不会像并列数组那样出现同名分叉）：
+   *   - `'live'`：元数据始终注入 system prompt。
+   *   - `'lazy'`：metadata 不进 prompt；用户显式引用 URI 后，模型按稳定指引自行读取。
+   *   - 不在 map 中（缺席）= 第三档禁用，`skill://` 不可读取或执行。
+   * 落 AGENT.md front-matter `skills`。缺席整个字段 ⇒ 该 agent 未绑定任何 skill。
+   */
+  skills?: SkillBindings;
   subAgents?: string[];
   zero?: AgentZeroState;
 }
@@ -194,9 +203,9 @@ export interface AgentZeroState {
 
 export type AgentMarkdownFront = AgentMarkdownFrontBase;
 
-export type AgentMcpServer = import('../types/profileTypes').AgentMcpServer;
+export type AgentMcpServer = ProfileAgentMcpServer;
 
-import type { ModelConfig } from '../types/profileTypes';
+
 
 export interface AgentMarkdownFile {
   frontMatter: AgentMarkdownFront;
@@ -259,7 +268,7 @@ export interface AgentDetail {
   /** 本地工具白名单;语义同 `AgentMarkdownFrontBase.tools`(默认全开)。 */
   tools?: string[];
   mcpServers?: AgentMcpServer[];
-  skills?: string[];
+  skills?: SkillBindings;
   subAgents?: string[];
   /** 聊天空态的预设提示词（Quick Prompts）。缺席 ⇒ 未定制，renderer 回退默认播种列表。 */
   zero?: AgentZeroState;
@@ -552,20 +561,18 @@ export interface SkillsIndexFile {
   items: SkillRecord[];
 }
 
-interface SkillRecordBase {
-  name: string;                  // 与磁盘目录名一致，作为稳定 id
-  description: string;
-  version: string;
-}
-
-export type SkillRecord = SkillRecordBase;
+/**
+ * skills.json 索引项。结构与 profile 层 `SkillConfig` 同构（name/description/version/foreign?），
+ * 直接复用后者作为单一真值，避免同构类型多处漂移。name 与磁盘目录名一致，作为稳定 id。
+ */
+export type SkillRecord = SkillConfig;
 
 export interface McpServersFile {
   version: 1;
   items: McpServerRecord[];
 }
 
-export type McpServerRecord = import('../types/profileTypes').McpServerConfig;
+export type McpServerRecord = McpServerConfig;
 
 export interface ModelsCacheFile {
   version: 1;

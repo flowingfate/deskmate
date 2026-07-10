@@ -1,6 +1,7 @@
 import { log } from '@main/log';
 import { Profiles } from '../../persist';
 import type { Agent } from '../../persist/agent';
+import { setSkillTier } from '@shared/types/profileTypes';
 
 const logger = log;
 
@@ -166,15 +167,17 @@ export async function applySkillToAgents(
       continue;
     }
 
-    const currentSkills = agent.config.skills || [];
-    if (currentSkills.includes(skillName)) {
+    const bindings = agent.config.skills ?? {};
+    // 已有任一档位（live/lazy）即视为已绑定，避免把 lazy 覆盖成 live。
+    if (bindings[skillName] !== undefined) {
       alreadyAppliedCount += 1;
       skippedTargets.push({ ...target, reason: 'ALREADY_APPLIED' });
       continue;
     }
 
     try {
-      await agent.patchFront({ skills: [...currentSkills, skillName] });
+      // bind 语义 = 第一档 自动启用。
+      await agent.patchFront({ skills: setSkillTier(bindings, skillName, 'live') });
       appliedTargets.push(target);
     } catch {
       failedCount += 1;

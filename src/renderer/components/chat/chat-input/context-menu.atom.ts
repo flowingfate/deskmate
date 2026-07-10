@@ -1,11 +1,12 @@
 import { atom } from '@/atom';
-import { ContextOption, ContextMenuOptionType, ContextMenuTriggerType, MentionScheme, filterSkillsByQuery, getDefaultMenuOptions } from '@/lib/chat/contextMentions';
+import { ContextOption, ContextMenuOptionType, MentionScheme, filterSkillsByQuery, getDefaultMenuOptions } from '@/lib/chat/contextMentions';
 import { searchWorkspaceFiles } from '@/lib/workspace/workspaceSearchService';
 import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { ensureAgentDetail, getAgentDetailSync } from '@/states/agentDetail.atom';
 import { getSkills as getSkillsAtom } from '@/states/skills.atom';
 import { currentSessionStore } from '@/states/currentSession.atom';
 import type { SkillConfig } from '@shared/types/profileTypes';
+import { boundSkillNames } from '@shared/types/profileTypes';
 import { composeTextCommands } from './chatInputCommands';
 
 /**
@@ -18,18 +19,44 @@ function currentAgentId(): string | null {
 
 
 /**
- * 取当前 agent 已绑定且全局存在的 skills（语义同老 getCurrentAgentSkills）。
- * cold 字段 skills 走 detail；await ensure 保证首次 # 触发也能命中。
+ * 取当前 agent 绑定的全部 skills（第一档 live ∪ 第二档 lazy）供 `@` 菜单引用。
+ * live skill 已在 system prompt 里，仍可被 `[@skill://<name>]` 二次引用起强调作用；
+ * lazy skill 则靠引用向模型提供 URI。两档都进菜单，off skill 不进。
+ * cold 字段走 detail；await ensure 保证首次触发也能命中。
  */
 async function currentAgentSkills(): Promise<SkillConfig[]> {
   const id = currentAgentId();
   if (!id) return [];
   await ensureAgentDetail(id);
-  const names = getAgentDetailSync(id)?.skills ?? [];
+  const names = boundSkillNames(getAgentDetailSync(id)?.skills);
   const globalSkills = getSkillsAtom();
   return names
     .map((n) => globalSkills.find((s) => s.name === n))
     .filter((s): s is SkillConfig => !!s);
+}
+
+/**
+ * 把当前 agent 绑定的 skill 按 query 过滤成菜单 options。
+ * query 为空即返回全部；无命中返回 NoResults 提示项。供「Add Skill」默认项展开使用。
+ */
+async function skillOptions(query: string): Promise<ContextOption[]> {
+  const skills = await currentAgentSkills();
+  if (skills.length === 0) {
+    return [{
+      type: ContextMenuOptionType.NoResults,
+      fileName: 'No skills bound to this agent',
+      description: 'Enable skills (Live or Lazy) in Agent Settings',
+    }];
+  }
+  const filtered = filterSkillsByQuery(skills, query);
+  if (filtered.length === 0) {
+    return [{
+      type: ContextMenuOptionType.NoResults,
+      fileName: `No skills matching "${query}"`,
+      description: `${skills.length} skills available`,
+    }];
+  }
+  return filtered;
 }
 
 /**
@@ -163,15 +190,15 @@ export const ContextMenuAtom = atom(zeroContextMenuState, (get, set) => {
           }]);
         }
         return;
+      } else if (option.type === ContextMenuOptionType.Skill) {
+        // 「Add Skill」默认项 → 展开当前 agent 绑定的 skill 列表。
+        resetOptions(await skillOptions(''));
+        return;
       }
     } else {
-      // Options with actual values — route insertion command to the compose Textarea
-      if (option.type === ContextMenuOptionType.Skill) {
-        composeTextCommands.insertSkillMention(option.value ?? '');
-      } else {
-        composeTextCommands.insertMention(option);
-      }
-      // Close menu
+      // Options with actual values — route insertion command to the compose Textarea.
+      // Skill value 现在也是完整 URI(`skill://name`),与文件 mention 统一走 insertMention。
+      composeTextCommands.insertMention(option);
       closeMenu();
     }
   }
@@ -181,7 +208,7 @@ export const ContextMenuAtom = atom(zeroContextMenuState, (get, set) => {
   }
 
   let timer = 0;
-  async function triggerMenu(query: string, inputRect: DOMRect, triggerType?: ContextMenuTriggerType) {
+  async function triggerMenu(query: string, inputRect: DOMRect) {
     set({
       ...get(),
       show: true,
@@ -193,118 +220,75 @@ export const ContextMenuAtom = atom(zeroContextMenuState, (get, set) => {
       },
     });
 
-  // Debounced search
-    if (timer) clearTimeout(timer);
+    // Debounced search
+    clearTimeout(timer);
     timer = window.setTimeout(async () => {
       try {
-        // 🆕 Determine search logic based on trigger type
-        if (triggerType === ContextMenuTriggerType.Skill) {
-          // # trigger: search Skills
-          const skills = await currentAgentSkills();
-          let options: ContextOption[];
+        // 唯一 `@` 触发：无 query 展示默认项（Add Knowledge / Chat Session / Skill），
+        // 有 query 则并行搜 KB + session 文件，并追加匹配的 skill。
+        if (query.trim().length === 0) {
+          resetOptions(getDefaultMenuOptions());
+          return;
+        }
 
-          if (skills.length === 0) {
-            // No skills available
-            options = [{
-              type: ContextMenuOptionType.NoResults,
-              fileName: 'No skills available for this agent',
-              description: 'Add skills in Agent Settings',
-            }];
-          } else {
-            // Filter skills by query
-            options = filterSkillsByQuery(skills, query);
+        const aid = currentAgentId();
+        const cur = currentSessionStore.get();
+        const hasAgent = !!aid;
+        const hasChatSession = !!(cur.agentId && cur.chatSessionId);
 
-            if (options.length === 0 && query.trim().length > 0) {
-              // 🆕 No matching results after filtering, show hint
-              options = [{
-                type: ContextMenuOptionType.NoResults,
-                fileName: `No skills matching "${query}"`,
-                description: `${skills.length} skills available`,
-              }];
-            } else if (options.length === 0) {
-              // Show all skills when no search term
-              options = skills.map((skill: { name: string; description?: string }) => ({
-                type: ContextMenuOptionType.Skill,
-                fileName: skill.name,
-                description: skill.description || '',
-                value: skill.name,
-              }));
+        const searchPromises: Promise<{ results: { path: string }[]; source: MentionScheme }>[] = [];
+
+        if (hasAgent) {
+          searchPromises.push(
+            searchWorkspaceFiles({
+              folder: 'knowledge://',
+              pattern: query,
+              maxResults: 10,
+              fuzzy: true,
+              searchTarget: 'files',
+            }).then(res => ({ results: res.results, source: 'knowledge' as MentionScheme }))
+          );
+        }
+
+        if (hasChatSession) {
+          searchPromises.push(
+            searchWorkspaceFiles({
+              folder: 'local://',
+              pattern: query,
+              maxResults: 10,
+              fuzzy: true,
+              searchTarget: 'files',
+            }).then(res => ({ results: res.results, source: 'local' as MentionScheme }))
+          );
+        }
+
+        const options: ContextOption[] = [];
+
+        // 匹配的 skill 排在文件前面（skill 命名短、更贴近用户意图）。
+        const skills = await currentAgentSkills();
+        options.push(...filterSkillsByQuery(skills, query));
+
+        if (searchPromises.length > 0) {
+          const searchResults = await Promise.all(searchPromises);
+          for (const { results, source } of searchResults) {
+            for (const r of results) {
+              options.push(buildFileOption(r.path, source));
             }
-          }
-
-          resetOptions(options);
-        } else {
-          // @ trigger: search Knowledge Base and Chat Session Files via URI.
-          // KB is reachable whenever an agent is active (handler falls back to
-          // default `${agentRoot}/knowledge` when config field empty); local
-          // sandbox requires an active session.
-          const aid = currentAgentId();
-          const cur = currentSessionStore.get();
-          const hasAgent = !!aid;
-          const hasChatSession = !!(cur.agentId && cur.chatSessionId);
-
-          if (query.trim().length > 0) {
-            const searchPromises: Promise<{ results: { path: string }[]; source: MentionScheme }>[] = [];
-
-            if (hasAgent) {
-              searchPromises.push(
-                searchWorkspaceFiles({
-                  folder: 'knowledge://',
-                  pattern: query,
-                  maxResults: 10,
-                  fuzzy: true,
-                  searchTarget: 'files',
-                }).then(res => ({ results: res.results, source: 'knowledge' as MentionScheme }))
-              );
-            }
-
-            if (hasChatSession) {
-              searchPromises.push(
-                searchWorkspaceFiles({
-                  folder: 'local://',
-                  pattern: query,
-                  maxResults: 10,
-                  fuzzy: true,
-                  searchTarget: 'files',
-                }).then(res => ({ results: res.results, source: 'local' as MentionScheme }))
-              );
-            }
-
-            let options: ContextOption[] = [];
-
-            if (searchPromises.length > 0) {
-              const searchResults = await Promise.all(searchPromises);
-              for (const { results, source } of searchResults) {
-                for (const r of results) {
-                  options.push(buildFileOption(r.path, source));
-                }
-              }
-            }
-
-            if (options.length === 0) {
-              options = [{
-                type: ContextMenuOptionType.NoResults,
-                fileName: `No files matching "${query}"`,
-                description: 'Try a different search term',
-              }];
-            }
-
-            resetOptions(options);
-          } else {
-            // No search term (just typed @): show default options
-            resetOptions(getDefaultMenuOptions());
           }
         }
-      } catch (error) {
-        if (triggerType === ContextMenuTriggerType.Skill) {
+
+        if (options.length === 0) {
           resetOptions([{
             type: ContextMenuOptionType.NoResults,
-            fileName: 'Failed to load skills',
-            description: '',
+            fileName: `No matches for "${query}"`,
+            description: 'Try a different search term',
           }]);
-        } else {
-          resetOptions(getDefaultMenuOptions());
+          return;
         }
+
+        resetOptions(options);
+      } catch (error) {
+        resetOptions(getDefaultMenuOptions());
       }
     }, 200);
   }

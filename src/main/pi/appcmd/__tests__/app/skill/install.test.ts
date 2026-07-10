@@ -1,6 +1,6 @@
 /**
- * `skill install` subcommand 测试 —— 3 个 source 路径 (device / clawhub / github)
- * + path 校验 + dry-run / json 输出。
+ * `skill install` subcommand 测试 —— 仅 device-path 安装(远程 clawhub/github
+ * 已整体移除,不再有 --from 参数)+ path 校验 + dry-run / json 输出。
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -24,56 +24,33 @@ describe('skill install', () => {
     expect(skillMocks.installSkillInternal).not.toHaveBeenCalled();
   });
 
-  it('--from 非法值 → exit 2 + 列出合法值', async () => {
+  it('传 --from → exit 2(unknown flag,参数已整体移除)', async () => {
     const r = await runSkill('install foo --from bogus --path /tmp/foo');
     expect(r.exitCode).toBe(2);
-    expect(r.stderr).toContain('invalid --from "bogus"');
-    expect(r.stderr).toContain('device, clawhub, github');
+    expect(r.stderr).toContain('unknown flag: --from');
     expect(skillMocks.installSkillInternal).not.toHaveBeenCalled();
   });
 
-  it('default --from=device 缺 --path → exit 2', async () => {
+  it('缺 --path → exit 2', async () => {
     const r = await runSkill('install foo');
     expect(r.exitCode).toBe(2);
     expect(r.stderr).toContain('--path is required');
     expect(skillMocks.installSkillInternal).not.toHaveBeenCalled();
   });
 
-  it('--from github 缺 --path → exit 2', async () => {
-    const r = await runSkill('install foo --from github');
-    expect(r.exitCode).toBe(2);
-    expect(r.stderr).toContain('--path is required');
-  });
-
-  it('--from device --path 走 device-path', async () => {
+  it('--path 走 device-path', async () => {
     skillMocks.installSkillInternal.mockResolvedValue({
       success: true,
       message: 'ok',
       skill_name: 'foo',
     });
 
-    const r = await runSkill('install foo --from device --path /tmp/foo.zip');
+    const r = await runSkill('install foo --path /tmp/foo.zip');
     expect(r.exitCode).toBe(0);
     expect(skillMocks.installSkillInternal).toHaveBeenCalledWith(
       { skill_name: 'foo', path: '/tmp/foo.zip' },
       expect.anything(),
     );
-  });
-
-  it('--from clawhub --path 走 device-path(human output 显示 clawhub)', async () => {
-    skillMocks.installSkillInternal.mockResolvedValue({
-      success: true,
-      message: 'ok',
-      skill_name: 'foo',
-    });
-
-    const r = await runSkill('install foo --from clawhub --path /tmp/clawhub/foo');
-    expect(r.exitCode).toBe(0);
-    expect(skillMocks.installSkillInternal).toHaveBeenCalledWith(
-      { skill_name: 'foo', path: '/tmp/clawhub/foo' },
-      expect.anything(),
-    );
-    expect(r.stdout).toContain('from clawhub');
   });
 
   it('--dry-run 不调 kernel,人话输出', async () => {
@@ -92,7 +69,6 @@ describe('skill install', () => {
       dryRun: true,
       action: 'install',
       skill_name: 'foo',
-      from: 'device',
       path: '/tmp/foo',
     });
   });
@@ -124,7 +100,6 @@ describe('skill install', () => {
       success: true,
       action: 'install',
       skill_name: 'foo',
-      from: 'device',
     });
   });
 });

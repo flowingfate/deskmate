@@ -6,6 +6,8 @@ export const invokeSkills = skillsRenderToMain.provideInvokeForPreload(ipcRender
   'installSkillFromFilePath',
   'updateSkillFromDevice',
   'applySkillToAgents',
+  'scanForeignAgentSkills',
+  'importForeignAgentSkills',
   'getSkillMarkdown',
   'getSkillDirectoryContents',
   'getSkillFileContent',

@@ -2,19 +2,33 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { updateSkillFromDevice } from '../skillDeviceImporter';
-import { skillManager } from '../skillManager';
-vi.mock('../skillManager', async () => ({
-  skillManager: {
-    parseSkillMarkdown: vi.fn(),
-    validateSkillPackage: vi.fn(),
-    createTempDirectory: vi.fn(),
-    cleanupTempDirectory: vi.fn(),
-    checkSkillExists: vi.fn(),
-    determineVersion: vi.fn(),
-    installSkill: vi.fn(),
-    extractZip: vi.fn(),
-    parseSkillFileName: vi.fn(),
-  },
+import { parseSkillMarkdown } from '../skillMetadata';
+import { determineVersion, parseSkillFileName } from '../skillVersion';
+import { extractZip } from '../skillArchive';
+import {
+  validateSkillPackage,
+  createTempDirectory,
+  cleanupTempDirectory,
+  checkSkillExists,
+  installSkill,
+} from '../skillInstall';
+
+vi.mock('../skillMetadata', async () => ({
+  parseSkillMarkdown: vi.fn(),
+}));
+vi.mock('../skillVersion', async () => ({
+  determineVersion: vi.fn(),
+  parseSkillFileName: vi.fn(),
+}));
+vi.mock('../skillArchive', async () => ({
+  extractZip: vi.fn(),
+}));
+vi.mock('../skillInstall', async () => ({
+  validateSkillPackage: vi.fn(),
+  createTempDirectory: vi.fn(),
+  cleanupTempDirectory: vi.fn(),
+  checkSkillExists: vi.fn(),
+  installSkill: vi.fn(),
 }));
 
 describe('skillDeviceImporter.updateSkillFromDevice', () => {
@@ -24,10 +38,10 @@ describe('skillDeviceImporter.updateSkillFromDevice', () => {
     vi.clearAllMocks();
     tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-device-importer-test-'));
 
-    (skillManager.createTempDirectory as Mock).mockImplementation((prefix: string) => (
+    (createTempDirectory as Mock).mockImplementation((prefix: string) => (
       fs.mkdtempSync(path.join(tempRoot, `${prefix}-`))
     ));
-    (skillManager.parseSkillMarkdown as Mock).mockImplementation((content: string) => {
+    (parseSkillMarkdown as Mock).mockImplementation((content: string) => {
       const versionMatch = content.match(/version:\s*"?([^\n"]+)"?/);
 
       return {
@@ -38,11 +52,11 @@ describe('skillDeviceImporter.updateSkillFromDevice', () => {
         },
       };
     });
-    (skillManager.validateSkillPackage as Mock).mockReturnValue({ valid: true });
-    (skillManager.checkSkillExists as Mock).mockReturnValue({ name: 'pdf', version: '1.5.0' });
-    (skillManager.determineVersion as Mock).mockImplementation((metadataVersion?: string) => metadataVersion ?? '2.0.0');
-    (skillManager.installSkill as Mock).mockResolvedValue({ success: true });
-    (skillManager.cleanupTempDirectory as Mock).mockImplementation((dirPath: string) => {
+    (validateSkillPackage as Mock).mockReturnValue({ valid: true });
+    (checkSkillExists as Mock).mockReturnValue({ name: 'pdf', version: '1.5.0' });
+    (determineVersion as Mock).mockImplementation((metadataVersion?: string) => metadataVersion ?? '2.0.0');
+    (installSkill as Mock).mockResolvedValue({ success: true });
+    (cleanupTempDirectory as Mock).mockImplementation((dirPath: string) => {
       if (fs.existsSync(dirPath)) {
         fs.rmSync(dirPath, { recursive: true, force: true });
       }
@@ -73,7 +87,7 @@ describe('skillDeviceImporter.updateSkillFromDevice', () => {
   it('updates a skill from a folder path', async () => {
     const { skillDir } = createSkillFolder('2.3.0');
 
-    const result = await updateSkillFromDevice(skillDir, 'pdf');
+    const result = await updateSkillFromDevice(skillDir);
 
     expect(result).toEqual({
       success: true,
@@ -81,28 +95,40 @@ describe('skillDeviceImporter.updateSkillFromDevice', () => {
       skillVersion: '2.3.0',
       inputType: 'folder',
     });
-    expect(skillManager.installSkill).toHaveBeenCalledWith(
+    expect(installSkill).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'pdf',
         description: 'PDF skill',
         version: '2.3.0',
       }),
       expect.any(String),
-      true,
     );
-    const installPath = (skillManager.installSkill as Mock).mock.calls[0][1] as string;
+    const installPath = (installSkill as Mock).mock.calls[0][1] as string;
     expect(path.basename(installPath)).toBe('pdf');
+  });
+
+  it('rejects when no installed skill matches the package name', async () => {
+    (checkSkillExists as Mock).mockReturnValue(null);
+    const { skillDir } = createSkillFolder('2.3.0');
+
+    const result = await updateSkillFromDevice(skillDir);
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.stringContaining('No installed skill named "pdf" was found'),
+    });
+    expect(installSkill).not.toHaveBeenCalled();
   });
 
   it('rejects a direct SKILL.md path', async () => {
     const { skillMdPath } = createSkillFolder('2.4.0');
 
-    const result = await updateSkillFromDevice(skillMdPath, 'pdf');
+    const result = await updateSkillFromDevice(skillMdPath);
 
     expect(result).toEqual({
       success: false,
       error: expect.stringContaining('Unsupported skill input'),
     });
-    expect(skillManager.installSkill).not.toHaveBeenCalled();
+    expect(installSkill).not.toHaveBeenCalled();
   });
 });

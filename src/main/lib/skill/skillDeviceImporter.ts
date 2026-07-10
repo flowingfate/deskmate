@@ -6,7 +6,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { log } from '@main/log';
-import { skillManager } from './skillManager';
+import { parseSkillMarkdown } from './skillMetadata';
+import { parseSkillFileName, determineVersion } from './skillVersion';
+import { extractZip } from './skillArchive';
+import {
+  createTempDirectory,
+  cleanupTempDirectory,
+  validateSkillPackage,
+  checkSkillExists,
+  installSkill,
+} from './skillInstall';
 
 const logger = log;
 
@@ -89,7 +98,7 @@ function readSkillMetadata(skillDir: string): { metadata: { name: string; descri
 
   try {
     const skillMdContent = fs.readFileSync(entryPath, 'utf-8');
-    const { metadata, error } = skillManager.parseSkillMarkdown(skillMdContent);
+    const { metadata, error } = parseSkillMarkdown(skillMdContent);
     if (!metadata || error) {
       return { metadata: null, error: error || 'Failed to parse skill metadata' };
     }
@@ -130,7 +139,7 @@ async function prepareSkillSource(inputPath: string, tempPrefix: string): Promis
     throw new Error('Unsupported skill input. Expected a .zip, .skill, or skill folder.');
   }
 
-  const tempDir = skillManager.createTempDirectory(tempPrefix);
+  const tempDir = createTempDirectory(tempPrefix);
 
   try {
     if (inputType === 'folder') {
@@ -141,7 +150,7 @@ async function prepareSkillSource(inputPath: string, tempPrefix: string): Promis
       }
 
       const extractedDir = stageSkillDirectory(sourceRoot, tempDir, metadata.name);
-      const validation = skillManager.validateSkillPackage(extractedDir, metadata.name);
+      const validation = validateSkillPackage(extractedDir, metadata.name);
       if (!validation.valid) {
         throw new Error(validation.error || 'Skill validation failed');
       }
@@ -155,8 +164,8 @@ async function prepareSkillSource(inputPath: string, tempPrefix: string): Promis
     }
 
     const zipFileName = path.basename(inputPath);
-    const { version: parsedVersion } = skillManager.parseSkillFileName(zipFileName);
-    const rootDirName = await skillManager.extractZip(inputPath, tempDir);
+    const { version: parsedVersion } = parseSkillFileName(zipFileName);
+    const rootDirName = await extractZip(inputPath, tempDir);
     const initialExtractedDir = path.join(tempDir, rootDirName);
     const { metadata, error } = readSkillMetadata(initialExtractedDir);
     if (!metadata || error) {
@@ -176,7 +185,7 @@ async function prepareSkillSource(inputPath: string, tempPrefix: string): Promis
 
     normalizeSkillEntryFile(extractedDir);
 
-    const validation = skillManager.validateSkillPackage(extractedDir, metadata.name);
+    const validation = validateSkillPackage(extractedDir, metadata.name);
     if (!validation.valid) {
       throw new Error(validation.error || 'Skill validation failed');
     }
@@ -189,7 +198,7 @@ async function prepareSkillSource(inputPath: string, tempPrefix: string): Promis
       parsedVersion,
     };
   } catch (error) {
-    skillManager.cleanupTempDirectory(tempDir);
+    cleanupTempDirectory(tempDir);
     throw error;
   }
 }
@@ -209,7 +218,7 @@ export async function addSkillFromDevice(
     preparedSource = await prepareSkillSource(inputPath, 'device-skill');
     const { extractedDir, metadata, parsedVersion, inputType } = preparedSource;
 
-    const existingSkill = await skillManager.checkSkillExists(metadata.name);
+    const existingSkill = await checkSkillExists(metadata.name);
     if (existingSkill) {
       logger.info({ msg: `[SkillDeviceImporter] Found existing skill "${metadata.name}", requesting user confirmation` });
 
@@ -226,11 +235,7 @@ export async function addSkillFromDevice(
       }
     }
 
-    const finalVersion = skillManager.determineVersion(
-      metadata.version,
-      parsedVersion,
-      existingSkill
-    );
+    const finalVersion = determineVersion(metadata.version, parsedVersion, existingSkill);
     logger.info({ msg: `[SkillDeviceImporter] Using version: ${finalVersion} (metadata: ${metadata.version || 'none'}, filename: ${parsedVersion || 'none'})` });
 
     logger.info({ msg: '[SkillDeviceImporter] Installing skill...' });
@@ -241,11 +246,7 @@ export async function addSkillFromDevice(
       version: finalVersion,
     };
 
-    const installResult = await skillManager.installSkill(
-      skillConfig,
-      extractedDir,
-      !!existingSkill
-    );
+    const installResult = await installSkill(skillConfig, extractedDir);
 
     if (!installResult.success) {
       return { success: false, error: installResult.error };
@@ -265,66 +266,38 @@ export async function addSkillFromDevice(
     return { success: false, error: errorMessage };
   } finally {
     if (preparedSource?.tempDir) {
-      skillManager.cleanupTempDirectory(preparedSource.tempDir);
+      cleanupTempDirectory(preparedSource.tempDir);
     }
   }
 }
 
 /**
- * Update a skill from a local device (dedicated to update operations, includes skill name validation)
+ * Update a skill from a local device (auto-detects the target skill from the
+ * package's own SKILL.md name; caller no longer pre-selects which skill to
+ * update). Rejects when no installed skill matches that name — this is the
+ * *only* gate, replacing the old target-name-must-match-caller-context check.
  */
 export async function updateSkillFromDevice(
   inputPath: string,
-  targetSkillName: string,
-  validateSkillNameCallback?: (detectedSkillName: string) => Promise<boolean>,
-  confirmCallback?: (skillName: string) => Promise<boolean>
 ): Promise<AddSkillFromDeviceResult> {
   let preparedSource: PreparedSkillSource | null = null;
 
   try {
-    logger.info({ msg: `[SkillDeviceImporter] Updating skill from device: ${inputPath}, target: ${targetSkillName}` });
+    logger.info({ msg: `[SkillDeviceImporter] Updating skill from device: ${inputPath}` });
 
     preparedSource = await prepareSkillSource(inputPath, 'update-skill');
     const { extractedDir, metadata, parsedVersion, inputType } = preparedSource;
 
-    if (validateSkillNameCallback) {
-      const nameValidationResult = await validateSkillNameCallback(metadata.name);
-      if (!nameValidationResult) {
-        return {
-          success: false,
-          error: `Validation failed: The selected skill artifact contains skill "${metadata.name}" but you are trying to update skill "${targetSkillName}". Please select the correct artifact or folder for skill "${targetSkillName}".`
-        };
-      }
-    } else {
-      if (metadata.name !== targetSkillName) {
-        return {
-          success: false,
-          error: `Validation failed: The selected skill artifact contains skill "${metadata.name}" but you are trying to update skill "${targetSkillName}". Please select the correct artifact or folder for skill "${targetSkillName}".`
-        };
-      }
-    }
-
-    const existingSkill = await skillManager.checkSkillExists(metadata.name);
+    const existingSkill = await checkSkillExists(metadata.name);
 
     if (!existingSkill) {
       return {
         success: false,
-        error: `Cannot update skill "${metadata.name}" because it does not exist. Use "Add from Device" to install it first.`
+        error: `No installed skill named "${metadata.name}" was found. Use "Add from Device" to install a new skill instead.`
       };
     }
 
-    if (confirmCallback) {
-      const userConfirmed = await confirmCallback(metadata.name);
-      if (!userConfirmed) {
-        return { success: false, error: 'User cancelled the operation' };
-      }
-    }
-
-    const finalVersion = skillManager.determineVersion(
-      metadata.version,
-      parsedVersion,
-      existingSkill
-    );
+    const finalVersion = determineVersion(metadata.version, parsedVersion, existingSkill);
     logger.info({ msg: `[SkillDeviceImporter] Using version: ${finalVersion} (metadata: ${metadata.version || 'none'}, filename: ${parsedVersion || 'none'})` });
 
     logger.info({ msg: '[SkillDeviceImporter] Updating skill...' });
@@ -335,11 +308,7 @@ export async function updateSkillFromDevice(
       version: finalVersion,
     };
 
-    const installResult = await skillManager.installSkill(
-      skillConfig,
-      extractedDir,
-      true
-    );
+    const installResult = await installSkill(skillConfig, extractedDir);
 
     if (!installResult.success) {
       return { success: false, error: installResult.error };
@@ -353,7 +322,7 @@ export async function updateSkillFromDevice(
     return { success: false, error: errorMessage };
   } finally {
     if (preparedSource?.tempDir) {
-      skillManager.cleanupTempDirectory(preparedSource.tempDir);
+      cleanupTempDirectory(preparedSource.tempDir);
     }
   }
 }

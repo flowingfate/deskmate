@@ -1,58 +1,42 @@
 /**
- * `skill search <query>` / `skill search --installed [<query>]`
+ * `skill search <query>`
  *
- * 只读 lookup,跨 3 个 source 合并 + 去重:installed / clawhub / github。
- * 单源失败被收敛进 warnings,不影响其它源的结果。
+ * 只读 lookup —— 按关键字搜索本地已装 skill,并标注该 skill 是否已绑定到
+ * 当前 agent(`applied_to_current_agent`)。
  *
- * 输出明确标注 source,LLM 看到 `clawhub` / `github` 时应当用
- * `local_folder` + `--from <source> --path` 走 device-path install。
- *
- * `--installed`:窄化为本地已装 skill 的过滤(等价 `skill list` 但加关键字)。
- * 不传 query + `--installed` 等价 `skill list`。
+ * 与 `skill list` 的区别:`list` 是零 query 的纯枚举,不带绑定标注;
+ * `search <query>` 要求关键字,换来"这个 skill 是否已经能被当前 agent
+ * 调用"这一额外信息。零 query 场景请直接用 `skill list`。
  */
 
 import {
   searchLibraryInternal,
   type SearchLibraryResult,
 } from './kernel/searchLibrary';
-import {
-  listSkillsInternal,
-} from './kernel/listSkills';
 
 import { COMMON_FLAGS, isHelp, isJson } from '../../../_commonFlags';
 import { parseFlags, type FlagSpec } from '../../../flags';
 import type { AppCmdContext } from '../../../types';
 
 const HELP = `USAGE
-  skill search <query>           Search across 3 sources (installed / clawhub / github).
-  skill search --installed       List installed skills (optionally filtered by query).
+  skill search <query>
 
 DESCRIPTION
-  Read-only discovery. The cross-source path queries 3 catalogs in parallel
-  and returns the merged, deduplicated list (priority: installed > clawhub
-  > github). Each result is tagged with its source — always mention the
-  source when answering the user.
-
-  For clawhub / github hits, the result includes a "local_folder" you can
-  pass to "skill install <name> --from clawhub|github --path <local_folder>"
-  to install.
+  Read-only keyword search over installed skills. Unlike "skill list"
+  (which enumerates everything with no filter), this also reports
+  whether each match is already bound to the current agent
+  ("applied_to_current_agent"). Use "skill list" for a zero-query dump.
 
 OPTIONS
-  --installed   Narrow to already-installed skills (or list all when no query).
   --json        Output the raw result envelope as JSON.
   --help, -h    Show this help.
 
 EXAMPLES
   skill search pdf
   skill search "office docs" --json
-  skill search --installed
-  skill search --installed pdf
 `;
 
-const FLAGS: FlagSpec[] = [
-  ...COMMON_FLAGS,
-  { name: 'installed', type: 'boolean' },
-];
+const FLAGS: FlagSpec[] = [...COMMON_FLAGS];
 
 export async function runSearch(argv: string[], ctx: AppCmdContext): Promise<void> {
   const parsed = parseFlags(argv, FLAGS);
@@ -65,69 +49,9 @@ export async function runSearch(argv: string[], ctx: AppCmdContext): Promise<voi
     ctx.print(HELP);
     return;
   }
-
-  const installed = parsed.flags.installed === true;
-
-  if (installed) {
-    // --installed:走 listSkillsInternal,再按可选 query 过滤
-    if (parsed.positional.length > 1) {
-      ctx.printErr(
-        `skill search --installed: too many positional args (${parsed.positional.length}); accept 0 or 1 query.\n`,
-      );
-      ctx.setExitCode(2);
-      return;
-    }
-    const list = await listSkillsInternal({ signal: ctx.signal });
-    if (!list.success) {
-      if (isJson(parsed.flags)) {
-        ctx.print(JSON.stringify(list, null, 2) + '\n');
-        ctx.setExitCode(1);
-        return;
-      }
-      ctx.printErr(`skill search --installed: ${list.message}\n`);
-      ctx.setExitCode(1);
-      return;
-    }
-    const queryRaw = parsed.positional[0]?.trim().toLowerCase();
-    const filtered = queryRaw
-      ? list.skills.filter(
-          (s) =>
-            s.name.toLowerCase().includes(queryRaw) ||
-            s.description.toLowerCase().includes(queryRaw),
-        )
-      : list.skills;
-
-    if (isJson(parsed.flags)) {
-      ctx.print(
-        JSON.stringify(
-          { success: true, source: 'installed', count: filtered.length, skills: filtered },
-          null,
-          2,
-        ) + '\n',
-      );
-      return;
-    }
-    if (filtered.length === 0) {
-      ctx.print(
-        queryRaw
-          ? `No installed skills match "${queryRaw}".\n`
-          : 'No skills installed.\n',
-      );
-      return;
-    }
-    const lines: string[] = [`Installed skills (${filtered.length}):`];
-    for (const s of filtered) {
-      lines.push(`  ${s.name}  (v${s.version})`);
-      if (s.description) lines.push(`    ${s.description}`);
-    }
-    ctx.print(lines.join('\n') + '\n');
-    return;
-  }
-
-  // 跨 4 源搜索路径
   if (parsed.positional.length === 0) {
     ctx.printErr(
-      'skill search: missing <query>. Provide a keyword or use --installed.\n',
+      'skill search: missing <query>. Use "skill list" to enumerate all installed skills.\n',
     );
     ctx.setExitCode(2);
     return;
@@ -165,9 +89,8 @@ export async function runSearch(argv: string[], ctx: AppCmdContext): Promise<voi
   for (const item of result.results) {
     const meta = item.metadata;
     const versionPart = meta.version ? ` v${meta.version}` : '';
-    lines.push(`  [${item.source}] ${meta.name}${versionPart}`);
+    lines.push(`  ${meta.name}${versionPart}`);
     if (meta.description) lines.push(`    ${meta.description}`);
-    if (meta.local_folder) lines.push(`    local_folder: ${meta.local_folder}`);
     if (meta.applied_to_current_agent !== undefined) {
       lines.push(`    applied_to_current_agent: ${meta.applied_to_current_agent ? 'yes' : 'no'}`);
     }

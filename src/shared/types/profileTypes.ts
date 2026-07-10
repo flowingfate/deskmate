@@ -8,6 +8,38 @@
 import type { ThinkingLevel } from './thinkingLevel';
 
 /**
+ * 支持导入的外部 Agent skills 来源 registry id 枚举。
+ * 权威运行时清单是 `main/lib/skill/foreignAgentSkillScanner.ts` 的 `FOREIGN_SKILL_SOURCES`
+ * （其数组按 `ForeignSkillSourceDefinition[]` 定型，新增来源时若 id 不在本枚举内会编译失败）。
+ */
+export type ForeignSkillSourceId =
+  | 'claude-code'
+  | 'codex'
+  | 'cursor'
+  | 'agents'
+  | 'universal-agents'
+  | 'opencode'
+  | 'gemini-cli'
+  | 'copilot';
+
+/**
+ * 外部 Agent 导入 skill 的来源溯源。仅外部 Agent 导入会写入（设备/zip 导入不记录）。
+ * `kind` 区分 link/copy 安装形态；字段全部必填，与 `importForeignAgentSkills` 写入处一致。
+ */
+export type ForeignSkillSourceKind = 'link' | 'copy';
+
+export interface ForeignSkillSource {
+  kind: ForeignSkillSourceKind;
+  /** 来源 Agent 的 registry id，如 `claude-code`。 */
+  id: ForeignSkillSourceId;
+  /** 来源 Agent 的展示名，如 `Claude Code`。 */
+  label: string;
+  /** 外部源目录绝对路径（仅本地 UI / 管理用，不进入 LLM prompt）。 */
+  originalPath: string;
+  importedAt: number;
+}
+
+/**
  * Skill configuration
  */
 export interface SkillConfig {
@@ -17,6 +49,53 @@ export interface SkillConfig {
   description: string;
   /** Skill version */
   version: string;
+  /** 外部 Agent 导入的来源溯源；仅 foreign-agent 导入的 skill 有此字段。 */
+  foreign?: ForeignSkillSource;
+}
+
+/**
+ * Agent 对单个 skill 的启用档位。缺席（skill 不在 `SkillBindings` map 中）= 完全禁用（第三档）。
+ *   - `'live'`：元数据始终注入 system prompt。
+ *   - `'lazy'`：元数据不进入 system prompt；用户显式引用 URI 后，模型可按稳定指引自行读取。
+ */
+export type SkillTier = 'live' | 'lazy';
+
+/**
+ * Skill 启用档位映射：key = skill name，value = 档位。单一真值，结构上保证
+ * 每个 skill 至多一个档位。落 AGENT.md front-matter `skills`。
+ */
+export type SkillBindings = Record<string, SkillTier>;
+
+/** `skills` 映射中档位为 `'live'` 的 skill 名字（第一档，稳定顺序）。 */
+export function liveSkillNames(bindings: SkillBindings | undefined): string[] {
+  if (!bindings) return [];
+  return Object.keys(bindings).filter((name) => bindings[name] === 'live');
+}
+
+/** `skills` 映射中档位为 `'lazy'` 的 skill 名字（第二档，稳定顺序）。 */
+export function lazySkillNames(bindings: SkillBindings | undefined): string[] {
+  if (!bindings) return [];
+  return Object.keys(bindings).filter((name) => bindings[name] === 'lazy');
+}
+
+/** `skills` 映射中的全部 skill 名字（第一档 ∪ 第二档，稳定顺序）。 */
+export function boundSkillNames(bindings: SkillBindings | undefined): string[] {
+  if (!bindings) return [];
+  return Object.keys(bindings);
+}
+
+/**
+ * 把一个 skill 设为指定档位（不可变；返回新 map）。`tier === undefined` ⇒ 移除该 key（第三档）。
+ */
+export function setSkillTier(
+  bindings: SkillBindings | undefined,
+  name: string,
+  tier: SkillTier | undefined,
+): SkillBindings {
+  const next: SkillBindings = { ...(bindings ?? {}) };
+  if (tier === undefined) delete next[name];
+  else next[name] = tier;
+  return next;
 }
 
 /**
@@ -490,8 +569,8 @@ export interface AgentPersona {
    * 字段名沿用持久化 schema (`AGENT.md` front-matter `thinkingLevel`)。
    */
   thinkingLevel?: ThinkingLevel | null;
-  /** Skills name list used by the Agent */
-  skills?: string[];
+  /** Skill 启用档位映射（第一/二/三档）；语义同 `AgentMarkdownFrontBase.skills`。 */
+  skills?: SkillBindings;
   /** Sub-agent name list referenced by the Agent */
   sub_agents?: string[];
 }
@@ -553,8 +632,6 @@ export interface Profile {
   primaryAgent?: string;
   /** MCP server configuration */
   mcp_servers: McpServerConfig[];
-  /** Skills configuration list */
-  skills?: SkillConfig[];
   /**
    * Sub-Agent lightweight index (after file-based refactoring)
    * Full configuration is stored in agents/{name}/AGENT.md files,
@@ -613,7 +690,7 @@ export const DEFAULT_AGENT_PERSONA: AgentPersona = {
   mcp_servers: [],
   tools: [],
   system_prompt: "You are a highly capable AI assistant designed to help users with a wide variety of tasks. Your core capabilities include:\n\n**Communication & Analysis:**\n- Provide clear, accurate, and helpful responses to questions\n- Analyze complex problems and break them down into manageable parts\n- Adapt your communication style to match the user's needs and expertise level\n\n**Technical Assistance:**\n- Help with programming, debugging, and code review across multiple languages\n- Assist with data analysis, research, and information synthesis\n- Provide guidance on best practices and technical decision-making\n\n**Creative & Productive Support:**\n- Generate creative content including writing, brainstorming, and ideation\n- Help with planning, organization, and project management\n- Assist with document creation, editing, and formatting\n\n**Interaction Guidelines:**\n- Always strive for accuracy and cite sources when appropriate\n- Ask clarifying questions when requirements are unclear\n- Provide step-by-step explanations for complex procedures\n- Respect user privacy and maintain confidentiality\n- Be honest about limitations and uncertainties\n\n**Tools & Integration:**\n- Leverage available MCP servers and tools to enhance capabilities\n- Use web browsing, file operations, and data processing tools when beneficial\n- Integrate multiple information sources to provide comprehensive responses\n\nYour goal is to be a reliable, knowledgeable, and adaptable assistant that helps users accomplish their objectives efficiently and effectively.",
-  skills: ['skill-creator'],
+  skills: {},
 };
 
 /**

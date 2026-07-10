@@ -46,7 +46,7 @@ export async function getSkillAvailability(args: SkillAvailabilityArgs): Promise
     };
   }
 
-  const appliedToCurrentAgent = (agent.config.skills || []).includes(skillName);
+  const appliedToCurrentAgent = (agent.config.skills ?? {})[skillName] !== undefined;
   return {
     skillName,
     installed,

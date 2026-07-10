@@ -1,31 +1,23 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { isBuiltinSkill } from '../../../shared/constants/builtinSkills';
 import { Profiles } from '../../persist';
-import { PERSIST_PATH } from '@shared/persist/path';
-import { getAppRoot } from '@main/persist/lib/root';
 
 export interface DeleteInstalledSkillResult {
   success: boolean;
   skillName: string;
-  skillPath?: string;
-  removedFromDisk: boolean;
-  error?: 'BUILTIN_SKILL' | 'DELETE_PROFILE_FAILED' | 'DELETE_FILES_FAILED';
+  error?: 'DELETE_PROFILE_FAILED' | 'DELETE_FILES_FAILED';
 }
 
+/**
+ * 卸载已安装 skill：从 profile skills 索引移除并删盘。
+ *
+ * 删盘由 `Skills.remove()` 独家负责（走 `removeDirIfExists` = `fs.rm(recursive, force)`）。
+ * 对 linked skill（目录是指向外部的 symlink），`fs.rm` 只删链接、**不穿透**外部目标目录
+ * （已实测；Node recursive rm 不跟随 symlink），故不会误伤 `~/.claude/skills/foo` 等源目录。
+ * 本函数只负责错误映射，不重复做文件删除。
+ */
 export async function deleteInstalledSkill(
   skillName: string,
 ): Promise<DeleteInstalledSkillResult> {
   const normalizedSkillName = skillName.trim();
-
-  if (isBuiltinSkill(normalizedSkillName)) {
-    return {
-      success: false,
-      skillName: normalizedSkillName,
-      removedFromDisk: false,
-      error: 'BUILTIN_SKILL',
-    };
-  }
 
   let profile;
   try {
@@ -34,52 +26,19 @@ export async function deleteInstalledSkill(
     return {
       success: false,
       skillName: normalizedSkillName,
-      removedFromDisk: false,
       error: 'DELETE_FILES_FAILED',
     };
   }
 
-  let deletedFromProfile = true;
   try {
     await profile.skills.remove(normalizedSkillName);
   } catch {
-    deletedFromProfile = false;
-  }
-  if (!deletedFromProfile) {
     return {
       success: false,
       skillName: normalizedSkillName,
-      removedFromDisk: false,
       error: 'DELETE_PROFILE_FAILED',
     };
   }
 
-  const skillPath = path.join(PERSIST_PATH.skillsDir(getAppRoot(), profile.id), normalizedSkillName);
-
-  try {
-    const existedOnDisk = fs.existsSync(skillPath);
-    if (existedOnDisk) {
-      const stat = fs.lstatSync(skillPath);
-      if (stat.isSymbolicLink()) {
-        fs.unlinkSync(skillPath);
-      } else {
-        fs.rmSync(skillPath, { recursive: true, force: true });
-      }
-    }
-
-    return {
-      success: true,
-      skillName: normalizedSkillName,
-      skillPath,
-      removedFromDisk: existedOnDisk,
-    };
-  } catch {
-    return {
-      success: false,
-      skillName: normalizedSkillName,
-      skillPath,
-      removedFromDisk: false,
-      error: 'DELETE_FILES_FAILED',
-    };
-  }
+  return { success: true, skillName: normalizedSkillName };
 }

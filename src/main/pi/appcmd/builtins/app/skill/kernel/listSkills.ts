@@ -1,7 +1,7 @@
 /**
  * Skill "list" 内核 —— 列出 active profile 内所有已安装 skill。
  *
- * 角色:被 `appcmd/builtins/app/skill/list.ts` 与 `search.ts --installed` 复用。
+ * 角色:被 `appcmd/builtins/app/skill/list.ts` 复用。
  *
  * 与 `agent/kernel/listAgents.ts` 同设计:envelope 包含 name + 简要元信息,
  * 让 LLM 一次拿全(version / source / description),避免后续 N 次 status 调用。

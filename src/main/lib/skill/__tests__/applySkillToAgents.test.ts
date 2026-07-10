@@ -1,4 +1,6 @@
+import type { Mock } from 'vitest';
 import { applySkillToAgents } from '../applySkillToAgents';
+import type { SkillBindings } from '@shared/types/profileTypes';
 
 const mockActive = vi.fn();
 
@@ -6,15 +8,26 @@ vi.mock('../../../persist', () => ({
   Profiles: { get: () => ({ active: () => mockActive() }) },
 }));
 
-function makeAgent(id: string, name: string, skills: string[]) {
-  const config: any = { name, skills };
+interface TestAgentConfig {
+  name: string;
+  skills: SkillBindings;
+}
+interface TestAgent {
+  id: string;
+  config: TestAgentConfig;
+  patchFront: Mock;
+  persist: Mock;
+}
+
+function makeAgent(id: string, name: string, skills: SkillBindings): TestAgent {
+  const config: TestAgentConfig = { name, skills };
   // Mirror the real Agent.patchFront: assign the diff to config, then persist.
   // Source applySkillToAgents only awaits agent.patchFront() and relies on its
   // internal persist call for durability.
-  const agent: any = {
+  const agent: TestAgent = {
     id,
     config,
-    patchFront: vi.fn(async (p: any) => {
+    patchFront: vi.fn(async (p: Partial<TestAgentConfig>) => {
       Object.assign(config, p);
       await agent.persist();
     }),
@@ -29,11 +42,11 @@ describe('applySkillToAgents', () => {
   });
 
   it('applies a skill to matching targets', async () => {
-    const a1 = makeAgent('chat-1', 'Deck Builder', []);
-    const a2 = makeAgent('chat-2', 'Designer', []);
-    const a3 = makeAgent('chat-3', 'Reviewer', ['pptx']);
+    const a1 = makeAgent('chat-1', 'Deck Builder', {});
+    const a2 = makeAgent('chat-2', 'Designer', {});
+    const a3 = makeAgent('chat-3', 'Reviewer', { pptx: 'live' });
 
-    const agentsById: Record<string, any> = { 'chat-1': a1, 'chat-2': a2, 'chat-3': a3 };
+    const agentsById: Record<string, TestAgent> = { 'chat-1': a1, 'chat-2': a2, 'chat-3': a3 };
     mockActive.mockResolvedValue({
       skills: {
         get: (n: string) => (n === 'pptx' ? { name: 'pptx' } : undefined),
@@ -56,9 +69,9 @@ describe('applySkillToAgents', () => {
     expect(result.success).toBe(true);
     expect(result.appliedCount).toBe(2);
     expect(result.alreadyAppliedCount).toBe(1);
-    expect(a1.patchFront).toHaveBeenCalledWith({ skills: ['pptx'] });
+    expect(a1.patchFront).toHaveBeenCalledWith({ skills: { pptx: 'live' } });
     expect(a1.persist).toHaveBeenCalled();
-    expect(a2.patchFront).toHaveBeenCalledWith({ skills: ['pptx'] });
+    expect(a2.patchFront).toHaveBeenCalledWith({ skills: { pptx: 'live' } });
     expect(a2.persist).toHaveBeenCalled();
     expect(a3.patchFront).not.toHaveBeenCalled();
   });

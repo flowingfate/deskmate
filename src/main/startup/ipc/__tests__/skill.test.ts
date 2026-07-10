@@ -109,7 +109,8 @@ describe('startup/ipc/skill Windows selection flow', () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
   }
 
-  it('uses File mode with .zip/.skill-only filters and forwards selected path for add flow', async () => {
+  it('add flow: Windows File choice opens file-only selector with .zip/.skill filters', async () => {
+    mockShowMessageBox.mockResolvedValue({ response: 1 });
     mockShowOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:/tmp/demo.skill'] });
 
     const registerSkillIpc = (await import('../skill')).default;
@@ -119,10 +120,10 @@ describe('startup/ipc/skill Windows selection flow', () => {
 
     setPlatformWin32();
     const handler = getHandler('skills:addSkillFromDevice');
-    const result = await handler({}, undefined, { requestSource: 'settings', selectionMode: 'artifact' });
+    const result = await handler({}, undefined, { requestSource: 'settings' });
 
     expect(result.success).toBe(true);
-    expect(mockShowMessageBox).not.toHaveBeenCalled();
+    expect(mockShowMessageBox).toHaveBeenCalled();
     expect(mockShowOpenDialog).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -130,11 +131,6 @@ describe('startup/ipc/skill Windows selection flow', () => {
         filters: [{ name: 'Skill Artifact', extensions: ['zip', 'skill'] }],
       }),
     );
-    const fileDialogOptions = mockShowOpenDialog.mock.calls[0][1];
-    expect(fileDialogOptions.filters).toEqual([
-      { name: 'Skill Artifact', extensions: ['zip', 'skill'] },
-    ]);
-
     expect(mockInstallAndActivateSkill).toHaveBeenCalledWith(
       expect.objectContaining({
         source: { type: 'device-path', value: 'C:/tmp/demo.skill' },
@@ -159,7 +155,8 @@ describe('startup/ipc/skill Windows selection flow', () => {
     expect(mockInstallAndActivateSkill).not.toHaveBeenCalled();
   });
 
-  it('uses folder-only selector when add flow explicitly requests folder mode', async () => {
+  it('add flow: Windows Folder choice opens folder-only selector', async () => {
+    mockShowMessageBox.mockResolvedValue({ response: 2 });
     mockShowOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:/tmp/skill-folder'] });
 
     const registerSkillIpc = (await import('../skill')).default;
@@ -169,10 +166,10 @@ describe('startup/ipc/skill Windows selection flow', () => {
 
     setPlatformWin32();
     const handler = getHandler('skills:addSkillFromDevice');
-    const result = await handler({}, undefined, { requestSource: 'settings', selectionMode: 'folder' });
+    const result = await handler({}, undefined, { requestSource: 'settings' });
 
     expect(result.success).toBe(true);
-    expect(mockShowMessageBox).not.toHaveBeenCalled();
+    expect(mockShowMessageBox).toHaveBeenCalled();
     expect(mockShowOpenDialog).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -183,6 +180,34 @@ describe('startup/ipc/skill Windows selection flow', () => {
     expect(mockInstallAndActivateSkill).toHaveBeenCalledWith(
       expect.objectContaining({
         source: { type: 'device-path', value: 'C:/tmp/skill-folder' },
+      }),
+    );
+  });
+
+  it('add flow: non-Windows uses a single merged file+folder dialog (no type prompt)', async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    mockShowOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['/tmp/demo.skill'] });
+
+    const registerSkillIpc = (await import('../skill')).default;
+    registerSkillIpc({
+          mainWindow: {} as any,
+        } as any);
+
+    const handler = getHandler('skills:addSkillFromDevice');
+    const result = await handler({}, undefined, { requestSource: 'settings' });
+
+    expect(result.success).toBe(true);
+    expect(mockShowMessageBox).not.toHaveBeenCalled();
+    expect(mockShowOpenDialog).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        properties: ['openFile', 'openDirectory'],
+        filters: [{ name: 'Skill Artifact', extensions: ['zip', 'skill'] }],
+      }),
+    );
+    expect(mockInstallAndActivateSkill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: { type: 'device-path', value: '/tmp/demo.skill' },
       }),
     );
   });
@@ -198,7 +223,7 @@ describe('startup/ipc/skill Windows selection flow', () => {
 
     setPlatformWin32();
     const handler = getHandler('skills:updateSkillFromDevice');
-    const result = await handler({}, 'sample-skill');
+    const result = await handler({});
 
     expect(result.success).toBe(true);
     expect(mockShowMessageBox).toHaveBeenCalledWith(
@@ -214,11 +239,6 @@ describe('startup/ipc/skill Windows selection flow', () => {
         properties: ['openDirectory'],
       }),
     );
-    expect(mockUpdateSkillFromDevice).toHaveBeenCalledWith(
-      'C:/tmp/skill-folder',
-      'sample-skill',
-      expect.any(Function),
-      expect.any(Function),
-    );
+    expect(mockUpdateSkillFromDevice).toHaveBeenCalledWith('C:/tmp/skill-folder');
   });
 });

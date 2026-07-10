@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-30 -->
+<!-- Last verified: 2026-07-13 -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -174,6 +174,8 @@ async function loadImpl() {
 - **取消信号一路传递。** 网络 I/O / spawn 子进程 / Playwright page 必须把
   `ctx.signal` 透传到底层 `fetch` / `spawn` / `page.*`。漏传会让取消挂起整个
   上游超时(30–60s),阻塞用户发送新消息。
+- **`shell` 的裸 skill cwd 特例**：`skill://<name>` 在 `read` / command / args 仍指向 `SKILL.md`，仅在 `cwd` 位置映射为 skill 根目录；带子路径的 URI 保持精确解析，文件路径不得静默降级到父目录。
+- `find` 的 `workspaceRoot` 不可为文件系统根目录。其 10 秒超时会 abort 同一个传给 workspace search 的 signal，后者必须终止 `rg`；不得以 `Promise.race` 单独返回而让扫描继续在后台运行。
 - **IPC `tools` 通道是 dev/debug 入口**,chat 主链路**不走 IPC** —— `pi/tool.ts`
   直接在主进程内调 `tools.execute(name, args, ctx)`,IPC 只服务 UI 列表
   (`getAll` / `has`)与偶尔的 debug `execute`。
@@ -200,4 +202,5 @@ async function loadImpl() {
   `installSkill` / `uninstallSkill` / `bindSkill` / `unbindSkill` /
   `listSkills` / `getSkillStatus` / `searchLibrary` 业务内核调底层 helper
   (`installAndActivateSkill` / `deleteInstalledSkill` / `applySkillToAgents`
-  / `removeSkillsFromAgents` / `searchClawHubSkills` / `searchGitHubSkills`)。
+  / `removeSkillsFromAgents`)。远程 marketplace 搜索(ClawHub/GitHub)已于
+  2026-07-11 整体移除,`searchLibrary` 现在只查本地 `profile.skills`。

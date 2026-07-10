@@ -111,7 +111,7 @@ const PARAMETERS = jsonSchema({
 /** 工具本体逻辑;签名供测试 / dev 调用。 */
 export async function findInternal(
   args: FindToolArgs,
-  _opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal },
 ): Promise<FindToolResult> {
 
   // 1. Validate arguments
@@ -138,6 +138,14 @@ export async function findInternal(
 
   try {
     // 3. Build the search query
+    const aborter = new AbortController();
+    const abortFromCaller = () => aborter.abort();
+    if (opts?.signal?.aborted) {
+      aborter.abort();
+    } else {
+      opts?.signal?.addEventListener('abort', abortFromCaller, { once: true });
+    }
+
     const query: IFileSearchQuery = {
       folder: workspaceRoot,
       pattern,
@@ -146,20 +154,27 @@ export async function findInternal(
       searchTarget,
       includePattern: args.includePattern,
       excludePattern: args.excludePattern,
+      signal: aborter.signal,
     };
 
-    // 4. Execute the search (using WorkspaceWatcher)
+    // A timeout only protects the app when the search engine receives the same
+    // cancellation signal and terminates its child process.
     const watcher = getWorkspaceWatcher();
-
-    // Set timeout
-    const searchPromise = watcher.searchFiles(query);
     let timeoutId: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Search timeout')), SEARCH_TIMEOUT_MS);
+      timeoutId = setTimeout(() => {
+        aborter.abort();
+        reject(new Error('Search timeout'));
+      }, SEARCH_TIMEOUT_MS);
     });
 
-    const searchResult = await Promise.race([searchPromise, timeoutPromise]);
-    clearTimeout(timeoutId);
+    const searchResult = await Promise.race([
+      watcher.searchFiles(query),
+      timeoutPromise,
+    ]).finally(() => {
+      clearTimeout(timeoutId);
+      opts?.signal?.removeEventListener('abort', abortFromCaller);
+    });
 
     // 5. Process search results
     const results: FindFileResult[] = searchResult.results.map(result => ({
@@ -219,6 +234,11 @@ function validateArgs(args: FindToolArgs): { isValid: boolean; error?: string } 
   // Validate that workspaceRoot is an absolute path
   if (!path.isAbsolute(args.workspaceRoot)) {
     return { isValid: false, error: 'workspaceRoot must be an absolute path' };
+  }
+
+  const normalizedRoot = path.resolve(args.workspaceRoot);
+  if (normalizedRoot === path.parse(normalizedRoot).root) {
+    return { isValid: false, error: 'workspaceRoot must not be a filesystem root' };
   }
 
   // Validate that workspaceRoot exists

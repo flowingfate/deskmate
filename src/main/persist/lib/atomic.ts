@@ -85,11 +85,28 @@ export async function listFiles(dir: string): Promise<string[]> {
   }
 }
 
-/** 列出目录下的子目录名。目录不存在返回 []。 */
-export async function listDirs(dir: string): Promise<string[]> {
+/**
+ * 列出目录下的子目录名。目录不存在返回 []。
+ * `followSymlinks` 打开时，指向目录的软链接也计入（用于 skills 的 linked skill —— 外部 agent
+ * 目录以 symlink 落在 skills/ 下，默认 `isDirectory()` 对 symlink 返回 false 会漏掉它们）。
+ */
+export async function listDirs(
+  dir: string,
+  followSymlinks: boolean = false,
+): Promise<string[]> {
   try {
     const entries = await fsp.readdir(dir, { withFileTypes: true });
-    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    const names: string[] = [];
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        names.push(e.name);
+      } else if (followSymlinks && e.isSymbolicLink()) {
+        // 跟随软链接 stat 目标；断链或指向文件则跳过。
+        const target = await fsp.stat(path.join(dir, e.name)).catch(() => null);
+        if (target?.isDirectory()) names.push(e.name);
+      }
+    }
+    return names;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw err;

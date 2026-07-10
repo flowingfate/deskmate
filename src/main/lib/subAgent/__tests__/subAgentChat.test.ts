@@ -25,7 +25,7 @@ vi.mock('../../mcpRuntime', async () => ({
   mcpClientManager: {},
 }));
 
-vi.mock('../../skill/skillManager', async () => ({
+vi.mock('../../skill', async () => ({
   skillManager: {
     getSkillMetadata: vi.fn(() => ({ metadata: { description: 'mock skill', version: '1.0' } })),
   },

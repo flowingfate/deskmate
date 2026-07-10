@@ -7,7 +7,7 @@
  */
 
 import { Profiles } from '@main/persist';
-import type { SkillAgentTarget } from '@main/lib/skill/applySkillToAgents';
+import type { SkillAgentTarget } from '@main/lib/skill';
 
 /**
  * 校验 skill name(或 query 字符串)。subcommand 拿到 positional[0] 后立即
@@ -28,19 +28,27 @@ export function validateName(
 }
 
 /**
+ * trim + 去重 + 过滤空串,返回裸数组。命令层校验版(`normalizeSkillNames`)与
+ * kernel 层都复用它,避免同一段 map/Set/filter 逻辑三处漂移。
+ */
+export function dedupeSkillNames(values: readonly string[] | undefined): string[] {
+  return Array.from(
+    new Set(
+      (values ?? [])
+        .map((v) => (typeof v === 'string' ? v.trim() : ''))
+        .filter((v): v is string => !!v),
+    ),
+  );
+}
+
+/**
  * 校验一个或多个 skill name(positional 多个,或 `--skill-name` 重复)。
  * 去重 + trim 过滤,空集返回 error。
  */
 export function normalizeSkillNames(
   values: readonly string[],
 ): { ok: true; names: string[] } | { ok: false; error: string } {
-  const names = Array.from(
-    new Set(
-      values
-        .map((v) => (typeof v === 'string' ? v.trim() : ''))
-        .filter((v): v is string => !!v),
-    ),
-  );
+  const names = dedupeSkillNames(values);
   if (names.length === 0) {
     return { ok: false, error: 'skill name list is empty after trim/dedup.' };
   }

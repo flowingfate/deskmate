@@ -101,9 +101,11 @@ const SkillFileViewer: React.FC<SkillFileViewerProps> = ({
 }) => {
   if (!fileInfo) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-sm text-sc-muted-foreground">
-        <FileText className="size-10 opacity-40" />
-        <span>No file selected</span>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-sc-muted text-sc-muted-foreground">
+          <FileText className="size-6" />
+        </span>
+        <span className="text-sm text-sc-muted-foreground">No file selected</span>
       </div>
     )
   }

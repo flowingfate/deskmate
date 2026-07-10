@@ -15,6 +15,8 @@ export interface IFileSearchQuery {
   fuzzy?: boolean;                     // Whether to use fuzzy matching
   cacheKey?: string;                   // Cache key
   searchTarget?: SearchTarget;         // Search target: files (files only) | folders (directories only) | both (files + directories, default)
+  /** Optional cancellation signal; engines must stop any spawned work when aborted. */
+  signal?: AbortSignal;
 }
 
 export interface IFileSearchResult {

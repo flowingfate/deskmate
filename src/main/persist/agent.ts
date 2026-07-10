@@ -13,6 +13,7 @@ import type {
   SessionOverrides,
 } from '../../shared/persist/types';
 import type { ThinkingLevel } from '../../shared/types/thinkingLevel';
+import type { SkillBindings } from '../../shared/types/profileTypes';
 
 export type { AgentDetail, AgentFrontPatch } from '../../shared/persist/types';
 
@@ -54,7 +55,7 @@ class AgentConfig {
   /** 本地工具白名单(deskmate 原生);见 `AgentMarkdownFrontBase.tools`。 */
   public tools?: string[];
   public mcpServers?: AgentMarkdownFront['mcpServers'];
-  public skills?: string[];
+  public skills?: SkillBindings;
   public subAgents?: string[];
   /** 聊天空态预设提示词;见 `AgentMarkdownFrontBase.zero`。 */
   public zero?: AgentZeroState;
@@ -92,7 +93,7 @@ class AgentConfig {
     if (this.thinkingLevel !== undefined) opt.thinkingLevel = this.thinkingLevel;
     if (this.tools !== undefined)           opt.tools = this.tools;
     if (this.mcpServers !== undefined)      opt.mcpServers = this.mcpServers;
-    if (this.skills !== undefined)          opt.skills = this.skills;
+    if (this.skills !== undefined) opt.skills = this.skills;
     if (this.subAgents !== undefined)       opt.subAgents = this.subAgents;
     if (this.zero !== undefined)            opt.zero = this.zero;
     if (this.locked !== undefined)          opt.locked = this.locked;
@@ -134,6 +135,7 @@ export class Agent extends PersistBase {
     const nowIso = new Date().toISOString();
     agent.createdAt = record?.createdAt ?? nowIso;
     agent.updatedAt = record?.updatedAt ?? nowIso;
+    await agent.knowledge.ensure();
     return agent;
   }
 
@@ -290,7 +292,7 @@ export class Agent extends PersistBase {
     if (partial.emoji !== undefined)           c.emoji = partial.emoji;
     if (partial.avatar !== undefined)          c.avatar = partial.avatar;
     // thinkingLevel 三态：undefined=不改 / null=清除 / 具体值=写入
-    if (partial.thinkingLevel !== undefined) c.thinkingLevel = partial.thinkingLevel ?? undefined;
+    if (partial.thinkingLevel !== undefined)   c.thinkingLevel = partial.thinkingLevel ?? undefined;
     if (partial.tools !== undefined)           c.tools = partial.tools;
     if (partial.mcpServers !== undefined)      c.mcpServers = partial.mcpServers;
     if (partial.skills !== undefined)          c.skills = partial.skills;

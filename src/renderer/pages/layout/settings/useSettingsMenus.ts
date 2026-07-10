@@ -25,14 +25,11 @@ interface SimpleMenuState {
 
 export interface SettingsMenus {
   mcpServerMenu: NamedMenuState;
-  skillsAddMenu: SimpleMenuState;
   skillMenu: SkillMenuState;
   subAgentsAddMenu: SimpleMenuState;
 
   handleMcpServerMenuToggle: (serverName: string, buttonElement: HTMLElement) => void;
   handleMcpServerMenuClose: () => void;
-  handleSkillsAddMenuToggle: (buttonElement: HTMLElement) => void;
-  handleSkillsAddMenuClose: () => void;
   handleSkillMenuToggle: (skillName: string, buttonElement: HTMLElement) => void;
   handleSkillMenuClose: () => void;
   handleSubAgentsAddMenuToggle: (buttonElement: HTMLElement) => void;
@@ -43,11 +40,6 @@ export function useSettingsMenus(): SettingsMenus {
   const [mcpServerMenu, setMcpServerMenu] = useState<NamedMenuState>({
     isOpen: false,
     serverName: null,
-    anchorElement: null,
-  });
-
-  const [skillsAddMenu, setSkillsAddMenu] = useState<SimpleMenuState>({
-    isOpen: false,
     anchorElement: null,
   });
 
@@ -74,16 +66,6 @@ export function useSettingsMenus(): SettingsMenus {
     setMcpServerMenu({ isOpen: false, serverName: null, anchorElement: null });
   };
 
-  const handleSkillsAddMenuToggle = (buttonElement: HTMLElement) => {
-    setSkillsAddMenu((prev) =>
-      prev.isOpen ? { isOpen: false, anchorElement: null } : { isOpen: true, anchorElement: buttonElement },
-    );
-  };
-
-  const handleSkillsAddMenuClose = () => {
-    setSkillsAddMenu({ isOpen: false, anchorElement: null });
-  };
-
   const handleSkillMenuToggle = (skillName: string, buttonElement: HTMLElement) => {
     if (skillMenu.isOpen && skillMenu.skillName === skillName) {
       setSkillMenu({ isOpen: false, skillName: null, anchorElement: null });
@@ -108,13 +90,10 @@ export function useSettingsMenus(): SettingsMenus {
 
   return {
     mcpServerMenu,
-    skillsAddMenu,
     skillMenu,
     subAgentsAddMenu,
     handleMcpServerMenuToggle,
     handleMcpServerMenuClose,
-    handleSkillsAddMenuToggle,
-    handleSkillsAddMenuClose,
     handleSkillMenuToggle,
     handleSkillMenuClose,
     handleSubAgentsAddMenuToggle,

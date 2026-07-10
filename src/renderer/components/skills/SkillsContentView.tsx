@@ -3,11 +3,10 @@
 import React from 'react'
 import { BookMarked } from 'lucide-react'
 import { Button } from '@/shadcn/button'
-import { Card } from '@/shadcn/card'
 import SkillListPanel from './SkillListPanel'
 import SkillViewPanel from './SkillViewPanel'
 import { SkillConfig } from '../../lib/userData/types'
-import { useAddSkillFromDevice } from './useAddSkillFromDevice'
+import SkillsAddButton from './SkillsAddButton'
 
 interface SkillsContentViewProps {
   skills: SkillConfig[]
@@ -24,34 +23,27 @@ const SkillsContentView: React.FC<SkillsContentViewProps> = ({
   onSelectSkill,
   onSkillMenuToggle
 }) => {
-  const addSkillFromDevice = useAddSkillFromDevice()
-
-  const handleAddFromDeviceArtifact = () => {
-    void addSkillFromDevice('artifact')
-  }
-
-  const handleAddFromDeviceFolder = () => {
-    void addSkillFromDevice('folder')
-  }
 
   // Show empty state when there are no Skills and not loading
   if (!isLoading && skills.length === 0) {
     return (
-      <div className="flex h-full min-h-0 items-center justify-center p-3">
-        <Card className="flex max-w-md flex-col items-center gap-5 p-10 text-center shadow-none">
-          <BookMarked className="size-10 text-sc-muted-foreground opacity-40" />
-          <p className="text-sm text-sc-muted-foreground">
-            No skills available. Add one from a .zip/.skill file or a folder.
-          </p>
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" onClick={handleAddFromDeviceArtifact}>
-              Add from Device (.zip/.skill)
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleAddFromDeviceFolder}>
-              Add from Device (folder)
-            </Button>
+      <div className="flex h-full min-h-0 items-center justify-center p-6">
+        <div className="flex max-w-md flex-col items-center gap-5 text-center">
+          <span className="flex size-14 items-center justify-center rounded-2xl bg-sc-muted text-sc-muted-foreground">
+            <BookMarked className="size-6" />
+          </span>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium text-sc-foreground">No skills yet</p>
+            <p className="text-sm text-sc-muted-foreground">
+              Add one from a .zip / .skill file or a folder to get started.
+            </p>
           </div>
-        </Card>
+          <SkillsAddButton align="center">
+            <Button variant="outline" size="sm">
+              Add from Device
+            </Button>
+          </SkillsAddButton>
+        </div>
       </div>
     )
   }
@@ -59,7 +51,7 @@ const SkillsContentView: React.FC<SkillsContentViewProps> = ({
   return (
     <div className="flex h-full">
       {/* Left: Skill list */}
-      <div className="p-3 flex w-66 shrink-0 flex-col overflow-hidden border-r border-black/7">
+      <div className="p-3 flex w-66 shrink-0 flex-col overflow-hidden border-r border-sc-border">
         <SkillListPanel
           skills={skills}
           selectedSkill={selectedSkill}

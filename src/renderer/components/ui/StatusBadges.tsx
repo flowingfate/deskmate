@@ -50,7 +50,7 @@ const AvailableToolsBadge: React.FC<AvailableToolsBadgeProps> = ({
       title={`Current Agent has ${toolsCount} available tools${onOpenMcpTools ? ' (Click to manage tools)' : ''}`}
       onClick={onOpenMcpTools}
     >
-      tools: {toolsCount}
+      mcp tools: {toolsCount}
     </Badge>
   );
 };
@@ -78,7 +78,7 @@ const AvailableSkillsBadge: React.FC<AvailableSkillsBadgeProps> = ({
   // cold 字段（skills）走 detail atom；未到时按 0 显示。
   const detail = useAgentDetail(currentAgentId);
   const globalSkills = useSkillsAtom();
-  const agentSkillNames = detail?.skills ?? [];
+  const agentSkillNames = Object.keys(detail?.skills ?? {});
   const skillsCount = agentSkillNames.filter((n) => globalSkills.some((s) => s.name === n)).length;
 
   return (

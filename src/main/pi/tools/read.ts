@@ -39,7 +39,7 @@ const DESCRIPTION = [
   '- `report.pdf` / `notes.docx` / `data.xlsx` — office document (auto-detected by extension)',
   '- `local://<path>` — file in the current session sandbox (write via `write local://<path>`)',
   '- `knowledge://<path>` — file in the current agent\'s Knowledge Base (write via `write knowledge://<path>`)',
-  '- `skill://my-skill` — load a skill\'s SKILL.md (browse available skills via `app skill list`)',
+  '- `skill://my-skill` — load an enabled skill\'s SKILL.md; `skill://my-skill/<relpath>` reads any file inside that skill dir (e.g. `skill://pdf/REFERENCE.md`, `skill://pdf/scripts/fill.py`). Unbound skills are rejected',
   '- `photo.png` / `local://uploads/shot.jpg` — image file; returns the image so you can view its contents',
   '- `page.html` / `page.htm` — HTML file; structure-first reader (never dumps raw HTML), see HTML query below',
   '',
@@ -70,7 +70,7 @@ const DESCRIPTION = [
   '<critical>',
   '- Prefer `read` over `shell cat` / `head` / `tail` / `less` for every file inspection. Bash pipelines for reading files are FORBIDDEN.',
   '- For line/page ranges, append the selector to `path` (e.g. `path="src/foo.ts:50-200"`, `path="report.pdf:p3-7"`). NEVER substitute `sed -n` / `awk NR` / `head | tail`.',
-  '- For `skill://<name>`, the name is the stable skill id — case-sensitive. If unsure of available names, run `app skill list` first.',
+  '- For `skill://<name>[/<relpath>]`, the name is the stable, case-sensitive skill id and must be bound to the current agent. Sub-paths are relative to the skill dir, exactly as SKILL.md references them.',
   '- `local://` and `knowledge://` read text files via streaming pagination — large files are truncated by line/byte budget, binary files return a `fileTypeHint=binary` preview rather than an error. Use line selectors (`local://big.log:1000-1100`) for slicing.',
   '</critical>',
 ].join('\n');

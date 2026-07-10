@@ -1,9 +1,10 @@
 /**
  * useAddSkillFromDevice —— 「从设备添加技能」的共享业务 hook。
  *
- * 触发源（SkillsAddMenuDropdown 菜单项、SkillsContentView 空态按钮）都是纯 IPC 调用
- * （main 进程弹原生文件/文件夹对话框），不依赖任何 renderer 局部 ref，故直接内联到各
- * producer，无需绕全局事件 / atom 中转。安装成功后：
+ * 触发源（SkillsAddButton 下拉项、SkillsContentView 空态按钮）都是纯 IPC 调用
+ * （main 进程弹一个原生对话框，用户在同一个框里选 folder / .zip / .skill：mac/Linux
+ * 单对话框即可，Windows 因原生限制先弹类型选择），不依赖任何 renderer 局部 ref。
+ * 安装成功后：
  *   - 命中「已安装未应用」→ 弹 ApplySkillDialog 让用户选应用到哪些 agent；
  *   - 广播 SkillFolderRefreshAtom，由当前展示该 skill 的 explorer/viewer 重拉目录内容。
  */
@@ -12,18 +13,17 @@ import { useCallback } from 'react';
 import { skillsApi } from '@/ipc/skill';
 import { useToast } from '../ui/ToastProvider';
 import { ApplySkillDialogAtom } from './ApplySkillToAgentsDialog';
-import { SkillFolderRefreshAtom, type SkillAddSelectionMode } from './skillCommands.atom';
+import { SkillFolderRefreshAtom } from './skillCommands.atom';
 
-export function useAddSkillFromDevice(): (mode?: SkillAddSelectionMode) => Promise<void> {
+export function useAddSkillFromDevice(): () => Promise<void> {
   const { showSuccess, showError, showToast } = useToast();
   const installSkillActions = ApplySkillDialogAtom.useChange();
   const refreshFolder = SkillFolderRefreshAtom.useChange().refresh;
 
-  return useCallback(async (selectionMode?: SkillAddSelectionMode) => {
+  return useCallback(async () => {
     try {
       const result = await skillsApi.addSkillFromDevice(undefined, {
         requestSource: 'settings',
-        selectionMode,
       });
 
       if (result.success) {

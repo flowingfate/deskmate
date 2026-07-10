@@ -342,20 +342,39 @@ describe('Profile duplicateAgent', () => {
       model: 'github-copilot::claude-sonnet-4.6',
       systemPrompt: 'You are Otto.',
     });
-    await src.patchFront({ skills: ['skill-a'], subAgents: ['sub-a'] });
+    await src.patchFront({ skills: { 'skill-a': 'live' }, subAgents: ['sub-a'] });
 
+    await src.knowledge.remove();
     const dst = await profile.duplicateAgent(src.id, 'Otto Clone');
+    expect(await dst.knowledge.exists()).toBe(true);
     expect(dst.id).not.toBe(src.id);
     expect(dst.config.name).toBe('Otto Clone');
     expect(dst.config.version).toBe('1.0.0');
     expect(dst.config.model).toBe(src.config.model);
-    expect(dst.config.skills).toEqual(['skill-a']);
+    expect(dst.config.skills).toEqual({ 'skill-a': 'live' });
     expect(dst.config.subAgents).toEqual(['sub-a']);
     expect(dst.systemPrompt).toBe('You are Otto.');
 
     // 出现在 agents.json items
     const list = profile.listAgents();
     expect(list.find((r) => r.id === dst.id)).toBeDefined();
+  });
+
+  it('repairs missing knowledge directory when a legacy agent loads', async () => {
+    const { Profiles, Profile } = await freshModules();
+    const reg = Profiles.get();
+    await reg.bootstrap();
+    const profile = await reg.active();
+    const agent = await profile.createAgent({ name: 'Legacy', version: '1.0.0' });
+    await agent.knowledge.remove();
+
+    Profile.evict(profile.id);
+    const reloaded = await Profile.getOrLoad(profile.id);
+    expect(await agent.knowledge.exists()).toBe(false);
+    const repaired = await reloaded.getAgent(agent.id);
+    expect(repaired).toBeDefined();
+    if (!repaired) return;
+    expect(await repaired.knowledge.exists()).toBe(true);
   });
 
   it('rejects empty newName and unknown srcId', async () => {

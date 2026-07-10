@@ -19,6 +19,20 @@ function ensureRoot(): Logger {
   const init = createPinoLogger();
   rootPino = init.logger;
   rootTransport = init.transport;
+  // thread-stream 是 EventEmitter：关闭竞态下（app 退出 / Ctrl+C 杀进程组时，MCP 子进程
+  // exit 回调仍在 log.debug）向已 end/ending 的 worker 写入会 emit 'error'。无监听器时
+  // Node 直接把它升级为 Uncaught Exception（见 thread-stream index.js write→error）。
+  // 挂一个吞掉「worker 正在结束/已退出」的守卫，避免退出期日志把进程带崩。
+  rootTransport?.on('error', (err: Error) => {
+    const m = err?.message ?? '';
+    if (m.includes('worker is ending') || m.includes('worker has exited')) return;
+    // 其它 transport 错误退化到 stderr（此时 sqlite 日志链本身已不可信）。
+    try {
+      console.error('[log] transport error:', m);
+    } catch {
+      // ignore
+    }
+  });
   rootLogger = wrap(rootPino);
   return rootLogger;
 }
@@ -47,6 +61,9 @@ function normalize(f: Partial<LogFields>): Record<string, unknown> {
 }
 
 function emit(child: PinoLogger, level: LogLevel, f: LogFields): void {
+  // 退出序列里 closeLogs() 之后仍可能有迟到的日志调用（如 MCP 子进程 exit 回调）。
+  // worker 已 end，再写会触发 thread-stream 'error'；直接 no-op，别喂正在关闭的 worker。
+  if (closed) return;
   child[level](normalize(f), f.msg);
 }
 
