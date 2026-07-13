@@ -13,7 +13,8 @@ import {
   removeSkillsFromAgents,
   type RemoveSkillsFromAgentsResult,
   type SkillAgentTarget,
-} from '@main/lib/skill/removeSkillsFromAgents';
+} from '@main/lib/skill';
+import { dedupeSkillNames } from '../_shared';
 
 export interface UnbindSkillArgs {
   /** 一次 unbind 一个或多个 skill。 */
@@ -36,21 +37,11 @@ export interface UnbindSkillResult {
   error?: string;
 }
 
-function normalizeSkillNames(values: string[] | undefined): string[] {
-  return Array.from(
-    new Set(
-      (values || [])
-        .map((s) => (typeof s === 'string' ? s.trim() : ''))
-        .filter((s): s is string => !!s),
-    ),
-  );
-}
-
 export async function unbindSkillInternal(
   args: UnbindSkillArgs,
   _opts?: { signal?: AbortSignal },
 ): Promise<UnbindSkillResult> {
-  const skillNames = normalizeSkillNames(args.skill_names);
+  const skillNames = dedupeSkillNames(args.skill_names);
   if (skillNames.length === 0) {
     return {
       success: false,

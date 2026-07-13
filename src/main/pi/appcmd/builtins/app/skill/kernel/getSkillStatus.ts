@@ -51,7 +51,7 @@ export async function getSkillStatusInternal(
     const skillName = raw.trim();
 
     const profile = await Profiles.get().active();
-    const installed = profile.skills.items.find((s) => s.name === skillName);
+    const installed = profile.skills.get(skillName);
 
     if (!installed) {
       return {
@@ -65,7 +65,7 @@ export async function getSkillStatusInternal(
     let appliedToCurrent: boolean | undefined;
     if (args.current_agent_id && args.current_agent_id.trim()) {
       const agent = await profile.getAgent(args.current_agent_id.trim());
-      appliedToCurrent = agent?.config.skills?.includes(skillName) ?? false;
+      appliedToCurrent = (agent?.config.skills ?? {})[skillName] !== undefined;
     }
 
     return {

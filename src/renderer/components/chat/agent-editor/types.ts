@@ -1,3 +1,5 @@
+import type { SkillBindings } from '@shared/types/profileTypes'
+
 // Agent Chat Editor type definitions
 
 // Agent MCP Server config - contains server name and selected tools
@@ -19,9 +21,9 @@ export interface AgentConfig {
   /** 本地工具白名单。缺席/空 ⇒ 全开;非空 ⇒ 仅列表内。与 mcpServers 独立。 */
   tools?: string[]
   systemPrompt: string
-  skills?: string[] // List of Skill names used by this Agent
+  skills?: SkillBindings // Skill 启用档位映射（live/lazy，缺席=禁用）
   subAgents?: string[] // List of Sub-Agent names used by this Agent
-  locked?: boolean // 受保护标记:true ⇒ 身份/系统提示词/内置skill 不可改、不可删
+  locked?: boolean // 受保护标记:true ⇒ 身份/系统提示词不可改、不可删
   createdAt: Date
   updatedAt: Date
 }

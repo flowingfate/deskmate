@@ -58,7 +58,7 @@ describe('skill uninstall', () => {
       message: 'No skills were uninstalled from the current profile.',
       uninstalled_count: 0,
       uninstalled_skills: [],
-      skipped_skills: [{ skill_name: 'pptx', reason: 'BUILTIN_SKILL' }],
+      skipped_skills: [{ skill_name: 'pptx', reason: 'DELETE_FAILED' }],
       error: 'NO_SKILLS_UNINSTALLED',
     });
 

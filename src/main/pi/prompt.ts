@@ -13,6 +13,7 @@ import type { Profile } from '@main/persist/profile';
 import { log } from '@main/log';
 
 import type { AgentConfig } from './utils/config';
+import { liveSkillNames, lazySkillNames } from '@shared/types/profileTypes';
 import { getGlobalSystemPrompt } from './utils/globalSystemPrompt';
 import {
   identityBlock,
@@ -64,19 +65,22 @@ async function buildAgentSpecific(
 }
 
 /**
- * agent.skills → profile.skills 注册表中找出对应项;missing 记 log;返回模板
- * 字符串或 ''。LLM 视角下 skill 用 `skill://<name>` URI 引用 —— `skill://`
- * handler 会解析到 `${profile}/skills/<name>/SKILL.md`,profile 绝对路径不
- * 暴露给 LLM。
+ * 只把 live skill 的元数据放进 system prompt。它完全由 agent 配置决定，跨 turn 稳定，
+ * 因而不破坏 provider 的前缀 KV cache。lazy skill 不列在这里：用户的 `@skill://<name>`
+ * 引用本身落在 user message，模型按稳定指引自行 `read skill://<name>`。
  */
 function buildBoundSkills(agentCfg: AgentConfig, profile: Profile): string {
-  const wanted = normalizeNames(agentCfg.skills);
-  if (wanted.length === 0) return '';
+  const bindings = agentCfg.skills;
+  const liveNames = normalizeNames(liveSkillNames(bindings));
+  const hasLazySkills = lazySkillNames(bindings).length > 0;
+  if (liveNames.length === 0 && !hasLazySkills) return '';
+
+  const wanted = liveNames;
 
   const items: Array<{ name: string; description: string; version: string; filePath: string }> = [];
   const missing: string[] = [];
   for (const name of wanted) {
-    const skill = profile.skills.items.find((s) => s.name === name);
+    const skill = profile.skills.get(name);
     if (!skill) { missing.push(name); continue; }
     items.push({
       name: skill.name,
@@ -92,7 +96,7 @@ function buildBoundSkills(agentCfg: AgentConfig, profile: Profile): string {
       requested: wanted.length, resolved: items.length,
     });
   }
-  return boundSkillsBlock(items);
+  return boundSkillsBlock(items, { hasLazySkills });
 }
 
 /** agent.subAgents → profile.subAgents.listConfigs() 过滤；返回模板字符串或 ''。 */

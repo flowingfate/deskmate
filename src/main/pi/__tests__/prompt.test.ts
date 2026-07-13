@@ -9,20 +9,24 @@ vi.mock('../utils/globalSystemPrompt', () => ({
   getGlobalSystemPrompt: () => '<<GLOBAL_PROMPT>>',
 }));
 
-// systemReminderUtils 是纯函数；让它原样透传以方便断言
-vi.mock('../utils/systemReminderUtils', () => ({
-  wrapInSystemReminder: (s: string) => `[REMINDER]${s}[/REMINDER]`,
-}));
 
 
 // Profiles 链：mock active() 返回受控 profile 对象
 const profile: {
   id: string;
-  skills: { items: SkillRecord[] };
+  skills: {
+    items: SkillRecord[];
+    get: (name: string) => SkillRecord | undefined;
+  };
   subAgents: { listConfigs: () => Promise<SubAgentConfig[]> };
 } = {
   id: 'p_active',
-  skills: { items: [] },
+  skills: {
+    items: [],
+    get(name: string) {
+      return this.items.find((s) => s.name === name);
+    },
+  },
   subAgents: { listConfigs: async () => [] },
 };
 
@@ -96,7 +100,7 @@ describe('buildSystemPrompt', () => {
       { name: 'web-search', description: 'search', version: '1.0' },
     ];
     const out = await buildSystemPrompt({
-      agentCfg: makeAgent({ skills: ['web-search', 'missing-one'] }),
+      agentCfg: makeAgent({ skills: { 'web-search': 'live', 'missing-one': 'live' } }),
       profileId: 'p_active', agentId: 'a1', sessionId: 's1',
     });
     expect(out).toContain('Skills Instructions:');
@@ -110,10 +114,39 @@ describe('buildSystemPrompt', () => {
 
   it('omits skills block when agent has no skills', async () => {
     const out = await buildSystemPrompt({
-      agentCfg: makeAgent({ skills: [] }),
+      agentCfg: makeAgent({ skills: {} }),
       profileId: 'p_active', agentId: 'a1', sessionId: 's1',
     });
     expect(out).not.toContain('Skills Instructions:');
+  });
+
+  it('does not list lazy skill metadata but supplies stable read guidance', async () => {
+    profile.skills.items = [
+      { name: 'pdf', description: 'pdf tools', version: '1.0' },
+    ];
+    const out = await buildSystemPrompt({
+      agentCfg: makeAgent({ skills: { pdf: 'lazy' } }),
+      profileId: 'p_active', agentId: 'a1', sessionId: 's1',
+    });
+    expect(out).toContain('Skills Instructions:');
+    expect(out).toContain('The user may explicitly reference a lazy skill');
+    expect(out).toContain('MUST call `read skill://<name>`');
+    expect(out).not.toContain('**pdf**');
+    expect(out).not.toContain('Description: pdf tools');
+  });
+
+  it('lists live metadata but not lazy metadata', async () => {
+    profile.skills.items = [
+      { name: 'web-search', description: 'search', version: '1.0' },
+      { name: 'pdf', description: 'pdf', version: '2.0' },
+    ];
+    const out = await buildSystemPrompt({
+      agentCfg: makeAgent({ skills: { 'web-search': 'live', pdf: 'lazy' } }),
+      profileId: 'p_active', agentId: 'a1', sessionId: 's1',
+    });
+    expect(out).toContain('skill://web-search');
+    expect(out).not.toContain('**pdf**');
+    expect(out).not.toContain('Description: pdf');
   });
 
   it('renders sub-agents block from profile.subAgents.listConfigs()', async () => {
@@ -149,3 +182,5 @@ describe('buildSystemPrompt', () => {
     expect(out).not.toContain('Available Sub-Agents');
   });
 });
+
+

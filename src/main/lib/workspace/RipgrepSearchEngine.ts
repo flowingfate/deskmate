@@ -136,41 +136,32 @@ export class RipgrepSearchEngine implements ISearchEngine {
       throw new Error('Search folder is required for ripgrep search. Please provide a valid workspace path.');
     }
 
+    if (query.signal?.aborted) {
+      throw new Error('Search aborted');
+    }
+
+    const maxResults = Math.min(query.maxResults ?? 200, 200);
+    const boundedQuery: IFileSearchQuery = { ...query, maxResults };
     const startTime = Date.now();
     const results: IFileSearchResult[] = [];
     let filesScanned = 0;
 
+    const searchTarget = boundedQuery.searchTarget || 'both';
 
-    const searchTarget = query.searchTarget || 'both';
+    // Search files first so a mixed query preserves the existing ordering.
+    if (searchTarget === 'files' || searchTarget === 'both') {
+      await this.searchFiles(boundedQuery, results, onProgress, (count) => { filesScanned = count; });
+    }
 
-    try {
-      // Search files (if needed)
-      if (searchTarget === 'files' || searchTarget === 'both') {
-        await this.searchFiles(query, results, onProgress, (count) => { filesScanned = count; });
-      }
+    if (
+      (searchTarget === 'folders' || searchTarget === 'both') &&
+      results.length < maxResults
+    ) {
+      await this.searchDirectories(boundedQuery, results, onProgress);
+    }
 
-      // Search directories (if needed)
-      if (searchTarget === 'folders' || searchTarget === 'both') {
-        await this.searchDirectories(query, results, onProgress);
-      }
-
-
-      // 🎯 Use the local fuzzy scorer for scoring and sorting
-      if (query.pattern && results.length > 0) {
-        await this.scoreAndSortResults(results, query.pattern);
-      }
-
-      // Output sorted results (top 10)
-      results.slice(0, 10).forEach((result, index) => {
-      });
-
-      // Limit the number of results
-      if (query.maxResults && results.length > query.maxResults) {
-        results.splice(query.maxResults);
-      }
-
-    } catch (error) {
-      throw error;
+    if (boundedQuery.pattern && results.length > 0) {
+      await this.scoreAndSortResults(results, boundedQuery.pattern);
     }
 
     const duration = Date.now() - startTime;
@@ -178,7 +169,7 @@ export class RipgrepSearchEngine implements ISearchEngine {
 
     return {
       results,
-      limitHit: query.maxResults ? results.length >= query.maxResults : false,
+      limitHit: results.length >= maxResults,
       stats: {
         duration,
         filesScanned,
@@ -246,73 +237,8 @@ export class RipgrepSearchEngine implements ISearchEngine {
     results: IFileSearchResult[],
     onProgress?: (result: IFileSearchResult) => void
   ): Promise<void> {
-    // Use ripgrep to list all files, then extract directories
     const rgArgs = this.buildRipgrepArgs(query, true);
-    const allPaths: string[] = [];
-
-    await new Promise<void>((resolve, reject) => {
-      const rg = spawn(this.rgPath, rgArgs, {
-        cwd: query.folder,
-        shell: false
-      });
-
-      let buffer = '';
-
-      rg.stdout.on('data', (data: Buffer) => {
-        buffer += data.toString();
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.trim()) {
-            allPaths.push(line.trim());
-          }
-        }
-      });
-
-      rg.stderr.on('data', (data: Buffer) => {
-      });
-
-      rg.on('close', () => resolve());
-      rg.on('error', (error) => reject(error));
-    });
-
-    // Extract unique directory paths
-    const directories = new Set<string>();
-    for (const filePath of allPaths) {
-      // 🔥 Fix: support both Windows and Unix path separators
-      const normalizedPath = filePath.replace(/\\/g, '/');
-      const parts = normalizedPath.split('/');
-      // Add all parent directories
-      for (let i = 1; i < parts.length; i++) {
-        const dirPath = parts.slice(0, i).join('/');
-        if (dirPath && !directories.has(dirPath)) {
-          directories.add(dirPath);
-        }
-      }
-    }
-
-    // Filter matching directories and add to results
-    for (const dirPath of directories) {
-      if (query.maxResults && results.length >= query.maxResults) {
-        break;
-      }
-
-      const dirName = path.basename(dirPath);
-      if (this.matchesDirectoryPattern(dirName, dirPath, query)) {
-        const result: IFileSearchResult = {
-          path: dirPath.replace(/\\/g, '/'),
-          score: 0, // will be computed by the fuzzy scorer
-          isDirectory: true
-        };
-
-        results.push(result);
-
-        if (onProgress) {
-          onProgress(result);
-        }
-      }
-    }
+    await this.executeRipgrep(rgArgs, query, results, true, onProgress);
   }
 
   /**
@@ -327,65 +253,103 @@ export class RipgrepSearchEngine implements ISearchEngine {
     updateFilesScanned?: (count: number) => void
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      if (query.signal?.aborted) {
+        reject(new Error('Search aborted'));
+        return;
+      }
+
       const rg: ChildProcess = spawn(this.rgPath, rgArgs, {
         cwd: query.folder,
         shell: false
       });
-
+      const matchedDirectories = new Set<string>();
       let buffer = '';
+      let settled = false;
+
+      const cleanup = () => query.signal?.removeEventListener('abort', onAbort);
+      const finish = (terminate: boolean) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (terminate) rg.kill();
+        resolve();
+      };
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        rg.kill();
+        reject(error);
+      };
+      const onAbort = () => fail(new Error('Search aborted'));
+
+      query.signal?.addEventListener('abort', onAbort, { once: true });
 
       rg.stdout?.on('data', (data: Buffer) => {
+        if (settled) return;
+
         buffer += data.toString();
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.trim()) {
-            if (updateFilesScanned) {
-              updateFilesScanned(results.length + 1);
-            }
+          const rawPath = line.trim();
+          if (!rawPath) continue;
 
+          if (isDirectory) {
+            const parts = rawPath.replace(/\\/g, '/').split('/');
+            for (let index = 1; index < parts.length; index++) {
+              const directoryPath = parts.slice(0, index).join('/');
+              if (
+                !directoryPath ||
+                matchedDirectories.has(directoryPath) ||
+                !this.matchesDirectoryPattern(path.basename(directoryPath), directoryPath, query)
+              ) {
+                continue;
+              }
+
+              matchedDirectories.add(directoryPath);
+              const result: IFileSearchResult = {
+                path: directoryPath,
+                score: 0,
+                isDirectory: true
+              };
+              results.push(result);
+              onProgress?.(result);
+
+              if (query.maxResults && results.length >= query.maxResults) {
+                finish(true);
+                return;
+              }
+            }
+          } else {
+            updateFilesScanned?.(results.length + 1);
             const result: IFileSearchResult = {
-              path: line.trim().replace(/\\/g, '/'),
-              score: 0, // will be computed by the fuzzy scorer
-              isDirectory
+              path: rawPath.replace(/\\/g, '/'),
+              score: 0,
+              isDirectory: false
             };
-
             results.push(result);
+            onProgress?.(result);
 
-            if (onProgress) {
-              onProgress(result);
-            }
-
-            // Check whether the maximum number of results has been reached
             if (query.maxResults && results.length >= query.maxResults) {
-              rg.kill();
-              resolve();
+              finish(true);
               return;
             }
           }
         }
       });
 
-      rg.stderr?.on('data', (data: Buffer) => {
-        const errorMsg = data.toString();
-        // Only log non-empty error messages
-        if (errorMsg.trim()) {
-        }
-      });
-
+      rg.stderr?.on('data', () => {});
       rg.on('close', (code) => {
-        // ripgrep exit codes: 0 = match found, 1 = no match found, 2+ = error
+        if (settled) return;
         if (code === 0 || code === 1) {
-          resolve();
+          finish(false);
         } else {
-          reject(new Error(`Ripgrep exited with code ${code}`));
+          fail(new Error(`Ripgrep exited with code ${code}`));
         }
       });
-
-      rg.on('error', (error) => {
-        reject(error);
-      });
+      rg.on('error', (error) => fail(error));
     });
   }
 
@@ -402,9 +366,6 @@ export class RipgrepSearchEngine implements ISearchEngine {
     // Output format
     args.push('--color=never'); // Disable color output
     args.push('--no-messages'); // Disable error messages
-
-    // Symlink handling
-    args.push('--follow'); // Follow symlinks
 
     // Hidden files
     args.push('--hidden'); // Search hidden files (files starting with .)

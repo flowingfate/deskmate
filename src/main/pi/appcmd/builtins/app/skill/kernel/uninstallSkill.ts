@@ -11,7 +11,8 @@
  */
 
 import { Profiles } from '@main/persist';
-import { deleteInstalledSkill } from '@main/lib/skill/deleteInstalledSkill';
+import { deleteInstalledSkill } from '@main/lib/skill';
+import { dedupeSkillNames } from '../_shared';
 
 export interface UninstallSkillArgs {
   skill_names: string[];
@@ -26,21 +27,11 @@ export interface UninstallSkillResult {
   error?: string;
 }
 
-function normalizeSkillNames(values: string[]): string[] {
-  return Array.from(
-    new Set(
-      values
-        .map((s) => (typeof s === 'string' ? s.trim() : ''))
-        .filter((s): s is string => !!s),
-    ),
-  );
-}
-
 export async function uninstallSkillInternal(
   args: UninstallSkillArgs,
   _opts?: { signal?: AbortSignal },
 ): Promise<UninstallSkillResult> {
-  const skillNames = normalizeSkillNames(args.skill_names || []);
+  const skillNames = dedupeSkillNames(args.skill_names);
   if (skillNames.length === 0) {
     return {
       success: false,
@@ -83,7 +74,7 @@ export async function uninstallSkillInternal(
     } else {
       skippedSkills.push({
         skill_name: skillName,
-        reason: deleteResult.error === 'BUILTIN_SKILL' ? 'BUILTIN_SKILL' : 'DELETE_FAILED',
+        reason: 'DELETE_FAILED',
       });
     }
   }

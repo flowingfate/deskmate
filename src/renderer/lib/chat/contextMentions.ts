@@ -4,23 +4,16 @@
  * 统一 mention 形态:
  *   [@knowledge://<path>]  → 当前 agent KB 内文件
  *   [@local://<path>]      → 当前 session sandbox 内文件
- *   [#skill:<name>]        → 当前 agent 绑定的 skill
+ *   [@skill://<name>]      → 当前 agent 绑定的 skill
  */
 
 /** 唯一 mention 匹配:`[@(knowledge|local)://...]`,捕获 scheme prefix + 内部路径。 */
 export const mentionRegex = /\[@(knowledge:\/\/|local:\/\/)([^\]]+)\]/g;
 
-/** Skill mention:`[#skill:<name>]`,允许名字内含空格。 */
-export const skillMentionRegex = /\[#skill:([^\]]+)\]/g;
 
 /** Mention scheme,由 URI prefix 决定。 */
 export type MentionScheme = 'knowledge' | 'local';
 
-// Context menu trigger types
-export enum ContextMenuTriggerType {
-  Workspace = '@',
-  Skill = '#'
-}
 
 // Context menu option types
 export enum ContextMenuOptionType {
@@ -38,7 +31,7 @@ export interface ContextOption {
   relativePath?: string;   // 内部相对路径(可选;default options 没有)
   fileName: string;        // 显示名
   description?: string;    // 附加描述
-  /** Full mention URI(`knowledge://...` / `local://...`)— Roo-Code 兼容字段。 */
+  /** Full mention URI(`knowledge://...` / `local://...` / `skill://...`)。 */
   value?: string;
 }
 
@@ -59,47 +52,33 @@ export function getDefaultMenuOptions(): ContextOption[] {
       description: 'Browse and select current chat session deliverables',
       value: undefined,
     },
+    {
+      type: ContextMenuOptionType.Skill,
+      fileName: 'Add Skill',
+      description: 'Reference a skill bound to this agent',
+      value: undefined, // no value → 展开当前 agent 绑定的 skill 列表
+    },
   ];
 }
 
 /**
- * 当前光标是否处在 `@` / `#` 触发的菜单上下文中。
+ * 当前光标是否处在 `@` 触发的菜单上下文中(唯一触发键)。
+ * 已落在某个 mention 内部(`knowledge://` / `local://` / `skill://`)则不重触发。
  */
-export function getContextMenuTriggerType(text: string, cursorPos: number): ContextMenuTriggerType | null {
+export function shouldShowContextMenu(text: string, cursorPos: number): boolean {
   const beforeCursor = text.slice(0, cursorPos);
   const lastAtIndex = beforeCursor.lastIndexOf('@');
-  const lastHashIndex = beforeCursor.lastIndexOf('#');
-
-  if (lastAtIndex === -1 && lastHashIndex === -1) return null;
-
-  // Skill trigger
-  if (lastHashIndex !== -1 && lastHashIndex > lastAtIndex) {
-    const textAfterHash = beforeCursor.slice(lastHashIndex + 1);
-    if (textAfterHash.startsWith('skill:')) return null;
-    if (!/\s/.test(textAfterHash)) {
-      return ContextMenuTriggerType.Skill;
-    }
+  if (lastAtIndex === -1) return false;
+  const textAfterAt = beforeCursor.slice(lastAtIndex + 1);
+  // 已在一个 mention 内部 —— 不再重触发菜单。
+  if (
+    textAfterAt.startsWith('knowledge://') ||
+    textAfterAt.startsWith('local://') ||
+    textAfterAt.startsWith('skill://')
+  ) {
+    return false;
   }
-
-  // Workspace (@) trigger
-  if (lastAtIndex !== -1) {
-    const textAfterAt = beforeCursor.slice(lastAtIndex + 1);
-    // 已经在一个 mention 内部 —— 不再重触发菜单。
-    if (textAfterAt.startsWith('knowledge://') || textAfterAt.startsWith('local://')) return null;
-    if (!/\s/.test(textAfterAt)) {
-      return ContextMenuTriggerType.Workspace;
-    }
-  }
-
-  return null;
-}
-
-export function shouldShowContextMenu(text: string, cursorPos: number): boolean {
-  return getContextMenuTriggerType(text, cursorPos) !== null;
-}
-
-export function shouldShowSkillContextMenu(text: string, cursorPos: number): boolean {
-  return getContextMenuTriggerType(text, cursorPos) === ContextMenuTriggerType.Skill;
+  return !/\s/.test(textAfterAt);
 }
 
 /** @ 触发时,光标到 `@` 之间的查询串。 */
@@ -108,14 +87,6 @@ export function getCurrentSearchQuery(text: string, cursorPos: number): string {
   const lastAtIndex = beforeCursor.lastIndexOf('@');
   if (lastAtIndex === -1) return '';
   return beforeCursor.slice(lastAtIndex + 1);
-}
-
-/** # 触发时,光标到 `#` 之间的查询串。 */
-export function getCurrentSkillSearchQuery(text: string, cursorPos: number): string {
-  const beforeCursor = text.slice(0, cursorPos);
-  const lastHashIndex = beforeCursor.lastIndexOf('#');
-  if (lastHashIndex === -1) return '';
-  return beforeCursor.slice(lastHashIndex + 1);
 }
 
 /**
@@ -139,30 +110,6 @@ export function insertMention(
     const mention = `[@${uri}]`;
     const newText = `${beforeMention}${mention} ${afterCursor}`;
     const newCursorPos = lastAtIndex + mention.length + 1; // mention + trailing space
-    return { newText, newCursorPos };
-  }
-
-  return { newText: text, newCursorPos: safeCursorPos };
-}
-
-/**
- * 把光标位置往左到 `#` 起替换为 `[#skill:<name>] `。
- */
-export function insertSkillMention(
-  text: string,
-  cursorPos: number,
-  skillName: string,
-): { newText: string; newCursorPos: number } {
-  const safeCursorPos = Math.min(Math.max(0, cursorPos), text.length);
-  const beforeCursor = text.slice(0, safeCursorPos);
-  const afterCursor = text.slice(safeCursorPos);
-  const lastHashIndex = beforeCursor.lastIndexOf('#');
-
-  if (lastHashIndex !== -1) {
-    const beforeMention = text.slice(0, lastHashIndex);
-    const mention = `[#skill:${skillName}]`;
-    const newText = `${beforeMention}${mention} ${afterCursor}`;
-    const newCursorPos = lastHashIndex + mention.length + 1;
     return { newText, newCursorPos };
   }
 
@@ -204,18 +151,6 @@ export function extractMentions(text: string): Array<{ scheme: MentionScheme; pa
   return out;
 }
 
-/**
- * 抽取 message 内所有 `[#skill:...]`,返回 skill 名列表。
- */
-export function extractSkillMentions(text: string): string[] {
-  const mentions: string[] = [];
-  const regex = new RegExp(skillMentionRegex);
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(text)) !== null) {
-    mentions.push(match[1]);
-  }
-  return mentions;
-}
 
 /**
  * 按 query 过滤 skill 列表,组装成菜单 options。
@@ -231,6 +166,6 @@ export function filterSkillsByQuery(
       type: ContextMenuOptionType.Skill,
       fileName: skill.name,
       description: skill.description || '',
-      value: skill.name,
+      value: `skill://${skill.name}`,
     }));
 }

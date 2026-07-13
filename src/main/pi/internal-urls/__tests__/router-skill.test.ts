@@ -26,10 +26,12 @@ import { Profiles } from '@main/persist/profiles';
 import { setRootForTesting } from '@main/persist/lib/root';
 
 let tmpRoot = '';
+let agentId = '';
 const PROFILE_ID = 'p_TEST';
 
 beforeEach(() => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'read-router-it-'));
+  agentId = '';
   setRootForTesting(tmpRoot);
   // 单例需要清掉 —— 上一个 test 的 Profile cache / Profiles instance 会拖进来。
   Profile.evict(PROFILE_ID);
@@ -53,13 +55,26 @@ afterEach(() => {
 function makeCtx(): ResolveContext {
   return {
     profileId: PROFILE_ID,
-    agentId: 'a',
+    agentId,
     sessionId: 's',
     signal: new AbortController().signal,
   };
 }
 
+async function bindSkill(name: string): Promise<void> {
+  const profile = await Profile.getOrLoad(PROFILE_ID);
+  let agent = agentId ? await profile.getAgent(agentId) : undefined;
+  if (!agent) {
+    agent = await profile.createAgent({ name: 'Router Test Agent', version: '1.0.0' });
+    agentId = agent.id;
+  }
+  await agent.patchFront({
+    skills: { ...(agent.config.skills ?? {}), [name]: 'live' },
+  });
+}
+
 async function seedSkill(name: string, body: string): Promise<void> {
+  await bindSkill(name);
   const skills = new Skills(PROFILE_ID);
   await skills.writeMarkdown(name, body);
 }
@@ -115,9 +130,10 @@ describe('SkillProtocolHandler', () => {
     expect(resource.notes?.[0]).toMatch(/Loaded skill "my-skill"/);
   });
 
-  it('skill 不存在时错误消息对 LLM 友好:不暴露绝对路径,不带 stack', async () => {
+  it('已绑定但不存在的 skill 返回不泄漏路径的 not-found 错误', async () => {
     const router = InternalUrlRouter.get();
     router.register(new SkillProtocolHandler());
+    await bindSkill('nonexistent');
 
     await expect(router.resolve('skill://nonexistent', makeCtx())).rejects.toThrow(
       /Skill "nonexistent" not found/,
@@ -142,14 +158,238 @@ describe('SkillProtocolHandler', () => {
     expect(resource.content).toBe('body');
   });
 
-  it('拒绝 skill 目录下其它 sub-path —— 只暴露 SKILL.md', async () => {
+  it('读 skill 目录内子文件 `skill://name/scripts/run.py`', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    await seedSkill('alpha', 'body');
+    // 在 skill 目录里落一个脚本文件。
+    const scriptDir = path.join(tmpRoot, 'profiles', PROFILE_ID, 'skills', 'alpha', 'scripts');
+    fs.mkdirSync(scriptDir, { recursive: true });
+    fs.writeFileSync(path.join(scriptDir, 'run.py'), 'print("hi")\n');
+
+    const resource = await router.resolve('skill://alpha/scripts/run.py', makeCtx());
+    expect(resource.url).toBe('skill://alpha/scripts/run.py');
+    expect(resource.content).toBe('print("hi")\n');
+    expect(resource.contentType).toBe('text/plain');
+  });
+
+  it('子文件不存在 → 友好 not found(不暴露绝对路径)', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    await seedSkill('alpha', 'body');
+
+    const err = await router
+      .resolve('skill://alpha/nope.md', makeCtx())
+      .catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/skill:\/\/alpha\/nope\.md not found/);
+    expect((err as Error).message).not.toContain(tmpRoot);
+  });
+
+  it('`..` 逃逸被拒 —— 限制在 skill 目录内', async () => {
     const router = InternalUrlRouter.get();
     router.register(new SkillProtocolHandler());
     await seedSkill('alpha', 'body');
 
     await expect(
-      router.resolve('skill://alpha/other.md', makeCtx()),
-    ).rejects.toThrow(/only exposes SKILL\.md/);
+      router.resolve('skill://alpha/../../../etc/passwd', makeCtx()),
+    ).rejects.toThrow(/escapes the skill:\/\/ directory/);
+  });
+
+  it('安全:`skill://../auth.json`(host=`..`)被拒 —— 挡 profile 认证文件穿越', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    // 落一个 profile 级敏感文件到 skills 目录的父级,验证读不到。
+    const profileDir = path.join(tmpRoot, 'profiles', PROFILE_ID);
+    fs.mkdirSync(profileDir, { recursive: true });
+    fs.writeFileSync(path.join(profileDir, 'auth.json'), '{"secret":"token"}');
+
+    await expect(
+      router.resolve('skill://../auth.json', makeCtx()),
+    ).rejects.toThrow(/Invalid skill name/);
+  });
+
+  it('安全:host=`..` 裸读(readMarkdown 分支)也被 parse 词法守卫拦下', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+
+    await expect(router.resolve('skill://..', makeCtx())).rejects.toThrow(
+      /Invalid skill name/,
+    );
+  });
+
+  it('安全:resolveToPath 上 host=`..` 同样被拒(shell 执行路径)', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+
+    await expect(
+      router.resolveToPath('skill://../auth.json', makeCtx()),
+    ).rejects.toThrow(/Invalid skill name/);
+  });
+
+  it('二进制子文件(NUL byte)被拒,只暴露文本', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    await seedSkill('alpha', 'body');
+    const skillDir = path.join(tmpRoot, 'profiles', PROFILE_ID, 'skills', 'alpha');
+    fs.writeFileSync(path.join(skillDir, 'blob.bin'), Buffer.from([0x00, 0x01, 0x02]));
+
+    await expect(
+      router.resolve('skill://alpha/blob.bin', makeCtx()),
+    ).rejects.toThrow(/appears to be binary/);
+  });
+
+  it('主 SKILL.md 也拒绝二进制和超限内容', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    await seedSkill('alpha', 'body');
+    const skillDir = path.join(tmpRoot, 'profiles', PROFILE_ID, 'skills', 'alpha');
+
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), Buffer.from([0x00, 0x01]));
+    await expect(router.resolve('skill://alpha', makeCtx())).rejects.toThrow(/appears to be binary/);
+
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), Buffer.alloc(1024 * 1024 + 1, 'a'));
+    await expect(router.resolve('skill://alpha', makeCtx())).rejects.toThrow(/exceeds .* byte limit/);
+  });
+
+  it('主 SKILL.md 的内层 symlink 逃逸被拒', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    const secretPath = path.join(tmpRoot, 'outside-secret');
+    fs.writeFileSync(secretPath, 'PRIVATE KEY MATERIAL');
+
+    const externalSkill = path.join(tmpRoot, 'external-skill');
+    fs.mkdirSync(externalSkill, { recursive: true });
+    fs.symlinkSync(secretPath, path.join(externalSkill, 'SKILL.md'), 'file');
+    const skillsRoot = path.join(tmpRoot, 'profiles', PROFILE_ID, 'skills');
+    fs.mkdirSync(skillsRoot, { recursive: true });
+    fs.symlinkSync(externalSkill, path.join(skillsRoot, 'linked'), 'dir');
+    await bindSkill('linked');
+
+    await expect(router.resolve('skill://linked', makeCtx())).rejects.toThrow(
+      /escapes the skill:\/\/ directory/,
+    );
+  });
+
+  it('未绑定的 skill 不能读取或解析执行路径', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    await seedSkill('enabled', 'body');
+    await new Skills(PROFILE_ID).writeMarkdown('off', 'body');
+
+    await expect(router.resolve('skill://off', makeCtx())).rejects.toThrow(/not enabled/);
+    await expect(router.resolveToPath('skill://off', makeCtx())).rejects.toThrow(/not enabled/);
+  });
+
+  it('resolveToPath:裸 name → SKILL.md 文件路径(非目录)', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    await seedSkill('alpha', 'body');
+
+    const abs = await router.resolveToPath('skill://alpha', makeCtx());
+    expect(abs).toBe(
+      path.resolve(tmpRoot, 'profiles', PROFILE_ID, 'skills', 'alpha', 'SKILL.md'),
+    );
+  });
+
+  it('resolveToPath:子路径 → 目录内文件绝对路径', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    await seedSkill('alpha', 'body');
+
+    const abs = await router.resolveToPath('skill://alpha/scripts/run.py', makeCtx());
+    expect(abs).toBe(
+      path.resolve(tmpRoot, 'profiles', PROFILE_ID, 'skills', 'alpha', 'scripts', 'run.py'),
+    );
+  });
+
+  it('resolveToPath:`..` 逃逸同样被拒', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+    await seedSkill('alpha', 'body');
+
+    await expect(
+      router.resolveToPath('skill://alpha/../evil', makeCtx()),
+    ).rejects.toThrow(/escapes the skill:\/\/ directory/);
+  });
+
+  it('安全:linked skill 内层 symlink 逃逸到外部机密被拒(resolve 读路径)', async () => {
+    // linked skill 的根是指向外部第三方目录的 symlink,其内容 live 可变。攻击场景:
+    // 外部目录里藏一个内层 symlink `evil -> <外部机密>`。词法 `..` 检查无法察觉
+    // (evil 逻辑上在 skill 目录内),必须靠 realpath containment 拦下。
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+
+    const secretDir = path.join(tmpRoot, 'outside-secret');
+    fs.mkdirSync(secretDir, { recursive: true });
+    fs.writeFileSync(path.join(secretDir, 'id_rsa'), 'PRIVATE KEY MATERIAL');
+
+    const externalSkill = path.join(tmpRoot, 'external-skill');
+    fs.mkdirSync(externalSkill, { recursive: true });
+    fs.writeFileSync(path.join(externalSkill, 'SKILL.md'), '# linked\n');
+    fs.symlinkSync(path.join(secretDir, 'id_rsa'), path.join(externalSkill, 'evil'), 'file');
+    fs.symlinkSync(secretDir, path.join(externalSkill, 'evildir'), 'dir');
+
+    // 以 symlink 形式把外部目录 link 进 skills/ —— 复刻 linkSkill 的落地形态。
+    const skillsRoot = path.join(tmpRoot, 'profiles', PROFILE_ID, 'skills');
+    fs.mkdirSync(skillsRoot, { recursive: true });
+    fs.symlinkSync(externalSkill, path.join(skillsRoot, 'linked'), 'dir');
+    await bindSkill('linked');
+
+    // 根 SKILL.md 仍可正常读(跟随根链接是预期的)。
+    const ok = await router.resolve('skill://linked', makeCtx());
+    expect(ok.content).toBe('# linked\n');
+
+    // 内层逃逸链接:文件链接、目录链接下的文件都必须被拒,且错误不含机密内容/绝对路径。
+    for (const rel of ['evil', 'evildir/id_rsa']) {
+      const err = await router.resolve(`skill://linked/${rel}`, makeCtx()).catch((e: Error) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toMatch(/escapes the skill:\/\/ directory/);
+      expect((err as Error).message).not.toContain('PRIVATE KEY MATERIAL');
+    }
+  });
+
+  it('安全:linked skill 内层 symlink 逃逸在 resolveToPath 上也被拒(shell 执行路径)', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+
+    const secretDir = path.join(tmpRoot, 'outside-secret');
+    fs.mkdirSync(secretDir, { recursive: true });
+    fs.writeFileSync(path.join(secretDir, 'key'), 'SECRET');
+
+    const externalSkill = path.join(tmpRoot, 'external-skill');
+    fs.mkdirSync(externalSkill, { recursive: true });
+    fs.writeFileSync(path.join(externalSkill, 'SKILL.md'), 'ok');
+    fs.symlinkSync(path.join(secretDir, 'key'), path.join(externalSkill, 'evil'), 'file');
+
+    const skillsRoot = path.join(tmpRoot, 'profiles', PROFILE_ID, 'skills');
+    fs.mkdirSync(skillsRoot, { recursive: true });
+    fs.symlinkSync(externalSkill, path.join(skillsRoot, 'linked'), 'dir');
+    await bindSkill('linked');
+
+    await expect(
+      router.resolveToPath('skill://linked/evil', makeCtx()),
+    ).rejects.toThrow(/escapes the skill:\/\/ directory/);
+  });
+
+  it('linked skill 内指向自身目录的良性 symlink 不被误伤', async () => {
+    const router = InternalUrlRouter.get();
+    router.register(new SkillProtocolHandler());
+
+    const externalSkill = path.join(tmpRoot, 'external-skill');
+    fs.mkdirSync(path.join(externalSkill, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(externalSkill, 'SKILL.md'), 'ok');
+    fs.writeFileSync(path.join(externalSkill, 'scripts', 'run.py'), 'print("hi")\n');
+    // 良性内部 symlink:别名指向同一 skill 目录内的脚本。
+    fs.symlinkSync(path.join(externalSkill, 'scripts', 'run.py'), path.join(externalSkill, 'alias.py'), 'file');
+
+    const skillsRoot = path.join(tmpRoot, 'profiles', PROFILE_ID, 'skills');
+    fs.mkdirSync(skillsRoot, { recursive: true });
+    fs.symlinkSync(externalSkill, path.join(skillsRoot, 'linked'), 'dir');
+    await bindSkill('linked');
+
+    const resource = await router.resolve('skill://linked/alias.py', makeCtx());
+    expect(resource.content).toBe('print("hi")\n');
   });
 
   it('保留 host 大小写 —— 不被 URL parser 强制 lowercase', async () => {

@@ -31,7 +31,7 @@
 | 截图 | `src/main/lib/screenshot/` | 多显示器覆盖层，`screenshot://` 协议，全局快捷键 | [ai.prompt.md](../src/main/lib/screenshot/ai.prompt.md) |
 | Research window | `src/main/lib/research/` + `src/main/startup/ipc/research.ts` | `web research` 的可见研究窗口管理；Electron `BrowserWindow` + 多个 `WebContentsView` tab 展示外部网页，live DOM 抽取用户确认来源 | — |
 | 媒体协议 | `src/main/lib/media/` | `media://` 字节直供 protocol,渲染层展示 sandbox/knowledge 图片 | [ai.prompt.md](../src/main/lib/media/ai.prompt.md) |
-| Skills | `src/main/lib/skill/` | .zip/.skill 归档，CDN 目录，SKILL.md YAML 前置内容 | — |
+| Skills | `src/main/lib/skill/` | profile 级安装、agent 级绑定和 `skill://` 按需消费 | [skill-system.md](skill-system.md) |
 | 终端管理器 | `src/main/lib/terminal/` | 池化的 `command`（临时）和 `mcp_transport`（持久）终端 | — |
 | 后台进程管理器 | `src/main/lib/backgroundProcessManager/` | 异步后台进程执行，环形缓冲区输出 | [ai.prompt.md](../src/main/lib/backgroundProcessManager/ai.prompt.md) |
 | 运行时管理器 | `src/main/lib/runtime/` | 内嵌 bun + uv，Python shim，内部/外部模式 | — |

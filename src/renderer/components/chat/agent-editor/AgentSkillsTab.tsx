@@ -1,33 +1,65 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
-import { Settings, RotateCw, Loader2 } from 'lucide-react';
-import { Checkbox } from '@/shadcn/checkbox'
+import { Settings, BookMarked, Loader2, Zap, Hand, Ban } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import { Badge } from '@/shadcn/badge';
+import { ScrollArea } from '@/shadcn/scroll-area';
 import { cn } from '@/lib/utilities/utils';
 
 import { TabComponentProps } from './types';
 import { useSkills } from '../../userData/userDataProvider';
-import { isBuiltinSkill } from '../../../../shared/constants/builtinSkills';
 import ListSearchBox from '../../ui/ListSearchBox';
-import { log } from '@/log';
-const logger = log.child({ mod: 'AgentSkillsTab' });
+import type { SkillTier, SkillBindings } from '@shared/types/profileTypes';
 
 /**
- * AgentSkillsTab - Agent Skills configuration tab
+ * AgentSkillsTab - Agent Skills 三档配置
  *
- * Features:
- * - Displays the global Skills list
- * - Allows users to select/deselect Skills via checkboxes
- * - Selected skill names are stored in agent.skills: string[]
+ * 每个 skill 有三种启用档位（互斥），真值是 `agent.skills`（`SkillBindings` 映射）：
+ *  - `live`：元数据始终合并进 system prompt。map 值 `'live'`。
+ *  - `lazy`：默认不进 system prompt；用户在输入框用 `[@skill://<name>]` 显式引用后，模型可按提示读取。
+ *  - `off`：不在 map 中，LLM 无法通过 `skill://` 读取或执行。
  *
- * Layout and styles are kept consistent with AgentMcpServersTab
+ * 布局风格与 AgentMcpServersTab / AgentToolsTab 对齐。
  */
+
+type DisplayTier = SkillTier | 'off';
+
+interface TierOption {
+  tier: DisplayTier;
+  label: string;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
+  activeClass: string;
+}
+
+const TIER_OPTIONS: TierOption[] = [
+  { tier: 'live', label: 'Live', icon: Zap, activeClass: 'bg-sc-primary text-sc-primary-foreground' },
+  { tier: 'lazy', label: 'Lazy', icon: Hand, activeClass: 'bg-amber-500 text-white' },
+  { tier: 'off', label: 'Off', icon: Ban, activeClass: 'bg-sc-muted-foreground/80 text-sc-background' },
+];
+
+/** SkillBindings 映射 → 每个已装 skill 的显示档位（不在 map 中 ⇒ off）。 */
+function deriveTierMap(
+  skillNames: string[],
+  bindings: SkillBindings | undefined,
+): Map<string, DisplayTier> {
+  const map = new Map<string, DisplayTier>();
+  for (const name of skillNames) {
+    map.set(name, bindings?.[name] ?? 'off');
+  }
+  return map;
+}
+
+/** 显示档位 Map → SkillBindings 映射（仅 live/lazy 入 map，off 剔除）。 */
+function tierMapToBindings(map: Map<string, DisplayTier>): SkillBindings {
+  const bindings: SkillBindings = {};
+  for (const [name, tier] of map) {
+    if (tier === 'live' || tier === 'lazy') bindings[name] = tier;
+  }
+  return bindings;
+}
+
 const AgentSkillsTab: React.FC<TabComponentProps> = ({
-  mode,
-  agentId,
   agentData,
-  onSave,
   onDataChange,
   cachedData,
   readOnly = false,
@@ -35,110 +67,73 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
   const { skills: globalSkills, isLoading } = useSkills();
   const navigate = useNavigate();
 
-  // Store selected skill names
-  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
+  const skillNames = useMemo(() => (globalSkills ?? []).map((s) => s.name), [globalSkills]);
 
+  // 每个 skill 的当前显示档位（含 off）。
+  const [tierMap, setTierMap] = useState<Map<string, DisplayTier>>(new Map());
+  const [initialTierMap, setInitialTierMap] = useState<Map<string, DisplayTier>>(new Map());
   const [isInitialized, setIsInitialized] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // 🆕 Search filter
-  const [agentSkillSearchQuery, setAgentSkillSearchQuery] = useState('');
-
-  // Initial data used to detect modifications
-  const [initialSkills, setInitialSkills] = useState<Set<string>>(new Set());
-
-  // Load selected skills - reload when agentData or cachedData changes
+  // hydrate：base 来自 agentData（真值 SkillBindings），cachedData（tab 编辑缓存）优先。
   useEffect(() => {
-    if (agentData?.id) {
-      const baseSkills = new Set<string>();
+    if (!agentData?.id || skillNames.length === 0) return;
 
-      if (agentData?.skills) {
-        agentData.skills.forEach((skillName) => {
-          baseSkills.add(skillName);
-        });
-      }
+    const base = deriveTierMap(skillNames, agentData.skills);
+    const current = cachedData?.skills !== undefined
+      ? deriveTierMap(skillNames, cachedData.skills)
+      : base;
 
-      // If cached data exists, prefer it over the base data
-      let finalSkills = baseSkills;
-      if (cachedData?.skills) {
-        finalSkills = new Set(cachedData.skills);
-      }
-
-      setSelectedSkills(finalSkills);
-      if (!isInitialized) {
-        setInitialSkills(new Set(baseSkills)); // Initial data is always the original data
-        setIsInitialized(true);
-      }
+    setTierMap(current);
+    if (!isInitialized) {
+      setInitialTierMap(base);
+      setIsInitialized(true);
     }
-  }, [agentData?.id, agentData?.skills, cachedData?.skills, isInitialized]);
+  }, [agentData?.id, agentData?.skills, cachedData?.skills, skillNames, isInitialized]);
 
-  // Check if data has been modified - use useMemo to avoid function reference changes
   const hasChanges = useMemo(() => {
-    if (selectedSkills.size !== initialSkills.size) return true;
-
-    for (const skill of selectedSkills) {
-      if (!initialSkills.has(skill)) return true;
+    if (tierMap.size !== initialTierMap.size) return true;
+    for (const [name, tier] of tierMap) {
+      if ((initialTierMap.get(name) ?? 'off') !== tier) return true;
     }
     return false;
-  }, [selectedSkills, initialSkills]);
+  }, [tierMap, initialTierMap]);
 
-  // Notify parent component when data changes - use useRef to track last notified data
-  const lastNotifiedDataRef = React.useRef<string | null>(null);
-
+  // 变更时通知父组件（携带 SkillBindings 映射）。
+  const lastNotifiedRef = React.useRef<string | null>(null);
   useEffect(() => {
-    if (isInitialized && onDataChange) {
-      const skills = Array.from(selectedSkills);
-      const dataKey = JSON.stringify(skills);
-
-      // Only notify parent when data actually changes, to avoid infinite loops
-      if (lastNotifiedDataRef.current !== dataKey) {
-        lastNotifiedDataRef.current = dataKey;
-        onDataChange('skills', { skills }, hasChanges);
-      }
+    if (!isInitialized || !onDataChange) return;
+    const skills = tierMapToBindings(tierMap);
+    const key = JSON.stringify(skills);
+    if (lastNotifiedRef.current !== key) {
+      lastNotifiedRef.current = key;
+      onDataChange('skills', { skills }, hasChanges);
     }
-  }, [selectedSkills, hasChanges, isInitialized, onDataChange]);
+  }, [tierMap, hasChanges, isInitialized, onDataChange]);
 
-  // Toggle skill selection state
-  const handleSkillToggle = useCallback((skillName: string) => {
-    if (readOnly) return; // Toggle not allowed in read-only mode
-
-    // Built-in skills cannot be unchecked for locked agents
-    if (isBuiltinSkill(skillName) && agentData?.locked === true) return;
-
-    setSelectedSkills((prev) => {
-      const newSelections = new Set(prev);
-
-      if (newSelections.has(skillName)) {
-        // Currently selected, deselect
-        newSelections.delete(skillName);
-      } else {
-        // Currently not selected, add selection
-        newSelections.add(skillName);
-      }
-
-      return newSelections;
+  const handleSetTier = useCallback((skillName: string, tier: DisplayTier) => {
+    if (readOnly) return;
+    setTierMap((prev) => {
+      const next = new Map(prev);
+      next.set(skillName, tier);
+      return next;
     });
   }, [readOnly]);
 
-  // 🆕 Refactor: count selected skills (only those that actually exist in globalSkills)
-  const selectedCount = useMemo(() => {
-    if (!globalSkills || globalSkills.length === 0) {
-      return 0;
+  // 统计：只算实际存在的 skill。
+  const { liveCount, lazyCount } = useMemo(() => {
+    let a = 0;
+    let d = 0;
+    for (const name of skillNames) {
+      const tier = tierMap.get(name);
+      if (tier === 'live') a += 1;
+      else if (tier === 'lazy') d += 1;
     }
-    // Filter to skills that actually exist
-    const availableSelectedSkills = Array.from(selectedSkills).filter(skillName =>
-      globalSkills.some(s => s.name === skillName)
-    );
-    return availableSelectedSkills.length;
-  }, [selectedSkills, globalSkills]);
+    return { liveCount: a, lazyCount: d };
+  }, [tierMap, skillNames]);
 
-  // Compute total skill count
-  const totalCount = useMemo(() => {
-    return globalSkills?.length || 0;
-  }, [globalSkills]);
+  const totalCount = skillNames.length;
 
-  // 跳到 Settings 的 Skills 管理页。意图（是否预选某技能）由 URL query 承载：
-  // `?selected=<name>` 让 SkillsView 自行选中，无需事件/定时器/sessionStorage。
-  // 导航是 PUSH，SettingsPage 的 Back 依据 history.state.idx 判断可回退性。
   const handleManageSkills = useCallback(() => {
     navigate('/settings/skills');
   }, [navigate]);
@@ -150,130 +145,155 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
     [navigate],
   );
 
-
+  const filteredSkills = (globalSkills ?? []).filter(
+    (skill) => !searchQuery || skill.name.includes(searchQuery),
+  );
 
   return (
-    <div className="agent-tab">
-      {/* Tab Header */}
-      <div className="flex items-center justify-between p-2 min-h-[44px] shrink-0 bg-surface-primary border-b border-black/[0.08]">
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="font-medium text-[13px] leading-[18px] text-content-secondary">
-            {selectedCount} selected from available skills
-          </span>
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 p-2 border-b border-sc-border">
+        <div className="flex items-center gap-2 text-sm text-sc-foreground">
+          <span className="text-sc-muted-foreground">{totalCount} skills</span>
+          {liveCount > 0 && (
+            <Badge variant="secondary" className="gap-1 text-xs">
+              <Zap size={11} /> {liveCount} live
+            </Badge>
+          )}
+          {lazyCount > 0 && (
+            <Badge variant="secondary" className="gap-1 text-xs">
+              <Hand size={11} /> {lazyCount} lazy
+            </Badge>
+          )}
         </div>
-        <div className="flex items-center shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleManageSkills}
-            title="Manage available skills"
-          >
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleManageSkills}
+          title="Manage available skills"
+        >
+          Manage Available Skills
+        </Button>
+      </div>
+
+      {/* Body */}
+      {isLoading ? (
+        <div className="flex flex-1 items-center justify-center gap-2 p-8 text-sm text-sc-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Loading skills...
+        </div>
+      ) : globalSkills && globalSkills.length > 0 ? (
+        <div className="flex flex-1 flex-col gap-2 min-h-0 p-2 pt-0">
+          <ListSearchBox
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search skills..."
+          />
+          <ScrollArea className="min-h-0 flex-1">
+            <ul className="flex flex-col gap-1.5">
+              {filteredSkills.map((skill) => {
+                const tier = tierMap.get(skill.name) ?? 'off';
+                return (
+                  <li key={skill.name}>
+                    <div
+                      className={cn(
+                        'group flex w-full items-center gap-3 rounded-lg border border-sc-border px-2.5 py-2',
+                        tier !== 'off' ? 'bg-sc-accent/40' : 'bg-transparent',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'flex size-8 shrink-0 items-center justify-center rounded-lg',
+                          tier === 'live'
+                            ? 'bg-sc-primary text-sc-primary-foreground'
+                            : tier === 'lazy'
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-sc-muted text-sc-muted-foreground',
+                        )}
+                      >
+                        <BookMarked size={15} />
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span
+                          className={cn(
+                            'truncate text-sm text-sc-foreground',
+                            tier !== 'off' ? 'font-semibold' : 'font-medium',
+                          )}
+                        >
+                          {skill.name}
+                        </span>
+                        {skill.version && (
+                          <span className="text-xs text-sc-muted-foreground">v{skill.version}</span>
+                        )}
+                      </div>
+
+                      {/* Tri-state segmented control */}
+                      <div
+                        role="radiogroup"
+                        aria-label={`Enablement for ${skill.name}`}
+                        className="flex shrink-0 items-center gap-0.5 rounded-md bg-sc-muted/60 p-0.5"
+                      >
+                        {TIER_OPTIONS.map((opt) => {
+                          const Icon = opt.icon;
+                          const active = tier === opt.tier;
+                          return (
+                            <button
+                              key={opt.tier}
+                              type="button"
+                              role="radio"
+                              aria-checked={active}
+                              disabled={readOnly}
+                              title={opt.label}
+                              onClick={() => handleSetTier(skill.name, opt.tier)}
+                              className={cn(
+                                'flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors',
+                                'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-sc-ring',
+                                readOnly && 'cursor-default opacity-70',
+                                active
+                                  ? opt.activeClass
+                                  : 'text-sc-muted-foreground hover:text-sc-foreground',
+                              )}
+                            >
+                              <Icon size={12} />
+                              <span className="hidden sm:inline">{opt.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleManageSkill(skill.name);
+                        }}
+                        title="Manage skill"
+                      >
+                        <Settings size={15} strokeWidth={1.5} />
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </ScrollArea>
+        </div>
+      ) : (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <span className="flex size-14 items-center justify-center rounded-2xl bg-sc-muted text-sc-muted-foreground">
+            <BookMarked className="size-6" />
+          </span>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium text-sc-foreground">No skills available to select</p>
+            <p className="text-sm text-sc-muted-foreground">Add a skill first, then assign it here.</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleManageSkills}>
             Manage Available Skills
           </Button>
         </div>
-      </div>
-
-      {/* Tab Body */}
-      <div className="flex-1 overflow-y-auto overflow-x-visible p-2 custom-scrollbar">
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-5 py-8 text-content-secondary">
-            <Loader2 className="animate-spin" size={24} />
-            <span>Loading Skills...</span>
-          </div>
-        ) : globalSkills && globalSkills.length > 0 ? (
-          <>
-            {/* Skills List */}
-            <div className="flex flex-col gap-2">
-              <ListSearchBox
-                value={agentSkillSearchQuery}
-                onChange={setAgentSkillSearchQuery}
-                placeholder="Search skills..."
-              />
-              {[...globalSkills].sort((a, b) => {
-                const aBuiltin = isBuiltinSkill(a.name);
-                const bBuiltin = isBuiltinSkill(b.name);
-                if (aBuiltin && !bBuiltin) return -1;
-                if (!aBuiltin && bBuiltin) return 1;
-                return 0;
-              })
-              .filter(skill => !agentSkillSearchQuery || skill.name.includes(agentSkillSearchQuery))
-              .map((skill) => {
-                const isSelected = selectedSkills.has(skill.name);
-                const isSkillBuiltin = isBuiltinSkill(skill.name);
-                const isSkillLocked = isSkillBuiltin && agentData?.locked === true;
-
-                return (
-                  <div
-                    key={skill.name}
-                    className={cn(
-                      'w-full rounded-md border border-transparent bg-transparent transition-[background,border-color] border-black/7',
-                      !readOnly && 'hover:bg-black/2',
-                      isSelected && 'bg-black/1',
-                    )}
-                    onClick={() => !readOnly && handleSkillToggle(skill.name)}
-                    style={readOnly ? { cursor: 'default', opacity: 0.75 } : undefined}
-                  >
-                    <div className="flex items-center justify-between w-full px-3 py-2.5 bg-transparent">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => {
-                            if (!readOnly && !isSkillLocked) {
-                              handleSkillToggle(skill.name);
-                            }
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          disabled={readOnly || isSkillLocked}
-                        />
-                        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="m-0 font-medium text-sm leading-5 text-content truncate">{skill.name}</span>
-                            {isSkillBuiltin && <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[0.6rem] font-medium rounded">Built-in</Badge>}
-                          </div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'row',
-                              gap: '6px',
-                              alignItems: 'center',
-                            }}
-                          >
-                            {skill.version && (
-                              <span className="inline-flex items-center justify-center self-start px-2 py-1 gap-1 rounded-lg bg-slate-400/30 text-slate-800 text-xs font-semibold leading-4 whitespace-nowrap">
-                                v{skill.version}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleManageSkill(skill.name);
-                          }}
-                          title="Manage Skill"
-                        >
-                          <Settings size={14} />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <div className="flex flex-col items-center justify-center gap-4 px-5 py-8 text-center text-content-secondary">
-            <h4>No available Skills to select</h4>
-            <Button variant="outline" size="sm" onClick={handleManageSkills}>
-              Go to Manage Available Skills
-            </Button>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };

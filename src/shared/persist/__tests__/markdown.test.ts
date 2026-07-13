@@ -14,7 +14,7 @@ const SAMPLE: AgentMarkdownFile = {
     version: '1.0.0',
     model: 'github-copilot::claude-sonnet-4.6',
     emoji: '🤖',
-    skills: ['web-search'],
+    skills: { 'web-search': 'live' },
   },
   systemPrompt: 'You are a highly capable AI assistant.\n',
 };

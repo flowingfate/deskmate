@@ -1,7 +1,7 @@
 /**
  * compose 聊天输入子树的命令句柄注册表（替代旧的 `chatInput:selectFiles` /
- * `chatInput:screenshot` / `agent:fillInput` / `context:mentionSelect` /
- * `context:skillMentionSelect` 自定义 window 事件）。
+ * `chatInput:screenshot` / `agent:fillInput` / `context:mentionSelect`
+ * 自定义 window 事件）。
  *
  * 这些「命令」本质是「对当前挂载、持有 textarea DOM ref 的 compose 输入组件发起一次
  * 命令式调用」——不是需要渲染的 state。故用**命令式句柄注册表**而非 atom：consumer 挂载
@@ -22,7 +22,6 @@ import type { ContextOption } from '@/lib/chat/contextMentions';
 /** compose Textarea 暴露的文本命令句柄。 */
 export interface ComposeTextHandle {
   insertMention: (option: ContextOption) => void;
-  insertSkillMention: (skillName: string) => void;
   fillInput: (text: string) => void;
 }
 
@@ -46,7 +45,6 @@ export function useRegisterComposeTextHandle(handle: ComposeTextHandle, enabled:
     if (!enabled) return;
     const forwarder: ComposeTextHandle = {
       insertMention: (o) => ref.current.insertMention(o),
-      insertSkillMention: (n) => ref.current.insertSkillMention(n),
       fillInput: (t) => ref.current.fillInput(t),
     };
     textHandle = forwarder;
@@ -74,7 +72,6 @@ export function useRegisterComposeFileHandle(handle: ComposeFileHandle): void {
 /** producer 调用入口（无 consumer 挂载时静默 no-op）。 */
 export const composeTextCommands: ComposeTextHandle = {
   insertMention: (option) => textHandle?.insertMention(option),
-  insertSkillMention: (skillName) => textHandle?.insertSkillMention(skillName),
   fillInput: (text) => textHandle?.fillInput(text),
 };
 

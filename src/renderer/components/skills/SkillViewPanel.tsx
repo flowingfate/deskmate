@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useCallback } from 'react'
+import { BookMarked } from 'lucide-react'
 import { SkillConfig } from '../../lib/userData/types'
 import { skillsApi } from '@/ipc/skill'
 import SkillFolderExplorer from './SkillFolderExplorer'
@@ -77,8 +78,11 @@ const SkillViewPanel: React.FC<SkillViewPanelProps> = ({
 
   if (!skill) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-8 text-center text-sm text-sc-muted-foreground">
-        <span>Select a skill to view details</span>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-sc-muted text-sc-muted-foreground">
+          <BookMarked className="size-6" />
+        </span>
+        <p className="text-sm text-sc-muted-foreground">Select a skill to view its files</p>
       </div>
     )
   }

@@ -3,9 +3,10 @@
  *
  * 只读:列出 active profile 内所有已安装 skill,带版本 / source / description。
  *
- * 与 `skill search --installed` 的区别:`list` 是纯枚举(零 query),`search`
- * 是按关键字过滤。LLM 想"我都装了啥"用 `list`;想"有没有装跟 X 相关的"用
- * `search --installed`。
+ * 与 `skill search <query>` 的区别:`list` 是纯枚举(零 query,无绑定标注),
+ * `search` 要求关键字,换来 `applied_to_current_agent` 标注。LLM 想"我都
+ * 装了啥"用 `list`;想"有没有装跟 X 相关的、且能不能被当前 agent 用"用
+ * `search <query>`。
  */
 
 import {

@@ -70,9 +70,10 @@ export class InternalUrlRouter {
   /**
    * 该 input 的 handler 是否实现了 {@link ProtocolHandler.resolveToPath}。
    *
-   * dispatch 用它判定"URI 文本资源是否可以走流式 fs backend":
-   * - `local://` / `knowledge://`(实现) → filesystem backend(支持大文件 + binary detection)
-   * - `skill://` 等系统资产(未实现) → 走 router.resolve(in-memory,1MB 上限)
+   * dispatch 用它判定"URI 能否翻成真实绝对路径"(office/image/html backend
+   * 与 mutable 文本流式 backend 都依赖它):
+   * - `local://` / `knowledge://` / `skill://`(均实现) → 可翻绝对路径
+   * - 纯 in-memory 系统资产(未实现) → 只能走 router.resolve
    *
    * 不实际调用 resolveToPath,纯能力探测。
    */
@@ -82,6 +83,24 @@ export class InternalUrlRouter {
       const parsed = parseInternalUrl(input);
       const handler = this.handlers.get(parsed.scheme);
       return handler?.resolveToPath !== undefined;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 该 input 的 handler 是否声明 `immutable`(curated 只读资产,如 `skill://`)。
+   *
+   * dispatch 用它决定文本读走哪条 backend:immutable 资产即便实现了
+   * `resolveToPath`(为了执行/fs IPC),文本读仍走 `router.resolve` in-memory
+   * 路径,以保留 `immutable` 标记 / `contentType` / 友好 not-found 语义;
+   * mutable sandbox(`local://` / `knowledge://`)才走 filesystem 流式 backend。
+   */
+  public isImmutable(input: string): boolean {
+    if (!isInternalUrlInput(input)) return false;
+    try {
+      const parsed = parseInternalUrl(input);
+      return this.handlers.get(parsed.scheme)?.immutable === true;
     } catch {
       return false;
     }

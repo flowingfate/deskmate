@@ -16,7 +16,7 @@ import {
   applySkillToAgents,
   type ApplySkillToAgentsResult,
   type SkillAgentTarget,
-} from '@main/lib/skill/applySkillToAgents';
+} from '@main/lib/skill';
 import { Profiles } from '@main/persist';
 
 export interface BindSkillArgs {
@@ -78,7 +78,7 @@ export async function bindSkillInternal(
     };
   }
 
-  const isInstalled = profile.skills.items.some((s) => s.name === skillName);
+  const isInstalled = !!profile.skills.get(skillName);
   if (!isInstalled) {
     return {
       success: false,

@@ -126,10 +126,12 @@ export async function dispatchRead(
       return readHtml({ path: abs, query, displayUrl: path }, ctx);
     }
 
-    // 用户 sandbox 文本资源(handler 实现 resolveToPath):走 filesystem backend
+    // 用户 sandbox 文本资源(mutable + 实现 resolveToPath):走 filesystem backend
     // 流式分页 —— 解除 1MB 上限,binary 文件返回提示而不抛错。`fileName` / `url`
     // 用 LLM-visible URI 注入,abs path 永不外泄(参 office 同模式)。
-    if (router.canResolveToPath(path)) {
+    // immutable curated 资产(`skill://`)即便能 resolveToPath 也走下面的
+    // router.resolve,保留 immutable / contentType / 友好 not-found。
+    if (router.canResolveToPath(path) && !router.isImmutable(path)) {
       const abs = await router.resolveToPath(path, toResolveContext(ctx));
       const fsResult = await readFilesystem({ path: abs, selector, signal: ctx.signal });
       const augmented = { ...fsResult, fileName: deriveDisplayName(path), url: path };

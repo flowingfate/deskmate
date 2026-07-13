@@ -1,3 +1,5 @@
+import type { ForeignSkillSourceId, ForeignSkillSourceKind } from './profileTypes';
+
 export interface SkillLibraryItem {
   name: string;
   description: string;
@@ -22,7 +24,6 @@ export interface SkillDeviceImportOptions {
   applyToCurrentAgent?: boolean;
   agentName?: string;
   requestSource?: string;
-  selectionMode?: 'artifact' | 'folder';
 }
 
 export interface SkillFilePathInstallOptions {
@@ -116,4 +117,72 @@ export interface SkillFileContent {
   isSupported: boolean;
   size: number;
   modifiedTime: string;
+}
+
+
+/** link/copy 安装形态，与落盘的 `ForeignSkillSource.kind` 同一枚举。 */
+export type ForeignSkillInstallMode = ForeignSkillSourceKind;
+
+export interface ForeignSkillSourceDefinition {
+  id: ForeignSkillSourceId;
+  label: string;
+  homeRelativePath: string[];
+}
+
+export interface ForeignSkillCandidate {
+  id: string;
+  sourceId: ForeignSkillSourceId;
+  sourcePath: string;
+  sourcePathDisplay: string;
+  name: string;
+  description: string;
+  version?: string;
+  valid: boolean;
+  invalidReason?: string;
+  duplicateSourceCount: number;
+}
+
+export interface ForeignSkillCategory {
+  sourceId: ForeignSkillSourceId;
+  sourceLabel: string;
+  sourceRootDisplay: string;
+  exists: boolean;
+  candidates: ForeignSkillCandidate[];
+  warnings: string[];
+}
+
+export interface ScanForeignAgentSkillsResult {
+  success: boolean;
+  categories: ForeignSkillCategory[];
+  warnings: string[];
+  error?: string;
+}
+
+export interface ImportForeignSkillItem {
+  candidateId: string;
+  sourceId: ForeignSkillSourceId;
+  sourcePath: string;
+  installMode: ForeignSkillInstallMode;
+  overwrite: boolean;
+  selectedSkillName: string;
+}
+
+export interface ImportForeignSkillItemResult {
+  candidateId: string;
+  skillName?: string;
+  installMode: ForeignSkillInstallMode;
+  success: boolean;
+  isOverwrite: boolean;
+  error?: string;
+}
+
+export interface ImportForeignAgentSkillsResult {
+  success: boolean;
+  importedCount: number;
+  failedCount: number;
+  linkedCount: number;
+  copiedCount: number;
+  overwrittenCount: number;
+  results: ImportForeignSkillItemResult[];
+  error?: string;
 }

@@ -1,8 +1,6 @@
 import React from 'react';
-import { FolderOpen, Trash2, RefreshCw } from 'lucide-react';
+import { FolderOpen, Trash2 } from 'lucide-react';
 import { useToast } from '../ui/ToastProvider';
-import { useSkills } from '../userData/userDataProvider';
-import { isBuiltinSkill } from '../../../shared/constants/builtinSkills';
 import { appApi } from '@/ipc/app';
 import { skillsApi } from '@/ipc/skill';
 import {
@@ -11,7 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/shadcn/dropdown-menu';
-import { DeleteSkillDialogAtom, SkillFolderRefreshAtom } from '../skills/skillCommands.atom';
+import { DeleteSkillDialogAtom } from '../skills/skillCommands.atom';
 
 interface SkillDropdownMenuProps {
   skillName: string;
@@ -24,13 +22,8 @@ const SkillDropdownMenu: React.FC<SkillDropdownMenuProps> = ({
   anchorElement,
   onClose
 }) => {
-  const { showSuccess, showError, showToast } = useToast();
-  const { skills } = useSkills();
+  const { showError } = useToast();
   const [isDev, setIsDev] = React.useState(false);
-
-  const currentSkill = skills.find(skill => skill.name === skillName);
-  const isBuiltin = isBuiltinSkill(skillName);
-
   React.useEffect(() => {
     const checkDevMode = async () => {
       const devMode = await appApi.isDev();
@@ -56,36 +49,9 @@ const SkillDropdownMenu: React.FC<SkillDropdownMenuProps> = ({
   const anchorRect = anchorElement.getBoundingClientRect();
 
   const requestDeleteSkill = DeleteSkillDialogAtom.useChange().requestDelete;
-  const refreshFolder = SkillFolderRefreshAtom.useChange().refresh;
 
   const handleDelete = () => {
     void requestDeleteSkill(skillName);
-  };
-
-  const handleUpdate = async () => {
-    onClose();
-
-    try {
-      if (!skillsApi?.updateSkillFromDevice) {
-        showError('Update skill from device API not available');
-        return;
-      }
-
-      const result = await skillsApi.updateSkillFromDevice(skillName);
-
-      if (result.success) {
-        showSuccess(`Skill "${result.skillName}" updated successfully`);
-
-        setTimeout(() => {
-          refreshFolder(result.skillName ?? skillName);
-        }, 600);
-      } else if (result.error && result.error !== 'File selection canceled' && result.error !== 'User cancelled the operation') {
-        showToast(result.error, 'error', undefined, { persistent: true });
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      showError(`Failed to update skill from device: ${errorMessage}`);
-    }
   };
 
   const handleOpenInExplorer = async () => {
@@ -133,18 +99,10 @@ const SkillDropdownMenu: React.FC<SkillDropdownMenuProps> = ({
             <span>{getOpenInExplorerText()}</span>
           </DropdownMenuItem>
         )}
-        {!isBuiltin && (
-          <DropdownMenuItem onClick={handleUpdate}>
-            <RefreshCw size={16} strokeWidth={1.5} />
-            <span>Update from Device...</span>
-          </DropdownMenuItem>
-        )}
-        {!isBuiltin && (
-          <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={handleDelete}>
-            <Trash2 size={16} strokeWidth={1.5} />
-            <span>Delete</span>
-          </DropdownMenuItem>
-        )}
+        <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={handleDelete}>
+          <Trash2 size={16} strokeWidth={1.5} />
+          <span>Delete</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

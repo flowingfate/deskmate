@@ -64,6 +64,7 @@ describe('messageWire.dehydrate', () => {
     expect((lines[0] as PersistedUserMessage).attachments).toHaveLength(1);
   });
 
+
   it('assistant 空 tool_calls / 空 outcome 时省略键名', () => {
     const lines = dehydrate([a({ content: 'sure', think: '...' })]);
     const line = lines[0] as PersistedAssistantMessage;

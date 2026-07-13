@@ -301,6 +301,7 @@ export const ContextMenu: React.FC = () => {
               {/* Chevron for default options */}
               {(option.type === ContextMenuOptionType.File || option.type === ContextMenuOptionType.Folder
                 || option.type === ContextMenuOptionType.Knowledge || option.type === ContextMenuOptionType.Local
+                || option.type === ContextMenuOptionType.Skill
                 ) &&
                 !option.value &&
                 !option.relativePath && (

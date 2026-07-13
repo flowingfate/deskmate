@@ -1,23 +1,18 @@
 /**
- * Skill 搜索内核 —— 跨 3 个 source 并发搜索(installed / clawhub / github),
- * 按优先级合并 + 按 name 去重(高优先级 source 胜出)。
+ * Skill 搜索内核 —— 仅查询本地 installed 源(profile 已安装的 skill 列表),
+ * 按 name/description 关键字过滤,可选标注 applied_to_current_agent。
  *
  * 角色:被 `appcmd/builtins/app/skill/search.ts` 调用。
  *
- * 3 个 source:
- *   1. installed —— 本地已装(可同时标 applied_to_current_agent)
- *   2. clawhub   —— clawhub.ai marketplace
- *   3. github    —— curated GitHub repo
- *
- * `Promise.allSettled` 保证单源失败不影响其它源;每条失败写到 `warnings`,
- * 即便所有源都挂也返回 success=true + 空 results,避免它在 catch 里乱重试。
+ * 历史备注:曾经跨 installed / clawhub(ClawHub marketplace) / github(curated repo)
+ * 3 个 source 并发搜索;远程发现功能已整体移除,现在只保留本地 installed 搜索。
+ * `source` 字段与 `SkillSearchSource` 类型因此收窄为单一字面量 `'installed'`,
+ * 保留是为了不破坏调用方(`search.ts`)对结果 shape 的既有假设。
  */
 
 import { Profiles } from '@main/persist';
-import { searchClawHubSkills } from '@main/lib/skill/clawHubSkillSearcher';
-import { searchGitHubSkills } from '@main/lib/skill/githubSkillSearcher';
 
-export type SkillSearchSource = 'installed' | 'clawhub' | 'github';
+export type SkillSearchSource = 'installed';
 
 export interface SkillSearchResultItem {
   source: SkillSearchSource;
@@ -26,11 +21,6 @@ export interface SkillSearchResultItem {
     description: string;
     version?: string;
     applied_to_current_agent?: boolean;
-    contact?: string;
-    url?: string;
-    repo?: string;
-    local_folder?: string;
-    score?: number;
   };
 }
 
@@ -49,17 +39,6 @@ export interface SearchLibraryArgs {
   current_agent_id?: string;
 }
 
-function collect(
-  outcome: PromiseSettledResult<SkillSearchResultItem[]>,
-  warnings: string[],
-  label: string,
-): SkillSearchResultItem[] {
-  if (outcome.status === 'fulfilled') return outcome.value;
-  const detail = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
-  warnings.push(`${label}: ${detail}`);
-  return [];
-}
-
 async function searchInstalled(
   queryLower: string,
   currentAgentId: string,
@@ -70,8 +49,9 @@ async function searchInstalled(
   const appliedSkillNames = new Set<string>();
   if (currentAgentId) {
     const agent = await profile.getAgent(currentAgentId);
-    if (agent?.config.skills) {
-      for (const s of agent.config.skills) appliedSkillNames.add(s);
+    const bindings = agent?.config.skills;
+    if (bindings) {
+      for (const s of Object.keys(bindings)) appliedSkillNames.add(s);
     }
   }
 
@@ -92,35 +72,6 @@ async function searchInstalled(
   }));
 }
 
-async function searchClawHub(query: string): Promise<SkillSearchResultItem[]> {
-  const clawHubResults = await searchClawHubSkills(query, 5);
-  return clawHubResults.map<SkillSearchResultItem>((skill) => ({
-    source: 'clawhub',
-    metadata: {
-      name: skill.name,
-      description: skill.description,
-      version: skill.version || undefined,
-      url: skill.url,
-      local_folder: skill.local_folder || undefined,
-      score: skill.score,
-    },
-  }));
-}
-
-async function searchGitHub(query: string): Promise<SkillSearchResultItem[]> {
-  const githubResults = await searchGitHubSkills(query, 5);
-  return githubResults.map<SkillSearchResultItem>((skill) => ({
-    source: 'github',
-    metadata: {
-      name: skill.name,
-      description: skill.description,
-      url: skill.url,
-      repo: skill.repo,
-      local_folder: skill.local_folder,
-    },
-  }));
-}
-
 export async function searchLibraryInternal(
   args: SearchLibraryArgs,
 ): Promise<SearchLibraryResult> {
@@ -137,41 +88,30 @@ export async function searchLibraryInternal(
 
   const query = raw.trim();
   const queryLower = query.toLowerCase();
-  const warnings: string[] = [];
   const currentAgentId = (args.current_agent_id || '').trim();
+  const warnings: string[] = [];
 
-  const [installedOutcome, clawHubOutcome, githubOutcome] = await Promise.allSettled([
-    searchInstalled(queryLower, currentAgentId),
-    searchClawHub(query),
-    searchGitHub(query),
-  ]);
-
-  const installedResults = collect(installedOutcome, warnings, 'Installed skills check failed');
-  const clawHubResults = collect(clawHubOutcome, warnings, 'ClawHub search failed');
-  const githubResults = collect(githubOutcome, warnings, 'GitHub repo search failed');
-
-  // 按优先级合并 + 按 name 去重(高优先级 source 胜出)。
-  const seenNames = new Set<string>();
-  const results: SkillSearchResultItem[] = [];
-  for (const list of [installedResults, clawHubResults, githubResults]) {
-    for (const item of list) {
-      if (seenNames.has(item.metadata.name)) continue;
-      seenNames.add(item.metadata.name);
-      results.push(item);
-    }
+  // 单一 source,不再需要 Promise.allSettled 跨源容错;
+  // 仍然吞掉异常写入 warnings(而非直接抛出),保持“查询失败也返回 success=true”的既有契约。
+  let results: SkillSearchResultItem[] = [];
+  try {
+    results = await searchInstalled(queryLower, currentAgentId);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    warnings.push(`Installed skills check failed: ${detail}`);
   }
 
   if (results.length === 0) {
     const msg =
       warnings.length > 0
-        ? `No skills found matching "${query}". Some sources failed: ${warnings.join('; ')}`
+        ? `No skills found matching "${query}". Search failed: ${warnings.join('; ')}`
         : `No skills found matching "${query}".`;
     return {
       success: true,
       message: msg,
       results: [],
       total_count: 0,
-      ...(warnings.length > 0 ? { warnings } : {}),
+      warnings,
     };
   }
 
@@ -180,6 +120,6 @@ export async function searchLibraryInternal(
     message: `Found ${results.length} skill(s) matching "${query}".`,
     results,
     total_count: results.length,
-    ...(warnings.length > 0 ? { warnings } : {}),
+    warnings,
   };
 }

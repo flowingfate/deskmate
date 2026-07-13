@@ -1,6 +1,7 @@
 import { log } from '@main/log';
 import { Profiles } from '../../persist';
 import type { Agent } from '../../persist/agent';
+import type { SkillBindings } from '@shared/types/profileTypes';
 
 const logger = log;
 
@@ -157,8 +158,8 @@ export async function removeSkillsFromAgents(
       continue;
     }
 
-    const currentSkills = agent.config.skills || [];
-    const removedSkills = currentSkills.filter(skill => skillNameSet.has(skill));
+    const bindings = agent.config.skills ?? {};
+    const removedSkills = Object.keys(bindings).filter((skill) => skillNameSet.has(skill));
 
     if (removedSkills.length === 0) {
       unchangedTargetCount += 1;
@@ -167,7 +168,9 @@ export async function removeSkillsFromAgents(
     }
 
     try {
-      await agent.patchFront({ skills: currentSkills.filter(skill => !skillNameSet.has(skill)) });
+      const nextBindings: SkillBindings = { ...bindings };
+      for (const name of removedSkills) delete nextBindings[name];
+      await agent.patchFront({ skills: nextBindings });
       updatedTargets.push({ ...target, removedSkills });
       removedBindingCount += removedSkills.length;
     } catch {

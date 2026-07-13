@@ -4,10 +4,14 @@ import * as fs from 'fs';
 
 import type { Context } from './shared';
 
-import { installAndActivateSkill } from "../../lib/skill/installAndActivateSkill";
-import { applySkillToAgents } from "../../lib/skill/applySkillToAgents";
-import { updateSkillFromDevice } from "../../lib/skill/skillDeviceImporter";
-import { deleteInstalledSkill } from "../../lib/skill/deleteInstalledSkill";
+import {
+  installAndActivateSkill,
+  applySkillToAgents,
+  updateSkillFromDevice,
+  deleteInstalledSkill,
+  scanForeignAgentSkills,
+  importForeignAgentSkills,
+} from "@main/lib/skill";
 import { getProfileSkillsDir } from "@main/persist/lib/path";
 import { Profiles } from '@main/persist';
 import { skillsRenderToMain } from '@shared/ipc/skill';
@@ -16,6 +20,41 @@ import { mainWindow } from '@main/startup/wins';
 export default function(ctx: Context) {
 
   const handleSkills = skillsRenderToMain.bindMain(ipcMain);
+
+  // renderer→main 的 skill 目录浏览/读文件共用的路径守卫。挡两类逃逸:
+  // 1) 词法:`skillName` 必须是单段,`relativePath` 拼接后不得越出 skill 根(带 path.sep
+  //    边界,避免 `foo` 前缀匹配 `foobar`)。
+  // 2) 真实路径:linked skill 根是指向外部第三方目录的 symlink,内容 live 可变;若里面藏
+  //    内层 symlink 指向机密,词法检查看不出来。故对已存在最深前缀做 realpath,要求落在
+  //    skill 根的 realpath 内(跟随根链接是预期的)。返回可安全访问的绝对路径,否则 null。
+  const resolveSkillSubPath = async (
+    skillName: string,
+    relativePath: string,
+  ): Promise<string | null> => {
+    const skillsDir = path.resolve(getProfileSkillsDir(Profiles.get().activeProfileId));
+    const base = path.resolve(skillsDir, skillName);
+    if (path.dirname(base) !== skillsDir) return null;
+    const full = path.resolve(base, relativePath);
+    if (full !== base && !full.startsWith(base + path.sep)) return null;
+    const realBase = await fs.promises.realpath(base).catch(() => null);
+    if (realBase !== null) {
+      let probe = full;
+      const suffix: string[] = [];
+      for (;;) {
+        const real = await fs.promises.realpath(probe).catch(() => null);
+        if (real !== null) {
+          const realFull = suffix.length ? path.join(real, ...suffix.reverse()) : real;
+          if (realFull !== realBase && !realFull.startsWith(realBase + path.sep)) return null;
+          break;
+        }
+        const parent = path.dirname(probe);
+        if (parent === probe) break;
+        suffix.push(path.basename(probe));
+        probe = parent;
+      }
+    }
+    return full;
+  };
 
   const resolveSingleSelectedPath = (result: unknown): string | undefined => {
     if (Array.isArray(result)) {
@@ -35,7 +74,7 @@ export default function(ctx: Context) {
     file?: string;
     folder?: string;
     detail?: string;
-  }, selectionMode?: 'artifact' | 'folder'): Promise<string | undefined> => {
+  }): Promise<string | undefined> => {
     const win = mainWindow();
     if (!win) {
       return undefined;
@@ -45,25 +84,6 @@ export default function(ctx: Context) {
     const fileTitle = titles?.file || 'Select Skill Artifact';
     const folderTitle = titles?.folder || 'Select Skill Folder';
     const modeDetail = titles?.detail || 'Select File for .zip/.skill, or Folder for a skill directory.';
-
-    if (selectionMode === 'artifact') {
-      const fileResult = await dialog.showOpenDialog(win, {
-        title: fileTitle,
-        properties: ['openFile'],
-        filters: [
-          { name: 'Skill Artifact', extensions: ['zip', 'skill'] }
-        ]
-      });
-      return resolveSingleSelectedPath(fileResult);
-    }
-
-    if (selectionMode === 'folder') {
-      const folderResult = await dialog.showOpenDialog(win, {
-        title: folderTitle,
-        properties: ['openDirectory'],
-      });
-      return resolveSingleSelectedPath(folderResult);
-    }
 
     // Windows cannot reliably support selecting files and folders in one native dialog.
     // Ask for input type first, then open the matching dialog to keep behavior consistent across platforms.
@@ -114,8 +134,6 @@ export default function(ctx: Context) {
 
     return resolveSingleSelectedPath(result);
   };
-
-
 
   // Install skill from a known file path (e.g., from file card / assistant message attachment)
   handleSkills.installSkillFromFilePath(async (_event, filePath: string, options?: { agentId?: string; applyToCurrentAgent?: boolean; agentName?: string; requestSource?: string }) => {
@@ -178,7 +196,7 @@ export default function(ctx: Context) {
   });
 
   // Add skill from local device (.zip, .skill, or folder)
-  handleSkills.addSkillFromDevice(async (_event, selectedPath?: string, options?: { agentId?: string; applyToCurrentAgent?: boolean; agentName?: string; requestSource?: string; selectionMode?: 'artifact' | 'folder' }) => {
+  handleSkills.addSkillFromDevice(async (_event, selectedPath?: string, options?: { agentId?: string; applyToCurrentAgent?: boolean; agentName?: string; requestSource?: string }) => {
     try {
 
       if (!mainWindow()) {
@@ -188,7 +206,7 @@ export default function(ctx: Context) {
       let skillInputPath = selectedPath;
 
       if (!skillInputPath) {
-        skillInputPath = await selectSkillArtifactPath(undefined, options?.selectionMode);
+        skillInputPath = await selectSkillArtifactPath();
       }
 
       if (!skillInputPath) {
@@ -281,16 +299,23 @@ export default function(ctx: Context) {
     }
   });
 
-  // Update skill from local device (.zip, .skill, or folder) with specific skill name validation
-  handleSkills.updateSkillFromDevice(async (_event, targetSkillName: string) => {
+  handleSkills.scanForeignAgentSkills(async () => {
+    return scanForeignAgentSkills();
+  });
+
+  handleSkills.importForeignAgentSkills(async (_event, items) => {
+    return importForeignAgentSkills(items);
+  });
+
+  // Update skill from local device (.zip, .skill, or folder); target skill name is
+  // auto-detected from the selected package's own SKILL.md — caller no longer names
+  // it ahead of time. The renderer already gates this behind its own confirmation
+  // dialog, so no second native confirm here.
+  handleSkills.updateSkillFromDevice(async () => {
     try {
 
       if (!mainWindow()) {
         return { success: false, error: 'No main window available' };
-      }
-
-      if (!targetSkillName) {
-        return { success: false, error: 'Target skill name is required for update' };
       }
 
       const selectedPath = await selectSkillArtifactPath({
@@ -303,42 +328,7 @@ export default function(ctx: Context) {
         return { success: false, error: 'File selection canceled' };
       }
 
-      // 2. Import and validate the skill with skillName validation callback
-
-      // Create skillName validation callback for update scenarios
-      const validateSkillNameCallback = async (detectedSkillName: string): Promise<boolean> => {
-        // Check if detected skill name matches the target skill name
-        if (detectedSkillName !== targetSkillName) {
-          return false; // Validation failed - skill names don't match
-        }
-        return true; // Validation passed - proceed with update
-      };
-
-      // Create confirmation callback for overwrite scenarios (always confirm for updates)
-      const confirmCallback = async (skillName: string): Promise<boolean> => {
-        const win = mainWindow();
-        if (!win) {
-          return false;
-        }
-
-        const confirmResult = await dialog.showMessageBox(win, {
-          type: 'question',
-          title: 'Update Skill',
-          message: `Update skill "${skillName}"?`,
-          detail: 'This will replace the existing skill with the new version. This action cannot be undone.',
-          buttons: ['Cancel', 'Update'],
-          defaultId: 1,
-          cancelId: 0
-        });
-
-        // Handle both old and new Electron API formats
-        if (typeof confirmResult === 'number') {
-          return confirmResult === 1; // Old API format
-        } else {
-          return (confirmResult as any).response === 1; // New API format - use type assertion
-        }
-      };
-      const importResult = await updateSkillFromDevice(selectedPath, targetSkillName, validateSkillNameCallback, confirmCallback);
+      const importResult = await updateSkillFromDevice(selectedPath);
 
       return importResult;
     } catch (error) {
@@ -351,16 +341,11 @@ export default function(ctx: Context) {
   handleSkills.getSkillMarkdown(async (_event, skillName: string) => {
     try {
 
-      // Build SKILL.md file path
-      const skillMarkdownPath = path.join(getProfileSkillsDir(Profiles.get().activeProfileId), skillName, 'SKILL.md');
-
-      // Check if file exists
-      if (!fs.existsSync(skillMarkdownPath)) {
+      const profile = Profiles.get().activeSync();
+      const content = await profile.skills.readMarkdown(skillName);
+      if (content === undefined) {
         return { success: false, error: `SKILL.md not found for skill: ${skillName}` };
       }
-
-      // Read file content
-      const content = fs.readFileSync(skillMarkdownPath, 'utf8');
       return { success: true, content };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -371,16 +356,8 @@ export default function(ctx: Context) {
   handleSkills.getSkillDirectoryContents(async (_event, skillName: string, relativePath: string = '') => {
     try {
 
-      // Build Skill directory path
-      const skillBasePath = path.join(getProfileSkillsDir(Profiles.get().activeProfileId), skillName);
-
-      // Build full path
-      const fullPath = relativePath ? path.join(skillBasePath, relativePath) : skillBasePath;
-
-      // Security check: ensure path is within skill directory
-      const normalizedFullPath = path.normalize(fullPath);
-      const normalizedBasePath = path.normalize(skillBasePath);
-      if (!normalizedFullPath.startsWith(normalizedBasePath)) {
+      const fullPath = await resolveSkillSubPath(skillName, relativePath);
+      if (fullPath === null) {
         return { success: false, error: 'Invalid path: attempted to access outside skill directory' };
       }
 
@@ -441,16 +418,8 @@ export default function(ctx: Context) {
         return { success: false, error: 'File path is required' };
       }
 
-      // Build Skill directory path
-      const skillBasePath = path.join(getProfileSkillsDir(Profiles.get().activeProfileId), skillName);
-
-      // Build full path
-      const fullPath = path.join(skillBasePath, relativePath);
-
-      // Security check: ensure path is within skill directory
-      const normalizedFullPath = path.normalize(fullPath);
-      const normalizedBasePath = path.normalize(skillBasePath);
-      if (!normalizedFullPath.startsWith(normalizedBasePath)) {
+      const fullPath = await resolveSkillSubPath(skillName, relativePath);
+      if (fullPath === null) {
         return { success: false, error: 'Invalid path: attempted to access outside skill directory' };
       }
 

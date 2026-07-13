@@ -6,7 +6,6 @@ import { cn } from '@/lib/utilities/utils'
 import { Button } from '@/shadcn/button'
 import { ScrollArea } from '@/shadcn/scroll-area'
 import { SkillConfig } from '../../lib/userData/types'
-import { isBuiltinSkill } from '../../../shared/constants/builtinSkills'
 import ListSearchBox from '../ui/ListSearchBox'
 
 interface SkillListPanelProps {
@@ -31,7 +30,6 @@ const SkillCard: React.FC<SkillCardProps> = ({
   onSelect,
   onMenuClick,
 }) => {
-  const isBuiltin = isBuiltinSkill(skill.name)
 
   return (
     <div
@@ -54,8 +52,8 @@ const SkillCard: React.FC<SkillCardProps> = ({
         className={cn(
           'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors',
           isSelected
-            ? 'bg-neutral-100 text-neutral-500 dark:bg-neutral-500/25 dark:text-neutral-400'
-            : 'bg-sc-muted text-sc-muted-foreground group-hover:bg-neutral-50 group-hover:text-neutral-500 dark:group-hover:bg-neutral-500/15 dark:group-hover:text-neutral-400',
+            ? 'bg-sc-primary text-sc-primary-foreground'
+            : 'bg-sc-muted text-sc-muted-foreground group-hover:bg-sc-primary/10 group-hover:text-sc-foreground',
         )}
       >
         <BookMarked size={15} />
@@ -64,17 +62,12 @@ const SkillCard: React.FC<SkillCardProps> = ({
         <div className="flex min-w-0 items-center gap-1.5">
           <span
             className={cn(
-              'truncate text-sm font-semibold',
-              isSelected && 'text-neutral-500 dark:text-neutral-400',
+              'truncate text-sm font-medium text-sc-foreground',
+              isSelected && 'font-semibold',
             )}
           >
             {skill.name}
           </span>
-          {isBuiltin && (
-            <span className="shrink-0 rounded bg-neutral-500/10 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">
-              Built-in
-            </span>
-          )}
         </div>
         {skill.version && (
           <span className="text-xs text-sc-muted-foreground">v{skill.version}</span>
@@ -102,18 +95,9 @@ const SkillListPanel: React.FC<SkillListPanelProps> = ({
   // Search filter — hooks must be at top level, before any early returns
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Sort skills: built-in skills first, then the rest
-  const sortedSkills = useMemo(() => [...skills].sort((a, b) => {
-    const aBuiltin = isBuiltinSkill(a.name)
-    const bBuiltin = isBuiltinSkill(b.name)
-    if (aBuiltin && !bBuiltin) return -1
-    if (!aBuiltin && bBuiltin) return 1
-    return 0
-  }), [skills])
-
   const filteredSkills = searchQuery
-    ? sortedSkills.filter(s => s.name.includes(searchQuery))
-    : sortedSkills
+    ? skills.filter(s => s.name.includes(searchQuery))
+    : skills
 
   // Stable identity for filtered list — catches same-length content changes
   const filteredIdentity = useMemo(
@@ -137,7 +121,7 @@ const SkillListPanel: React.FC<SkillListPanelProps> = ({
     const currentInFiltered = filteredSkills.some(s => s.name === selectedSkill.name)
     if (!currentInFiltered) {
       // External selection of an off-filter item — clear search to reveal it
-      if (searchQuery && sortedSkills.some(s => s.name === selectedSkill.name)) {
+      if (searchQuery && skills.some(s => s.name === selectedSkill.name)) {
         setSearchQuery('')
         return
       }
@@ -164,10 +148,14 @@ const SkillListPanel: React.FC<SkillListPanelProps> = ({
 
   if (skills.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-sc-muted-foreground">
-        <BookMarked className="size-10 opacity-40" />
-        <p className="text-sm font-medium">No skills available</p>
-        <p className="text-xs">Add a skill to get started.</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <span className="flex size-11 items-center justify-center rounded-xl bg-sc-muted text-sc-muted-foreground">
+          <BookMarked className="size-5" />
+        </span>
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium text-sc-foreground">No skills available</p>
+          <p className="text-xs text-sc-muted-foreground">Add a skill to get started.</p>
+        </div>
       </div>
     )
   }

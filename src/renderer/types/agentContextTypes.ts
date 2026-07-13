@@ -13,7 +13,6 @@ export interface AgentContextType {
     serverName: string | null;
     anchorElement: HTMLElement | null;
   };
-  onSkillsAddMenuToggle?: (buttonElement: HTMLElement) => void;
   onSkillMenuToggle?: (skillName: string, buttonElement: HTMLElement) => void;
 
   // Sub-Agent Menu Handlers

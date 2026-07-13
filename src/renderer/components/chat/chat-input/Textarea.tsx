@@ -5,11 +5,7 @@ import {
   getCurrentSearchQuery,
   insertMention,
   ContextOption,
-  ContextMenuOptionType,
-  ContextMenuTriggerType,
-  getContextMenuTriggerType,
-  getCurrentSkillSearchQuery,
-  insertSkillMention,
+  shouldShowContextMenu,
 } from '@/lib/chat/contextMentions';
 import { MentionHighlight } from '../MentionHighlight';
 import { getChatInputEnterAction } from '@/lib/chat/chatInputKeyboard';
@@ -154,30 +150,6 @@ export function TextArea(props: TextAreaProps) {
     }, 0);
   };
 
-  // 把 skill mention 插入抽成函数（键盘选中与命令句柄复用同一逻辑）。
-  const handleSkillMentionInsert = (skillName: string) => {
-    if (!textareaRef.current || !skillName) return;
-
-    // FIX: Read the current text from the DOM directly to avoid React state / DOM desync.
-    const currentText = textareaRef.current.value;
-    const cursorPos = textareaRef.current.selectionStart;
-    const { newText, newCursorPos } = insertSkillMention(
-      currentText,
-      cursorPos,
-      skillName,
-    );
-
-    setMessage(newText);
-    onContextMenuClose();
-
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-      }
-    }, 0);
-  };
-
   // 用导航态文本填充输入框（来自 ChatView 的 selectedText）。
   const handleFillInput = (text: string) => {
     if (!text || typeof text !== 'string') return;
@@ -195,7 +167,6 @@ export function TextArea(props: TextAreaProps) {
   useRegisterComposeTextHandle(
     {
       insertMention: (option) => handleMentionSelect(option),
-      insertSkillMention: handleSkillMentionInsert,
       fillInput: handleFillInput,
     },
     !!enableContextMenu,
@@ -261,18 +232,11 @@ export function TextArea(props: TextAreaProps) {
         e.preventDefault();
         const selectedOption = contextMenuState.options[contextMenuState.selectedIndex];
 
-        // Handle Skill-type options (triggered by #): 直接调用插入函数（同组件内，无需绕命令总线）
-        if (selectedOption.type === ContextMenuOptionType.Skill && selectedOption.value) {
-          handleSkillMentionInsert(selectedOption.value);
-          return;
-        }
-
-        // For default options (no relativePath or value), delegate to ChatView
+        // 默认项（无 value/relativePath，如 Add Knowledge / Chat Session / Skill）→ 交给
+        // ContextMenu.onSelect 展开对应列表；带 value 的项（文件 / skill URI）就地插入。
         if (!selectedOption.relativePath && !selectedOption.value) {
-          // Handled via ChatView's ContextMenu onSelect
           onContextMenuSelect(selectedOption);
         } else {
-          // For options with an actual path (@ triggered file options), use handleMentionSelect
           handleMentionSelect(selectedOption, true);
         }
         return;
@@ -334,22 +298,12 @@ export function TextArea(props: TextAreaProps) {
 
     setMessage(newValue);
 
-    // Check the trigger type (@ or #) using the unified triggerType check
-    const triggerType = getContextMenuTriggerType(newValue, cursorPos);
-
-    if (triggerType === ContextMenuTriggerType.Skill) {
-      // # trigger: show the Skills list
-      const query = getCurrentSkillSearchQuery(newValue, cursorPos);
-      const inputRect = getInputContainerRect();
-      if (inputRect) {
-        onContextMenuTrigger(query, inputRect, ContextMenuTriggerType.Skill);
-      }
-    } else if (triggerType === ContextMenuTriggerType.Workspace) {
-      // @ trigger: show workspace files
+    // 唯一 `@` 触发键：命中即展示菜单（默认项 / 文件 / skill）。
+    if (shouldShowContextMenu(newValue, cursorPos)) {
       const query = getCurrentSearchQuery(newValue, cursorPos);
       const inputRect = getInputContainerRect();
       if (inputRect) {
-        onContextMenuTrigger(query, inputRect, ContextMenuTriggerType.Workspace);
+        onContextMenuTrigger(query, inputRect);
       }
     } else {
       onContextMenuClose();
@@ -460,8 +414,8 @@ export function TextArea(props: TextAreaProps) {
         title={title}
         placeholder={
           supportsImages
-            ? 'Type a message, drag files/images, paste screenshot, @ to mention files, # for skills...'
-            : 'Type a message, drag files, @ to mention files, # for skills...'
+            ? 'Type a message, drag files/images, paste screenshot, @ to mention files & skills...'
+            : 'Type a message, drag files, @ to mention files & skills...'
         }
         className="w-full resize-none border-none px-5 py-0 m-0 text-[13px] leading-[1.6] bg-transparent text-[#1a1a1a] outline-none font-[inherit] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden relative z-2 field-sizing-content min-h-[3lh] max-h-[8lh] placeholder:text-[#a3a3a3] disabled:opacity-50 disabled:cursor-not-allowed"
       />

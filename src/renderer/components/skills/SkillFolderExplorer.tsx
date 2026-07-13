@@ -256,15 +256,15 @@ const SkillFolderExplorer: React.FC<SkillFolderExplorerProps> = ({
                   type="button"
                   onClick={() => item.isDirectory ? handleDirectoryClick(item) : handleFileClick(item)}
                   className={cn(
-                    'group flex w-full items-center gap-3 rounded-lg border border-sc-border bg-sc-card px-3 py-2.5 text-left transition-colors',
-                    'hover:border-neutral-300 hover:bg-sc-accent/60 dark:hover:border-neutral-500/40',
+                    'group flex w-full items-center gap-3 rounded-lg border border-transparent px-2.5 py-2 text-left transition-colors',
+                    'hover:bg-sc-accent/60',
                   )}
                 >
                   <span
                     className={cn(
                       'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors',
                       item.isDirectory
-                        ? 'bg-neutral-50 text-neutral-500 group-hover:bg-neutral-100 dark:bg-neutral-500/15 dark:text-neutral-400 dark:group-hover:bg-neutral-500/25'
+                        ? 'bg-sc-primary/10 text-sc-foreground group-hover:bg-sc-primary/15'
                         : 'bg-sc-muted text-sc-muted-foreground',
                     )}
                   >
@@ -290,9 +290,11 @@ const SkillFolderExplorer: React.FC<SkillFolderExplorerProps> = ({
           </ul>
         </ScrollArea>
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-sm text-sc-muted-foreground">
-          <Folder className="size-10 opacity-40" />
-          <p>This directory is empty</p>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <span className="flex size-11 items-center justify-center rounded-xl bg-sc-muted text-sc-muted-foreground">
+            <Folder className="size-5" />
+          </span>
+          <p className="text-sm text-sc-muted-foreground">This directory is empty</p>
         </div>
       )}
     </div>

@@ -40,6 +40,7 @@ import { buildCommandLine as buildCommandLineShared } from '@main/lib/background
 import { terminalManager } from '@main/lib/terminal'
 import type { TerminalConfigBase } from '@main/lib/terminal/types'
 import { CancellationError } from '@main/lib/utilities/errors';
+import { resolveCwdUri, resolveUriTokens } from './util/resolveUriTokens';
 
 import { jsonSchema } from './schema';
 import type { LocalTool, ToolContext, ToolResult } from './types';
@@ -184,7 +185,8 @@ const DESCRIPTION =
   'Best Practices:\n' +
   '- Prefer relative paths over absolute paths for portability\n' +
   '- Use forward slashes (/) in paths for cross-platform compatibility\n' +
-  '- Check command output (stdout/stderr) to verify execution results\n\n' +
+  '- Check command output (stdout/stderr) to verify execution results\n' +
+  '- Internal URIs (authorized skill://name/path, local://path, knowledge://path) in the command, args, or cwd are auto-resolved to absolute filesystem paths. Run enabled skill scripts directly (e.g. python skill://pdf/scripts/fill.py input.pdf); bare skill://pdf means the skill root only when used as cwd, while explicit subpaths keep their exact target.\n\n' +
   'System Info:\n' +
   `- Platform: ${process.platform}\n` +
   `- Default shell: ${process.platform === 'win32' ? 'powershell' : 'zsh'}\n` +
@@ -218,8 +220,16 @@ async function runShell(
       throw new Error(`Invalid shell arguments: ${validation.error}`);
     }
 
-    const normalizedCommand = args.command.trim();
-    const commandLine = buildCommandLineShared(normalizedCommand, args.args);
+    // 把 command / args / cwd 里的 internal URI(`skill://` / `local://` /
+    // `knowledge://`)就地翻成绝对路径 —— 让 LLM 能直接 `python skill://x/run.py`
+    // 执行 skill 脚本,而不必先查绝对路径。只解析 handler 能翻路径的 scheme;
+    // `http(s)://` 等未注册 scheme 原样保留(canResolveToPath=false)。
+    const normalizedCommand = await resolveUriTokens(args.command.trim(), ctx, true);
+    const resolvedArgs = args.args
+      ? await Promise.all(args.args.map((a) => resolveUriTokens(a, ctx, false)))
+      : undefined;
+    const resolvedCwd = await resolveCwdUri(args.cwd, ctx);
+    const commandLine = buildCommandLineShared(normalizedCommand, resolvedArgs);
 
     const dangerousPattern = DANGEROUS_PATTERNS.find((pattern) => pattern.test(commandLine));
     if (dangerousPattern) {
@@ -233,8 +243,8 @@ async function runShell(
 
     const timeoutMs = normalizeTimeout(args.timeoutSeconds, commandLine);
 
-    log.info({ msg: 'Preparing to execute command', mod: 'ShellTool', executionId, commandLine, timeoutMs, cwd: args.cwd, shell: args.shell });
-    return await runForeground(args, commandLine, timeoutMs, executionId, startTime, ctx);
+    log.info({ msg: 'Preparing to execute command', mod: 'ShellTool', executionId, commandLine, timeoutMs, cwd: resolvedCwd, shell: args.shell });
+    return await runForeground(args, commandLine, resolvedCwd, timeoutMs, executionId, startTime, ctx);
   } catch (error) {
     const executionTime = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -249,6 +259,7 @@ async function runShell(
 async function runForeground(
   args: ShellToolArgs,
   commandLine: string,
+  resolvedCwd: string,
   timeoutMs: number,
   executionId: string,
   startTime: number,
@@ -257,7 +268,7 @@ async function runForeground(
   const terminalConfig: TerminalConfigBase = {
     command: commandLine,
     args: [], // command 已含参数。
-    cwd: args.cwd,
+    cwd: resolvedCwd,
     shell: args.shell,
     timeoutMs,
     maxOutputLength: MAX_OUTPUT_CHARS,

@@ -26,41 +26,52 @@ export interface BoundSkillItem {
 }
 
 /** agent 绑定的 skills 段（含 What/How/Best Practices 长篇说明，含 system-reminder 包裹）。 */
-export function boundSkillsBlock(items: BoundSkillItem[]): string {
-  const sections: string[] = [];
-  sections.push('\n---\n**Skills Instructions:**\n');
-  sections.push('\n**What are Skills?**');
-  sections.push('Skills are specialized capabilities that extend your abilities for specific tasks. Each skill contains instructions, scripts, and resources to help you complete tasks in a consistent, repeatable way.\n');
+export function boundSkillsBlock(
+  items: BoundSkillItem[],
+  options: { hasLazySkills?: boolean } = {},
+): string {
+  const skillsList = items.length === 0
+    ? options.hasLazySkills
+      ? 'No live skills are configured. The user may explicitly reference a lazy skill with an `@skill://<name>` URI.'
+      : 'No valid skills configured for this agent.'
+    : items.map((s, i) => (
+      `${i + 1}. **${s.name}**\n` +
+      `   - Description: ${s.description}\n` +
+      `   - Version: ${s.version}\n` +
+      `   - File Path: \`${s.filePath}\`\n`
+    )).join('\n');
 
-  sections.push('\n**How to Use Skills:**');
-  sections.push('1. **Progressive Disclosure:** Skills information is loaded dynamically - you receive skill metadata first, then full instructions when relevant');
-  sections.push('2. **Skill Selection:** Review available skills and load the ones relevant to the current task');
-  sections.push('3. **Follow Instructions:** Each skill provides specific workflows and best practices - follow them carefully');
-  sections.push('4. **Combine Skills:** You can use multiple skills together to accomplish complex tasks');
-  sections.push('5. **Executable Scripts:** Some skills include code that you can run directly without loading into context\n');
+  const content = `
+---
+**Skills Instructions:**
 
-  sections.push('\n**Available Skills for This Agent:**\n');
-  if (items.length === 0) {
-    sections.push('No valid skills configured for this agent.');
-  } else {
-    items.forEach((s, i) => {
-      sections.push(`${i + 1}. **${s.name}**`);
-      sections.push(`   - Description: ${s.description}`);
-      sections.push(`   - Version: ${s.version}`);
-      sections.push(`   - File Path: \`${s.filePath}\``);
-      sections.push('');
-    });
-  }
 
-  sections.push('\n**Best Practices:**');
-  sections.push('- Load skills only when they\'re relevant to the current task');
-  sections.push('- Follow the specific instructions and workflows in each skill');
-  sections.push('- Use skill-provided scripts for deterministic operations');
-  sections.push('- Combine multiple skills when needed for complex workflows');
-  sections.push('- Always check skill metadata first before loading full content\n');
-  sections.push('---');
+**What are Skills?**
+Skills are specialized capabilities that extend your abilities for specific tasks. Each skill is a directory containing a \`SKILL.md\` instruction file, plus optional scripts and reference files.
 
-  return wrapInSystemReminder(sections.join('\n'));
+
+**How to Use Skills:**
+1. **Load authorized skills on demand:** Live skills expose metadata here; lazy skills are revealed only by the user's explicit URI. Before acting on either, you MUST call \`read skill://<name>\` to load its full \`SKILL.md\` — the full instructions are NOT auto-injected.
+2. **Read skill files:** \`SKILL.md\` may reference other files by relative path (e.g. \`REFERENCE.md\`, \`scripts/run.py\`). Read any of them via \`read skill://<name>/<relative-path>\` — the relative path is exactly as written in \`SKILL.md\`, rooted at the skill name.
+3. **Run skill scripts:** To execute a script a skill ships, pass its authorized \`skill://<name>/<relative-path>\` URI directly to the \`shell\` tool (e.g. \`python skill://pdf/scripts/fill.py input.pdf\`). The \`shell\` tool auto-resolves it in the command and \`cwd\` to a real filesystem path — you never need the absolute path.
+4. **Follow Instructions:** Each skill provides specific workflows and best practices — follow them carefully.
+5. **Combine Skills:** You can use multiple skills together to accomplish complex tasks.
+
+
+**Available Skills for This Agent:**
+
+${skillsList}
+
+**Best Practices:**
+- Load skills only when they're relevant to the current task
+- Follow the specific instructions and workflows in each skill
+- Use skill-provided scripts for deterministic operations
+- Combine multiple skills when needed for complex workflows
+- Always check skill metadata first before loading full content
+
+---`;
+
+  return wrapInSystemReminder(content);
 }
 
 export interface SubAgentItem {

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-15 -->
+<!-- Last verified: 2026-07-13 -->
 # 工作区系统
 
 > 为当前活动工作区目录提供高性能文件树枚举、内容搜索和实时文件变更监听。
@@ -18,6 +18,7 @@
 ## 架构
 - `FileTreeService` 和 `RipgrepSearchEngine` 都通过先调用 `require('@vscode/ripgrep').rgPath` 来定位 `rg` 二进制文件，然后在候选路径列表中回退（dev `node_modules`、`app.asar.unpacked`、`process.resourcesPath`）。两个文件重复了这个解析逻辑 — 这是已知的不一致。
 - **ripgrep 从 asar 中解包**（`electron-builder.config.js` 中配置了 `asarUnpack: ['**/node_modules/@vscode/ripgrep/**']`）。如果此配置被移除，工作区搜索会静默降级到 Node.js 回退方案。
+- `IFileSearchQuery.signal` 是搜索生命周期的一部分；`RipgrepSearchEngine` 收到 abort 后必须杀掉 `rg`。文件和目录搜索均最多保留 200 个结果；目录由 `rg --files` 输出流式提取，禁止先累积完整路径列表，也不跟随符号链接。
 - 当配置文件中没有配置工作区时，工作区根目录默认为用户主目录（`os.homedir()`）。文件操作通过 `SecurityValidator` 限制在此根目录的安全范围内。
 - `FileIndexCache` 目前没有被任何有意义的地方导入；保持原样（已废弃）。
 

@@ -11,6 +11,7 @@
 import { Profiles } from '@main/persist';
 import { parseAgentModel, type ParsedAgentModel } from '@shared/utils/agentModelId';
 import type { ThinkingLevel } from '@shared/types/thinkingLevel';
+import type { SkillBindings } from '@shared/types/profileTypes';
 
 /**
  * pi 内部使用的 agent runtime 视图。字段名以新 persist (camelCase) 为准。
@@ -29,7 +30,7 @@ export interface AgentConfig {
   mcpServers: Array<{ name: string; tools: string[] }>;
   systemPrompt: string;
   subAgents?: string[];
-  skills?: string[];
+  skills?: SkillBindings;
 }
 
 export async function readAgentConfig(profileId: string, agentId: string): Promise<AgentConfig | null> {

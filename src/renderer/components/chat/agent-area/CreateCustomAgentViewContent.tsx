@@ -4,7 +4,6 @@ import { useToast } from '../../ui/ToastProvider'
 import { getAgents, listenAgents, useAgents } from '@/states/agents.atom'
 import { addAgentConfig } from '../../../lib/chat/agentOps'
 import EmojiPicker from '../agent-editor/EmojiPicker'
-import { BUILTIN_SKILL_NAMES } from '../../../../shared/constants/builtinSkills'
 import { Button } from '@/shadcn/button'
 import { AlertTriangle } from 'lucide-react'
 import { log } from '@/log';
@@ -147,7 +146,7 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
           // 两个维度独立,见 AgentMarkdownFrontBase.tools / mcp_servers 语义。
           mcp_servers: [],
           tools: [],
-          skills: [...BUILTIN_SKILL_NAMES],
+          skills: {},
         }
       })
 

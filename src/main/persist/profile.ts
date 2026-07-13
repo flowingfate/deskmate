@@ -347,9 +347,10 @@ export class Profile {
     const agent = new Agent(this.id, id, this.agentRegistry, this.sessionIdx, this.jobRunIdx);
     agent.init({ ...input, nowIso: nowIso() });
 
-    // 写顺序：AGENT.md → agents.json（items 尾追加即排序生效）
+    // 写顺序：AGENT.md → knowledge/ → agents.json（items 尾追加即排序生效）
     // agent.persist() 内部会 emit('agent:updated')，本方法不再重复发。
     await agent.persist();
+    await agent.knowledge.ensure();
     this.agentRegistry.items.push(agent.toRecord());
     await this.agentRegistry.persist();
     this.agents.set(id, agent);
@@ -398,6 +399,8 @@ export class Profile {
     const dstKnowledge = dst.knowledge.path();
     if (await pathExists(srcKnowledge)) {
       await fsp.cp(srcKnowledge, dstKnowledge, { recursive: true, mode: fsConstants.COPYFILE_FICLONE });
+    } else {
+      await dst.knowledge.ensure();
     }
 
     this.agentRegistry.items.push(dst.toRecord());

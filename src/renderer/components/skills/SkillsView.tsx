@@ -10,10 +10,10 @@ import SettingsLayout from '../settings/SettingsLayout';
 import SkillsContentView from './SkillsContentView';
 import { SkillConfig } from '../../lib/userData/types';
 import { AgentContextType } from '../../types/agentContextTypes';
+import SkillsAddButton from './SkillsAddButton';
 
 const SkillsView: React.FC = () => {
   const {
-    onSkillsAddMenuToggle,
     onSkillMenuToggle,
   } = useOutletContext<AgentContextType>();
 
@@ -67,16 +67,6 @@ const SkillsView: React.FC = () => {
     setSelectedSkill(skill);
   }, []);
 
-  // Handle add button click
-  const handleAddClick = useCallback(
-    (buttonElement: HTMLElement) => {
-      if (onSkillsAddMenuToggle) {
-        onSkillsAddMenuToggle(buttonElement);
-      }
-    },
-    [onSkillsAddMenuToggle],
-  );
-
   return (
     <SettingsLayout
       icon={<BookMarked size={18} />}
@@ -85,14 +75,15 @@ const SkillsView: React.FC = () => {
         <Badge variant="secondary" className="text-xs">available skills: {skillsStats.totalSkills}</Badge>
       }
       actions={
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={(e) => handleAddClick(e.currentTarget)}
-          title="Add Skill"
-        >
-          <Plus size={14} />
-        </Button>
+        <SkillsAddButton>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Add Skill"
+          >
+            <Plus size={14} />
+          </Button>
+        </SkillsAddButton>
       }
     >
       <SkillsContentView

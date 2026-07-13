@@ -29,12 +29,13 @@ import type { ToolContext } from '../../types';
 import { Tracer } from '@shared/log/trace';
 
 let tmpRoot = '';
+let agentId = '';
 const PROFILE_ID = 'p_TEST';
 
 function makeCtx(): ToolContext {
   return {
     profileId: PROFILE_ID,
-    agentId: 'a',
+    agentId,
     sessionId: 's',
     signal: new AbortController().signal,
     eventSender: null,
@@ -45,8 +46,22 @@ function makeCtx(): ToolContext {
   };
 }
 
+async function seedSkill(name: string, content: string): Promise<void> {
+  const profile = await Profile.getOrLoad(PROFILE_ID);
+  let agent = agentId ? await profile.getAgent(agentId) : undefined;
+  if (!agent) {
+    agent = await profile.createAgent({ name: 'Read Tool Test Agent', version: '1.0.0' });
+    agentId = agent.id;
+  }
+  await agent.patchFront({
+    skills: { ...(agent.config.skills ?? {}), [name]: 'live' },
+  });
+  await new Skills(PROFILE_ID).writeMarkdown(name, content);
+}
+
 beforeEach(() => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'read-tool-it-'));
+  agentId = '';
   setRootForTesting(tmpRoot);
   Profile.evict(PROFILE_ID);
   Profiles.resetForTesting();
@@ -141,8 +156,7 @@ describe('read tool — filesystem backend', () => {
 describe('read tool — internal-url backend (skill://)', () => {
   it('读 skill://name → router 返回的 markdown 进 content', async () => {
     const body = '# Skill Title\n\nbody line 1\nbody line 2\n';
-    await new Skills(PROFILE_ID).writeMarkdown('demo', body);
-
+    await seedSkill('demo', body);
     const result = await read.handler({ path: 'skill://demo' }, makeCtx());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -156,8 +170,7 @@ describe('read tool — internal-url backend (skill://)', () => {
 
   it('skill://name + range selector → 在 markdown 上按行切片', async () => {
     const body = 'L1\nL2\nL3\nL4\nL5';
-    await new Skills(PROFILE_ID).writeMarkdown('multi', body);
-
+    await seedSkill('multi', body);
     const result = await read.handler({ path: 'skill://multi:2-3' }, makeCtx());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -168,7 +181,9 @@ describe('read tool — internal-url backend (skill://)', () => {
     expect(parsed.totalLines).toBe(5);
   });
 
-  it('skill 不存在 → 抛错(handler 透传,registry 在外层落 ok:false)', async () => {
+  it('已绑定但不存在的 skill → 抛错(handler 透传,registry 在外层落 ok:false)', async () => {
+    await seedSkill('nonexistent', 'placeholder');
+    fs.rmSync(path.join(tmpRoot, 'profiles', PROFILE_ID, 'skills', 'nonexistent'), { recursive: true });
     await expect(
       read.handler({ path: 'skill://nonexistent' }, makeCtx()),
     ).rejects.toThrow(/not found/);

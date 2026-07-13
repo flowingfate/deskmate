@@ -50,14 +50,14 @@ const memFsPromises = {
     if (!state.dirs.has(p)) throw enoent(p);
     const prefix = p === '/' ? '/' : p + '/';
     const seen = new Set<string>();
-    const out: Array<{ name: string; isFile(): boolean; isDirectory(): boolean }> = [];
+    const out: Array<{ name: string; isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean }> = [];
     for (const f of state.files.keys()) {
       if (!f.startsWith(prefix)) continue;
       const rest = f.slice(prefix.length);
       if (rest.includes('/')) continue;
       if (seen.has(rest)) continue;
       seen.add(rest);
-      out.push({ name: rest, isFile: () => true, isDirectory: () => false });
+      out.push({ name: rest, isFile: () => true, isDirectory: () => false, isSymbolicLink: () => false });
     }
     for (const d of state.dirs) {
       if (d === p || !d.startsWith(prefix)) continue;
@@ -65,7 +65,7 @@ const memFsPromises = {
       if (rest.includes('/')) continue;
       if (seen.has(rest)) continue;
       seen.add(rest);
-      out.push({ name: rest, isFile: () => false, isDirectory: () => true });
+      out.push({ name: rest, isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false });
     }
     return out;
   },

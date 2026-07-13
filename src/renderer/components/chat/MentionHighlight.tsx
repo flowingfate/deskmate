@@ -15,7 +15,7 @@ const HTML_ESCAPE_MAP: Record<string, string> = {
 const HTML_ESCAPE_RE = /[&<>"']/g;
 
 const URI_MENTION = /\[@(?:knowledge:\/\/|local:\/\/)[^\]]+\]/;
-const SKILL_MENTION = /\[#skill:([^\]]+)\]/;
+const SKILL_MENTION = /\[@skill:\/\/([^\]]+)\]/;
 const NEWLINE = /\n/;
 const MENTION_RE = new RegExp(
   `${URI_MENTION.source}|${SKILL_MENTION.source}|${NEWLINE.source}`,
@@ -29,7 +29,7 @@ function highlightMentions(text: string): string {
 
   return escaped.replace(MENTION_RE, (match) => {
     if (match === '\n') return '<br>';
-    if (match.startsWith('[#')) {
+    if (match.startsWith('[@skill://')) {
       return `<mark class="mention-highlight skill-mention">${match}</mark>`;
     }
     return `<mark class="mention-highlight uri-mention">${match}</mark>`;

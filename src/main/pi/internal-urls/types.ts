@@ -114,8 +114,9 @@ export interface ProtocolHandler {
    * **sandbox 边界检查仍必须做** —— renderer 拿到的绝对路径必须落在 sandbox 内,
    * `..` 越界一律抛错。
    *
-   * 未实现 = 该 scheme 不支持"翻成 fs path"语义(例如 `skill://` 应保持系统资产
-   * 抽象,不该外泄绝对路径)。
+   * 未实现 = 该 scheme 不支持"翻成 fs path"语义(纯 in-memory 系统资产)。
+   * `skill://` **实现**了本钩子:skill 是 curated agent 资产(需被 shell 执行、
+   * 被 renderer fs IPC 消费),有意外泄绝对路径 —— 与隔离 sandbox 的取舍不同。
    */
   resolveToPath?(url: ParsedInternalUrl, ctx: ResolveContext): Promise<string>;
 }

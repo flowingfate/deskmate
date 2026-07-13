@@ -19,6 +19,7 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { extractMonthFromChatSessionIdValue } from '@shared/utils/idFormats';
+import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from './root';
 
 // ============================================================
@@ -137,14 +138,6 @@ export function getAssetsDir(): string {
   return path.join(getAppDataPath(), 'assets');
 }
 
-export function getGithubSkillReposDir(): string {
-  return path.join(getAppDataPath(), 'github-skill-repos');
-}
-
-export function getClawhubSkillsDir(): string {
-  return path.join(getAppDataPath(), 'clawhub-skills');
-}
-
 export function getTmpDir(): string {
   return path.join(getAppDataPath(), 'tmp');
 }
@@ -189,7 +182,8 @@ export function getProfileDirectoryPath(id: string): string {
 }
 
 export function getProfileSkillsDir(id: string): string {
-  return path.join(getProfileDirectoryPath(id), 'skills');
+  // 复用 PERSIST_PATH.skillsDir 派生 `/skills` 段，避免与 shared 层路径规则漂移。
+  return PERSIST_PATH.skillsDir(getAppRoot(), id);
 }
 
 // ============================================================

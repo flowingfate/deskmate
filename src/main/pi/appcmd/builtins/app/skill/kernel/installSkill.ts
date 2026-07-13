@@ -10,7 +10,7 @@
  * 该 helper 当前没有 signal 入口。
  */
 
-import { installAndActivateSkill } from '@main/lib/skill/installAndActivateSkill';
+import { installAndActivateSkill } from '@main/lib/skill';
 
 export interface InstallSkillArgs {
   /** Skill name(用于结果展示) */

@@ -12,6 +12,7 @@
 import { Profiles } from '@main/persist';
 import type { Agent } from '@main/persist/agent';
 import type { AgentMcpServer } from '@shared/persist/types';
+import type { SkillBindings } from '@shared/types/profileTypes';
 
 interface AgentMcpServerInput {
   name: string;
@@ -108,9 +109,10 @@ export async function updateAgentInternal(
       }));
     }
 
-    let finalSkills: string[] | undefined;
+    // CLI `--skill foo` 语义 = 第一档 自动启用；整体替换 SkillBindings。
+    let finalSkills: SkillBindings | undefined;
     if (config.skills !== undefined) {
-      finalSkills = config.skills;
+      finalSkills = Object.fromEntries(config.skills.map((n) => [n, 'live' as const]));
     }
 
     if (config.system_prompt !== undefined) {

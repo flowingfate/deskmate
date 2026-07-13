@@ -1,4 +1,6 @@
+import type { Mock } from 'vitest';
 import { removeSkillsFromAgents } from '../removeSkillsFromAgents';
+import type { SkillBindings } from '@shared/types/profileTypes';
 
 const mockActive = vi.fn();
 
@@ -6,15 +8,34 @@ vi.mock('../../../persist', () => ({
   Profiles: { get: () => ({ active: () => mockActive() }) },
 }));
 
-function makeAgent(id: string, name: string, skills: string[]) {
-  const config: any = { name, skills };
+interface TestAgentConfig {
+  name: string;
+  skills: SkillBindings;
+}
+interface TestAgent {
+  id: string;
+  config: TestAgentConfig;
+  patchFront: Mock;
+  persist: Mock;
+}
+
+/** 从档位 map 或名字数组（默认 live 档）构造 skills 映射，方便测试书写。 */
+function toBindings(skills: SkillBindings | string[]): SkillBindings {
+  if (Array.isArray(skills)) {
+    return Object.fromEntries(skills.map((n) => [n, 'live' as const]));
+  }
+  return skills;
+}
+
+function makeAgent(id: string, name: string, skills: SkillBindings | string[]): TestAgent {
+  const config: TestAgentConfig = { name, skills: toBindings(skills) };
   // Mirror the real Agent.patchFront: assign the diff to config, then persist.
   // Source removeSkillsFromAgents only awaits agent.patchFront() and relies on
   // its internal persist call for durability.
-  const agent: any = {
+  const agent: TestAgent = {
     id,
     config,
-    patchFront: vi.fn(async (p: any) => {
+    patchFront: vi.fn(async (p: Partial<TestAgentConfig>) => {
       Object.assign(config, p);
       await agent.persist();
     }),
@@ -23,10 +44,10 @@ function makeAgent(id: string, name: string, skills: string[]) {
   return agent;
 }
 
-function buildProfile(agents: any[]) {
-  const byId: Record<string, any> = Object.fromEntries(agents.map(a => [a.id, a]));
+function buildProfile(agents: TestAgent[]) {
+  const byId: Record<string, TestAgent> = Object.fromEntries(agents.map((a) => [a.id, a]));
   return {
-    listAgents: () => agents.map(a => ({ id: a.id })),
+    listAgents: () => agents.map((a) => ({ id: a.id })),
     getAgent: async (id: string) => byId[id],
   };
 }
@@ -54,9 +75,10 @@ describe('removeSkillsFromAgents', () => {
     expect(result.success).toBe(true);
     expect(result.updatedAgentCount).toBe(3);
     expect(result.removedBindingCount).toBe(4);
-    expect(a1.patchFront).toHaveBeenCalledWith({ skills: ['figma'] });
-    expect(a2.patchFront).toHaveBeenCalledWith({ skills: [] });
-    expect(a3.patchFront).toHaveBeenCalledWith({ skills: [] });
+    // 保留未删除的档位（figma 仍为 live）；全删则为空 map。
+    expect(a1.patchFront).toHaveBeenCalledWith({ skills: { figma: 'live' } });
+    expect(a2.patchFront).toHaveBeenCalledWith({ skills: {} });
+    expect(a3.patchFront).toHaveBeenCalledWith({ skills: {} });
   });
 
   it('reports unchanged targets when none of the requested skills are applied', async () => {
@@ -88,7 +110,20 @@ describe('removeSkillsFromAgents', () => {
 
     expect(result.success).toBe(true);
     expect(result.removedBindingCount).toBe(1);
-    expect(a1.patchFront).toHaveBeenCalledWith({ skills: [] });
+    expect(a1.patchFront).toHaveBeenCalledWith({ skills: {} });
     expect(a1.persist).toHaveBeenCalled();
+  });
+
+  it('preserves the tier of a skill that is not being removed (lazy stays lazy)', async () => {
+    const a1 = makeAgent('chat-1', 'Deck Builder', { pptx: 'live', pdf: 'lazy' });
+    mockActive.mockResolvedValue(buildProfile([a1]));
+
+    const result = await removeSkillsFromAgents({
+      skillNames: ['pptx'],
+      targets: [{ agentId: 'chat-1', agentName: 'Deck Builder' }],
+    });
+
+    expect(result.success).toBe(true);
+    expect(a1.patchFront).toHaveBeenCalledWith({ skills: { pdf: 'lazy' } });
   });
 });
