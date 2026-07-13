@@ -120,12 +120,12 @@ runTurnLoop()                                                 session.ts:164
   │     └──────────────────────────────────────────────────────────────┘
   │     │
   │     ├─ if stopReason === 'aborted': push partial → break
-  │     ├─ assistantMsg = fromPiAssistantMessage(final)
+  │     ├─ assistantMsg = fromPiAssistantMessage(final, catalog)  ← MCP 限定名 demux 回 name+mcp
   │     │   appendAssistantMessage(assistantMsg)             ← 写 PersistedAssistantMessage
   │     ├─ lastUsage = final.usage    (供下一轮压缩决策 + ContextBadge)
   │     │
   │     ├─ if stopReason !== 'toolUse' → break
-  │     ├─ toolCalls = assistantMsg.tool_calls
+  │     ├─ toolCalls = final.content 中的 toolCall(**限定名**,非 demux 副本 → 保证 executeToolCall 查表命中)
   │     ├─ if signal.aborted → throw CancellationError
   │     └─ handleToolCalls(toolCalls, signal, turnTracer)
   │           Promise.all([ executeToolCall(...) ])      ← 并行
@@ -226,22 +226,20 @@ return [
 
 `pi/tool.ts` 三件事:列工具、翻译为 pi.Tool、执行 + interactive 弹窗。
 
-**列工具 + per-turn catalog**:`buildToolCatalogForAgent(agentCfg)`(`pi/toolCatalog.ts`)合并 agent 顶层 `tools?: string[]`(本地工具白名单,空 / 不设 = 全开)与 `agentCfg.mcpServers[]`(外部 MCP 显式启用集)产出 `ToolCatalog`。`specs` 直接喂 `pi.streamSimple({ tools })`;`routes: Map<toolName, { kind: 'local' } | { kind: 'mcp'; serverName }>` 给后续执行精确路由。同名工具(local ∩ mcp 或两 mcp server)在 build 时即抛 —— **不做静默优先级、不做 namespace**。
+**列工具 + per-turn catalog**:`buildToolCatalogForAgent(agentCfg)`(`pi/toolCatalog.ts`)合并 agent 顶层 `tools?: string[]`(本地工具白名单,空 / 不设 = 全开)与 `agentCfg.mcpServers[]`(外部 MCP 显式启用集)产出 `ToolCatalog` class。`specs`(公开只读)直接喂 `pi.streamSimple({ tools })`;私有 `routes: Map<llmName, { kind: 'local'; toolName } | { kind: 'mcp'; serverName; toolName }>` 经 `getRoute(name)` 精确路由。完整 LLM 限定名冲突在 build 时即抛 —— **不做静默优先级、不做 namespace**。
 
 **执行单个 tool call**(`executeToolCall(call, catalog, ctx)`,`tool.ts:127`):
 
 ```
 tracer = ctx.tracer.derive({ mod: 'chat.tool', toolName, callId, ... })
 
-route = catalog.routes.get(name)        // 必存在,否则 LLM 出错叫了不在 list 里的 tool
+route = catalog.getRoute(name)          // 必存在,否则 LLM 出错叫了不在 list 里的 tool
 
 try:
   rawContent = route.kind === 'local'
                ? await tools.execute(name, args, ctx)          // pi/tools/registry.ts,handler 拿 ctx 参数
                : await executeMcpToolOnServer(route.serverName, name, args, ctx.signal)
-  content = name === 'ask'
-            ? await runInteractiveInputFollowUp(...)            // 仅 local 路径启用
-            : rawContent
+  content = rawContent   // ask 的 human-loop 卡片派发已内聚到 ask 工具 handler 内部
   return { toolCallId, toolName, content, isError: false }
 catch e:
   return { toolCallId, toolName, content: e.message, isError: true }   // 不抛

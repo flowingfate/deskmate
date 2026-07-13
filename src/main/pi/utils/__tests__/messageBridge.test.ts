@@ -15,6 +15,7 @@ import type {
   AssistantMessage as PiAssistantMessage,
   Tool as PiTool,
 } from '@earendil-works/pi-ai';
+import { ToolCatalog, type ToolRoute } from '../../toolCatalog';
 
 const piAssistant = (overrides: Partial<PiAssistantMessage> = {}): PiAssistantMessage => ({
   role: 'assistant',
@@ -59,6 +60,9 @@ const tc = (id: string, withResponse: 'success' | 'fail' | false = false): ToolC
     : {}),
 });
 
+const catalog = (routes: Array<[string, ToolRoute]> = []): ToolCatalog =>
+  new ToolCatalog([], new Map(routes));
+
 // ───────────────────────────────────────────────────────────────────────────
 // 入境
 // ───────────────────────────────────────────────────────────────────────────
@@ -72,7 +76,7 @@ describe('fromPiAssistantMessage 入境', () => {
       ],
       responseId: 'r1',
     });
-    const out = fromPiAssistantMessage(pi);
+    const out = fromPiAssistantMessage(pi, catalog());
     expect(out.think).toBe('aaabbb');
     expect(out.content).toBe('');
     expect(out.tool_calls).toEqual([]);
@@ -86,7 +90,7 @@ describe('fromPiAssistantMessage 入境', () => {
       ],
       responseId: 'r2',
     });
-    const out = fromPiAssistantMessage(pi);
+    const out = fromPiAssistantMessage(pi, catalog());
     expect(out.content).toBe('hello world');
   });
 
@@ -101,7 +105,7 @@ describe('fromPiAssistantMessage 入境', () => {
       responseId: 'r3',
       stopReason: 'toolUse',
     });
-    const out = fromPiAssistantMessage(pi);
+    const out = fromPiAssistantMessage(pi, catalog());
     expect(out.think).toBe('plan');
     expect(out.content).toBe('let me check');
     expect(out.tool_calls).toHaveLength(2);
@@ -112,11 +116,12 @@ describe('fromPiAssistantMessage 入境', () => {
   });
 
   it('stopReason=aborted 时 outcome.kind=aborted, partial 跟内容非空成正比', () => {
-    const empty = fromPiAssistantMessage(piAssistant({ content: [], stopReason: 'aborted' }));
+    const empty = fromPiAssistantMessage(piAssistant({ content: [], stopReason: 'aborted' }), catalog());
     expect(empty.outcome).toEqual({ kind: 'aborted', partial: false });
 
     const withText = fromPiAssistantMessage(
       piAssistant({ content: [{ type: 'text', text: 'half' }], stopReason: 'aborted' }),
+      catalog(),
     );
     expect(withText.outcome).toEqual({ kind: 'aborted', partial: true });
   });
@@ -124,6 +129,7 @@ describe('fromPiAssistantMessage 入境', () => {
   it('stopReason=error 时 outcome.kind=error 透传 message', () => {
     const out = fromPiAssistantMessage(
       piAssistant({ content: [], stopReason: 'error', errorMessage: 'boom' }),
+      catalog(),
     );
     expect(out.outcome).toEqual({ kind: 'error', message: 'boom' });
   });
@@ -131,6 +137,7 @@ describe('fromPiAssistantMessage 入境', () => {
   it('error message 含 overflow 关键字 → category=overflow', () => {
     const out = fromPiAssistantMessage(
       piAssistant({ content: [], stopReason: 'error', errorMessage: 'context length exceeded' }),
+      catalog(),
     );
     expect(out.outcome).toEqual({
       kind: 'error',
@@ -140,7 +147,7 @@ describe('fromPiAssistantMessage 入境', () => {
   });
 
   it('responseId 缺省时生成 id', () => {
-    const out = fromPiAssistantMessage(piAssistant({ content: [], responseId: undefined }));
+    const out = fromPiAssistantMessage(piAssistant({ content: [], responseId: undefined }), catalog());
     expect(out.id).toMatch(/^msg_/);
   });
 
@@ -150,8 +157,26 @@ describe('fromPiAssistantMessage 入境', () => {
         content: [],
         usage: { input: 100, output: 50, cacheRead: 30, cacheWrite: 20, totalTokens: 200, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       }),
+      catalog(),
     );
     expect(out.usage).toEqual({ in: 100, out: 50, cache: [30, 20], total: 200 });
+  });
+
+  it('MCP 限定名 serverName/toolName 借 catalog demux 回自然 name + mcp', () => {
+    const pi = piAssistant({
+      content: [
+        { type: 'toolCall', id: 't1', name: 'brave/search', arguments: { q: 'x' } },
+        { type: 'toolCall', id: 't2', name: 'read', arguments: { path: '/y' } },
+      ],
+      stopReason: 'toolUse',
+    });
+    const out = fromPiAssistantMessage(pi, catalog([
+      ['brave/search', { kind: 'mcp', serverName: 'brave', toolName: 'search' }],
+      ['read', { kind: 'local', toolName: 'read' }],
+    ]));
+    expect(out.tool_calls[0]).toMatchObject({ id: 't1', name: 'search', mcp: 'brave' });
+    expect(out.tool_calls[1]).toMatchObject({ id: 't2', name: 'read' });
+    expect(out.tool_calls[1].mcp).toBeUndefined();
   });
 });
 
@@ -351,6 +376,22 @@ describe('toPiContext 出境', () => {
     const ctx = toPiContext(messages, '', tools);
     const assistant = ctx.messages[0] as { content: Array<{ type: string }> };
     expect(assistant.content.map((c) => c.type)).toEqual(['thinking', 'text', 'toolCall']);
+  });
+
+  it('MCP tool 回放时以 serverName/toolName 还原 LLM 名称', () => {
+    const mcpCall: ToolCall = {
+      id: 't1',
+      name: 'search',
+      mcp: 'brave',
+      time: 1,
+      args: { query: 'deskmate' },
+      response: { time: 2, status: 'success', result: 'ok', images: [] },
+    };
+    const ctx = toPiContext([a({ tool_calls: [mcpCall] })], '', tools);
+    const assistant = ctx.messages[0] as { content: Array<{ type: string; name?: string }> };
+    const result = ctx.messages[1] as { toolName: string };
+    expect(assistant.content.find((part) => part.type === 'toolCall')?.name).toBe('brave/search');
+    expect(result.toolName).toBe('brave/search');
   });
 
   it('assistant.outcome=error 时 stopReason=error, errorMessage 透传到 pi', () => {

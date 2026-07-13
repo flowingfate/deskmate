@@ -100,6 +100,26 @@ describe('messageWire.dehydrate', () => {
     const assistantLine = lines[0] as PersistedAssistantMessage;
     expect(assistantLine.tool_calls?.[0]).not.toHaveProperty('response');
   });
+
+  it('MCP tool 的 server 名称随 assistant 行落盘', () => {
+    const lines = dehydrate([
+      a({
+        tool_calls: [{
+          id: 't1',
+          name: 'search',
+          time: 2001,
+          args: { query: 'deskmate' },
+          mcp: 'brave-search',
+        }],
+      }),
+    ]);
+
+    const assistantLine = lines[0] as PersistedAssistantMessage;
+    expect(assistantLine.tool_calls?.[0].mcp).toBe('brave-search');
+    expect(rehydrate(lines).messages[0]).toMatchObject({
+      tool_calls: [{ mcp: 'brave-search' }],
+    });
+  });
 });
 
 describe('messageWire.rehydrate', () => {

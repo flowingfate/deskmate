@@ -263,7 +263,7 @@ export class SubAgentSession {
 
       // aborted：把已收到的 partial 落进历史并退出
       if (final.stopReason === 'aborted') {
-        const partial = fromPiAssistantMessage(final);
+        const partial = fromPiAssistantMessage(final, args.catalog);
         if (partial.content.length > 0 || (partial.tool_calls?.length ?? 0) > 0) {
           this.addAssistantMessage(partial);
         }
@@ -274,7 +274,7 @@ export class SubAgentSession {
         };
       }
 
-      const assistantMsg = fromPiAssistantMessage(final);
+      const assistantMsg = fromPiAssistantMessage(final, args.catalog);
       this.addAssistantMessage(assistantMsg);
 
       this.lastUsage = final.usage;
@@ -288,6 +288,10 @@ export class SubAgentSession {
         },
       };
 
+      // 执行侧必须用 final.content 的 raw toolCall（MCP 的 LLM 限定名
+      // serverName/toolName），executeToolCall 以此查 catalog.routes 命中。
+      // 切勿改用 assistantMsg.tool_calls —— 那是 demux 回自然名的持久化副本，
+      // 拿去查表会 miss，导致 MCP 工具全部执行失败。
       const toolCalls = final.content.filter((c): c is Extract<typeof c, { type: 'toolCall' }> => c.type === 'toolCall');
       const summary: RunTurnResult = {
         textContent: extractAssistantText(assistantMsg),
@@ -408,7 +412,8 @@ export class SubAgentSession {
     // 更易追踪日志)。每个 tool call 各自一个 chat.tool span。
     for (const tc of toolCalls) {
       const startTime = Date.now();
-      hooks.onToolStart?.(tc.id, tc.name, tc.arguments);
+      const { name: toolName } = catalog.resolveIdentity(tc.name);
+      hooks.onToolStart?.(tc.id, toolName, tc.arguments);
 
       const call = { id: tc.id, name: tc.name, arguments: tc.arguments };
       const ctx: ToolContext = {
@@ -435,11 +440,11 @@ export class SubAgentSession {
       let content = result.content;
       if (!result.isError && hooks.onToolResultPostprocess) {
         try {
-          content = await hooks.onToolResultPostprocess(tc.name, tc.arguments, content, result.deliverables);
+          content = await hooks.onToolResultPostprocess(toolName, tc.arguments, content, result.deliverables);
         } catch (err) {
           logger.warn({
             msg: '[SubAgentSession] tool result postprocess failed; using raw content',
-            toolName: tc.name,
+            toolName,
             err: err instanceof Error ? err.message : String(err),
           });
         }
@@ -455,9 +460,9 @@ export class SubAgentSession {
       this.applyToolResponse(call.id, toolResult);
 
       if (result.isError) {
-        hooks.onToolError?.(tc.id, tc.name, Date.now() - startTime);
+        hooks.onToolError?.(tc.id, toolName, Date.now() - startTime);
       } else {
-        hooks.onToolDone?.(tc.id, tc.name, Date.now() - startTime, content.length);
+        hooks.onToolDone?.(tc.id, toolName, Date.now() - startTime, content.length);
       }
     }
   }

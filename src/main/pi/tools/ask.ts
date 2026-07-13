@@ -1,9 +1,9 @@
 /**
  * `ask`:模型主动向用户索取结构化输入。
  *
- * 这个工具的 tool_result follow-up(把 schema 派发成 choice/form 卡片到
- * renderer)由 `pi/tool.ts::executeToolCall` 在 route.kind === 'local' &&
- * name === 'ask' 时调用 —— 不在本 wrapper 里。
+ * 校验通过后,本工具**自身**把 schema 派发成 choice/form 卡片到 renderer、
+ * 阻塞等用户提交/跳过、返回最终结果 JSON(`dispatchInteractiveCard`)——
+ * 与 `shell` 的 device-auth 同范式,不再由 `pi/tool.ts` 按 name 特判回调。
  *
  * Phase 8a 把 LLM-visible name 从 `request_interactive_input` 简化为 `ask`;
  * Phase 8b 把文件名 / 内部 type / 变量名一并对齐 —— 旧 `RequestInteractiveInput*`
@@ -11,10 +11,20 @@
  */
 
 import type { AskArgs, AskToolResult } from '@shared/types/askTypes';
+import type {
+  ChoiceInteractionRequest,
+  ChoiceInteractionResponse,
+  FormInteractionRequest,
+  FormInteractionResponse,
+  InteractiveMap,
+  InteractiveRequestType,
+} from '@shared/types/interactiveRequestTypes';
+import { request as humanLoopRequest } from '@shared/ipc/human-loop';
+import type { WebContents } from 'electron';
 import { z } from 'zod';
 
 import { jsonSchema } from './schema';
-import type { LocalTool, ToolResult } from './types';
+import type { LocalTool, ToolContext, ToolResult } from './types';
 
 const choiceOptionSchema = z.object({
   value: z.string().min(1),
@@ -259,10 +269,10 @@ export const ask: LocalTool = {
     description: DESCRIPTION,
     parameters: PARAMETERS,
   },
-  async handler(args, _ctx): Promise<ToolResult> {
-    // normalize → zod parse → 二次结构校验 → 落字段默认值。
-    // 失败统一返回 `{ success: false, error: 'INVALID_INPUT', message }`;
-    // 不抛错(由 `pi/tool.ts::executeToolCall` 直接读 result 派发卡片)。
+  async handler(args, ctx): Promise<ToolResult> {
+    // normalize → zod parse → 二次结构校验 → 落字段默认值。校验失败直接把
+    // `{ success: false, error: 'INVALID_INPUT', message }` 作为 tool_result 回给
+    // LLM(不弹卡片);通过则派发交互卡片并阻塞等用户。
     const parsed = askArgsSchema.safeParse(normalizeInteractiveInputArgs(args));
     if (!parsed.success) {
       const result: AskToolResult = {
@@ -301,10 +311,124 @@ export const ask: LocalTool = {
       return { ok: true, content: JSON.stringify(result) };
     }
 
-    const result: AskToolResult = {
-      success: true,
-      interactive_request: normalizedArgs as AskArgs,
-    };
-    return { ok: true, content: JSON.stringify(result) };
+    // 校验通过 → 直接把 choice/form 卡片派发到 renderer,阻塞等用户提交/跳过,
+    // 返回最终结果 JSON。以前这段 human-loop 在 `pi/tool.ts` 按 name==='ask'
+    // 特判触发;现已内聚到工具本体(与 `shell` 的 device-auth 同范式)。
+    return { ok: true, content: await dispatchInteractiveCard(normalizedArgs as AskArgs, ctx) };
   },
 };
+
+/**
+ * 把已校验的 `AskArgs` 派发成 choice/form 卡片到 renderer,阻塞等用户提交/跳过,
+ * 返回给 LLM 的最终结果 JSON。`eventSender` 为空(JobRun / 测试路径)时 human-loop
+ * 退化为"用户跳过"等价语义。
+ */
+async function dispatchInteractiveCard(args: AskArgs, ctx: ToolContext): Promise<string> {
+  if (args.schema.kind === 'choice') {
+    const id = generateInteractionId('choice');
+    const request: ChoiceInteractionRequest = {
+      chatSessionId: ctx.sessionId,
+      title: args.title,
+      description: args.description,
+      submitLabel: args.submitLabel,
+      skipLabel: args.skipLabel,
+      mode: args.schema.mode,
+      options: args.schema.options,
+      minSelections: args.schema.minSelections,
+      maxSelections: args.schema.maxSelections,
+    };
+    const cancel: ChoiceInteractionResponse = { action: 'skip', selectedValues: [] };
+    const response = await sendHumanLoopRequest(ctx.eventSender, 'choice', id, request, cancel, ctx.signal);
+
+    if (response.action === 'skip') {
+      return JSON.stringify({
+        success: true,
+        status: 'skipped',
+        request_type: 'choice',
+        skipped_by_user: true,
+        user_action: 'skip',
+        message:
+          'The user explicitly skipped or cancelled this interactive input request. Do not ask the same interactive question again unless the user later reopens the topic or provides new context.',
+        selected_values: [],
+      });
+    }
+    return JSON.stringify({
+      success: true,
+      status: 'submitted',
+      request_type: 'choice',
+      skipped_by_user: false,
+      user_action: 'submit',
+      message: 'The user submitted a response to this interactive input request.',
+      selected_values: response.selectedValues || [],
+    });
+  }
+
+  const id = generateInteractionId('form');
+  const request: FormInteractionRequest = {
+    chatSessionId: ctx.sessionId,
+    title: args.title,
+    description: args.description,
+    submitLabel: args.submitLabel,
+    skipLabel: args.skipLabel,
+    fields: args.schema.fields.map((field) => ({
+      key: field.key,
+      label: field.label,
+      control: field.control,
+      type: field.control === 'checkbox' ? 'boolean' : field.control === 'number' ? 'double' : 'string',
+      required: field.required,
+      defaultValue: field.defaultValue,
+      placeholder: field.placeholder,
+      description: field.description,
+      options: field.options,
+      minSelections: field.minSelections,
+      maxSelections: field.maxSelections,
+    })),
+  };
+  const cancel: FormInteractionResponse = { action: 'skip', formValues: {} };
+  const response = await sendHumanLoopRequest(ctx.eventSender, 'form', id, request, cancel, ctx.signal);
+
+  if (response.action === 'skip') {
+    return JSON.stringify({
+      success: true,
+      status: 'skipped',
+      request_type: 'form',
+      skipped_by_user: true,
+      user_action: 'skip',
+      message:
+        'The user explicitly skipped or cancelled this interactive input request. Do not ask the same interactive question again unless the user later reopens the topic or provides new context.',
+      form_values: null,
+    });
+  }
+  return JSON.stringify({
+    success: true,
+    status: 'submitted',
+    request_type: 'form',
+    skipped_by_user: false,
+    user_action: 'submit',
+    message: 'The user submitted a response to this interactive input request.',
+    form_values: response.formValues || {},
+  });
+}
+
+function generateInteractionId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+async function sendHumanLoopRequest<K extends InteractiveRequestType>(
+  sender: WebContents | null,
+  type: K,
+  id: string,
+  request: InteractiveMap[K]['in'],
+  cancelResponse: InteractiveMap[K]['out'],
+  signal: AbortSignal,
+): Promise<InteractiveMap[K]['out']> {
+  if (!sender || sender.isDestroyed()) return cancelResponse;
+
+  const task = humanLoopRequest(type, request, id).to(sender);
+  if (signal.aborted) {
+    task.resolve(cancelResponse);
+  } else {
+    signal.addEventListener('abort', () => { task.resolve(cancelResponse); }, { once: true });
+  }
+  return await task;
+}

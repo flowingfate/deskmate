@@ -70,20 +70,25 @@ interface ToolContext {
 ### per-turn ToolCatalog(`pi/toolCatalog.ts`)
 
 ```ts
-interface ToolCatalog {
-  specs: PiTool[];                  // 喂 pi.streamSimple({ tools })
-  routes: ReadonlyMap<string, ToolRoute>;
+class ToolCatalog {
+  readonly specs: PiTool[];         // 公开只读,喂 pi.streamSimple({ tools })
+  // routes 私有 —— 消费方走方法,不直接摸 Map
+  getRoute(llmName): ToolRoute | undefined;          // 执行 dispatch
+  resolveIdentity(llmName): { name; mcp };           // 限定名 → 自然名+mcp
+  static empty(): ToolCatalog;                       // 无工具 / 构建失败
 }
-type ToolRoute = { kind: 'local' } | { kind: 'mcp'; serverName: string };
+type ToolRoute =
+  | { kind: 'local'; toolName: string }
+  | { kind: 'mcp'; serverName: string; toolName: string };
 ```
 
 - `buildToolCatalogForAgent(cfg)` / `buildToolCatalogForSubAgent(cfg, mcpSelections)`:
-  agent 顶层 `tools?: string[]` 与 `mcp_servers` 独立合并。
-- 同名工具(local ∩ mcp,或两个 mcp server)在构 catalog 时立即抛 ——
-  **不做静默优先级、不做 namespace**。
-- `pi/tool.ts::executeToolCall(call, catalog, ctx)` 按 `route.kind` 分发:
-  - `'local'` → `tools.execute(name, args, ctx)`(本地 registry)。
-  - `'mcp'` → `executeMcpToolOnServer(serverName, name, args, ctx.signal)`
+  agent 顶层 `tools?: string[]` 与 `mcp_servers` 独立合并；本地 tool 原名暴露，
+  MCP tool 用 `serverName/toolName` 注册给 LLM，`getRoute` 保存原始 server / tool 名。
+- 只有完整 LLM 限定名冲突才构 catalog 时立即抛；**不**按 `/` 反解。
+- `pi/tool.ts::executeToolCall(call, catalog, ctx)` 用 `catalog.getRoute(name)` 取 route，按 `route.kind` 分发:
+  - `'local'` → `tools.execute(route.toolName, args, ctx)`(本地 registry)。
+  - `'mcp'` → `executeMcpToolOnServer(serverName, toolName, args, ctx.signal)`
     (server-scoped 执行,不再按裸 toolName 查全局 `toolToServerMap`)。
 
 ### lazy / 重模块推迟加载
@@ -166,9 +171,11 @@ async function loadImpl() {
   dict 形态(`additionalProperties: { type: 'string' }`)显式写
   `properties: {}` —— JSON Schema 标准里与缺省等价,但显式声明让 typing
   推断稳定。
-- **`ask` 不渲染任意 UI。**(原 LLM-name `request_interactive_input`。)
-  验证 JSON schema 并把规范化的 `choice` / `form` 转回主进程,由 `pi/tool.ts::executeToolCall`
-  用 `humanLoopRequest` 推卡片。
+- **`ask` 自成闭环。**(原 LLM-name `request_interactive_input`。)handler 校验
+  JSON schema 后**自身**用 `humanLoopRequest` 把 `choice` / `form` 卡片推到
+  renderer、阻塞等提交/跳过、返回结果 JSON(`dispatchInteractiveCard`)——
+  与 `shell` 的 device-auth 同范式。`eventSender` 为空(JobRun / 测试)时退化为
+  "用户跳过"。`pi/tool.ts` 不再按 name 特判回调。
 - **`tool_result` 并非总是终态。** `shell` 在命令退出前会通过 `ctx.chunkStream`
   推 `isPartial: true` chunk;下游消费者不能把每个 tool-result 块都当成完成态。
 - **取消信号一路传递。** 网络 I/O / spawn 子进程 / Playwright page 必须把

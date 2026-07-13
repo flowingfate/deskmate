@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { log } from '@main/log';
 
-// route 'foo' / 'bar' / 'noop' 强制走 mcp 路径,这样可以 mock executeMcpToolOnServer
-// 而不需要构造本地工具 registry。`{ kind: 'mcp', serverName: 'X' }` 路由让
-// executeToolCall 把调用转给我们 mock 的 mcp 入口。
+// 限定名 route 强制走 MCP 路径，验证 executeToolCall 用 route 中的原始
+// toolName 调 MCP，而非直接把 LLM-facing name 传入。
 vi.mock('@main/pi/mcp', () => ({
   executeMcpToolOnServer: vi.fn(),
   listAllMcpTools: vi.fn().mockResolvedValue([]),
@@ -12,18 +11,17 @@ vi.mock('@main/pi/mcp', () => ({
 
 import { executeToolCall, type ToolCallInput } from '../tool';
 import type { ToolContext } from '../tools/types';
-import type { ToolCatalog } from '../toolCatalog';
+import { ToolCatalog } from '../toolCatalog';
 import { Tracer } from '@shared/log/trace';
 import { executeMcpToolOnServer } from '../mcp';
 
 const mockedExecMcp = vi.mocked(executeMcpToolOnServer);
 
 function makeCatalog(toolName: string): ToolCatalog {
-  // mcp 路由,server 名固定即可 —— mockedExecMcp 不区分。
-  return {
-    specs: [],
-    routes: new Map([[toolName, { kind: 'mcp', serverName: 'srv1' }]]),
-  };
+  return new ToolCatalog(
+    [],
+    new Map([[toolName, { kind: 'mcp', serverName: 'srv1', toolName: 'actual_tool' }]]),
+  );
 }
 
 function makeCtx(call: ToolCallInput, tracer: Tracer): ToolContext {
@@ -64,6 +62,7 @@ describe('executeToolCall — chat.tool span', () => {
     const parent = Tracer.startWithSpan('turn');
     const call: ToolCallInput = { id: 'call_1', name: 'foo', arguments: { x: 1 } };
     await executeToolCall(call, makeCatalog(call.name), makeCtx(call, parent));
+    expect(mockedExecMcp).toHaveBeenCalledWith('srv1', 'actual_tool', { x: 1 }, expect.any(AbortSignal));
 
     const calls = infoSpy.mock.calls.map(([f]) => f as Record<string, unknown>);
     const start = calls.find((c) => c.mod === 'chat.tool' && c.msg === 'tool start');

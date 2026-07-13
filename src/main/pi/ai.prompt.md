@@ -12,15 +12,15 @@
 | `agent.ts` | Agent 注册表 + getOrCreateSession | 小 |
 | `prompt.ts` | system prompt 拼装(identity + knowledge + skills + sub-agents + global) | 小 |
 | `session.ts` | `BaseSession` 抽象基类 + `RegularSession`(UI 流式)+ `JobRun`(scheduler 静默);turn loop + tool 并行 + 压缩 + overflow 兜底 + 取消;**per-turn 构建 `ToolCatalog`** 并把 `ToolContext` 显式透传给 `executeToolCall` | 中 |
-| `toolCatalog.ts` | per-turn `ToolCatalog` 构建器(`buildToolCatalogForAgent` / `buildToolCatalogForSubAgent`);同时持 `pi.Tool[]`(给 LLM)与 `routes: Map<toolName, ToolRoute>`(`'local' | 'mcp'+serverName`);冲突检测(local∩mcp 同名立即抛) | 小 |
-| `tool.ts` | `executeToolCall(call, catalog, ctx)`:按 `route.kind` 分发到本地 registry 或 `executeMcpToolOnServer`;`ask` follow-up;tracer 起 `chat.tool` span | 中 |
+| `toolCatalog.ts` | per-turn `ToolCatalog` **class**(`buildToolCatalogForAgent` / `buildToolCatalogForSubAgent` 构建;`ToolCatalog.empty()` 空目录)。`specs` 公开只读直喂 pi；`routes` 私有,消费方走方法：`getRoute(llmName)` 取 route(执行 dispatch)、`resolveIdentity(llmName)` 把限定名 demux 回自然 `name` + `mcp`。每条 route 都持原始 `toolName`，MCP route 额外持 `serverName`；本地 tool 保持原名，MCP tool 以 `serverName/toolName` 注册给 LLM（**不**按 `/` 反解），只有完整 LLM 名冲突才抛。`resolveIdentity` 是「LLM 限定名 → 自然名+mcp」demux 的**唯一实现**，messageBridge 入境 / session 流式 chunk / sub-agent hooks 三处都调它 | 小 |
+| `tool.ts` | `executeToolCall(call, catalog, ctx)`:用 `catalog.getRoute(name)` 取 route,按 `route.kind` 分发到本地 registry 或 `executeMcpToolOnServer`;MCP 调用使用 route 的原始 `toolName`,不把 LLM 限定名传给 server;tracer 起 `chat.tool` span。**纯 dispatcher —— 不认识任何具体工具**(`ask` 的 human-loop 卡片派发已内聚回 `tools/ask.ts` handler,不再按 name 特判) | 中 |
 | `tools/` | **本地工具子系统** —— `LocalTool` registry + `ToolContext` + `lazy(spec, loader)` + 所有具体工具文件。**chat 主链路直接调 `tools.execute(name, args, ctx)`,不再绕 MCP 假 server**。详见 [`tools/ai.prompt.md`](./tools/ai.prompt.md) | 见子目录 |
 | `auth.ts` | PiAuthManager:OAuth + apiKey 存取 + expires-based refresh + inflight dedup | 中 |
 | `compression.ts` | 压缩决策(usage = pi.usage.totalTokens,含 output,与 badge 同口径)+ 内置 compressWithFullMode 调用 | 小 |
 | `errors.ts` | classifyError + overflow / network / rate / auth 分类 | 小 |
 | `utility.ts` | 非 streaming 后台调用 `runUtilityCompletion`(doctor / eval / 后台 LLM utility 共用入口) | 小 |
 | `mcp.ts` | external MCP 工具薄包装:`listAllMcpTools()`(给 catalog 列举外部工具)/ `executeMcpToolOnServer(serverName, toolName, args, signal)`(server-scoped 执行,**不再**有按裸 toolName 查全局 map 的路径) | 小 |
-| `utils/messageBridge.ts` | Domain `Message`(`@shared/types/message`)↔ `pi.Message` **唯一翻译点**:入境 `fromPiAssistantMessage`(把 ThinkingPart / TextPart / ToolCallPart 折成单串 `think` + `content` + `tool_calls[]`),出境 `toPiContext` 1→N 展开 `assistant.tool_calls[i].response` 为 `pi.toolResult` 行；内部把首个 user message 的持久化 `time` 投影为固定 reminder，`transientReminder` 仅附本次请求尾部，二者均不落盘 | 中 |
+| `utils/messageBridge.ts` | Domain `Message`(`@shared/types/message`)↔ `pi.Message` **唯一翻译点**:入境 `fromPiAssistantMessage(final, catalog)`(把 ThinkingPart / TextPart / ToolCallPart 折成单串 `think` + `content` + `tool_calls[]`；MCP 的 LLM 限定名经 `catalog.resolveIdentity` 精确 demux 回自然 `name` + `mcp` server，与出境 `toLlmToolName` 对称)，出境以 `ToolCall.mcp` 重新组装 MCP LLM 名称，1→N 展开每个 `assistant.tool_calls[i].response` 为 `pi.toolResult` 行；内部把首个 user message 的持久化 `time` 投影为固定 reminder，`transientReminder` 仅附本次请求尾部，二者均不落盘 | 中 |
 | `utils/fileAnnotation.ts` | 附件文本渲染 | 小 |
 | `utils/localTime.ts` | 客户端本地 ISO 时间、IANA timezone 与 UTC offset 的共享格式化；`app time` 和会话时间锚点复用 | 小 |
 | `utils/config.ts` | agent 配置读取(`readAgentConfig` + `readAgentRuntimeConfig`,返回 `{agent, parsedModel}` 元组;capability 派生不在这里,见 `model.ts`) | 小 |

@@ -2,22 +2,16 @@
  * pi 路径下的 tool 执行编排。
  *
  * Per-turn `ToolCatalog` 同时持 `pi.Tool[]`(给 LLM)与
- * `routes: Map<name, { kind: 'local' } | { kind: 'mcp'; serverName }>`
- * (执行 dispatch)。`executeToolCall` 按 route.kind 分发 —— **绝不**走"按
- * 裸 toolName 找源"的 API,从源头消灭多 MCP server 同名工具静默覆盖的
- * 歧义。
+ * `routes: Map<llmName, { kind: 'local'; toolName } | { kind: 'mcp'; serverName; toolName }>`。
+ * MCP 的 llmName 是 `serverName/toolName`；所有 route 都显式保存原始
+ * `toolName`，绝不按 `/` 反解，也绝不按裸 toolName 找源。
  *
- * `ask` 的 follow-up 只在 local 路径启用 —— 它的 tool result 后处理是
- * deskmate 内部约定,外部 MCP 不该被这条逻辑触碰。(Phase 8a 工具 LLM-name
- * 从 `request_interactive_input` 简化为 `ask`,内部类型名保留。)
+ * MCP tool 的执行 server-scoped(显式 serverName),绝不回到按裸 toolName 查
+ * 全局 map 的老路径。
  */
 
-import type { ChoiceInteractionRequest, ChoiceInteractionResponse, FormInteractionRequest, FormInteractionResponse, InteractiveMap, InteractiveRequestType } from '@shared/types/interactiveRequestTypes';
-import type { AskArgs, AskToolResult } from '@shared/types/askTypes';
-import { request as humanLoopRequest } from '@shared/ipc/human-loop';
 import { log } from '@main/log';
 import { Tracer } from '@shared/log/trace';
-import type { WebContents } from 'electron';
 
 import { executeMcpToolOnServer } from './mcp';
 import type { ToolCatalog } from './toolCatalog';
@@ -63,8 +57,10 @@ export async function executeToolCall(
     argsBytes: typeof call.arguments === 'object' ? JSON.stringify(call.arguments).length : 0,
   }));
 
+  const route = catalog.getRoute(call.name);
+  const toolName = route?.toolName ?? call.name;
+
   try {
-    const route = catalog.routes.get(call.name);
     if (!route) {
       throw new Error(`Tool not in catalog: ${call.name}`);
     }
@@ -74,7 +70,7 @@ export async function executeToolCall(
     let images: ToolResultImage[] | undefined;
     let deliverables: readonly string[] | undefined;
     if (route.kind === 'local') {
-      const result = await localTools.execute(call.name, args, ctx);
+      const result = await localTools.execute(route.toolName, args, ctx);
       if (!result.ok) throw new Error(result.error);
       rawContent = result.content;
       images = result.images;
@@ -82,22 +78,15 @@ export async function executeToolCall(
     } else {
       // route.kind === 'mcp':server-scoped 执行,显式给定 serverName,避免
       // mcpClientManager 全局 toolToServerMap 的同名冲突歧义。
-      rawContent = await executeMcpToolOnServer(route.serverName, call.name, args, ctx.signal);
+      rawContent = await executeMcpToolOnServer(route.serverName, route.toolName, args, ctx.signal);
     }
-
-    // `ask` 的 follow-up 是 deskmate 内部 human-loop 约定,仅对本地实现生效。
-    // 外部 MCP 即使取了同名工具(catalog 已禁止冲突,这条路径理论不可达;
-    // 留作 belt-and-suspenders)也不触发。
-    const content = route.kind === 'local' && call.name === 'ask'
-      ? await runInteractiveInputFollowUp(rawContent, ctx)
-      : rawContent;
 
     log.info(ctx.tracer.fields({
       msg: 'tool ok',
       isError: false,
-      contentBytes: content.length,
+      contentBytes: rawContent.length,
     }, 'self'));
-    return { toolCallId: call.id, toolName: call.name, content, isError: false, ...(images ? { images } : {}), ...(deliverables && deliverables.length > 0 ? { deliverables } : {}) };
+    return { toolCallId: call.id, toolName, content: rawContent, isError: false, ...(images ? { images } : {}), ...(deliverables && deliverables.length > 0 ? { deliverables } : {}) };
   } catch (e) {
     log.warn(ctx.tracer.fields({
       msg: 'tool failed',
@@ -106,7 +95,7 @@ export async function executeToolCall(
     }, 'self'));
     return {
       toolCallId: call.id,
-      toolName: call.name,
+      toolName,
       content: e instanceof Error ? e.message : String(e),
       isError: true,
     };
@@ -133,127 +122,3 @@ export function deriveToolTracer(
   });
 }
 
-// ─── `ask` follow-up ───────────────────────────────────────────────────────
-
-async function runInteractiveInputFollowUp(
-  content: string,
-  ctx: ToolContext,
-): Promise<string> {
-  let parsed: AskToolResult;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    return content;
-  }
-  if (!parsed?.success || !parsed.interactive_request) return content;
-
-  const args: AskArgs = parsed.interactive_request;
-
-  if (args.schema.kind === 'choice') {
-    const id = generateInteractionId('choice');
-    const request: ChoiceInteractionRequest = {
-      chatSessionId: ctx.sessionId,
-      title: args.title,
-      description: args.description,
-      submitLabel: args.submitLabel,
-      skipLabel: args.skipLabel,
-      mode: args.schema.mode,
-      options: args.schema.options,
-      minSelections: args.schema.minSelections,
-      maxSelections: args.schema.maxSelections,
-    };
-    const cancel: ChoiceInteractionResponse = { action: 'skip', selectedValues: [] };
-    const response = await sendHumanLoopRequest(ctx.eventSender, 'choice', id, request, cancel, ctx.signal);
-
-    if (response.action === 'skip') {
-      return JSON.stringify({
-        success: true,
-        status: 'skipped',
-        request_type: 'choice',
-        skipped_by_user: true,
-        user_action: 'skip',
-        message:
-          'The user explicitly skipped or cancelled this interactive input request. Do not ask the same interactive question again unless the user later reopens the topic or provides new context.',
-        selected_values: [],
-      });
-    }
-    return JSON.stringify({
-      success: true,
-      status: 'submitted',
-      request_type: 'choice',
-      skipped_by_user: false,
-      user_action: 'submit',
-      message: 'The user submitted a response to this interactive input request.',
-      selected_values: response.selectedValues || [],
-    });
-  }
-
-  const id = generateInteractionId('form');
-  const request: FormInteractionRequest = {
-    chatSessionId: ctx.sessionId,
-    title: args.title,
-    description: args.description,
-    submitLabel: args.submitLabel,
-    skipLabel: args.skipLabel,
-    fields: args.schema.fields.map((field) => ({
-      key: field.key,
-      label: field.label,
-      control: field.control,
-      type: field.control === 'checkbox' ? 'boolean' : field.control === 'number' ? 'double' : 'string',
-      required: field.required,
-      defaultValue: field.defaultValue,
-      placeholder: field.placeholder,
-      description: field.description,
-      options: field.options,
-      minSelections: field.minSelections,
-      maxSelections: field.maxSelections,
-    })),
-  };
-  const cancel: FormInteractionResponse = { action: 'skip', formValues: {} };
-  const response = await sendHumanLoopRequest(ctx.eventSender, 'form', id, request, cancel, ctx.signal);
-
-  if (response.action === 'skip') {
-    return JSON.stringify({
-      success: true,
-      status: 'skipped',
-      request_type: 'form',
-      skipped_by_user: true,
-      user_action: 'skip',
-      message:
-        'The user explicitly skipped or cancelled this interactive input request. Do not ask the same interactive question again unless the user later reopens the topic or provides new context.',
-      form_values: null,
-    });
-  }
-  return JSON.stringify({
-    success: true,
-    status: 'submitted',
-    request_type: 'form',
-    skipped_by_user: false,
-    user_action: 'submit',
-    message: 'The user submitted a response to this interactive input request.',
-    form_values: response.formValues || {},
-  });
-}
-
-function generateInteractionId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-async function sendHumanLoopRequest<K extends InteractiveRequestType>(
-  sender: WebContents | null,
-  type: K,
-  id: string,
-  request: InteractiveMap[K]['in'],
-  cancelResponse: InteractiveMap[K]['out'],
-  signal: AbortSignal,
-): Promise<InteractiveMap[K]['out']> {
-  if (!sender || sender.isDestroyed()) return cancelResponse;
-
-  const task = humanLoopRequest(type, request, id).to(sender);
-  if (signal.aborted) {
-    task.resolve(cancelResponse);
-  } else {
-    signal.addEventListener('abort', () => { task.resolve(cancelResponse); }, { once: true });
-  }
-  return await task;
-}

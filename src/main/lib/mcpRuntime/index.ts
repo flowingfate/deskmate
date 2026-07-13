@@ -120,9 +120,9 @@ export class MCPClientManager {
   }
 
   /**
-   * Server-scoped 工具执行。caller 必须已经通过 `toolCatalog.routes` 拿到
-   * `{ kind: 'mcp', serverName }` —— 不要新增按裸 toolName 查全局 map 的
-   * API,那条路径存在同名工具后连接者覆盖前者的 bug。
+   * Server-scoped 工具执行。caller 必须已经通过 `toolCatalog.routes` 按 LLM
+   * 限定名精确拿到 `{ kind: 'mcp', serverName, toolName }`，不要新增按裸
+   * toolName 查全局 map 的 API；那条路径存在同名工具后连接者覆盖前者的 bug。
    */
   async executeToolOnServer(args: {
     serverName: string;

@@ -63,6 +63,7 @@ export function rehydrate(lines: readonly PersistedJsonLine[]): {
         name: tc.name,
         time: tc.time,
         args: tc.args,
+        mcp: tc.mcp,
       }));
       const a: AssistantMessage = {
         role: 'assistant',
@@ -130,6 +131,7 @@ export function dehydrate(messages: readonly Message[]): PersistedJsonLine[] {
         name: tc.name,
         time: tc.time,
         args: tc.args,
+        mcp: tc.mcp,
       }));
     }
     if (m.outcome) line.outcome = m.outcome;

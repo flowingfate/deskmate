@@ -149,6 +149,8 @@ export interface ToolCall {
   name: string;
   time: number;
   args: Record<string, unknown>;
+  /** MCP server 名称；缺席表示本地工具或旧历史记录。 */
+  mcp?: string;
   /**
    * 已收到的最终 (最新一次) 结果。未跑或在跑时为 undefined。
    * **不**保留重试历史 —— 内存只关心当前态;历史从 jsonl 现读。

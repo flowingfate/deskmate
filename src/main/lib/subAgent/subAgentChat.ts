@@ -33,7 +33,7 @@ import { createUserMessage } from '@shared/utils/messageFactory';
 
 import type { SubAgentChatOptions } from './types';
 import { SubAgentSession, type SubAgentSessionHooks } from './subAgentSession';
-import { buildToolCatalogForSubAgent, type ToolCatalog } from '@main/pi/toolCatalog';
+import { buildToolCatalogForSubAgent, ToolCatalog } from '@main/pi/toolCatalog';
 const logger = log;
 
 // ---------------------------------------------------------------------------
@@ -676,7 +676,7 @@ export class SubAgentChat {
         msg: '[SubAgentChat] Failed to build tool catalog',
         err: err instanceof Error ? err.message : String(err),
       });
-      return { specs: [], routes: new Map() };
+      return ToolCatalog.empty();
     }
   }
 

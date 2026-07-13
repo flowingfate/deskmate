@@ -30,7 +30,7 @@ import { resolveCredentials, getModelInfo } from './model';
 import { buildSystemPrompt } from './prompt';
 import { toPiContext, fromPiAssistantMessage } from './utils/messageBridge';
 import { deriveToolTracer, executeToolCall } from './tool';
-import { buildToolCatalogForAgent, type ToolCatalog } from './toolCatalog';
+import { buildToolCatalogForAgent, ToolCatalog } from './toolCatalog';
 import type { ToolContext } from './tools/types';
 import { checkAndCompress } from './compression';
 import { classifyError, type PiErrorKind } from './errors';
@@ -81,6 +81,7 @@ interface StreamOneRoundArgs {
   model: PiModel<PiApi>;
   apiKey: string;
   piContext: PiContext;
+  catalog: ToolCatalog;
   signal: AbortSignal;
   parent: Tracer;
   /**
@@ -242,7 +243,7 @@ abstract class BaseSession {
       // 共用同一份 specs,保证"LLM 看到的"与"我们估算的"一致。
       const catalog: ToolCatalog = resolved.capabilities.tools
         ? await buildToolCatalogForAgent(agentCfg)
-        : { specs: [], routes: new Map() };
+        : ToolCatalog.empty();
       const piTools = catalog.specs;
       const contextWindow = baseModel.contextWindow || 128_000;
 
@@ -295,7 +296,7 @@ abstract class BaseSession {
 
         let llmMessages = compressionResult.llmContext;
         let piContext = toPiContext(llmMessages, systemPrompt, piTools);
-        const final = await this.streamOneRound({ model, apiKey, piContext, signal, parent: turnTracer, thinkingLevel: agentCfg.thinkingLevel }).catch(async (err) => {
+        const final = await this.streamOneRound({ model, apiKey, piContext, catalog, signal, parent: turnTracer, thinkingLevel: agentCfg.thinkingLevel }).catch(async (err) => {
           // 服务端 context overflow：本地估算偏低导致首请求被拒。强制压一次再
           // 重试本轮一次；force 压缩仍不能 applied 时只能抛原始错误。
           // pi 在收到 first chunk 前抛错时 stream 还没污染，retry 安全。
@@ -317,7 +318,7 @@ abstract class BaseSession {
 
           llmMessages = forced.llmContext;
           piContext = toPiContext(llmMessages, systemPrompt, piTools);
-          return this.streamOneRound({ model, apiKey, piContext, signal, parent: turnTracer, thinkingLevel: agentCfg.thinkingLevel });
+          return this.streamOneRound({ model, apiKey, piContext, catalog, signal, parent: turnTracer, thinkingLevel: agentCfg.thinkingLevel });
         });
 
         lastStopReason = final.stopReason;
@@ -326,14 +327,14 @@ abstract class BaseSession {
         // 不重新抛 CancellationError —— pi 已经把 error 事件正常发出，
         // 我们已在 stream 上推过 status / complete chunk，直接走清理流程即可。
         if (final.stopReason === 'aborted') {
-          const partial = fromPiAssistantMessage(final);
+          const partial = fromPiAssistantMessage(final, catalog);
           // fromPiAssistantMessage 已经把 aborted 翻译成 outcome.kind='aborted'
           const hasContent = partial.content.length + partial.think.length > 0 || partial.tool_calls.length > 0;
           if (hasContent) await this.appendAssistantMessage(partial);
           break;
         }
 
-        const assistantMsg = fromPiAssistantMessage(final);
+        const assistantMsg = fromPiAssistantMessage(final, catalog);
         await this.appendAssistantMessage(assistantMsg);
 
         // 用 pi 这一轮的 usage 作为下一轮压缩决策依据，并同步进 lastTokenUsage
@@ -689,7 +690,7 @@ export class RegularSession extends BaseSession {
 
   protected async streamOneRound(args: StreamOneRoundArgs): Promise<PiAssistantMessage> {
     this.setStatus(ChatStatus.SENDING_RESPONSE);
-    const { model, apiKey, piContext, signal, parent, thinkingLevel } = args;
+    const { model, apiKey, piContext, catalog, signal, parent, thinkingLevel } = args;
     const stream = this.requireActiveStream();
 
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -750,6 +751,7 @@ export class RegularSession extends BaseSession {
           // ToolCall.args 是结构化对象;UI 直到 args 解完才能展示。pi-ai 在
           // toolcall_end 把已解析好的完整 args 一次性回灌,这里就一次发完。
           const tc = evt.toolCall;
+          const { name, mcp } = catalog.resolveIdentity(tc.name);
           stream.send({
             chunkId: `${messageId}_${chunkSeq++}`,
             messageId,
@@ -759,9 +761,10 @@ export class RegularSession extends BaseSession {
             type: 'tool_call',
             index: evt.contentIndex,
             id: tc.id,
-            name: tc.name,
+            name,
             args: tc.arguments ?? {},
             time: Date.now(),
+            mcp,
           });
         } else if (evt.type === 'thinking_delta') {
           // pi-ai 把推理内容以独立流分段;UI 把这条线拼到 AssistantMessage.think。

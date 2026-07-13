@@ -13,7 +13,7 @@
 | `profile.ts` | 单 profile：内嵌 `ProfileSettings`（settings.json）+ `AgentRegistry`（agents.json：items + primaryAgentId）两个 PersistBase inner class；外层 `Profile` 负责 agent 实体集合（Map<id, Agent>）、CRUD、archive/restore、reconcile、跨 agent 聚合 | large |
 | `agent.ts` | `Agent` class：AGENT.md 读写 + sessions/jobs 子域入口 | large |
 | `session.ts` | `Session`(抽象基类:`messages.jsonl` I/O + files sandbox + 节流 persist + 元数据 mutate)+ `RegularSession` / `JobRun`(各自路径树/索引/索引同步)。消息接口:`appendDomainMessage(m: Message)` 写 user / assistant 行,`appendToolResponse(toolCallId, result)` 写 `tool_res` 行,`rewriteMessages(messages)` 整段重写 jsonl(emit `session:messages:rewritten`),`loadDomainMessages()` 折回 `{ messages, orphanResponses }`。`pendingMessages` 元素类型 `ChatHistoryItem = PersistedJsonLine`(同义 alias)。`flushMessages` 串行化,jsonl 行边界严格 | large |
-| `messageWire.ts` | `dehydrate(messages)` / `rehydrate(lines)` 在 Domain `Message[]` 与 `PersistedJsonLine[]` 之间互转。`PersistedJsonLine` 三种行(user / assistant / `tool_res`)的类型定义在 `shared/persist/types.ts`(跨进程共享) | small |
+| `messageWire.ts` | `dehydrate(messages)` / `rehydrate(lines)` 在 Domain `Message[]` 与 `PersistedJsonLine[]` 之间互转。`PersistedJsonLine` 三种行(user / assistant / `tool_res`)的类型定义在 `shared/persist/types.ts`(跨进程共享)；MCP `ToolCall.mcp`（server 名称）随 assistant 行原样保留，旧行缺席时保持 `undefined` | small |
 | `schedule.ts` | `ScheduleJob` + `ScheduleRegistry`:once/cron job + run 状态机;Step 9 起 run 路径走 `jobRunIdx` | medium |
 | `archive.ts` | agent 软删/恢复/purge/gc | small |
 | `mcp.ts` / `skills.ts` / `subAgents.ts` / `models.ts` | 共享注册表 CRUD | small |

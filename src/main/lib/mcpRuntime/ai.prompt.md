@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-09 -->
+<!-- Last verified: 2026-07-13 -->
 # MCP Runtime
 
 > 仅管理 **外部 MCP server** 的连接生命周期、OAuth、工具元数据缓存与
@@ -55,6 +55,10 @@ pi/tool.ts::executeToolCall(call, catalog, ctx)
 直接按 server name 查 client 然后 `client.executeTool(...)`;不再有"按裸 toolName
 查全局 toolToServerMap"的歧义路径 —— 后者已删,task.md §1 描述的"同名工具
 后连接者覆盖前者"bug 不再可能复现。
+
+LLM-facing MCP 名称由 `pi/toolCatalog.ts` 组合为 `serverName/toolName`，以便多个
+server 同时暴露同名 tool；执行前通过本轮 `ToolCatalog.getRoute(llmName)` **精确查表**恢复
+原始 server / tool 名，绝不按 `/` 字符串反解。
 
 **在线认证(HTTP / SSE 传输)**:401/403 时 transport 解析 `WWW-Authenticate`,
 通过 `McpAuthMetadataService` 发现 OAuth metadata,在重试前向
@@ -135,9 +139,9 @@ consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
   ?? 60000ms`,**`timeout: 0` 不是"无超时"** —— 会秒超时。initialize /
   listTools / callTool 全部显式传 `3_600_000ms` 覆盖(见 `mcpClient.ts`
   `REQUEST_TIMEOUT_MS`)。真正的取消由调用方 `AbortSignal` 走。
-- **executeToolOnServer 必须 server-scoped。** caller 通过 `ToolCatalog.routes`
-  拿到 `{ kind: 'mcp', serverName }` 后调入。**不要**新加按裸 toolName 查
-  global map 的 API —— 否则"多 server 同名工具静默覆盖"bug 会复现。
+- **executeToolOnServer 必须 server-scoped。** caller 通过 `ToolCatalog.getRoute(llmName)`
+  按 LLM 限定名精确取得 `{ kind: 'mcp', serverName, toolName }` 后调入。**不要**
+  新加按裸 toolName 查 global map 的 API —— 否则"多 server 同名工具静默覆盖"bug 会复现。
 - **运行时状态仅在内存。** `MCPServerRuntimeState` 永不写盘;应用重启所有 server 一律
   `disconnected`,与上次会话无关。
 - **OAuth 凭据明文写盘**(`DeskmateTokenCache` 产出 `.json`,与 `auth.json` 一致),profile 级隔离。

@@ -2,17 +2,11 @@
  * Per-turn 工具目录:把"本轮 LLM 看得见的 pi.Tool[]"与"执行时按工具名找到
  * 应去哪个 runtime"两件事打包成一个不可变快照。
  *
- * 历史 bug(必读):
- *   - 旧实现 `pi/tool.ts::listToolsForAgent` 仅做展示侧筛选;实际执行走
- *     `mcpClientManager.executeTool(toolName)` 按裸 toolName 查全局
- *     `toolToServerMap` —— 后连接的 MCP server 同名工具静默覆盖前者,
- *     用户期望 server A 的 `foo` 可能命中 server B。
- *   - 引入 ToolCatalog 后,执行路径必须 server-scoped(local / mcp+serverName),
- *     且冲突在构建期就 fail,不再"先连先得 vs 后连先得"。
+ * MCP 工具名在 LLM 侧按 `${serverName}/${toolName}` 限定，允许不同 server
+ * 暴露同名工具。入境调用以 routes 精确查表，**绝不**按 `/` 反解。
  *
- * 名字冲突策略:同一 toolName 同时被 local 与 mcp,或两个 mcp server 映射,
- * 一律 throw —— 不做优先级,不做 namespace。本地工具命名空间不与外部 MCP
- * 重叠是 agent 配置者的责任,catalog 只负责把违规变成可见的早期错误。
+ * 若限定名仍冲突（例如 server / tool 本身含 `/` 导致拼接相同），构建期 throw，
+ * 不做优先级或静默覆盖。
  */
 
 import type { Tool as PiTool } from '@earendil-works/pi-ai';
@@ -22,15 +16,46 @@ import { listAllMcpTools } from './mcp';
 import { tools as localTools, ensureToolsRegistered } from './tools/registry';
 import type { LocalTool } from './tools/types';
 
-/** 工具来源路由。`'local'` 跳本地 registry;`'mcp'` 透传 serverName 给 mcp runtime。 */
-export type ToolRoute =
-  | { kind: 'local' }
-  | { kind: 'mcp'; serverName: string };
 
-/** per-turn 工具目录快照。`specs` 直接喂给 pi-ai;`routes` 是执行侧 dispatch 表。 */
-export interface ToolCatalog {
-  specs: PiTool[];
-  routes: ReadonlyMap<string, ToolRoute>;
+/** 每条 route 都保存其原始 toolName；MCP route 额外保存 serverName。 */
+export type ToolRoute =
+  | { kind: 'local'; toolName: string }
+  | { kind: 'mcp'; serverName: string; toolName: string };
+
+/**
+ * per-turn 工具目录快照。`specs` 直接喂给 pi-ai(公开只读);`routes` 是执行侧
+ * dispatch 表,收为 private —— 消费方一律走方法,不直接摸 Map:
+ *   - `getRoute(llmName)`:按 LLM 限定名精确取 route(执行 dispatch)。
+ *   - `resolveIdentity(llmName)`:把限定名 demux 回自然 `name` + `mcp` server。
+ */
+export class ToolCatalog {
+  constructor(
+    readonly specs: PiTool[],
+    private readonly routes: ReadonlyMap<string, ToolRoute>,
+  ) {}
+
+  /** 无工具能力 / 构建失败时的空目录。 */
+  static empty(): ToolCatalog {
+    return new ToolCatalog([], new Map());
+  }
+
+  /** 按 LLM 限定名精确取 route(执行 dispatch);缺席(LLM 叫了不在 list 的 tool)返回 undefined。 */
+  getRoute(llmName: string): ToolRoute | undefined {
+    return this.routes.get(llmName);
+  }
+
+  /**
+   * 把 LLM 限定名还原为 Domain 侧可读的自然 `name` + MCP `mcp` server。
+   * 「LLM 限定名 → 自然名+mcp」这条 demux 规则的**唯一实现** —— messageBridge
+   * 入境、session 流式 chunk、sub-agent hooks 展示名都调它,绝不各自 inline
+   * `route.toolName` / `route.kind === 'mcp'` 判别。route 缺席(不该发生)时
+   * name 回退到原始 llmName。
+   */
+  resolveIdentity(llmName: string): { name: string; mcp: string | undefined } {
+    const route = this.routes.get(llmName);
+    if (route?.kind === 'mcp') return { name: route.toolName, mcp: route.serverName };
+    return { name: route?.toolName ?? llmName, mcp: undefined };
+  }
 }
 
 /**
@@ -62,12 +87,12 @@ export async function buildToolCatalogForAgent(agentCfg: AgentConfig): Promise<T
 
   const selectedLocal = pickLocalSubset(agentCfg.tools);
   for (const tool of selectedLocal) {
-    routes.set(tool.spec.name, { kind: 'local' });
+    routes.set(tool.spec.name, { kind: 'local', toolName: tool.spec.name });
     specs.push(tool.spec);
   }
 
   await appendMcpTools(routes, specs, agentCfg.mcpServers ?? []);
-  return { specs, routes };
+  return new ToolCatalog(specs, routes);
 }
 
 /**
@@ -102,12 +127,12 @@ export async function buildToolCatalogForSubAgent(
     selectedLocal = selectedLocal.filter((t) => !denied.has(t.spec.name));
   }
   for (const tool of selectedLocal) {
-    routes.set(tool.spec.name, { kind: 'local' });
+    routes.set(tool.spec.name, { kind: 'local', toolName: tool.spec.name });
     specs.push(tool.spec);
   }
 
   await appendMcpTools(routes, specs, mcpSelections);
-  return { specs, routes };
+  return new ToolCatalog(specs, routes);
 }
 
 // ─── internal ────────────────────────────────────────────────────────────
@@ -127,8 +152,9 @@ function pickLocalSubset(selection: string[] | undefined): LocalTool[] {
 }
 
 /**
- * 追加 mcp 工具到正在构建的 catalog,执行同名冲突检测。空 selection 不调
- * mcpClientManager —— 给"无外部 MCP" agent 省一次远端 round-trip。
+ * 追加 MCP 工具到正在构建的 catalog。LLM 名称以 serverName 限定；只有完整
+ * 限定名碰撞才 fail-fast。空 selection 不调 mcpClientManager，给无外部 MCP
+ * agent 省一次远端 round-trip。
  */
 async function appendMcpTools(
   routes: Map<string, ToolRoute>,
@@ -152,16 +178,17 @@ async function appendMcpTools(
     const selected = wantedByServer.get(t.serverName);
     if (selected === undefined) continue; // 该 server 未在白名单
     if (selected !== null && !selected.has(t.name)) continue;
-    const prev = routes.get(t.name);
+    const llmToolName = `${t.serverName}/${t.name}`;
+    const prev = routes.get(llmToolName);
     if (prev) {
-      const prevDesc = prev.kind === 'local' ? 'local' : `mcp[${prev.serverName}]`;
+      const prevDesc = prev.kind === 'local' ? 'local' : `mcp[${prev.serverName}/${prev.toolName}]`;
       throw new Error(
-        `[toolCatalog] duplicate tool name "${t.name}": already from ${prevDesc}, also exposed by mcp[${t.serverName}]`,
+        `[toolCatalog] duplicate LLM tool name "${llmToolName}": already from ${prevDesc}, also exposed by mcp[${t.serverName}/${t.name}]`,
       );
     }
-    routes.set(t.name, { kind: 'mcp', serverName: t.serverName });
+    routes.set(llmToolName, { kind: 'mcp', serverName: t.serverName, toolName: t.name });
     specs.push({
-      name: t.name,
+      name: llmToolName,
       description: t.description ?? '',
       parameters: pi.Type.Unsafe(t.inputSchema ?? {}),
     });

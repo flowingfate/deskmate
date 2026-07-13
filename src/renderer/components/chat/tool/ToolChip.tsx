@@ -10,6 +10,7 @@
 // 此时本组件不参与渲染,由 ToolCallsSection 直接调用 override。
 
 import React from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/shadcn/tooltip';
 import type { ToolCallExecutionStatus } from './types';
 
 type ChipVisual = 'completed' | 'executing' | 'failed';
@@ -22,6 +23,8 @@ export interface ToolChipProps {
   status: ToolCallExecutionStatus;
   failed: boolean;
   selected: boolean;
+  /** MCP 工具的 server 名称;缺席表示本地工具。MCP chip 以图标 + 紫色表面 + hover tooltip 区分。 */
+  mcpServer?: string;
   onClick: () => void;
 }
 
@@ -41,6 +44,11 @@ const CHIP_BASE =
 const CHIP_VARIANT: Record<'unselected' | 'selected', string> = {
   unselected: 'text-gray-700 bg-gray-100 ring-gray-200 hover:bg-gray-200/70 hover:ring-gray-300',
   selected:   'text-white bg-gray-900 ring-black/60 hover:bg-gray-800',
+};
+
+const MCP_CHIP_VARIANT: Record<'unselected' | 'selected', string> = {
+  unselected: 'text-violet-800 bg-violet-50 ring-violet-200 hover:bg-violet-100 hover:ring-violet-300',
+  selected: 'text-white bg-violet-700 ring-violet-800/60 hover:bg-violet-600',
 };
 
 const DOT_BASE = 'w-1.5 h-1.5 rounded-full flex-shrink-0';
@@ -71,22 +79,34 @@ export const ToolChip: React.FC<ToolChipProps> = ({
   status,
   failed,
   selected,
+  mcpServer,
   onClick,
 }) => {
+  const isMcp = mcpServer !== undefined;
   const visual = visualOf(status, failed);
   const dotCls = DOT_BY_VISUAL[visual];
   const display = label || toolName;
-  return (
+  const variant = isMcp ? MCP_CHIP_VARIANT : CHIP_VARIANT;
+  const button = (
     <button
       type="button"
-      className={`${CHIP_BASE} ${CHIP_VARIANT[selected ? 'selected' : 'unselected']}`}
+      className={`${CHIP_BASE} ${variant[selected ? 'selected' : 'unselected']}`}
       onClick={onClick}
       aria-pressed={selected}
-      aria-label={toolName}
+      aria-label={isMcp ? `MCP tool: ${toolName} (${mcpServer})` : toolName}
     >
       {dotCls && <span className={`${DOT_BASE} ${dotCls}`} aria-hidden="true" />}
       <span className="truncate max-w-45">{renderChipLabel(display, selected)}</span>
     </button>
+  );
+  if (!isMcp) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="top" className="flex items-center gap-1 text-[11px]">
+        <span>mcp · {mcpServer}</span>
+      </TooltipContent>
+    </Tooltip>
   );
 };
 

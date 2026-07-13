@@ -1,8 +1,9 @@
 /**
  * Domain Message ↔ pi.Context 翻译。本文件是两个方向的**唯一**入口:
- *   - 入境: `fromPiAssistantMessage(pi.AssistantMessage) → Domain.AssistantMessage`
+ *   - 入境: `fromPiAssistantMessage(pi.AssistantMessage, catalog) → Domain.AssistantMessage`
  *           pi 把 streaming 拼好的 final 还回来 → 聚合 thinking/text 双串、提 tool_calls、
- *           结构化 outcome (stopReason 翻 AssistantOutcome)
+ *           结构化 outcome (stopReason 翻 AssistantOutcome)。MCP 工具的 LLM 限定名
+ *           `serverName/toolName` 在此借 catalog 精确 demux 回自然 `name` + `mcp` server。
  *   - 出境: `toPiContext(Domain.Message[], systemPrompt, tools, options?) → pi.Context`
  *           **1→N 展开**:每条 Domain.AssistantMessage 之后,按其 tool_calls 顺序
  *           为已 response 的 ToolCall 紧跟一条 pi.toolResult message;无 response 的
@@ -37,8 +38,8 @@ import type {
   ToolCall,
   UserMessage,
 } from '@shared/types/message';
-
 import { newMessageId } from '@shared/utils/messageFactory';
+import type { ToolCatalog } from '../toolCatalog';
 import { buildFileAnnotationText } from './fileAnnotation';
 import { formatClientLocalTime } from './localTime';
 
@@ -81,7 +82,7 @@ export function toPiContext(
       piMessages.push({
         role: 'toolResult',
         toolCallId: tc.id,
-        toolName: tc.name,
+        toolName: toLlmToolName(tc),
         content,
         isError: tc.response.status === 'fail',
         timestamp: tc.response.time,
@@ -181,11 +182,15 @@ function attachmentImageToPi(mimeType: string, dataUrlBase64: string): PiImageCo
   };
 }
 
+function toLlmToolName(tc: ToolCall): string {
+  return tc.mcp ? `${tc.mcp}/${tc.name}` : tc.name;
+}
+
 function toolCallToPi(tc: ToolCall): PiToolCall {
   return {
     type: 'toolCall',
     id: tc.id,
-    name: tc.name,
+    name: toLlmToolName(tc),
     arguments: tc.args,
   };
 }
@@ -194,7 +199,7 @@ function toolCallToPi(tc: ToolCall): PiToolCall {
 // 入境: pi.AssistantMessage → Domain.AssistantMessage
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function fromPiAssistantMessage(msg: PiAssistantMessage): AssistantMessage {
+export function fromPiAssistantMessage(msg: PiAssistantMessage, catalog: ToolCatalog): AssistantMessage {
   let think = '';
   let content = '';
   const tool_calls: ToolCall[] = [];
@@ -205,11 +210,13 @@ export function fromPiAssistantMessage(msg: PiAssistantMessage): AssistantMessag
     } else if (part.type === 'text') {
       content += part.text;
     } else if (part.type === 'toolCall') {
+      const { name, mcp } = catalog.resolveIdentity(part.name);
       tool_calls.push({
         id: part.id,
-        name: part.name,
+        name,
         time: msg.timestamp,
         args: part.arguments ?? {},
+        mcp,
       });
     }
   }

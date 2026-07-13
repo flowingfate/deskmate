@@ -153,7 +153,7 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 ## MCP 工具执行流
 
 1. LLM 在生成聊天回复时请求一次 tool call
-2. `pi/tool.ts::executeToolCall(call, catalog, ctx)` 查 `catalog.routes.get(toolName)`
+2. `pi/tool.ts::executeToolCall(call, catalog, ctx)` 用 `catalog.getRoute(toolName)` 取 route
 3. 按 route 分发:
    - `route.kind === 'local'` → 本地工具 registry(`pi/tools/registry.ts`)调 `tools.execute(name, args, ctx)`
    - `route.kind === 'mcp'` → `mcpClientManager.executeToolOnServer({ serverName: route.serverName, toolName, ... })` 经 `VscMcpClient` 执行(stdio / SSE / HTTP transport)

@@ -8,7 +8,7 @@
  * 流式 chunk 的处理责任:
  *   - `thinking`  → 找/建对应 assistant,`think += text`
  *   - `content`   → 找/建对应 assistant,`content += text`
- *   - `tool_call` → 找/建对应 assistant,`tool_calls[index] = { id, name, args, time }`
+ *   - `tool_call` → 找/建对应 assistant,`tool_calls[index] = { id, name, args, time, mcp }`
  *                   (主进程在 toolcall_end 一次性发完整 args,renderer 不再累加字符串增量)
  *   - `tool_result` → 找上一条 assistant 中 id 匹配的 ToolCall,设其 `response`
  *                     (覆盖式;shell 等工具会发多条 partial chunk,每条都是覆盖)
@@ -434,7 +434,8 @@ export class SessionManager {
       name: chunk.name,
       args: chunk.args,
       time: chunk.time,
-      ...(existing.response ? { response: existing.response } : {}),
+      mcp: chunk.mcp,
+      response: existing.response,
     };
     this.markMessage(msg as RenderAssistantMessage, 'update');
     cache.lastUpdated = Date.now();
