@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PERSIST_PATH } from '@shared/persist/path';
 import { Profiles } from '@main/persist/profiles';
 import { setRootForTesting } from '@main/persist/lib/root';
+import { ProfileDb } from '@main/persist/lib/db/db';
 
 import { installSkill, linkSkill } from '../skillInstall';
 
@@ -22,6 +23,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.restoreAllMocks();
   Profiles.resetForTesting();
+  ProfileDb.resetForTesting();
   setRootForTesting(null);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
