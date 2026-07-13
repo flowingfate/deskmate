@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wrench, ExternalLink } from 'lucide-react';
 import { Checkbox } from '@/shadcn/checkbox';
@@ -10,6 +10,7 @@ import { Separator } from '@/shadcn/separator';
 import { TabComponentProps } from './types';
 import { useLocalTools, useLocalToolsLoading } from '@/states/tools.atom';
 import ListSearchBox from '../../ui/ListSearchBox';
+import { useDirtyTracker, setEquals, setFingerprint } from './useDirtyTracker';
 
 /**
  * AgentToolsTab - Agent 本地工具白名单 tab(deskmate 原生 tools)。
@@ -38,57 +39,36 @@ const AgentToolsTab: React.FC<TabComponentProps> = ({
   const isLoading = useLocalToolsLoading();
   const navigate = useNavigate();
 
-  const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set());
-  const [initialSelected, setInitialSelected] = useState<Set<string>>(new Set());
-  const [isInitialized, setIsInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const ready = !!agentData?.id && allTools.length > 0;
 
-  /** persist 形态(`undefined | string[]`)→ UI 内部 Set<toolName>。 */
+  /** persist 形态(`undefined | string[]`)→ UI 内部 Set<toolName>。缺席/空 ⇒ 全选。 */
   const inflate = useCallback(
-    (raw: string[] | undefined, available: { name: string }[]): Set<string> => {
-      // 缺席/空 ⇒ 全选(对应 schema 默认"全开")。
-      if (!raw || raw.length === 0) return new Set(available.map((t) => t.name));
-      return new Set(raw);
-    },
-    [],
+    (raw: string[] | undefined): Set<string> =>
+      !raw || raw.length === 0 ? new Set(allTools.map((t) => t.name)) : new Set(raw),
+    [allTools],
   );
 
-  // 等本地工具加载完再 hydrate,避免被空列表诱导成 "empty whitelist"。
-  useEffect(() => {
-    if (!agentData?.id) return;
-    if (allTools.length === 0) return;
+  const baseline = useMemo(() => inflate(agentData?.tools), [inflate, agentData?.tools]);
+  const cached = useMemo(
+    () => (cachedData?.tools !== undefined ? inflate(cachedData.tools) : null),
+    [inflate, cachedData?.tools],
+  );
 
-    const base = inflate(agentData.tools, allTools);
-    const final = cachedData?.tools !== undefined ? inflate(cachedData.tools, allTools) : base;
-
-    setSelectedTools(final);
-    if (!isInitialized) {
-      setInitialSelected(new Set(base));
-      setIsInitialized(true);
-    }
-  }, [agentData?.id, agentData?.tools, cachedData?.tools, allTools, isInitialized, inflate]);
-
-  const hasChanges = useMemo(() => {
-    if (selectedTools.size !== initialSelected.size) return true;
-    for (const tool of selectedTools) {
-      if (!initialSelected.has(tool)) return true;
-    }
-    return false;
-  }, [selectedTools, initialSelected]);
-
-  // Notify parent. 勾选数 === 全部 ⇒ `[]`(等价"全开"),否则白名单。
-  const lastNotifiedRef = React.useRef<string | null>(null);
-  useEffect(() => {
-    if (!isInitialized || !onDataChange) return;
-    const isAllSelected =
-      allTools.length > 0 && selectedTools.size === allTools.length;
-    const tools = isAllSelected ? [] : Array.from(selectedTools);
-    const key = JSON.stringify(tools.slice().sort());
-    if (lastNotifiedRef.current !== key) {
-      lastNotifiedRef.current = key;
-      onDataChange('tools', { tools }, hasChanges);
-    }
-  }, [selectedTools, hasChanges, isInitialized, onDataChange, allTools.length]);
+  const { value: selectedTools, setValue: setSelectedTools } = useDirtyTracker<Set<string>>({
+    tabName: 'tools',
+    ready,
+    agentId: agentData?.id,
+    baseline,
+    cached,
+    equals: setEquals,
+    fingerprint: setFingerprint,
+    // 勾选数 === 全部 ⇒ `[]`(等价"全开"),否则白名单。
+    toPayload: (set) => ({
+      tools: allTools.length > 0 && set.size === allTools.length ? [] : Array.from(set),
+    }),
+    onDataChange,
+  });
 
   const handleToolToggle = useCallback(
     (toolName: string) => {

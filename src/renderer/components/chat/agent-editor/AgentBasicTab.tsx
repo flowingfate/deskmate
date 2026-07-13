@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 
 import { TabComponentProps } from './types'
 import { AlertTriangle } from 'lucide-react'
@@ -6,6 +6,7 @@ import EmojiPicker from './EmojiPicker'
 import { useAgents } from '@/states/agents.atom'
 import { AgentAvatar } from '../../common/AgentAvatar'
 import { ModelSelectPopover } from '../ModelSelectPopover'
+import { useDirtyTracker } from './useDirtyTracker'
 
 const EMPTY_MODEL = '' // Step 9+：不再默认填一个 GHC modelId；让用户主动选
 
@@ -23,106 +24,63 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
   // Get all agents for duplicate name checking
   const agents = useAgents()
 
-  // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    emoji: '🤖',
-    avatar: '', // Agent avatar URL
-    role: '', // Retained but unused
-    model: EMPTY_MODEL
-  })
-
-  // Agent metadata (read-only display)
-  const [agentMeta, setAgentMeta] = useState({
-    version: '',
-  })
-
-  // UI state
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
-  const [isInitialized, setIsInitialized] = useState(false)
-  const [loadedAgentId, setLoadedAgentId] = useState<string | null>(null)
-  const [nameWarning, setNameWarning] = useState<string>('')
-
   // 受保护(locked)的 agent：身份(name/emoji/avatar)不可编辑
   const isLocked = agentData?.locked === true
-
   // avatar/emoji/name are not editable for locked agents or in read-only mode
   const isAvatarNameDisabled = readOnly || isLocked
   const isModelDisabled = readOnly
 
-  // Initial data used to detect modifications
-  const [initialData, setInitialData] = useState({
-    name: '',
-    emoji: '🤖',
-    avatar: '',
-    role: '',
-    model: EMPTY_MODEL
-  })
+  // Agent 版本号（只读展示）
+  const version = agentData?.version || ''
 
-  // Load existing data - only runs on initial component mount or when explicit re-sync is needed
-  useEffect(() => {
-    // In Update mode, or Add mode when agent is already created, sync data to form
-    if (agentData && (mode === 'update' || (mode === 'add' && agentData.id))) {
-      // Only reset form data when not yet initialized or agentId changes
-      if (!isInitialized || loadedAgentId !== agentData.id) {
-        const baseData = {
-          name: agentData.name,
-          emoji: agentData.emoji,
-          avatar: agentData.avatar || '', // Agent avatar URL
-          role: '', // Always set to empty
-          model: agentData.model
-        }
+  // UI state
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+  const [nameWarning, setNameWarning] = useState<string>('')
 
-        // Set metadata (read-only)
-        setAgentMeta({
-          version: agentData.version || '',
-        })
+  // 基线：由 agentData 派生（缺席时用 add 模式默认值）。
+  const baseline = useMemo(
+    () =>
+      agentData
+        ? {
+            name: agentData.name,
+            emoji: agentData.emoji,
+            avatar: agentData.avatar || '',
+            role: '',
+            model: agentData.model,
+          }
+        : { name: '', emoji: '🤖', avatar: '', role: '', model: EMPTY_MODEL },
+    [agentData],
+  )
 
-        // If cached data exists, prefer it over the base data
-        const finalData = cachedData ? {
-          name: cachedData.name !== undefined ? cachedData.name : baseData.name,
-          emoji: cachedData.emoji !== undefined ? cachedData.emoji : baseData.emoji,
-          avatar: cachedData.avatar !== undefined ? cachedData.avatar : baseData.avatar,
-          role: cachedData.role !== undefined ? cachedData.role : baseData.role,
-          model: cachedData.model !== undefined ? cachedData.model : baseData.model
-        } : baseData
-
-        setFormData(finalData)
-        setInitialData(baseData) // Initial data is always the original data
-        setLoadedAgentId(agentData.id)
-        setIsInitialized(true)
-      }
-    } else if (!isInitialized) {
-      // Initial state in Add mode
-      const defaultInitialData = {
-        name: '',
-        emoji: '🤖',
-        avatar: '',
-        role: '',
-        model: EMPTY_MODEL
-      }
-
-      // Reset metadata
-      setAgentMeta({
-        version: '',
-      })
-
-      // If cached data exists, use it
-      const finalData = cachedData ? {
-        name: cachedData.name !== undefined ? cachedData.name : defaultInitialData.name,
-        emoji: cachedData.emoji !== undefined ? cachedData.emoji : defaultInitialData.emoji,
-        avatar: cachedData.avatar !== undefined ? cachedData.avatar : defaultInitialData.avatar,
-        role: cachedData.role !== undefined ? cachedData.role : defaultInitialData.role,
-        model: cachedData.model !== undefined ? cachedData.model : defaultInitialData.model
-      } : defaultInitialData
-
-      setFormData(finalData)
-      setInitialData(defaultInitialData)
-      setLoadedAgentId(null)
-      setIsInitialized(true)
+  // cachedData（跨 Tab 编辑缓存）逐字段覆盖基线；缺席字段回退基线。
+  const cached = useMemo(() => {
+    if (!cachedData) return null
+    return {
+      name: cachedData.name !== undefined ? cachedData.name : baseline.name,
+      emoji: cachedData.emoji !== undefined ? cachedData.emoji : baseline.emoji,
+      avatar: cachedData.avatar !== undefined ? cachedData.avatar : baseline.avatar,
+      role: cachedData.role !== undefined ? cachedData.role : baseline.role,
+      model: cachedData.model !== undefined ? cachedData.model : baseline.model,
     }
-  }, [mode, agentData?.id, isInitialized, loadedAgentId, cachedData])
+  }, [cachedData, baseline])
+
+  const { value: formData, setValue: setFormData } = useDirtyTracker<typeof baseline>({
+    tabName: 'basic',
+    ready: mode === 'add' || !!agentData?.id,
+    agentId: agentData?.id,
+    baseline,
+    cached,
+    equals: (a, b) =>
+      a.name === b.name &&
+      a.emoji === b.emoji &&
+      a.avatar === b.avatar &&
+      a.role === b.role &&
+      a.model === b.model,
+    fingerprint: (v) => JSON.stringify([v.name, v.emoji, v.avatar, v.role, v.model]),
+    toPayload: (v) => ({ ...v }),
+    onDataChange,
+  })
 
 
   // Check for duplicate Agent name
@@ -158,25 +116,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
     setValidationErrors(errors)
     return Object.keys(errors).length === 0
   }, [formData, checkDuplicateName])
-
-  // Check if data has been modified
-  const hasChanges = useCallback(() => {
-    return (
-      formData.name !== initialData.name ||
-      formData.emoji !== initialData.emoji ||
-      formData.avatar !== initialData.avatar ||
-      formData.role !== initialData.role ||
-      formData.model !== initialData.model
-    )
-  }, [formData, initialData])
-
-  // Notify parent component when data changes
-  useEffect(() => {
-    if (isInitialized && onDataChange) {
-      const changes = hasChanges()
-      onDataChange('basic', formData, changes)
-    }
-  }, [formData, hasChanges, isInitialized, onDataChange])
 
   // Handle input change
   const handleInputChange = useCallback((field: string, value: string) => {
@@ -243,7 +182,7 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
                 avatar={formData.avatar}
                 name={formData.name}
                 size="lg"
-                version={agentMeta.version}
+                version={version}
               />
             </div>
             <span className="text-content-secondary text-[13px] font-normal">
@@ -293,13 +232,13 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
           )}
         </div>
 
-        {agentMeta.version && (
+        {version && (
           <div className="mb-4.5 mt-2 pt-4 border-t border-slate-300/50">
             <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Info</label>
             <div className="flex flex-wrap gap-6">
               <div className="flex items-center gap-2">
                 <span className="text-[13px] text-content-secondary font-medium">Version:</span>
-                <span className="text-[13px] text-content-heading font-normal">{agentMeta.version}</span>
+                <span className="text-[13px] text-content-heading font-normal">{version}</span>
               </div>
             </div>
           </div>

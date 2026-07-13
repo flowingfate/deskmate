@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 
 import { Button } from '@/shadcn/button'
 import { Sparkles, Loader2, Lock } from 'lucide-react'
@@ -6,6 +6,7 @@ import { TabComponentProps } from './types'
 import MarkdownEditor from './MarkdownEditor'
 import { useToast } from '../../ui/ToastProvider'
 import { llmApi } from '@/ipc/llm';
+import { useDirtyTracker } from './useDirtyTracker'
 
 const AgentSystemPromptTab: React.FC<TabComponentProps> = ({
   mode,
@@ -22,27 +23,16 @@ const AgentSystemPromptTab: React.FC<TabComponentProps> = ({
   // Check if editing is disabled (read-only mode or locked agent)
   const isEditDisabled = readOnly || isLocked
 
-  const [systemPrompt, setSystemPrompt] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [optimizationError, setOptimizationError] = useState<string | null>(null)
   const [optimizationWarnings, setOptimizationWarnings] = useState<string[]>([])
-  const [isInitialized, setIsInitialized] = useState(false)
 
-  // Initial data used to detect modifications
-  const [initialSystemPrompt, setInitialSystemPrompt] = useState('')
-
-  // Load existing system prompt - only runs on initial component mount or when explicit re-sync is needed
-  useEffect(() => {
-    // Avoid resetting state while user is editing
-    if (!isInitialized) {
-      let basePrompt = ''
-      if (agentData?.systemPrompt !== undefined) {
-        // If systemPrompt has an explicit value (including empty string)
-        basePrompt = agentData.systemPrompt
-      } else if (mode === 'update') {
-        // Only set default system prompt in update mode
-        basePrompt = `You are a helpful AI assistant.
+  // 基线：agentData.systemPrompt（真值恒为 string）；仅当显式缺席且 update 模式时兜底默认模板。
+  const baseline = useMemo(() => {
+    if (agentData?.systemPrompt !== undefined) return agentData.systemPrompt
+    if (mode === 'update') {
+      return `You are a helpful AI assistant.
 
 Please follow these guidelines:
 - Be concise and clear
@@ -51,29 +41,21 @@ Please follow these guidelines:
 
 ## Specific Instructions
 Add your specific instructions here...`
-      }
-
-      // If cached data exists, prefer it over the base prompt
-      const finalPrompt = cachedData?.systemPrompt !== undefined ? cachedData.systemPrompt : basePrompt
-
-      setSystemPrompt(finalPrompt)
-      setInitialSystemPrompt(basePrompt) // Initial data is always the original data
-      setIsInitialized(true)
     }
-  }, [agentData?.id, mode, isInitialized, cachedData])
+    return ''
+  }, [agentData?.systemPrompt, mode])
 
-  // Check if data has been modified
-  const hasChanges = useCallback(() => {
-    return systemPrompt !== initialSystemPrompt
-  }, [systemPrompt, initialSystemPrompt])
-
-  // Notify parent component when data changes
-  useEffect(() => {
-    if (isInitialized && onDataChange) {
-      const changes = hasChanges()
-      onDataChange('prompt', { systemPrompt }, changes)
-    }
-  }, [systemPrompt, hasChanges, isInitialized, onDataChange])
+  const { value: systemPrompt, setValue: setSystemPrompt } = useDirtyTracker<string>({
+    tabName: 'prompt',
+    ready: !!agentData?.id,
+    agentId: agentData?.id,
+    baseline,
+    cached: cachedData?.systemPrompt !== undefined ? cachedData.systemPrompt : null,
+    equals: (a, b) => a === b,
+    fingerprint: (v) => v,
+    toPayload: (v) => ({ systemPrompt: v }),
+    onDataChange,
+  })
 
   // Toggle edit/preview mode
   const handleTogglePreview = useCallback(() => {
