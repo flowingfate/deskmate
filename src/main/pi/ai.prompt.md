@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-15 (Phase 5 Domain Message + Resume + chatTypes Message 下线) -->
+<!-- Last verified: 2026-07-13 -->
 # pi 模块 — Chat 引擎（pi-ai 底座）
 
 > Deskmate 的 chat orchestrator，基于 `@earendil-works/pi-ai` 适配多 provider。
@@ -20,11 +20,12 @@
 | `errors.ts` | classifyError + overflow / network / rate / auth 分类 | 小 |
 | `utility.ts` | 非 streaming 后台调用 `runUtilityCompletion`(doctor / eval / 后台 LLM utility 共用入口) | 小 |
 | `mcp.ts` | external MCP 工具薄包装:`listAllMcpTools()`(给 catalog 列举外部工具)/ `executeMcpToolOnServer(serverName, toolName, args, signal)`(server-scoped 执行,**不再**有按裸 toolName 查全局 map 的路径) | 小 |
-| `utils/messageBridge.ts` | Domain `Message`(`@shared/types/message`)↔ `pi.Message` **唯一翻译点**:入境 `fromPiAssistantMessage`(把 ThinkingPart / TextPart / ToolCallPart 折成单串 `think` + `content` + `tool_calls[]`),出境 `toPiContext` 1→N 展开 `assistant.tool_calls[i].response` 为 `pi.toolResult` 行 | 中 |
+| `utils/messageBridge.ts` | Domain `Message`(`@shared/types/message`)↔ `pi.Message` **唯一翻译点**:入境 `fromPiAssistantMessage`(把 ThinkingPart / TextPart / ToolCallPart 折成单串 `think` + `content` + `tool_calls[]`),出境 `toPiContext` 1→N 展开 `assistant.tool_calls[i].response` 为 `pi.toolResult` 行；内部把首个 user message 的持久化 `time` 投影为固定 reminder，`transientReminder` 仅附本次请求尾部，二者均不落盘 | 中 |
 | `utils/fileAnnotation.ts` | 附件文本渲染 | 小 |
+| `utils/localTime.ts` | 客户端本地 ISO 时间、IANA timezone 与 UTC offset 的共享格式化；`app time` 和会话时间锚点复用 | 小 |
 | `utils/config.ts` | agent 配置读取(`readAgentConfig` + `readAgentRuntimeConfig`,返回 `{agent, parsedModel}` 元组;capability 派生不在这里,见 `model.ts`) | 小 |
 | `utils/buildLlmContext.ts` | 压缩快照回放 → 完整 LLM 上下文 | 小 |
-| `utils/globalSystemPrompt.ts` | 全局 system prompt 拼装 | 中 |
+| `utils/globalSystemPrompt.ts` | 稳定的全局 system prompt；首条 user message 的固定发送时间是默认锚点，只有需要晚于该锚点的时间才调用 `app("time")` | 中 |
 | `utils/systemReminderUtils.ts` | system reminder 注入 | 小 |
 | `utils/promptTemplates.ts` | prompt.ts 用到的拼接模板(identity / knowledge / skills / sub-agents) | 中 |
 | `utils/systemPromptLlmWritter.ts` | LLM 润色 system prompt(IPC `improveSystemPrompt`) | 中 |
@@ -48,6 +49,8 @@ agent → session → prompt / tool / mcp / compression → utils/internal
 **Domain Message 是事实源**:`src/shared/types/message.ts` 是主进程内存的 canonical 形态(也是 IPC 契约的入参/出参)。`pi.Message` 仅作 LLM 协议适配。`shared/types/chatTypes.ts` 在 Phase 5 后只剩 LlmApi / 文件常量,不再承载 Message shape。
 
 **bridge 单点**:`utils/messageBridge.ts` 是 Domain Message ↔ pi.Message 唯一翻译点。其他任何模块(renderer / IPC / persist / skill / prompt)都不感知 pi。
+
+**时间与缓存**:`messageBridge` 内部读取当前 LLM context 的首个 user message 的持久化 `time`，将它投影为固定 reminder；调用者不感知时间锚点。该文本不写回 Domain / persist，当前 context 不变时字节稳定；实时当前时间才按需调用 `app time`。
 
 **Resume**:`BaseSession.restore()` 在 `SessionDataFile.turn?.status === 'running'` 时调 `resume.ts:planResume` 算出 `pendingResume` 缓存到自身。下次 entry(`startStream` 等)在常规工作前消化它,把所有非平凡分支(runMissingTools / continueLoop / startTurn)统一收敛为 `aborted + idle`(终态设计,不再扩展自动续跑)。异常状态由 `loadChatSessionSnapshot` 在 `turn=running` 时填 `errorMessage` 透到 UI,渲染端 ErrorBar + Retry 让用户手动重试。详见 [`agent-loop.md` §4.5](../../../ai.prompt/agent-loop.md#45-resume崩溃后续跑)。
 

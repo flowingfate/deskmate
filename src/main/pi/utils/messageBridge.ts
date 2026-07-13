@@ -3,11 +3,13 @@
  *   - 入境: `fromPiAssistantMessage(pi.AssistantMessage) → Domain.AssistantMessage`
  *           pi 把 streaming 拼好的 final 还回来 → 聚合 thinking/text 双串、提 tool_calls、
  *           结构化 outcome (stopReason 翻 AssistantOutcome)
- *   - 出境: `toPiContext(Domain.Message[], systemPrompt, tools) → pi.Context`
- *           **1→N 展开**: 每条 Domain.AssistantMessage 之后,按其 tool_calls 顺序
+ *   - 出境: `toPiContext(Domain.Message[], systemPrompt, tools, options?) → pi.Context`
+ *           **1→N 展开**:每条 Domain.AssistantMessage 之后,按其 tool_calls 顺序
  *           为已 response 的 ToolCall 紧跟一条 pi.toolResult message;无 response 的
- *           ToolCall 不输出 (这是 resume 的核心约束 —— 所有 ToolCall 必须先补跑出
- *           response 才能再调 LLM,见 `planResume.runMissingTools`)
+ *           ToolCall 不输出(这是 resume 的核心约束 —— 所有 ToolCall 必须先补跑出
+ *           response 才能再调 LLM,见 `planResume.runMissingTools`)。
+ *           首个 user message 的持久化 `time` 在本地转换为固定时间 reminder；
+ *           `transientReminder` 只附本次请求消息尾部且不落盘。
  *
  * 没有 SystemMessage 翻译入口 —— system prompt 由 `buildSystemPrompt` 现拼,
  * 不进 messages 序列。
@@ -38,21 +40,31 @@ import type {
 
 import { newMessageId } from '@shared/utils/messageFactory';
 import { buildFileAnnotationText } from './fileAnnotation';
+import { formatClientLocalTime } from './localTime';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 出境: Domain → pi.Context
 // ═══════════════════════════════════════════════════════════════════════════
 
+interface PiContextOptions {
+  readonly transientReminder?: string;
+}
+
+const EMPTY_CONTEXT_OPTIONS: PiContextOptions = {};
+
 export function toPiContext(
   messages: readonly Message[],
   systemPrompt: string,
   tools: PiTool[],
+  options: PiContextOptions = EMPTY_CONTEXT_OPTIONS,
 ): PiContext {
   const piMessages: PiMessage[] = [];
+  let isFirstUserMessage = true;
 
   for (const m of messages) {
     if (m.role === 'user') {
-      piMessages.push(userToPi(m));
+      piMessages.push(userToPi(m, isFirstUserMessage));
+      isFirstUserMessage = false;
       continue;
     }
     piMessages.push(assistantToPi(m));
@@ -76,6 +88,14 @@ export function toPiContext(
       } satisfies PiToolResultMessage);
     }
   }
+  const trimmedReminder = options.transientReminder?.trim();
+  if (trimmedReminder) {
+    piMessages.push({
+      role: 'user',
+      content: [{ type: 'text', text: trimmedReminder }],
+      timestamp: Date.now(),
+    } satisfies PiUserMessage);
+  }
 
   const trimmedSystem = systemPrompt.trim();
   const ctx: PiContext = { messages: piMessages };
@@ -84,7 +104,7 @@ export function toPiContext(
   return ctx;
 }
 
-function userToPi(msg: UserMessage): PiUserMessage {
+function userToPi(msg: UserMessage, includeTimeReminder: boolean): PiUserMessage {
   const content: (PiTextContent | PiImageContent)[] = [];
   // text + file/office/opaque annotation 合并成一段
   const annotation = buildFileAnnotationText(msg.attachments);
@@ -97,12 +117,20 @@ function userToPi(msg: UserMessage): PiUserMessage {
     if (att.kind !== 'image' || att.source.kind !== 'dataUrl') continue;
     content.push(attachmentImageToPi(att.mimeType, att.source.data));
   }
+  if (includeTimeReminder) {
+    content.push({ type: 'text', text: buildTimeReminder(msg.time) });
+  }
 
   return {
     role: 'user',
     content,
     timestamp: msg.time,
   };
+}
+
+function buildTimeReminder(time: number): string {
+  const localTime = formatClientLocalTime(time);
+  return `<system-reminder>\nThis user message was sent at ${localTime.localTime} ${localTime.timeZone} (${localTime.utcOffset}). This is a stable timestamp, not the current time.\n</system-reminder>`;
 }
 
 function assistantToPi(msg: AssistantMessage): PiAssistantMessage {

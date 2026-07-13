@@ -1,6 +1,6 @@
 # Tool System —— 用 shell 范式重塑应用内工具调用
 
-<!-- Last verified: 2026-06-29 -->
+<!-- Last verified: 2026-07-13 -->
 ## 1. 范围
 
 本文档覆盖 DESKMATE **本地工具系统**的总体设计 —— 包括今天已有的 `LocalTool` registry,以及新引入的 **`app` 伪 shell** 机制。
@@ -49,6 +49,7 @@ app("--help")                              ← 列出所有应用能力
 app("mcp --help")                          ← 看 mcp 命令的子命令 + flag
 app("mcp add brave --env K=xxx --yes")     ← 真执行
 app("agent list")                          ← LLM 已经知道形态了
+app("time")                              ← 查询客户端当前本地时间
 
 ---
 
@@ -83,8 +84,9 @@ src/main/pi/appcmd/
 │   ├── app/                       `app` 域 —— appCommands + 成员
 │   │   ├── index.ts               export const appCommands = new AppCommandRegistry() + eager 注册
 │   │   ├── hello/                 骨架示范命令(say/list/fail),活模板
-│   │   ├── mcp/  agent/  skill/   真实命令(各自 index.ts 路由 + subcommand 文件 + kernel/)
-│   │   ├── schedule/  subagent/   feature-gated 命令
+│   │   ├── time.ts                       无副作用的客户端本地时间查询
+│   │   ├── mcp/  agent/  skill/          真实命令(各自 index.ts 路由 + subcommand 文件 + kernel/)
+│   │   ├── schedule/  subagent/          feature-gated 命令
 │   │   └── ...
 │   └── web/                       `web` 域 —— webCommands + 成员(与 app/ 逐字对等)
 │       ├── index.ts               export const webCommands = new AppCommandRegistry() + eager 注册

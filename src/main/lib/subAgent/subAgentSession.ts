@@ -92,6 +92,8 @@ export interface SubAgentSessionHooks {
 
 export interface RunTurnArgs {
   systemPrompt: string;
+  /** 仅附在本次请求消息尾部的非持久化动态提示。 */
+  transientReminder?: string;
   /**
    * 本轮工具目录。caller(SubAgentChat)在每轮 runTurn 之前用
    * `buildToolCatalogForSubAgent(cfg, resolvedMcpServers)` 构建,session
@@ -234,7 +236,9 @@ export class SubAgentSession {
 
       const { apiKey, model } = await resolveCredentials(baseModel, this.profileId);
       let llmMessages = compressionResult.llmContext;
-      let piContext = toPiContext(llmMessages, args.systemPrompt, piTools);
+      let piContext = toPiContext(llmMessages, args.systemPrompt, piTools, {
+        transientReminder: args.transientReminder,
+      });
 
       let final: PiAssistantMessage;
       try {
@@ -251,7 +255,9 @@ export class SubAgentSession {
         if (composedSignal.aborted) throw new CancellationError('Cancelled after overflow recovery compaction');
 
         llmMessages = forced.llmContext;
-        piContext = toPiContext(llmMessages, args.systemPrompt, piTools);
+        piContext = toPiContext(llmMessages, args.systemPrompt, piTools, {
+          transientReminder: args.transientReminder,
+        });
         final = await this.streamOneRound(model, apiKey, piContext, composedSignal, args.hooks, args.tracer);
       }
 

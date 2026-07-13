@@ -41,6 +41,7 @@ async function run(cmdline: string): Promise<string> {
 beforeAll(() => {
   // sanity:确认真实命令已注册(由 `appcmd/builtins/app` 的副作用)
   expect(appCommands.has('mcp')).toBe(true);
+  expect(appCommands.has('time')).toBe(true);
 });
 
 describe('app LocalTool — 顶层 / 路由', () => {
@@ -99,5 +100,26 @@ describe('app LocalTool — description', () => {
     expect(desc).toMatch(/--help/);
     expect(desc).toMatch(/--json/);
     expect(desc).toMatch(/--dry-run/);
+  });
+});
+
+describe('app LocalTool — time', () => {
+  it('returns this client’s local time in human-readable form', async () => {
+    const out = await run('time');
+    expect(out).toMatch(/^Current local time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2} .+ \(UTC[+-]\d{2}:\d{2}\)$/);
+  });
+
+  it('returns the local-time fields as JSON', async () => {
+    const out = await run('time --json');
+    const parsed: { local_time: string; timezone: string; utc_offset: string } = JSON.parse(out);
+    expect(parsed.local_time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+    expect(parsed.timezone.length).toBeGreaterThan(0);
+    expect(parsed.utc_offset).toMatch(/^UTC[+-]\d{2}:\d{2}$/);
+  });
+
+  it('rejects positional arguments', async () => {
+    const out = await run('time extra');
+    expect(out).toContain('takes no positional arguments');
+    expect(out).toContain('(exit 2)');
   });
 });

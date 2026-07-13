@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-01 -->
+<!-- Last verified: 2026-07-13 -->
 # pi/appcmd — `app` shell 风格的应用内能力调度
 
 > 主进程**伪 shell** 子系统:LLM 通过单个 `app` LocalTool 调用一行 cmdline
@@ -20,7 +20,8 @@
 | `makeRouterCommand.ts` | **顶层工具的对等核心**。`makeRouterCommand({ name, synopsis, registry })` 把一个 `AppCommandRegistry` 包成「router 形态」`AppCommand`:第一个 token 当命令名查注册表转交成员。`help`(getter)+ `toolDescription` 动态枚举注册表(顶层 help / 命令索引)。`app` 路由 `appCommands`,`web` 路由 `webCommands`,两者由 `pi/tools/{app,web}.ts` 经 `makeCommandFacade(makeRouterCommand(...))` 生成,**逻辑完全对等**。顶层「松散」纪律(空 / `--help` / 未知命令 → help,不附 exit code)| 小 |
 | `_facade.ts` | `makeCommandFacade(cmd)` 工厂:把一个 `AppCommand` 包成顶层 LocalTool(`parseCmdline` → `dispatchAppCommand` → `formatAppCmdContent` + stdio/exit/`--help`/`--json`)。`app` / `web` 都是 `makeCommandFacade(makeRouterCommand(...))`。`spec.description` 优先取 `cmd.toolDescription()` | 小 |
 | `_commonFlags.ts` | 跨命令共享 flag spec + `isHelp` / `isJson` / `isDryRun` / `isYes` helper。**任何命令的 `--help` / `--json` / `--dry-run` / `--yes` 都必须 spread 这个常量**,UX 一致性的红线就在这一个文件 | 小 |
-| `builtins/app/index.ts` | `app` 域注册表 `appCommands` + **模块加载期 eager 注册**全部成员(hello / mcp / agent / skill / schedule / subagent);feature-gated 成员(schedule / subagent)按 flag 决定是否注册。`pi/tools/app.ts` import 本模块即拿到填充好的实例。**与 `builtins/web/index.ts` 逐字对等**,差异仅注册表装了谁 | 小 |
+| `builtins/app/index.ts` | `app` 域注册表 `appCommands` + **模块加载期 eager 注册**全部成员(hello / time / mcp / agent / skill / schedule / subagent);feature-gated 成员(schedule / subagent)按 flag 决定是否注册。`pi/tools/app.ts` import 本模块即拿到填充好的实例。**与 `builtins/web/index.ts` 逐字对等**,差异仅注册表装了谁 | 小 |
+| `builtins/app/time.ts` | 无副作用的 `app time` 命令；返回本客户端的本地 ISO 时间、IANA timezone 和 UTC offset，支持 `--json` | 小 |
 | `builtins/app/hello/` | 骨架示范命令(`say` / `list` / `fail`),覆盖每个契约角;新命令的**活模板** | 小 |
 | `builtins/app/mcp/` | 第一个真实命令:MCP server 管理。9 个 subcommand(install / add / update / remove / connect / disconnect / reconnect / status / search)+ `_shared.ts` 内部 helper + `kernel/` 业务内核子目录(5 个 `*Internal()` 函数 + 类型,只被本目录消费,不外露)| 中 |
 | `builtins/app/agent/` | 第二个真实命令:Agent 管理。8 个 subcommand(install / add / update / remove / list / status / set-primary / search)+ `_shared.ts` 内部 helper(`parseMcpServerFlag` / `parseMcpToolFlag` / `buildMcpServersArray`,处理 `--mcp-server git --mcp-tool git:status` 这种多 token 嵌套形态)+ `kernel/` 业务内核子目录(8 个 `*Internal()` 函数 + `findAgent` helper)| 中 |

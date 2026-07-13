@@ -4,41 +4,17 @@
  * 从 lib/chat/globalSystemPrompt.ts 搬过来(Step 4 PR5a 自包含化)。差异:
  *   - 删除 `FILE OPERATIONS WORKSPACE RESTRICTION` 整段(overview §3.5 移除 workspace)。
  *   - 不导出 `getGlobalSystemPromptAsMessages`:pi 只用纯字符串拼接,不需要 Message 形态。
- *   - **Phase 8a**:`get_current_datetime` / `coding_agent` 工具已下线,对应
- *     TEMPORAL HIERARCHY 长段压缩成 4 行(当前时间直接注入 prompt 头),
- *     `CODING AGENT TOOL USAGE` 整段连带 `isFeatureEnabled` 守卫一并删。
+ *   - `get_current_datetime` 工具已下线:当前客户端本地时间由 `app("time")`
+ *     按需查询,避免动态值污染 system prompt cache。
  *
  * lib/chat 版仍被 chat engine 5 文件内部使用,等 PR5d 物理删时一并清理。
  */
 
 import { BASE_CDN_URL } from '@shared/constants/endpoints';
 
-/**
- * 计算注入到 prompt 头部的"Current time"行。
- *
- * Time source:本机系统时间(`Date()` + `Intl.DateTimeFormat()`),**不**走
- * NTP。`Date.getTimezoneOffset()` 返回分钟数且符号反直觉(UTC+8 → -480),
- * 这里用 `<= 0 ? '+' : '-'` 翻正。同形态代码原属 `get_current_datetime` 工具,
- * Phase 8a 把该工具改成 prompt 直接注入 —— LLM 不必再 tool roundtrip。
- */
-function buildCurrentTimeLine(): string {
-  const now = new Date();
-  const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const tzOffset = now.getTimezoneOffset();
-  const sign = tzOffset <= 0 ? '+' : '-';
-  const hh = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0');
-  const mm = String(Math.abs(tzOffset) % 60).padStart(2, '0');
-  const Y = now.getFullYear();
-  const M = String(now.getMonth() + 1).padStart(2, '0');
-  const D = String(now.getDate()).padStart(2, '0');
-  const h = String(now.getHours()).padStart(2, '0');
-  const m = String(now.getMinutes()).padStart(2, '0');
-  const s = String(now.getSeconds()).padStart(2, '0');
-  return `Current time: ${Y}-${M}-${D}T${h}:${m}:${s} ${tzName} (UTC${sign}${hh}:${mm})`;
-}
-
+/** 返回所有 agent 共享的稳定全局 system prompt。 */
 export function getGlobalSystemPrompt(): string {
-  const prompt = `${buildCurrentTimeLine()}
+  const prompt = `
 
 SYSTEM NOTIFICATIONS AND REMINDERS
 
@@ -109,12 +85,11 @@ Mapping rules:
 
 TEMPORAL REFERENCE HANDLING
 
-The authoritative "Current time" is injected at the top of this prompt. Trust it absolutely.
-
-- For "today" / "tomorrow" / "X days ago" / "recent N months" — compute from the injected time, not from memory.
+- The first user message includes an authoritative client-local sent timestamp in a <system-reminder>. Use it as the default temporal baseline; it is stable, not live current time.
+- Use the app tool with sub-command time — app("time") — when the answer needs a live current time, such as when the user explicitly asks for the current time or elapsed time could change the answer.
 - Your training-data sense of time (2023 / 2024 / etc.) is irrelevant; never use it as a fallback.
-- Search results contain HISTORICAL dates by design — finding old material never means the current time is wrong.
-- If you ever need precise sub-second time or a non-local timezone, run \`date -u +%FT%T.%3NZ\` (or your platform equivalent) via the shell tool — do NOT guess.
+- Search results contain HISTORICAL dates by design — finding old material never means the user-message timestamp is wrong.
+- If you need sub-second precision or a timezone other than the client's local timezone, run date -u +%FT%T.%3NZ (or your platform equivalent) via the shell tool — do NOT guess.
 
 ===
 
