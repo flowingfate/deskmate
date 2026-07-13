@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Plus, Pencil, Trash2, Sparkles } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import { ScrollArea } from '@/shadcn/scroll-area';
@@ -43,6 +43,7 @@ const AgentPresetsTab: React.FC<AgentPresetsTabProps> = ({ agentId, readOnly = f
   // null ⇒ 对话框关闭；{ editing: null } ⇒ 新建；{ editing: preset } ⇒ 编辑。
   const [editorState, setEditorState] = useState<{ editing: PresetPrompt | null } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PresetPrompt | null>(null);
+  const deleteActionRef = useRef<HTMLButtonElement>(null);
 
   function handleSubmit(data: PresetPromptInput) {
     if (editorState?.editing) {
@@ -109,7 +110,7 @@ const AgentPresetsTab: React.FC<AgentPresetsTabProps> = ({ agentId, readOnly = f
           if (!open) setPendingDelete(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent initialFocusRef={deleteActionRef}>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this quick prompt?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -119,6 +120,7 @@ const AgentPresetsTab: React.FC<AgentPresetsTabProps> = ({ agentId, readOnly = f
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              ref={deleteActionRef}
               onClick={confirmDelete}
               className="bg-sc-destructive text-sc-destructive-foreground hover:bg-sc-destructive/90"
             >

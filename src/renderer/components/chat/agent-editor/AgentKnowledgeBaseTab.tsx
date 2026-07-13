@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { requestConfirmation } from '@/components/ui/ConfirmationDialog';
 import {
   Folder,
   FolderOpen,
@@ -741,10 +742,12 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
     const pathsToDelete = currentItems.map(item => item.path);
     const itemCount = pathsToDelete.length;
 
-    // Use system confirmation dialog
-    const confirmMessage = `Are you sure you want to clear all ${itemCount} items in the current folder?\n\nThis action cannot be undone.`;
-
-    const confirmed = window.confirm(confirmMessage);
+    const confirmed = await requestConfirmation({
+      title: 'Clear current folder?',
+      description: `Are you sure you want to clear all ${itemCount} items in the current folder? This action cannot be undone.`,
+      confirmLabel: 'Clear folder',
+      destructive: true,
+    });
 
     if (!confirmed) {
       return;

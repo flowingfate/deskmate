@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { requestConfirmation } from '@/components/ui/ConfirmationDialog';
 import {
   X,
   FileText,
@@ -463,9 +464,14 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
     };
   }, [isEditing, textContent, file]);
 
-  const confirmDiscardChanges = useCallback(() => {
+  const confirmDiscardChanges = useCallback(async (): Promise<boolean> => {
     if (!isDirty) return true;
-    return window.confirm('You have unsaved changes. Do you want to discard them?');
+    return requestConfirmation({
+      title: 'Discard unsaved changes?',
+      description: 'You have unsaved changes. Do you want to discard them?',
+      confirmLabel: 'Discard changes',
+      destructive: true,
+    });
   }, [isDirty]);
 
   const handleEdit = useCallback(() => {
@@ -475,16 +481,17 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
     setSaveError(null);
   }, [isEditable, textContent]);
 
-  const handleCancelEdit = useCallback(() => {
-    if (!confirmDiscardChanges()) return;
+  const handleCancelEdit = useCallback(async () => {
+    if (!(await confirmDiscardChanges())) return;
     if (monacoEditorRef.current) {
       monacoEditorRef.current.dispose();
       monacoEditorRef.current = null;
     }
     setIsEditing(false);
     setIsDirty(false);
+    onDirtyStateChange?.(false);
     setSaveError(null);
-  }, [confirmDiscardChanges]);
+  }, [confirmDiscardChanges, onDirtyStateChange]);
 
   const handleSave = useCallback(async () => {
     if (!file || !isEditable || !isDirty) return;
@@ -559,10 +566,11 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  const handleClose = useCallback(() => {
-    if (!confirmDiscardChanges()) return;
+  const handleClose = useCallback(async () => {
+    if (!(await confirmDiscardChanges())) return;
+    onDirtyStateChange?.(false);
     onClose();
-  }, [confirmDiscardChanges, onClose]);
+  }, [confirmDiscardChanges, onClose, onDirtyStateChange]);
 
   useEffect(() => {
     if (!isOpen) return;

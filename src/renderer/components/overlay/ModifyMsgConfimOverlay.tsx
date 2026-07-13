@@ -1,5 +1,5 @@
 
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -83,6 +83,7 @@ export const inlineEditConfirmAtom = atom(zeroState, (get, set) => {
 
 function Overlay() {
   const [state, actions] = inlineEditConfirmAtom.use();
+  const confirmActionRef = useRef<HTMLButtonElement>(null);
 
   return (
     <Dialog
@@ -93,7 +94,7 @@ function Overlay() {
         }
       }}
     >
-      <DialogContent className="max-w-md p-6">
+      <DialogContent className="max-w-md p-6" initialFocusRef={confirmActionRef}>
         <DialogHeader className="space-y-2">
           <DialogTitle className="text-left">{state.title}</DialogTitle>
           <DialogDescription className="text-left leading-6">
@@ -112,7 +113,7 @@ function Overlay() {
             <Button variant="outline" onClick={() => actions.resolve(false)}>
               Cancel
             </Button>
-            <Button onClick={() => actions.resolve(true)}>
+            <Button ref={confirmActionRef} onClick={() => actions.resolve(true)}>
               Confirm
             </Button>
           </div>

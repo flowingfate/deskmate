@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,7 @@ const McpAuthConsentDialog: React.FC = () => {
     serverName: '',
     providerLabel: 'Identity Provider',
   });
+  const allowActionRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const cleanup = mcpAuthEvents.showConsent((_event, data) => {
@@ -47,7 +48,7 @@ const McpAuthConsentDialog: React.FC = () => {
       open={state.isOpen}
       onOpenChange={(open) => { if (!open) handleResponse('cancel'); }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" initialFocusRef={allowActionRef}>
         <DialogHeader>
           <DialogTitle>Allow sign-in to {state.providerLabel}?</DialogTitle>
         </DialogHeader>
@@ -60,7 +61,7 @@ const McpAuthConsentDialog: React.FC = () => {
           <Button variant="outline" onClick={() => handleResponse('cancel')}>
             Not now
           </Button>
-          <Button onClick={() => handleResponse('allow-this-time')}>
+          <Button ref={allowActionRef} onClick={() => handleResponse('allow-this-time')}>
             Allow
           </Button>
         </DialogFooter>

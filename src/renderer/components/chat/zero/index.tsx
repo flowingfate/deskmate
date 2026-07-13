@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SlidersHorizontal, Plus } from 'lucide-react';
 import { composeTextAtom } from '../chat-input/Textarea';
@@ -45,6 +45,7 @@ export function ZeroState() {
   const hasPrompts = prompts.length > 0;
   // 待覆盖确认的提示词；非 null 时弹出 AlertDialog。
   const [pendingOverwrite, setPendingOverwrite] = useState<PresetPrompt | null>(null);
+  const replaceActionRef = useRef<HTMLButtonElement>(null);
 
   function fill(prompt: PresetPrompt) {
     set(prompt.prompt);
@@ -118,7 +119,7 @@ export function ZeroState() {
           if (!open) setPendingOverwrite(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent initialFocusRef={replaceActionRef}>
           <AlertDialogHeader>
             <AlertDialogTitle>Replace current input?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -129,7 +130,7 @@ export function ZeroState() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmOverwrite}>Replace</AlertDialogAction>
+            <AlertDialogAction ref={replaceActionRef} onClick={confirmOverwrite}>Replace</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

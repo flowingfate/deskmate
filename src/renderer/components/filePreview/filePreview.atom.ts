@@ -1,5 +1,6 @@
 import { atom } from '@/atom';
 import { FilePreviewDescriptor } from './FilePreviewPanel';
+import { requestConfirmation } from '@/components/ui/ConfirmationDialog';
 
 interface FilePreviewState {
   isDirty: boolean;
@@ -14,33 +15,48 @@ interface FilePreviewState {
  */
 function createFilePreviewAtom() {
   return atom(null as FilePreviewState | null, (get, set) => {
-    function cancel() {
+    async function cancel(): Promise<void> {
+      const current = get();
+      if (current?.isDirty) {
+        const discard = await requestConfirmation({
+          title: 'Discard unsaved changes?',
+          description: 'You have unsaved changes in the current preview. Do you want to discard them?',
+          confirmLabel: 'Discard changes',
+          destructive: true,
+        });
+        if (!discard) return;
+      }
       set(null);
     }
 
-    function open(file: FilePreviewDescriptor) {
+    async function open(file: FilePreviewDescriptor): Promise<void> {
       const current = get();
       if (!current) {
-        return set({ file, isDirty: false });
+        set({ file, isDirty: false });
+        return;
       }
 
       const prevKey = `${current.file.name}|${current.file.url}`;
       const nextKey = `${file.name}|${file.url}`;
-
-      // 同一文件 = toggle
-      if (prevKey === nextKey) {
-        if (current.isDirty) {
-          const discard = window.confirm('You have unsaved changes in the current preview. Do you want to discard them and open another file?');
-          if (discard) set(null);
-          return;
-        }
-        return set(null);
-      }
+      const isSameFile = prevKey === nextKey;
 
       if (current.isDirty) {
-        const discard = window.confirm('You have unsaved changes in the current preview. Do you want to discard them and open another file?');
+        const discard = await requestConfirmation({
+          title: 'Discard unsaved changes?',
+          description: isSameFile
+            ? 'You have unsaved changes in the current preview. Do you want to discard them and close the preview?'
+            : 'You have unsaved changes in the current preview. Do you want to discard them and open another file?',
+          confirmLabel: 'Discard changes',
+          destructive: true,
+        });
         if (!discard) return;
       }
+
+      if (isSameFile) {
+        set(null);
+        return;
+      }
+
       set({ file, isDirty: false });
     }
 

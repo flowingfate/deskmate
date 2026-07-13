@@ -41,6 +41,7 @@ import McpAuthConsentDialog from '../components/mcp/McpAuthConsentDialog';
 import RequestOAuthClientIdDialog from '../components/mcp/RequestOAuthClientIdDialog';
 import { useMcpConnectionFailureToast } from '../lib/mcp/useMcpConnectionFailureToast';
 import { settingsEntryLoader } from '@renderer/lib/navigation/settingsEntry';
+import { ConfirmationDialogHost } from '../components/ui/ConfirmationDialog';
 
 const logger = log.child({ mod: 'AppRoutes' });
 
@@ -105,6 +106,7 @@ const RootLayout: React.FC = () => {
       <WindowZoomHotkeys />
       <McpAuthConsentDialog />
       <RequestOAuthClientIdDialog />
+      <ConfirmationDialogHost />
       <div className="h-screen flex flex-col overflow-hidden">
         {!isAppShellRoute && <TitleBar />}
         <div className="flex-1 min-h-0">

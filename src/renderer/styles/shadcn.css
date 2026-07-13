@@ -71,3 +71,13 @@
   --sc-input: hsl(0 0% 16%);
   --sc-ring: hsl(0 0% 84%);
 }
+
+/* Programmatic dialog focus must remain visible after a pointer-triggered open.
+ * In Chromium, that focus does not match :focus-visible. The attribute is
+ * removed as soon as the target blurs. */
+@layer base {
+  [data-initial-focus] {
+    outline: 2px solid var(--sc-ring);
+    outline-offset: 2px;
+  }
+}

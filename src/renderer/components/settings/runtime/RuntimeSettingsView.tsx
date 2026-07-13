@@ -14,6 +14,7 @@ import type { RuntimeEnvironment } from '../../../lib/userData/types';
 import { runtimeApi } from '@/ipc/runtime';
 import { log } from '@/log';
 const logger = log.child({ mod: 'RuntimeSettingsView' });
+import { requestConfirmation } from '@/components/ui/ConfirmationDialog';
 
 const RuntimeSettingsView: React.FC = () => {
   const [runtimeEnv, setRuntimeEnv] = useState<RuntimeEnvironment | null>(null);
@@ -127,7 +128,13 @@ const RuntimeSettingsView: React.FC = () => {
   }, [newPythonVersion, loadPythonVersions, showSuccess, showError]);
 
   const handleUninstallPython = useCallback(async (version: string) => {
-    if (!confirm(`Are you sure you want to uninstall Python ${version}?`)) return;
+    const confirmed = await requestConfirmation({
+      title: `Uninstall Python ${version}?`,
+      description: `Are you sure you want to uninstall Python ${version}?`,
+      confirmLabel: 'Uninstall',
+      destructive: true,
+    });
+    if (!confirmed) return;
     setIsPythonLoading(true);
     try {
       await runtimeApi.uninstallPythonVersion(version);

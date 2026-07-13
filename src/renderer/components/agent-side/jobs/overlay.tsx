@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -103,6 +103,7 @@ const ScheduleOverlay: React.FC<AddScheduleOverlayProps> = ({
   const [notifyOnCompletion, setNotifyOnCompletion] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -267,7 +268,7 @@ const ScheduleOverlay: React.FC<AddScheduleOverlayProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-190 max-w-190 max-h-[90vh] flex flex-col overflow-hidden p-0">
+      <DialogContent initialFocusRef={nameInputRef} className="w-190 max-w-190 max-h-[90vh] flex flex-col overflow-hidden p-0">
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle>{dialogTitle}</DialogTitle>
           <DialogDescription>{dialogDescription}</DialogDescription>
@@ -285,7 +286,7 @@ const ScheduleOverlay: React.FC<AddScheduleOverlayProps> = ({
 
             <div>
               <div className={sectionTitle}>Schedule Name</div>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Daily standup summary" />
+              <Input ref={nameInputRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="Daily standup summary" />
             </div>
 
             <div>

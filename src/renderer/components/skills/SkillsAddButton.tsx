@@ -21,7 +21,7 @@
  * 下拉菜单、确认框与动作分发。
  */
 
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { Plus, RefreshCw, ScanSearch } from 'lucide-react'
 import {
   DropdownMenu,
@@ -53,6 +53,7 @@ const SkillsAddButton: React.FC<SkillsAddButtonProps> = ({ children, align = 'en
   const updateSkillFromDevice = useUpdateSkillFromDevice()
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false)
   const [showForeignImportDialog, setShowForeignImportDialog] = useState(false)
+  const chooseFileActionRef = useRef<HTMLButtonElement>(null)
 
   const confirmUpdate = () => {
     setShowUpdateConfirm(false)
@@ -85,7 +86,7 @@ const SkillsAddButton: React.FC<SkillsAddButtonProps> = ({ children, align = 'en
       />
 
       <AlertDialog open={showUpdateConfirm} onOpenChange={setShowUpdateConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent initialFocusRef={chooseFileActionRef}>
           <AlertDialogHeader>
             <AlertDialogTitle>Update a skill from device</AlertDialogTitle>
             <AlertDialogDescription>
@@ -96,7 +97,7 @@ const SkillsAddButton: React.FC<SkillsAddButtonProps> = ({ children, align = 'en
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmUpdate}>Choose File...</AlertDialogAction>
+            <AlertDialogAction ref={chooseFileActionRef} onClick={confirmUpdate}>Choose File...</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

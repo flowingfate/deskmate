@@ -26,6 +26,7 @@ const SettingsDialogs: React.FC<SettingsDialogsProps> = ({
   setDeleteMcpDialog,
   handleConfirmDeleteMcp,
 }) => {
+  const deleteActionRef = React.useRef<HTMLButtonElement>(null);
   return (
     <>
       <DeleteSkillConfirmDialog />
@@ -41,7 +42,7 @@ const SettingsDialogs: React.FC<SettingsDialogsProps> = ({
           }
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" initialFocusRef={deleteActionRef}>
           <DialogHeader>
             <DialogTitle className="text-left">Delete MCP Server</DialogTitle>
             <DialogDescription className="text-left">
@@ -62,6 +63,7 @@ const SettingsDialogs: React.FC<SettingsDialogsProps> = ({
               No
             </Button>
             <Button
+              ref={deleteActionRef}
               variant="destructive"
               size="sm"
               onClick={handleConfirmDeleteMcp}

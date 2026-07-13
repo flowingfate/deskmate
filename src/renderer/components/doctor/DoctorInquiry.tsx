@@ -36,6 +36,7 @@ function DoctorInquiry() {
   const open = type === 'idle-show';
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const agents = useAgents();
   const sessions = useAgentSessions(
     form.agentId && form.agentId !== NONE_OPTION ? form.agentId : '',
@@ -104,7 +105,7 @@ function DoctorInquiry() {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) actions.hide(); }}>
-      <DialogContent  data-dbg="doctor-inquiry-dialog" className="max-w-xl max-h-[88vh] p-0 flex flex-col overflow-hidden">
+      <DialogContent initialFocusRef={descriptionRef} data-dbg="doctor-inquiry-dialog" className="max-w-xl max-h-[88vh] p-0 flex flex-col overflow-hidden">
         <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-neutral-100 bg-linear-to-r from-neutral-50 to-neutral-50 shrink-0">
           {doctor_icon}
           <DialogHeader className="flex-1 min-w-0">
@@ -120,6 +121,7 @@ function DoctorInquiry() {
         <div className="flex flex-col gap-5 px-6 py-5 overflow-y-auto flex-1 min-h-0">
           <Field label="Problem Description" required>
             <Textarea
+              ref={descriptionRef}
               value={form.description}
               onChange={(e) => actions.updateForm((f) => { f.description = e.target.value; })}
               placeholder="Briefly describe what you observed..."
