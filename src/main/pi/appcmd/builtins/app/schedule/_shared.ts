@@ -71,14 +71,14 @@ export function parseScheduleTypeFlag(
 
 /**
  * `schedule list` 的人话渲染:一行一 job,简洁可读;与 `kubectl get jobs`
- * 风格对齐 —— LLM / 用户都能一眼看到 id / name / type / next 触发 / status。
+ * 风格对齐 —— LLM / 用户都能一眼看到 id / name / type / next 触发 / enabled。
  */
 export function formatJobLine(job: JobView): string {
   const trigger =
     job.schedule_type === 'cron'
       ? `cron=${job.cron_expression || '?'}`
       : `at=${job.run_at || '?'}`;
-  const lastRun = job.last_run_at ? `last=${job.last_run_at}` : 'last=-';
+  const lastStarted = job.last_started_at ? `last=${job.last_started_at}` : 'last=-';
   const enabled = job.enabled ? 'on' : 'off';
-  return `  ${job.job_id}  ${job.name}  [${job.schedule_type}/${enabled}/${job.status}]  ${trigger}  ${lastRun}`;
+  return `  ${job.job_id}  ${job.name}  [${job.schedule_type}/${enabled}]  ${trigger}  ${lastStarted}`;
 }

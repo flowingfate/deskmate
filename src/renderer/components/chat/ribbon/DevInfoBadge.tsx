@@ -1,13 +1,11 @@
 import { Bug, Check, Copy } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 import { appApi } from '@/ipc/app';
+import { CurrentSessionStatus } from '@/lib/chat/agentSessionCacheManager';
+import { useSchedulesByAgentId } from '@/states/schedules.atom';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { RibbonItem } from './RibbonItem';
-
-interface DevInfoBadgeProps {
-  agentId?: string | null;
-  sessionId?: string | null;
-}
 
 interface DevInfoRow {
   key: string;
@@ -16,11 +14,21 @@ interface DevInfoRow {
   display?: string;
 }
 
-export function DevInfoBadge({ agentId, sessionId }: DevInfoBadgeProps): ReactElement {
+
+export function DevInfoBadge(): ReactElement {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const [appVersion, setAppVersion] = useState('1.15.6');
+  const {
+    agentId: routeAgentId,
+    jobId,
+    sessionId: routeSessionId,
+  } = useParams();
+  const { agentId: currentAgentId, chatSessionId } = CurrentSessionStatus.use();
+  const agentId = routeAgentId ?? currentAgentId;
+  const sessionId = routeSessionId ?? chatSessionId;
+  const scheduleJob = useSchedulesByAgentId(agentId).find(({ id }) => id === jobId);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return;
@@ -49,16 +57,29 @@ export function DevInfoBadge({ agentId, sessionId }: DevInfoBadgeProps): ReactEl
     setTimeout(() => setCopied(null), 1500);
   };
 
+  const identifiers = [
+    agentId ? `agent: ${agentId}` : null,
+    jobId ? `job: ${jobId}` : null,
+    sessionId ? `session: ${sessionId}` : null,
+  ].filter((value): value is string => value !== null);
   const rows: DevInfoRow[] = [
     { key: 'version', label: 'Version', value: appVersion },
-    ...(agentId ? [{ key: 'chat', label: 'Chat ID', value: agentId }] : []),
-    ...(sessionId ? [{ key: 'session', label: 'Session ID', value: sessionId }] : []),
-    ...(agentId && sessionId
+    ...(agentId ? [{ key: 'agent', label: 'Agent ID', value: agentId }] : []),
+    ...(jobId
       ? [{
-          key: 'both',
+          key: 'job',
+          label: 'Schedule',
+          value: jobId,
+          display: scheduleJob?.id,
+        }]
+      : []),
+    ...(sessionId ? [{ key: 'session', label: 'Session ID', value: sessionId }] : []),
+    ...(identifiers.length > 1
+      ? [{
+          key: 'identifiers',
           label: 'Copy IDs',
-          value: `agent: ${agentId}\nsession: ${sessionId}`,
-          display: 'agent + session',
+          value: identifiers.join('\n'),
+          display: identifiers.map((value) => value.split(':', 1)[0]).join(' + '),
         }]
       : []),
   ];
@@ -78,9 +99,11 @@ export function DevInfoBadge({ agentId, sessionId }: DevInfoBadgeProps): ReactEl
       {open && (
         <div className="absolute right-0 bottom-[calc(100%+6px)] z-1000 min-w-52 overflow-hidden rounded-lg border border-border bg-white shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
           {rows.map(({ key, label, value, display }) => (
-            <div
+            <button
               key={key}
-              className="flex items-center justify-between gap-3 px-3 py-2 cursor-pointer transition-[background] duration-100 hover:bg-[#fafafa] not-first:border-t not-first:border-(--bg-secondary)"
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left cursor-pointer transition-[background] duration-100 hover:bg-[#fafafa] focus-visible:outline-none focus-visible:bg-[#fafafa] not-first:border-t not-first:border-(--bg-secondary)"
               onClick={() => copyValue(key, value)}
             >
               <span className="text-[11px] font-medium text-content-tertiary whitespace-nowrap shrink-0">{label}</span>
@@ -88,7 +111,7 @@ export function DevInfoBadge({ agentId, sessionId }: DevInfoBadgeProps): ReactEl
                 <span>{display ?? value}</span>
                 {copied === key ? <Check size={12} /> : <Copy size={12} />}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       )}

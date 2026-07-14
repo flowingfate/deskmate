@@ -14,6 +14,7 @@ import { useAgentById, useAgents } from '@/states/agents.atom'
 import { useAgentDetail } from '@/states/agentDetail.atom'
 import { getAgentSessions } from '@/states/sessionIndex.atom'
 import { updateAgent } from '../../../lib/chat/agentOps'
+import { newEntityId } from '@shared/persist/id'
 import { AgentPersona } from '../../../lib/userData/types'
 import { useToast } from '../../ui/ToastProvider'
 import { useFeatureFlag } from '../../../lib/featureFlags'
@@ -473,23 +474,16 @@ const AgentEditingView: React.FC = () => {
     }
   }, [canSaveAll, collectPendingChanges, agentId, agentData, currentAgent, detail, showSuccess])
 
-  // Navigate back to chat page
+  // Navigate back to chat page.
   const handleBackToChat = useCallback(() => {
     if (!agentId) {
       navigate('/agent')
       return
     }
 
-    const sessions = getAgentSessions(agentId)
-    const hasExistingSessions = sessions.length > 0
-
+    const hasExistingSessions = getAgentSessions(agentId).length > 0
     if (!hasExistingSessions) {
-      navigate(`/agent/${agentId}`, {
-        state: {
-          intent: 'new-chat',
-          source: 'agent-settings-back'
-        }
-      })
+      navigate(`/agent/${agentId}/${newEntityId('s')}`)
       return
     }
 

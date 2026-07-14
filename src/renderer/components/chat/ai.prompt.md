@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-14 (ContextBadge 将累计 token 以 Prompt input / Uncached input / cache read-write / output / total 的层级展示) -->
+<!-- Last verified: 2026-07-15 (JobRunChat 将已结束的 schedule run 派生为 regular continuation) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -6,18 +6,19 @@
 ## 关键文件
 | 文件 | 职责 | 规模 |
 |------|------|------|
-| `ChatView.tsx` | 主聊天视图容器；负责路由↔会话同步、会话分叉/选择与 agent 编辑导航 | ~300 LOC |
-| `ChatViewContent.tsx` | 可滚动的消息列表区域；处理会话切换占位、回放与输入委托，不承载 ribbon 业务状态 | ~200 LOC |
-| `ChatViewHeader.tsx` | 顶部栏：左侧组合 agent 身份、技能、本地工具与 MCP 工具状态（徽标可跳转各自设置）；右侧 `ContextBadge` 点击向下展开 context window 详情及当前消息历史中 assistant usage 的累计 token 消耗：Prompt input（uncached input + cache read + cache write）、output、total | —
-| `ribbon/index.tsx` | 输入框上方的紧凑控制条：左侧弹性槽渲染提示或错误，保留右侧会话操作的固定宽度 | 小 |
+| `ChatView.tsx` | 主聊天视图容器；仅负责 URL↔会话同步，以 `kind` 区分 regular 可交互会话与 job-run 只读回放 | ~120 LOC |
+| `JobRunChat.tsx` | job-run 的只读说明与转换入口；仅 terminal run 可经 persist IPC 创建独立 regular session，成功后导航到普通 session URL | small |
+| `ChatViewHeader.tsx` | 顶部栏：左侧组合 agent 身份与自包含的 Skills / Local tools / MCP tools 状态徽标；右侧 `ContextBadge` 点击向下展开 context window 详情及当前消息历史中 assistant usage 的累计 token 消耗：Prompt input（uncached input + cache read + cache write）、output、total | — |
+| `../ui/StatusBadges.tsx` | 聚合当前 agent 的 Skills / Local tools / MCP tools 状态；徽标直接调用 `editAgent(agentId, tab)` 进入对应设置，不经 `ChatView` / `ChatViewHeader` 回调透传 | — |
+| `ribbon/index.tsx` | 输入框上方的紧凑控制条：左侧弹性槽渲染提示或错误，job-run 不显示 regular-only Retry；保留右侧会话操作的固定宽度 | 小 |
 | `ribbon/RibbonItem.tsx` | ribbon 专用紧凑按钮：由 ribbon 的交叉轴拉伸铺满高度、无圆角；统一 hover / active / disabled 状态，并通过包裹 disabled button 的 tooltip trigger 保证所有项目均可显示提示 | 小 |
-| `ribbon/DevInfoBadge.tsx` | 开发环境的版本、Agent ID、会话 ID 信息及复制菜单；自行获取 app version，菜单向上展开 | 小 |
+| `ribbon/DevInfoBadge.tsx` | 开发环境的版本、Agent ID、scheduler job 名称/ID、会话 ID 信息及复制菜单；自行获取 app version，路由和会话状态为标识符来源，菜单向上展开 | 小 |
 | `ribbon/RibbonTip.tsx` | 左侧垂直居中的灯泡图标 + 操作提示轮播；每次仅以一次 state 更新并行挂载当前/下一项，分别播放 `ribbon-tip-exit` 与 `ribbon-tip-enter` CSS 关键帧，避免 rAF 状态切换导致的闪跳；文本省略但保留悬浮全文 | 小 |
 | `ribbon/ErrorBar.tsx` | 无背景的紧凑错误行；重试按钮紧随消息，错误文本在左侧弹性槽内单行截断并经悬浮全文暴露诊断建议 | 小 |
 | `ribbon/JumpToLatest.tsx` | 始终显示的跳转控件 `JumpToLatestItem`：不可跳转时 disabled，滚离最新消息后激活并显示 `Jump to latest` 文案；同文件定义 `JumpToLatestAtom` 状态机 | 小 |
-| `ribbon/useSessionActionTarget.ts` | 导出 `SessionActionTarget` 可辨识联合，并在 ribbon 内聚路由会话操作判定：匹配 job-run 路由、核对当前 route/cache、以消息数识别新建空会话；不经 `ChatView` / `ChatViewContent` 透传 | 小 |
+| `ribbon/useSessionActionTarget.ts` | 导出 `SessionActionTarget` 可辨识联合，并在 ribbon 内聚路由会话操作判定：job-run target 携带 agent / job / session 标识，所有 target 均核对当前 route/cache，regular 再以消息数识别新建空会话；不经 `ChatView` / `ChatViewContent` 透传 | 小 |
 | `ribbon/ForkSessionItem.tsx` | 仅对已就绪且已有消息的 regular session 启用；job run、无会话与切换中均 disabled，通过 `chatSessionCommands` 复用 fork + 路由跳转逻辑 | 小 |
-| `ribbon/OpenSessionFolderItem.tsx` | 仅对已就绪且已有消息的 regular session 启用；使用 `FolderTree` 区别工作区开关图标。`getFilePath` 主进程端经 `Agent.getSession()` 解析真实 ULID session 目录，避免旧时间戳 ID 路径推导失败 | 小 |
+| `ribbon/OpenSessionFolderItem.tsx` | 对已就绪的 regular session 与 job run 启用；regular 经 `getFilePath → Agent.getSession()`，job run 经 `getScheduleRunFilePath → Agent.getJob().getRun()` 取得各自真实 session 根目录后交给系统文件管理器打开 | 小 |
 | `ribbon/ToggleWorkspaceExplorer.tsx` | 工作区侧栏的可见性切换按钮，使用 `RibbonItem` | 小 |
 | `ChatRenderItem.tsx` | `ChatRenderItemComponent` — 把扁平的 `ChatRenderItem[]`（来源于 `render-items-manager`）按类型分发到对应渲染器，并通过 `React.memo` + 自定义浅比较跳过未变化的项 | ~200 LOC |
 | `ChatContainer.tsx` | 消息列表渲染容器；组合 `useChatAutoScroll`、渲染项派生与编辑动作，不持有 ribbon 桥接状态 | ~410 LOC |
@@ -51,7 +52,7 @@
 | `chat-input/shared/transformMentions.ts` | 纯函数；把 `[@knowledge://...]`、`[@local://...]`、`[@skill://...]` 这些 mention bracket 形态转换为 markdown inline code（防止前后符号被解析为粗体/链接）。三种 scheme 统一走 internal URI，一条正则覆盖 | 小 |
 | `chat-input/ThinkingLevelSelector.tsx` | 单聊会话的 thinking level 选择器（pi-ai `ThinkingLevel` 枚举：`minimal/low/medium/high/xhigh`）；仅在活跃模型支持 ≥2 个等级时渲染；写入 `chat.agent.thinkingLevel`，通过 `updateAgent` 持久化到 AGENT.md front-matter。dropdown 顶部 "Auto" 项写入 `thinkingLevel: null` 清除字段，回到 provider 默认 —— 前端不假装知道默认值。运行时由 `pi.streamSimple({ reasoning })` 翻译给各 provider，不再走旧的"Claude→high / GPT→medium"启发式 | 小 |
 | `chat-input/ContextMenu.tsx` | @-提及下拉菜单，用于文件、技能和工作区项目 | — |
-| `chat-input/chatInputCommands.ts` | compose 聊天输入子树的**命令句柄注册表**（替代旧 `chatInput:selectFiles`/`chatInput:screenshot`/`agent:fillInput`/`context:mentionSelect`/`context:skillMentionSelect` window 事件）。consumer 挂载期用 `useRegisterComposeTextHandle`（compose Textarea，`enableContextMenu` 门控，edit 实例不注册）/ `useRegisterComposeFileHandle`（ComposeInput）注册自身方法到模块单例（内部经 ref 转发器，handler 闭包变化免重注册）；producer 直接调 `composeTextCommands.*`（insertMention/insertSkillMention/fillInput）/ `composeFileCommands.*`（selectFiles/screenshot）。**不是 state**——命令式句柄，无 atom/无 re-render/无 nonce diff，只把无类型 `CustomEvent` 换成编译期类型契约 + 可跳转引用。选注册表而非 context：producer 之一 `context-menu.atom.ts` 非 React 组件读不了 context | 小 |
+| `chat-input/chatInputCommands.ts` | compose 聊天输入子树的**命令句柄注册表**（替代旧 `chatInput:selectFiles`/`chatInput:screenshot`/`context:mentionSelect`/`context:skillMentionSelect` window 事件）。consumer 挂载期用 `useRegisterComposeTextHandle`（compose Textarea，`enableContextMenu` 门控，edit 实例不注册）/ `useRegisterComposeFileHandle`（ComposeInput）注册自身方法到模块单例（内部经 ref 转发器，handler 闭包变化免重注册）；producer 直接调 `composeTextCommands.insertMention` / `composeFileCommands.*`（selectFiles/screenshot）。**不是 state**——命令式句柄，无 atom/无 re-render/无 nonce diff，只把无类型 `CustomEvent` 换成编译期类型契约 + 可跳转引用。选注册表而非 context：producer 之一 `context-menu.atom.ts` 非 React 组件读不了 context | 小 |
 | `../filePreview/ChatFilePreviewOverlay.tsx` | 聊天页 inline 文件预览浮层;满铺 chat-content 区(连 ComposeInput 一起遮住),纯订阅 `ChatFilePreviewAtom` 渲染。聊天子树被 `ChatFilePreviewScope` 包裹，producer 经 `useOpenFilePreview()` 就近命中此 atom（不再监听 `fileViewer:open` 事件）。**外壳薄,渲染共用 `filePreview/FilePreviewPanel`** | — |
 | `chat-side.atom.ts` | `WorkspaceExplorerAtom`（右侧工作区侧栏可见性 + reveal）的 atom；`effectiveToggle` 打开侧栏时顺带 `ChatFilePreviewAtom.cancel()`。文件预览状态已迁到 `filePreview/filePreview.atom.ts` | — |
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
@@ -64,17 +65,17 @@
 | `zero/presetPrompts.ts` + `zero/presetIcons.ts` | 预设提示词的数据层：类型 `PresetPrompt`（源真值 `@shared/persist/types`，`iconKey` 为 `string`）+ `usePresetPrompts`（订阅 `agentDetail.atom` 的 `zero.preset_prompts`，缺席回退空数组）+ `presetPromptActions`（CRUD → `persistApi.patchAgentFront(agentId, { zero })` 整段覆盖写）+ `MAX_PRESET_PROMPTS`。`presetIcons.ts` 是 iconKey→Lucide 组件的注册表（36 key + 兜底）。**数据链路已收敛到本文件，上层组件只依赖 hook/actions 不感知后端** | 小 |
 | `agent-editor/AddScheduleOverlay.tsx` | 共享的定时任务创建/编辑对话框；由 `components/agent-side/jobs/JobsView` 与 `JobRunsView` 调用 | — |
 | `agent-editor/scheduleTemplates.ts` | 内置定时任务模板，被 `NewJob` 的下拉消费 | — |
-| `workspace/WorkspaceExplorerSidepane.tsx` | 工作区侧栏容器：Agent Knowledge（`knowledge://`）+ Session Deliverables（`local://`）两个 `FileExplorerSection` | — |
-| `workspace/FileExplorerSection.tsx` | 单个文件根的展示外壳（折叠态 / 头部 / body 分发）；全部逻辑下沉到 `useFileExplorerSection`，状态视图在 `FileExplorerSectionStates.tsx`。纯 Tailwind，无 scss | — |
-| `workspace/useFileExplorerSection.ts` | FileExplorerSection 的数据/副作用 hook：URI→路径解析、文件树加载与懒加载、文件监听、拖拽复制、菜单动作 | — |
-| `workspace/FileTreeExplorer.tsx` + `FileTreeNodeItem.tsx` | 可展开文件树容器 + 单节点；展开态持久化到 localStorage；图标查表在 `fileTreeIcons.tsx` | — |
+| `workspace/WorkspaceExplorerSidepane.tsx` | 工作区侧栏容器：Agent Knowledge（`knowledge://`）+ Session Deliverables（`local://`）两个 `FileExplorerSection`；`local://` 由 main 按 session ID 跨 regular / job-run 定位各自物理目录 | — |
+| `workspace/FileExplorerSection.tsx` | 单个文件根的展示外壳（折叠态 / 头部 / body 分发）；`readOnly` 目录允许浏览 / 打开 / 复制路径，禁止拖入、添加、粘贴和删除；全部逻辑下沉到 `useFileExplorerSection` | — |
+| `workspace/useFileExplorerSection.ts` | FileExplorerSection 的数据/副作用 hook：URI→路径解析、文件树加载与懒加载、文件监听、拖拽复制、菜单动作；所有写入口在 hook 内再次执行 `readOnly` capability 门控 | — |
+| `workspace/FileTreeExplorer.tsx` + `FileTreeNodeItem.tsx` | 可展开文件树容器 + 单节点；展开态持久化到 localStorage；只读节点的上下文菜单不提供 Delete；图标查表在 `fileTreeIcons.tsx` | — |
 | `workspace/PasteToWorkspaceDialog.tsx` | 将 AI 生成内容保存到工作区文件的对话框 | — |
 
 ## 架构
 
 ### 组件层级
 ```
-ChatView (路由同步, 会话操作)
+ChatView (URL→会话同步)
   └─ ChatViewContent (会话切换占位, 回放)
        ├─ ChatContainer (滚动管理, 渲染项迭代)
        │    └─ ChatRenderItemComponent (按类型分发每项)
@@ -88,7 +89,9 @@ ChatView (路由同步, 会话操作)
        ├─ ChatWorkspaceSideOverlay (右侧工作区浮层, 覆盖消息区; ChatViewContent 本地组件)
        └─ ChatFilePreviewOverlay (满铺 inline 文件预览, 覆盖整个 chat-content; 复用 filePreview/FilePreviewPanel)
 
-`ChatView` 位于 `/agent/:agentId/:sessionId` 与 `/agent/:agentId/job/:jobId/:sessionId` 路由下。两条路由在 `entries/main.routes.tsx` 用同一个 `ChatView` 组件渲染，由路由显式注入 `kind?: 'regular' | 'job-run'` prop（默认 `'regular'`）；ChatView 据此决定快照拉取走 `loadChatSessionSnapshot/markSessionRead`（regular，命中 `regular_sessions` + `Agent.getSession()`）还是 `loadJobRunSnapshot/markJobRunRead`（job-run，命中 `job_runs` + `Agent.getJob().getRun()`）。两条 IPC 路径在主进程 persist 层完全物理隔离，禁止写"按 sessionId 万能取" 的混查 helper。它通过 `agentSessionCacheManager` 将路由与后端会话状态同步，处理会话分叉/选择，并分发 agent 编辑的导航事件。
+`ChatView` 位于 `/agent/:agentId/:sessionId` 与 `/agent/:agentId/job/:jobId/:sessionId` 路由下。两条路由在 `entries/main.routes.tsx` 用同一个 `ChatView` 组件渲染，由路由显式注入 `kind?: 'regular' | 'job'` prop（默认 `'regular'`）；**kind 是 UI capability boundary，不只是 hydration 选项**：regular 走 `loadChatSessionSnapshot/markSessionRead`，可 compose / edit / retry；job 走 `loadJobRunSnapshot/markJobRunRead`，是只读回放，隐藏 compose、message edit、Retry 和 cancel。已结束 run 的 `JobRunChat` 可经 persist IPC 克隆为新 regular session 并导航过去；原 run 仍是只读调度历史。两条 IPC 路径在 persist 层完全物理隔离，禁止写“按 sessionId 万能取”的混查 helper。
+
+新建 regular session 不经过 `location.state` 中的隐式 intent：入口直接用 `newEntityId('s')` 生成 ID，并导航到完整 `/agent/:agentId/:sessionId` URL。ID 只在 renderer 分配；首次发送消息前不持久化，因此未发送即离开的会话不会留下空壳。`/agent/:agentId` 表示 sessions 子屏无选中，ChatView 明确将 current session 置空。
 
 ### 消息渲染管线
 消息通过清晰的管线流转：
@@ -159,6 +162,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 更改 approval / choice / form 交互 | `interactive/RequestCard.tsx`、`ChatRenderItem.tsx`、`agentSessionCacheManager.ts` | 待处理请求经 `render-items-manager` 进入渲染流水线，由 `ChatRenderItemComponent` 分发 |
 | 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`entries/main.routes.tsx` 中的路由、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS`、`agent-area/AgentEditingView.tsx` 的 Tab 渲染分支 | 遵循现有标签页外壳模式 |
 | 修改滚动行为 | `useChatAutoScroll.ts` hook（由 `ChatContainer.tsx` 消费） | 始终验证基于 `chatSessionId` 的重置；流式跟随由 `streamingMessageTextLength` effect 驱动 |
+| 修改 regular / job-run capability | `ChatView.tsx` + `ChatViewContent.tsx` + `ribbon/index.tsx` | job-run 的写入限制由 UI 实现；不支持取消 |
 
 ## 联动变更映射
 | 变更内容 | 同时需要修改 |
@@ -194,6 +198,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 7. 长会话里发一条新消息，观察历史消息**不重渲**（DevTools Profiler；ChatRenderItem 的 memo + render-items-manager 的引用复用应让旧 item 跳过）。
 8. 在流式生成中向上滚动，确认不会被拉回底部；向下滚到底部后流式应自动跟随。
 9. 打开 ContextBadge，确认累计 token 消耗等于当前 assistant 消息的 `usage` 之和；完成一轮流式回复后应立即更新，无需切换会话。
+10. 打开 job run：确认输入区显示只读提示、user message 无编辑入口、ribbon 无 Retry；切回 sessions 后 URL 是 `/agent/:agentId`，不会复用 run ID。
 
 ## 注意事项
 
@@ -204,6 +209,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 - `ChatContainer` 不是会话消息的真实来源。消息选择位于 `ChatViewContent`（或回放状态）中；活跃列表通过 props 传递。
 - 会话切换不等同于空聊天。在目标会话缓存就绪前，不要显示空状态或零状态 UI。
 - 聊天输入的发送可用性必须在 `ComposeInput` 和 `EditInlineInput` 两侧保持一致，且都应基于显式的 `chatStatus === 'idle'`。将缺失的状态视为 idle 会重新打开编辑器在会话状态水合前提交的竞态条件。
+- job-run 是 scheduler 产物，不是 interactive chat。**不支持 send、edit、retry 或 cancel**；已结束 run 唯一的继续路径是派生新的 regular session，不能把 run 原地改类型或重用其 id。运行中的 run 必须由 main 拒绝转换；若未来要取消运行，必须由 scheduler 自己持有执行取消句柄，不能复用 `agentChat.cancelChatSession`。
 - 内联编辑提交失败是可恢复的聊天错误。如果 `onSubmitEditedMessage` 被拒绝，将消息捕获到 chat-session cache 中，以便 `ErrorBar` 能够渲染它。
 - 时间线自动滚动不仅仅由消息数量变化驱动。如果插入了待处理的交互式请求或类似的非消息时间线项，`ChatContainer` 仍需要显式的最新滚动触发（当前由 `ResizeObserver` 稳定窗口兜底）。
 - Agent 编辑器标签页路由使用嵌套的 React Router `<Outlet>` — 添加标签页需要同时修改组件树和 `entries/main.routes.tsx`。

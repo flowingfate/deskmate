@@ -20,12 +20,8 @@ interface RunRowProps {
  * (Download / Delete only — see `ChatSessionDropdownMenu`).
  */
 const RunRow: React.FC<RunRowProps> = ({ run, isActive, onSelect }) => {
-  const [
-    { isOpen: menuIsOpen, sessionId: menuSessionId },
-    menuActions,
-  ] = ChatSessionMenuAtom.use();
-  const isMenuOpen = menuIsOpen && menuSessionId === run.id;
-
+  const [menuState, menuActions] = ChatSessionMenuAtom.use();
+  const isMenuOpen = menuState.isOpen && menuState.sessionId === run.id;
   const state = getScheduledSessionDisplayState(run);
   const isUnread = run.readStatus !== 'read' && !isActive;
 
@@ -38,8 +34,9 @@ const RunRow: React.FC<RunRowProps> = ({ run, isActive, onSelect }) => {
     const trigger = e.currentTarget as HTMLElement;
     // Tells `ChatSessionDropdownMenu` to render the schedule-mode menu (Download / Delete only).
     trigger.dataset.chatSessionMenuSource = 'schedule';
+    trigger.dataset.chatSessionMenuJobId = run.jobId;
     menuActions.toggle(run.agentId, run.id, run.title, trigger);
-  }, [menuActions, run.agentId, run.id, run.title]);
+  }, [menuActions, run.agentId, run.id, run.jobId, run.title]);
 
   const finishedAt = run.runStatus === 'running' ? null : run.finishedAt;
   const error = run.runStatus === 'failed' ? run.runError : null;

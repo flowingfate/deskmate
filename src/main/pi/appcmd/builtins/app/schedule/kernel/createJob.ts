@@ -13,7 +13,8 @@
  * 没有可中止的长任务。
  */
 
-import { schedulerManager } from '@main/lib/scheduler/SchedulerManager';
+import { schedulerManager } from '@main/lib/scheduler';
+import type { SchedulerJobCreateInput } from '@shared/ipc/scheduler';
 
 export interface CreateJobArgs {
   /** Human-readable name. */
@@ -55,20 +56,28 @@ export async function createJobInternal(
     }
 
     const scheduleType: 'cron' | 'once' = hasAt ? 'once' : 'cron';
+    const cronExpression = args.cron_expression?.trim();
+    const runAt = args.run_at?.trim();
+    const common = {
+      description: args.description,
+      name: args.name,
+      enabled: true,
+      agentId,
+      message: args.message,
+      notifyOnCompletion: true,
+    };
+    let input: SchedulerJobCreateInput;
+    if (cronExpression) {
+      input = { ...common, scheduleType: 'cron', cronExpression };
+    } else if (runAt) {
+      input = { ...common, scheduleType: 'once', runAt };
+    } else {
+      return { success: false, message: 'Provide exactly one of --cron or --at (recurring vs one-time).' };
+    }
 
     let jobId: string;
     try {
-      jobId = await schedulerManager.createJob({
-        description: args.description,
-        name: args.name,
-        scheduleType,
-        cronExpression: hasCron ? args.cron_expression?.trim() : undefined,
-        runAt: hasAt ? args.run_at?.trim() : undefined,
-        enabled: true,
-        agentId,
-        message: args.message,
-        status: 'pending',
-      });
+      jobId = await schedulerManager.createJob(input);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       return {

@@ -13,9 +13,7 @@
  *
  * 填充时机:模块加载期 eager 注册。`pi/tools/app.ts` import 本模块即触发,
  * `makeRouterCommand` 在首次被调用时读 `appCommands.list()`,此刻已注册完毕。
- * **feature-gated 成员**(schedule / subagent)按 flag 决定是否注册 —— 关掉时
- * 绝不注册,避免「列表里有但 execute 拒绝」(与 `web` 的无条件注册唯一的差别,
- * 纯因 app 域存在受控能力,不是结构上的特殊)。
+ * `subagent` 仍由 feature flag 控制；其他成员始终注册。
  *
  * 设计文档:[`ai.prompt/tool-system.md`](../../../../ai.prompt/tool-system.md)
  */
@@ -38,12 +36,8 @@ export const appCommands = new AppCommandRegistry();
 appCommands.register(agentCommand);
 appCommands.register(mcpCommand);
 appCommands.register(skillCommand);
-
 appCommands.register(timeCommand);
-// 批 Capability(feature-gated):scheduler 默认开,关掉时绝不注册。
-if (isFeatureEnabled('deskmateFeatureScheduler')) {
-  appCommands.register(scheduleCommand);
-}
+appCommands.register(scheduleCommand);
 
 // 批 Capability(feature-gated):subagent —— dev 默认开,生产默认关。
 if (isFeatureEnabled('deskmateFeatureSubAgent')) {

@@ -1,19 +1,37 @@
 import { connectRenderToMain } from './base';
-import type { SchedulerJob } from '../../main/lib/scheduler/types';
 
-export type { SchedulerJob };
-export type SchedulerJobCreateInput = Omit<SchedulerJob, 'id'> & { id?: string };
+type SchedulerJobBase = {
+  id: string;
+  description: string;
+  name: string;
+  enabled: boolean;
+  agentId: string;
+  message: string;
+  /** 最近一次运行开始时间；由 persist 的 runState 投影。 */
+  lastStartedAt?: string;
+  /** Whether to send a notification on completion. Defaults to true. */
+  notifyOnCompletion: boolean;
+};
 
-export interface SchedulerSessionInfo {
-  chatSession_id: string;
-  title: string;
-  last_updated: string;
-}
+export type SchedulerJob =
+  | (SchedulerJobBase & { scheduleType: 'cron'; cronExpression: string })
+  | (SchedulerJobBase & { scheduleType: 'once'; runAt: string });
 
-export interface SchedulerManualRunResult {
-  chatSessionId?: string;
-  messagesCount?: number;
-}
+type SchedulerJobMutableFields = Partial<
+  Pick<SchedulerJobBase, 'name' | 'description' | 'message' | 'enabled' | 'notifyOnCompletion'>
+>;
+
+export type SchedulerJobCreateInput = Omit<SchedulerJobBase, 'id' | 'lastStartedAt'> & (
+  | { scheduleType: 'cron'; cronExpression: string }
+  | { scheduleType: 'once'; runAt: string }
+);
+
+/** Schedule replacement is atomic: switching kind always supplies its new value. */
+export type SchedulerJobUpdate = SchedulerJobMutableFields & (
+  | { scheduleType?: undefined; cronExpression?: undefined; runAt?: undefined }
+  | { scheduleType: 'cron'; cronExpression: string; runAt?: undefined }
+  | { scheduleType: 'once'; runAt: string; cronExpression?: undefined }
+);
 
 type RenderToMain = {
   listJobs: {
@@ -33,17 +51,18 @@ type RenderToMain = {
     return: { success: boolean; error?: string };
   };
   updateJob: {
-    call: [jobId: string, updates: Partial<Pick<SchedulerJob, 'name' | 'message' | 'scheduleType' | 'cronExpression' | 'runAt' | 'description' | 'enabled' | 'status' | 'lastRunAt' | 'executedAt' | 'notifyOnCompletion'>>];
+    call: [jobId: string, updates: SchedulerJobUpdate];
     return: { success: boolean; error?: string };
   };
   runJobNow: {
     call: [jobId: string, force?: boolean];
     return: { success: boolean; data?: SchedulerManualRunResult; error?: string };
   };
-  getJobSessions: {
-    call: [jobId: string];
-    return: { success: boolean; data?: SchedulerSessionInfo[]; error?: string };
-  };
 };
+
+export interface SchedulerManualRunResult {
+  chatSessionId?: string;
+  messagesCount?: number;
+}
 
 export const renderToMain = connectRenderToMain<RenderToMain>('scheduler');

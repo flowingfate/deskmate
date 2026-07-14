@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-14 (持久化 schema 入口改为 shared/persist/types/index.ts) -->
+<!-- Last verified: 2026-07-15 (session / job-run ownership 查询统一经 querySession / queryJobRun) -->
 
 # Persist 模块（新布局 store 层）
 
@@ -12,14 +12,14 @@
 | `profiles.ts` | `Profiles` 单例 + `bootstrap()` 10 步 + active 切换 + attach/detach auth | medium |
 | `profile.ts` | 单 profile：内嵌 `ProfileSettings`（settings.json）+ `AgentRegistry`（agents.json：items + primaryAgentId）两个 PersistBase inner class；外层 `Profile` 负责 agent 实体集合（Map<id, Agent>）、CRUD、archive/restore、reconcile、跨 agent 聚合 | large |
 | `agent.ts` | `Agent` class：AGENT.md 读写 + sessions/jobs 子域入口 | large |
-| `session.ts` | `Session`(抽象基类:`messages.jsonl` I/O + files sandbox + 节流 persist + 元数据 mutate)+ `RegularSession` / `JobRun`(各自路径树/索引/索引同步)。消息接口:`appendDomainMessage(m: Message)` 写 user / assistant 行,`appendToolResponse(toolCallId, result)` 写 `tool_res` 行,`rewriteMessages(messages)` 整段重写 jsonl(emit `session:messages:rewritten`),`loadDomainMessages()` 折回 `{ messages, orphanResponses }`。`pendingMessages` 元素类型 `ChatHistoryItem = PersistedJsonLine`(同义 alias)。`flushMessages` 串行化,jsonl 行边界严格 | large |
+| `session.ts` | `Session`(抽象基类:`messages.jsonl` I/O + files sandbox + 节流 persist + 元数据 mutate)+ `RegularSession` / `JobRun`(各自路径树/索引/索引同步)。`JobRun.forkToSession` 仅对 terminal run clone messages/files/contextState 为独立 regular session。消息接口:`appendDomainMessage(m: Message)` 写 user / assistant 行,`appendToolResponse(toolCallId, result)` 写 `tool_res` 行,`rewriteMessages(messages)` 整段重写 jsonl(emit `session:messages:rewritten`),`loadDomainMessages()` 折回 `{ messages, orphanResponses }`。`pendingMessages` 元素类型 `ChatHistoryItem = PersistedJsonLine`(同义 alias)。`flushMessages` 串行化,jsonl 行边界严格 | large |
 | `messageWire.ts` | `dehydrate(messages)` / `rehydrate(lines)` 在 Domain `Message[]` 与 `PersistedJsonLine[]` 之间互转。消息 schema 在 `shared/persist/types/message.ts` 定义并经 `shared/persist/types/index.ts` 统一导出；MCP `ToolCall.mcp`（server 名称）随 assistant 行原样保留，旧行缺席时保持 `undefined` | small |
 | `schedule.ts` | `ScheduleJob` + `ScheduleRegistry`:once/cron job + run 状态机;Step 9 起 run 路径走 `jobRunIdx` | medium |
 | `archive.ts` | agent 软删/恢复/purge/gc | small |
 | `mcp.ts` / `skills.ts` / `subAgents.ts` / `models.ts` | 共享注册表 CRUD | small |
 | `knowledge.ts` | agent knowledge/ 目录生命周期 | tiny |
 | `auth.ts` | `LegacyAuth` / `PiAuth`：auth.json / auth.pi.json | small |
-| `ipc.ts` | `registerPersistIpc()` —— dry-run handler，**未接入 startup pipeline** | small |
+| `ipc.ts` | `querySession` / `queryJobRun` 沿 ownership chain 统一解析 active profile → agent → session / job run，并由 persist 与 chat-session IPC 复用；`registerPersistIpc()` 注册 persist handlers | small |
 | `storageOverview.ts` | 「本地数据透明」聚合器:只读递归统计。**以 agent 为组**（`AgentStorageGroup`：会话/定时/知识/config 四子项，config 用减法兜底守恒）+ profile 级共享分类（`StorageCategory`：skills/subAgents/mcp/models/搜索索引/归档/profileConfig）。`computeStorageOverview` + reveal 边界校验 `resolveRevealTarget`。`/settings/persist` 页数据源 | small |
 | `lib/atomic.ts` | tmp→rename 原子写 + 增量 helpers | small |
 | `lib/emit.ts` | `emit()` —— persist → renderer 广播入口（mainWindow 不存在时 no-op） | tiny |
@@ -66,6 +66,8 @@ Profiles.get().active()          → Profile
 
 两类 session 永不混走同一容器：`Agent.sessions: Map<id, RegularSession>`，`ScheduleJob.runs: Map<id, JobRun>`。子类间没有共同的 placement getter；要分支判断，用 `instanceof`。
 
+`JobRun.forkToSession(sessionIdx)` 是 schedule run 唯一的继续对话入口：只接受 completed / failed run，clone `messages.jsonl` 与 `files/`（`COPYFILE_FICLONE`），保留 `contextState` / overrides，生成新的 regular id、重置 `turn` / star / read 状态，并让 `RegularSession.afterPersist` 负责 `regular_sessions` + renderer 事件。IPC `forkJobRunToSession` 仅沿 ownership chain 解析目标 run 并委派给该方法。原 run 永远保留在 `job_runs` 作为调度历史；不得原地改 `kind` 或复用 run id。
+
 取 session 走 PK 查 SQLite index（Step 9）：
 - `Agent.getSession(id)` → `sessionIdx.findById(id) → RegularSession.load(... row.month ...)`（**只**查 `regular_sessions`）
 - `ScheduleJob.getRun(id)` → `jobRunIdx.findById(id) → JobRun.load(... row.month, jobId)`（**只**查 `job_runs`）
@@ -93,6 +95,7 @@ Profiles.get().active()          → Profile
 | 加 AGENT.md 字段 | `types/agent.ts`（经 `types/index.ts` 导出）+ `agent.ts` `AgentConfig.assign/toFrontMatter` 处理 + markdown 测试 | front-matter 字段是否需要在 record 同步、加载时如何回填要先判定 |
 | 加 regular session 索引字段 | `types/session.ts` 的 `RegularSessionRow`（经 `types/index.ts` 导出）+ `lib/db/schema.ts` DDL 加列 + `lib/db/sessionIdx.ts` marshal/unmarshal + `RegularSession.toRegularRow` 同步 + `SessionIdx.rebuildFromDisk` 投影 | source of truth 是 data.json 中对应字段，先保证那边有 |
 | 加 job_run 索引字段 | 同上但走 `JobRunRow` / `JobRun.toJobRunRow` / `JobRunIdx` 路径 | schedule_run 表与 regular 表物理分开，互不影响 |
+| 将 schedule run 继续为 regular session | `session.ts#JobRun.forkToSession` + `RegularSession` data 投影；clone messages/files 后才写 regular `data.json`，最后由 afterPersist 同步 SQL / 事件 | 只接受 terminal run；原 run 不删、不改 |
 | 加 SQLite 偏序索引 | `lib/db/schema.ts` `CREATE INDEX IF NOT EXISTS ix_xxx ON ... WHERE ...;` + 测试 `EXPLAIN QUERY PLAN` 验命中 | 候选索引清单见 [ai.prompt/persist.md §9.2](../../../ai.prompt/persist.md) |
 | 加 IPC 通道 | `src/shared/ipc/persist.ts` 加 channel + `ipc.ts` 加 handler + `preload/persist/invoke.ts` 加 allowlist | renderer 调用走 `persistApi.xxx()` 自动类型推导 |
 | 加 SQLite 单元测试 | `__tests__/sqlite-index.test.ts` 仿 PR-1 模板（tmp 真盘 + ProfileDb.resetForTesting） | better-sqlite3 是 native，无法在 mock fs 跑 |
@@ -102,14 +105,14 @@ Profiles.get().active()          → Profile
 
 - ⚠️ `name` 不是主键。`agents.json` 允许重名；所有引用走 `a_{ulid}` id。重命名 agent 时 id 不变。**例外**：sub_agents / skills 沿用 name 作 id（Claude Code 兼容性）。
 - ⚠️ messages.jsonl 是 append-only。常态走 `Session.appendDomainMessage(m)` / `appendToolResponse(id, result)` 进 buffer,`flushMessages` 才落盘;`Session.persist()` 内部会同时 flush。**整段覆盖**走 `rewriteMessages(messages)`(edit / retry / 导入路径,emit `session:messages:rewritten`),不要单独覆盖写 messages.jsonl。
-- ⚠️ Session 删除走 `Agent.deleteSession(id)`（RegularSession）或 `Agent.deleteJob(id)`（JobRun 整 job 目录一锅端），会同时删 dir + 通过 `sessionIdx.remove` / `jobRunIdx.removeByJob` 删 SQL 行 + emit 相应 `*:index:updated`(op='remove')/`schedule:removed`。**不要**直接 `session.deleteFromDisk()`。
+- ⚠️ Session 删除必须按形态走 owner：`Agent.deleteSession(id)` 只删 RegularSession；`ScheduleJob.deleteRun(id)` 只删已结束的单条 JobRun（running 会拒绝，避免与执行写盘竞态）；`Agent.deleteJob(id)` 才整 job 级联删除。它们分别同步源目录、SQLite 行并 emit 对应 remove 事件。**不要**直接 `session.deleteFromDisk()`。
 - ⚠️ Agent 软删走 `Profile.archiveAgent(id)`：写顺序是 archive move dir → agents.json 剔除（含 `primaryAgentId` 命中清空）。若中途崩溃，下次启动 `reconcileAgents()` 会发现 items 指向不存在的目录并自愈。
 - ⚠️ `knowledge/` 是每个 agent 的基础目录：`Profile.createAgent` 在将 record 发布到 `agents.json` 前创建它；`duplicateAgent` 复制源目录，旧 source 缺目录时创建空目录；`Agent.load` 会为已登记的旧 agent 懒创建目录。渲染器文件树会校验物理目录存在，不能把空知识库当作缺失目录。
 - ⚠️ `markdown.ts` 允许 `model: ''`（空字符串），便于刚 create 的 agent 立刻 round-trip。**不要**收紧成非空校验，否则会破坏 reconcile / restore 流程。
 - ⚠️ 测试 mock fs 时 helper 不能单放 `_*.ts` —— vitest 的 include 模式 `__tests__/**/*.ts` 全扫；要么内嵌进 test 文件，要么改后缀。`session-schedule.test.ts` 整文件改走 tmp 真盘（Step 9）—— `better-sqlite3` 是 native，无法被 `vi.mock('node:fs')` 拦截。
 - ⚠️ `Agent.createSession({ id?, title?, overrides?, contextState? })` 可接收外部 `id`。供 `pi.Agent.getOrCreateSession` 的 lazy create 路径使用：renderer 在 "New Chat" 按钮按下时本地 `newEntityId('s')` 生成 id 并 navigate，但**直到首次 streamMessage 走 pi 才真正落盘**，避免空壳 session。不传 id 走默认 ULID 生成，保持向后兼容。
 - ⚠️ `handle.getSnapshot` 内有 **inflight 合并**：同 tick 多窗口 / 多 atom 的并发 invoke 共享一个 Promise，结束即释放。改 handler 时不要清掉这层 —— 它是 renderer 端 7 atom fan-out 的 main 端兜底；renderer 那侧在 [_snapshot.ts](../../renderer/states/_snapshot.ts) 自带 cache+inflight。两层都不缓存写路径数据，结束就 reset。
-- ⚠️ **session 写路径 emit 契约**：每个子类在 `afterPersist()` 内自己做"upsert SQLite + emit 广播"两件事——基类不知道 SQLite / 广播 channel 存在。`RegularSession.afterPersist`：`sessionIdx.upsert(toRegularRow())` + emit `session:updated`。`JobRun.afterPersist`：`jobRunIdx.upsert(toJobRunRow())` + emit `schedule:run:updated`。idx 句柄（`SessionIdx` / `JobRunIdx`）由子类构造时注入；`Agent.bindSessionOnChange` / `ScheduleJob.bindRunOnChange` 入口已删——再没有 `Session.onChange` 这个机制。`session:index:updated` 由 `SessionIdx.upsert / remove` 自己发，**payload 是单条 op**（`{op:'upsert', entry}` / `{op:'remove', id}`），renderer atom 按 id 合并。
+- ⚠️ **session 写路径 emit 契约**：每个子类在 `afterPersist()` 内自己做"upsert SQLite + emit 广播"两件事——基类不知道 SQLite / 广播 channel 存在。`RegularSession.afterPersist`：`sessionIdx.upsert(toRegularRow())` + emit `session:updated`。`JobRun.afterPersist`：`jobRunIdx.upsert(toJobRunRow())` + emit `schedule:run:updated`。删除单条 run 由 `ScheduleJob.deleteRun` 在源目录和 SQLite 行移除后 emit `schedule:run:removed`。idx 句柄（`SessionIdx` / `JobRunIdx`）由子类构造时注入；`Agent.bindSessionOnChange` / `ScheduleJob.bindRunOnChange` 入口已删——再没有 `Session.onChange` 这个机制。`session:index:updated` 由 `SessionIdx.upsert / remove` 自己发，**payload 是单条 op**（`{op:'upsert', entry}` / `{op:'remove', id}`），renderer atom 按 id 合并。
 - ⚠️ **DB 自愈/初次填充**：`Profile.load` 拿到 `ProfileDb.open(id)` 后看 `wasCreated`（升级 / migrate / 拷贝 profile 目录的场景，新建空表）或 `checkIntegrity() === false`（DB 损坏 → `close` + `unlinkProfileDb` + 重 open），两条路径都会跑 `SessionIdx.rebuildFromDisk()` + `JobRunIdx.rebuildFromDisk()` 把 DB 与盘上 data.json 拉齐。`SessionIdx` / `JobRunIdx` 不持有 `ProfileDb` 引用而是每次按 `profileId` lookup，所以重建后旧引用不会悬空。
 - ⚠️ **Starred 入口（Step 9）**：starred 真值是 `regular_sessions.starred_at` 列，与 row 同生共死。`setSessionStarred` IPC handler 走 `RegularSession.setStar(star)` 写 data.json → afterPersist 同步本列（**不刷 updatedAt**，与 `setReadStatus` 同语义）+ 在被删 session 之前确实 star 过 / 标记动作完成时补一次 `starred:updated`。**没有** `SessionIdx.setStarred` 入口 —— Step 9 设计稿写过但实施时被 `RegularSession.setStar` 路径替代。`setStar` 仅存在于 `RegularSession`，对 `JobRun` 无定义（schedule_run 不进 `regular_sessions` 表）。
 - ⚠️ **进程退出 flush**：`main.ts onBeforeQuit` 在 logger close 之前调 `Profiles.get().shutdown()`（Phase 3.5，5s 超时），内部走 `Profile.shutdown` → `Agent.shutdown` → `Session.flushMessages` + `ProfileDb.close`。**绝不**让 `Profiles.shutdown` 变 fire-and-forget（早期实现漏 `await Profile.shutdownAll()` 会丢最后一批 messages.jsonl 行）。

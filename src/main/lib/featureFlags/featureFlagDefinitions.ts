@@ -22,13 +22,6 @@ import { FeatureFlagConfig, FeatureFlagName, FeatureFlagContext, FeatureFlagDefa
  * Grouped by feature module for easier maintenance
  */
 export const FEATURE_FLAG_DEFINITIONS: FeatureFlagConfig[] = [
-  // ============== Screenshot ==============
-  {
-    name: 'deskmateFeatureScreenshot',
-    description: 'Screenshot feature (enabled in all environments)',
-    defaultValue: true,
-  },
-
 
   // ============== Git Integration ==============
   {
@@ -37,12 +30,6 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagConfig[] = [
     defaultValue: (ctx) => ctx.isDev,
   },
 
-  // ============== Scheduler ==============
-  {
-    name: 'deskmateFeatureScheduler',
-    description: 'Cron-based scheduled task system',
-    defaultValue: () => true,
-  },
 
   // ============== Sub-Agent ==============
   {

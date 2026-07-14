@@ -17,7 +17,7 @@ beforeEach(() => {
 });
 
 describe('schedule 顶层路由', () => {
-  it('注册到全局 appCommands(feature flag 默认 true)', () => {
+  it('注册到全局 appCommands', () => {
     expect(appCommands.has('schedule')).toBe(true);
   });
 

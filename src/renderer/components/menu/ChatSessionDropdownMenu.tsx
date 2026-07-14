@@ -12,25 +12,36 @@ import {
 } from '@/shadcn/dropdown-menu';
 const logger = log.child({ mod: 'ChatSessionDropdownMenu' });
 
-const zeroState: {
-  isOpen: boolean;
-  agentId: string | null;
-  sessionId: string | null;
-  title: string | null;
+type ClosedMenuState = { isOpen: false };
+type OpenRegularMenuState = {
+  isOpen: true;
+  agentId: string;
+  sessionId: string;
+  title: string;
   starred: boolean;
-  source: 'default' | 'schedule';
-  anchorElement: HTMLElement | null;
-} = {
-  isOpen: false,
-  agentId: null,
-  sessionId: null,
-  title: null,
-  starred: false,
-  source: 'default',
-  anchorElement: null,
+  source: 'default';
+  anchorElement: HTMLElement;
 };
+type OpenScheduleMenuState = {
+  isOpen: true;
+  agentId: string;
+  sessionId: string;
+  jobId: string;
+  title: string;
+  starred: boolean;
+  source: 'schedule';
+  anchorElement: HTMLElement;
+};
+type MenuState = ClosedMenuState | OpenRegularMenuState | OpenScheduleMenuState;
 
-export const ChatSessionMenuAtom = atom(zeroState, (get, set) => {
+interface MenuActions {
+  close(): void;
+  toggle(agentId: string, sessionId: string, title: string, buttonElement: HTMLElement): void;
+}
+
+const zeroState: MenuState = { isOpen: false };
+
+export const ChatSessionMenuAtom = atom<MenuState, MenuActions>(zeroState, (get, set) => {
   function close() {
     set(zeroState);
   }
@@ -50,30 +61,25 @@ export const ChatSessionMenuAtom = atom(zeroState, (get, set) => {
       ? 'schedule' as const
       : 'default' as const;
     const starred = buttonElement.dataset.chatSessionStarred === 'true';
-
+    if (source === 'schedule') {
+      const jobId = buttonElement.dataset.chatSessionMenuJobId;
+      if (!jobId) {
+        logger.warn({ msg: 'Schedule menu opened without job id', sessionId });
+        return;
+      }
+      set({ isOpen: true, agentId, sessionId, jobId, title, starred, source, anchorElement: buttonElement });
+      return;
+    }
     set({ isOpen: true, agentId, sessionId, title, starred, source, anchorElement: buttonElement });
   }
 
   return { toggle, close };
 });
 
-interface InnerProps {
-  agentId: string | null;
-  sessionId: string;
-  title: string | null;
-  starred: boolean;
-  source: 'default' | 'schedule';
-  anchorElement: HTMLElement;
-}
+type InnerProps = OpenRegularMenuState | OpenScheduleMenuState;
 
-const ChatSessionDropdownMenu: React.FC<InnerProps> = ({
-  agentId,
-  sessionId,
-  title,
-  starred,
-  source,
-  anchorElement,
-}) => {
+const ChatSessionDropdownMenu: React.FC<InnerProps> = (props) => {
+  const { agentId, sessionId, title, starred, source, anchorElement } = props;
   const { close: onClose } = ChatSessionMenuAtom.useChange();
   const runCommand = chatSessionCommands.use();
 
@@ -112,11 +118,30 @@ const ChatSessionDropdownMenu: React.FC<InnerProps> = ({
   };
 
   const handleDownloadChatSession = () => {
-    if (!agentId) return;
-    runCommand({ type: 'download', agentId, sessionId, title: title ?? '' });
+    if (props.source === 'schedule') {
+      runCommand({
+        type: 'downloadScheduleRun',
+        agentId,
+        jobId: props.jobId,
+        runId: sessionId,
+        title,
+      });
+      return;
+    }
+    runCommand({ type: 'download', agentId, sessionId, title });
   };
 
   const handleDeleteChatSession = () => {
+    if (props.source === 'schedule') {
+      runCommand({
+        type: 'deleteScheduleRun',
+        agentId,
+        jobId: props.jobId,
+        runId: sessionId,
+        name: title,
+      });
+      return;
+    }
     runCommand({ type: 'delete', sessionId });
   };
 
@@ -177,7 +202,7 @@ const ChatSessionDropdownMenu: React.FC<InnerProps> = ({
 };
 
 export default () => {
-  const [{ isOpen, agentId, sessionId, title, starred, source, anchorElement }] = ChatSessionMenuAtom.use();
-  if (!isOpen || !anchorElement || !sessionId) return null;
-  return createElement(ChatSessionDropdownMenu, { agentId, sessionId, title, starred, source, anchorElement });
+  const [state] = ChatSessionMenuAtom.use();
+  if (!state.isOpen) return null;
+  return createElement(ChatSessionDropdownMenu, state);
 };

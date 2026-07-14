@@ -19,9 +19,6 @@
  *   remove.ts    `schedule remove <job-id> --yes`              (destructive)
  *   run.ts       `schedule run <job-id>`                       (action)
  *
- * Feature flag:`schedule` AppCommand 由 `deskmateFeatureScheduler` 守卫
- * 在 `appcmd/index.ts` 决定是否 `register` —— 与老 `pi/tools/index.ts`
- * 注册 schedule LocalTool 同模式。
  */
 
 import type { AppCommand } from '../../../types';

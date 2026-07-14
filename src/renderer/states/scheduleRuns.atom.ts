@@ -6,10 +6,10 @@
  * `persist:listAllScheduleRuns` 一次性拉全量；增量靠订阅 schedule 通道重拉。
  *
  * 订阅通道：
- *   - persist:profile:switched      → 清空整张表
- *   - persist:schedule:run:updated  → 全量重 fetch 该 agent（粒度粗，单 agent 通常 <数百 run）
- *   - persist:schedule:removed      → 全量重 fetch（job 被删时连带清掉它的 run）
- *
+ *   - persist:profile:switched       → 清空整张表
+ *   - persist:schedule:run:updated   → 全量重 fetch 该 agent（粒度粗，单 agent 通常 <数百 run）
+ *   - persist:schedule:run:removed   → 全量重 fetch（单条 run 删除）
+ *   - persist:schedule:removed       → 全量重 fetch（job 被删时连带清掉它的 run）
  * 数据模型说明：
  *  - 字段集与 `RegularSessionIndexEntry` 不同（schedule_run 特有 runStatus / startedAt /
  *    finishedAt / runError），独立 atom 避免 sessionIndex.atom 形态混乱。
@@ -83,6 +83,10 @@ persistEvents['profile:switched'](() => {
 });
 
 persistEvents['schedule:run:updated']((_e, payload) => {
+  reloadAgent(payload.agentId);
+});
+
+persistEvents['schedule:run:removed']((_e, payload) => {
   reloadAgent(payload.agentId);
 });
 

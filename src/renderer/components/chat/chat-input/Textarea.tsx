@@ -150,25 +150,10 @@ export function TextArea(props: TextAreaProps) {
     }, 0);
   };
 
-  // 用导航态文本填充输入框（来自 ChatView 的 selectedText）。
-  const handleFillInput = (text: string) => {
-    if (!text || typeof text !== 'string') return;
-    setMessage(text);
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.setSelectionRange(text.length, text.length);
-      }
-    }, 0);
-  };
-
   // 注册文本命令句柄：仅 compose 输入框（enableContextMenu）注册，
-  // edit 实例不注册，消除旧全局事件在 compose/edit 两个 Textarea 上并存监听的隐患。
+  // edit 实例不注册，消除 compose/edit 两个 Textarea 并存时的命令歧义。
   useRegisterComposeTextHandle(
-    {
-      insertMention: (option) => handleMentionSelect(option),
-      fillInput: handleFillInput,
-    },
+    { insertMention: (option) => handleMentionSelect(option) },
     !!enableContextMenu,
   );
 

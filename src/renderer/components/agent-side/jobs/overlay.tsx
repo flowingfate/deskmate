@@ -12,7 +12,7 @@ import { Button } from '@/shadcn/button'
 import { Input } from '@/shadcn/input'
 import { Textarea } from '@/shadcn/textarea'
 import { schedulerApi } from '../../../ipc/scheduler'
-import type { SchedulerJob } from '@shared/ipc/scheduler'
+import type { SchedulerJob, SchedulerJobCreateInput, SchedulerJobUpdate } from '@shared/ipc/scheduler'
 import { buildDailyMultiTimesCronExpression } from '../../../lib/scheduler/cronDescriptions'
 import {
   buildCronExpression,
@@ -109,21 +109,25 @@ const ScheduleOverlay: React.FC<AddScheduleOverlayProps> = ({
     if (!open) return
 
     if (editingJob) {
-      const parsedCron = parseCronExpression(editingJob.cronExpression)
-
       setName(editingJob.name || '')
       setDescription(editingJob.description || '')
       setMessage(editingJob.message || '')
       setAgentId(editingJob.agentId || defaultAgentId || '')
-      setMode(editingJob.scheduleType === 'cron' ? 'recurring' : 'once')
-      setRunAt(buildLocalDateTimeInputFromIso(editingJob.runAt))
-      setRecurringPreset(parsedCron.preset)
-      setRecurringTime(parsedCron.time)
-      setMultiDailyTimes(normalizeMultiDailyTimes(parsedCron.multiDailyTimes))
-      setEveryNValue(parsedCron.everyNValue)
-      setWeeklyDay(parsedCron.weeklyDay)
-      setMonthlyDay(parsedCron.monthlyDay)
-      setNotifyOnCompletion(editingJob.notifyOnCompletion !== false)
+      setNotifyOnCompletion(editingJob.notifyOnCompletion)
+
+      if (editingJob.scheduleType === 'cron') {
+        const parsedCron = parseCronExpression(editingJob.cronExpression)
+        setMode('recurring')
+        setRecurringPreset(parsedCron.preset)
+        setRecurringTime(parsedCron.time)
+        setMultiDailyTimes(normalizeMultiDailyTimes(parsedCron.multiDailyTimes))
+        setEveryNValue(parsedCron.everyNValue)
+        setWeeklyDay(parsedCron.weeklyDay)
+        setMonthlyDay(parsedCron.monthlyDay)
+      } else {
+        setMode('once')
+        setRunAt(buildLocalDateTimeInputFromIso(editingJob.runAt))
+      }
     } else {
       setName(initialValues?.name || '')
       setDescription(initialValues?.description || '')
@@ -202,62 +206,85 @@ const ScheduleOverlay: React.FC<AddScheduleOverlayProps> = ({
       const trimmedName = name.trim()
       const trimmedDescription = description.trim()
       const trimmedMessage = message.trim()
-      const scheduleType: SchedulerJob['scheduleType'] = mode === 'once' ? 'once' : 'cron'
-      const nextCronExpression = mode === 'recurring' ? cronExpression : undefined
-      const nextRunAt = mode === 'once' ? toIsoString(runAt) : undefined
+      const common = {
+        name: trimmedName,
+        description: trimmedDescription,
+        message: trimmedMessage,
+        notifyOnCompletion,
+      }
 
-      if (editingJob) {
-        const updates: Partial<Pick<SchedulerJob, 'name' | 'message' | 'scheduleType' | 'cronExpression' | 'runAt' | 'description' | 'agentId' | 'notifyOnCompletion'>> = {
-          name: trimmedName,
-          description: trimmedDescription,
-          message: trimmedMessage,
-          scheduleType,
-          cronExpression: nextCronExpression,
-          runAt: nextRunAt,
-          agentId,
-          notifyOnCompletion,
+      if (mode === 'recurring' && cronExpression) {
+        const updates: SchedulerJobUpdate = {
+          ...common,
+          scheduleType: 'cron',
+          cronExpression,
         }
-
-        const response = await schedulerApi.updateJob(editingJob.id, updates)
-        if (response?.success) {
-          const updatedJob: SchedulerJob = {
-            ...editingJob,
-            ...updates,
+        if (editingJob) {
+          const response = await schedulerApi.updateJob(editingJob.id, updates)
+          if (response?.success) {
+            onUpdated?.({ ...editingJob, ...updates })
+            onOpenChange(false)
+            return
           }
-          onUpdated?.(updatedJob)
-          onOpenChange(false)
+          setError(response?.error || 'Failed to update schedule')
           return
         }
 
+        const job: SchedulerJobCreateInput = {
+          ...common,
+          scheduleType: 'cron',
+          cronExpression,
+          enabled: true,
+          agentId,
+        }
+        const response = await schedulerApi.createJob(job)
+        if (response?.success) {
+          onCreated?.({ ...job, id: response.data?.jobId ?? '' })
+          onOpenChange(false)
+          return
+        }
+        setError(response?.error || 'Failed to create schedule')
+        return
+      }
+      if (mode === 'recurring') {
+        setError('A recurring schedule requires a cron expression.')
+        return
+      }
+
+      const oneTimeRunAt = toIsoString(runAt)
+      if (!oneTimeRunAt) {
+        setError('A one-time schedule requires a run time.')
+        return
+      }
+      const updates: SchedulerJobUpdate = {
+        ...common,
+        scheduleType: 'once',
+        runAt: oneTimeRunAt,
+      }
+      if (editingJob) {
+        const response = await schedulerApi.updateJob(editingJob.id, updates)
+        if (response?.success) {
+          onUpdated?.({ ...editingJob, ...updates })
+          onOpenChange(false)
+          return
+        }
         setError(response?.error || 'Failed to update schedule')
         return
       }
 
-      const job = {
-        description: trimmedDescription,
-        name: trimmedName,
-        scheduleType,
-        cronExpression: nextCronExpression,
-        runAt: nextRunAt,
+      const job: SchedulerJobCreateInput = {
+        ...common,
+        scheduleType: 'once',
+        runAt: oneTimeRunAt,
         enabled: true,
         agentId,
-        message: trimmedMessage,
-        status: 'pending' as const,
-        notifyOnCompletion,
       }
-
       const response = await schedulerApi.createJob(job)
       if (response?.success) {
-        onCreated?.({
-          ...job,
-          id: response.data?.jobId ?? '',
-          lastRunAt: undefined,
-          executedAt: undefined,
-        } as SchedulerJob)
+        onCreated?.({ ...job, id: response.data?.jobId ?? '' })
         onOpenChange(false)
         return
       }
-
       setError(response?.error || 'Failed to create schedule')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

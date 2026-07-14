@@ -3,11 +3,12 @@ import { atom } from '@/atom';
 import { agentSessionCacheManager } from '@renderer/lib/chat/agentSessionCacheManager';
 import { deleteAgentConfig } from '@renderer/lib/chat/agentOps';
 import { deleteChatSession } from '@renderer/lib/chat/chatSessionOps';
-import { startNewSessionFor } from '@renderer/lib/chat/startNewSessionFor';
+import { newEntityId } from '@shared/persist/id';
 import { getProfileId } from '@/states/profile.atom';
 import { getAgents, getPrimaryAgentId } from '@/states/agents.atom';
 import { log } from '@/log';
 import { agentChatApi } from '@/ipc/agentChat';
+import { persistApi } from '@/ipc/persist';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,38 +24,59 @@ const logger = log.child({ mod: 'DeleteOverlay' });
 import { useToast, type ToastContextType } from '../ui/ToastProvider';
 import { type NavigateFunction, useNavigate, useLocation } from 'react-router-dom';
 
-interface State {
-  isOpen: boolean;
-  type: 'agent' | 'chat-session';
-  id: string | null;
-  name: string | null;
-  isCurrentSession?: boolean;
+type DeleteTarget =
+  | { type: 'agent'; id: string; name: string; isCurrentSession: boolean }
+  | { type: 'chat-session'; id: string; name: string; isCurrentSession: boolean }
+  | {
+    type: 'schedule-run';
+    id: string;
+    agentId: string;
+    jobId: string;
+    name: string;
+    isCurrentSession: boolean;
+  };
+
+type State =
+  | { isOpen: false }
+  | { isOpen: true; target: DeleteTarget };
+
+interface DeleteActions {
+  cancel(): void;
+  confirm(toast: ToastContextType, navigate: NavigateFunction, currentPath: string): Promise<void>;
+  showAgent(id: string, name: string, isCurrentSession?: boolean): void;
+  showChatSession(id: string, name: string, isCurrentSession?: boolean): void;
+  showScheduleRun(agentId: string, jobId: string, id: string, name: string, isCurrentSession?: boolean): void;
 }
 
-const zeroState: State = {
-  isOpen: false,
-  type: 'agent',
-  id: null,
-  name: null,
-  isCurrentSession: false,
-};
+const zeroState: State = { isOpen: false };
 
-export const DeleteConfirmAtom = atom(zeroState, (get, set) => {
+export const DeleteConfirmAtom = atom<State, DeleteActions>(zeroState, (get, set) => {
   function cancel() {
     set(zeroState);
   }
 
-  function showAgent(id: string, name: string, isCurrentSession?: boolean) {
-    set({ isOpen: true, type: 'agent', id, name, isCurrentSession });
+  function showAgent(id: string, name: string, isCurrentSession = false) {
+    set({ isOpen: true, target: { type: 'agent', id, name, isCurrentSession } });
   }
 
-  function showChatSession(id: string, name: string, isCurrentSession?: boolean) {
-    set({ isOpen: true, type: 'chat-session', id, name, isCurrentSession });
+  function showChatSession(id: string, name: string, isCurrentSession = false) {
+    set({ isOpen: true, target: { type: 'chat-session', id, name, isCurrentSession } });
+  }
+
+  function showScheduleRun(
+    agentId: string,
+    jobId: string,
+    id: string,
+    name: string,
+    isCurrentSession = false,
+  ) {
+    set({ isOpen: true, target: { type: 'schedule-run', agentId, jobId, id, name, isCurrentSession } });
   }
 
   async function confirm(toast: ToastContextType, navigate: NavigateFunction, currentPath: string) {
-    const { type, id, name, isCurrentSession } = get();
-    if (!id) return;
+    const state = get();
+    if (!state.isOpen) return;
+    const { type, id, name, isCurrentSession } = state.target;
 
     const { showError, showSuccess } = toast;
     try {
@@ -89,17 +111,9 @@ export const DeleteConfirmAtom = atom(zeroState, (get, set) => {
             logger.debug({ msg: "Delete agent - switching to fallback agent:", deletedAgentId: id, targetAgentId, agentsCount: agents.length });
 
             if (targetAgentId) {
-              const result = await startNewSessionFor(
-                targetAgentId,
-              );
-              logger.debug({ msg: "startNewSessionFor result:", data: result });
-
-              if (result.success && result.chatSessionId) {
-                logger.debug({ msg: "Navigating to new agent route:", targetAgentId, newChatSessionId: result.chatSessionId });
-                navigate(`/agent/${targetAgentId}/${result.chatSessionId}`, { replace: true });
-              } else {
-                logger.error({ msg: "Failed to start new chat for fallback agent:", err: result?.error, result });
-              }
+              const chatSessionId = newEntityId('s');
+              logger.debug({ msg: "Delete agent - opening fallback agent", targetAgentId, chatSessionId });
+              navigate(`/agent/${targetAgentId}/${chatSessionId}`, { replace: true });
             } else {
               logger.error({ msg: "No fallback agent found after deletion", availableAgents: agents.map((a) => a.id) });
             }
@@ -127,17 +141,10 @@ export const DeleteConfirmAtom = atom(zeroState, (get, set) => {
           return;
         }
 
-        // Fix: adjust delete order per design doc
-        // Step 3: if deleting the CurrentChatSessionId, switch to a new session first
+        // Navigate away before deleting the current session; the route is the active-session source of truth.
         if (isCurrentSession) {
-          // 3b. Switch to a new ChatSession via startNewSessionFor + 显式 navigate
-          // 新架构下，主进程不再 echo currentChatSessionIdChanged；source of truth 是路由。
-          if (currentAgentId) {
-            const newResult = await startNewSessionFor(currentAgentId);
-            if (newResult.success && newResult.chatSessionId) {
-              navigate(`/agent/${currentAgentId}/${newResult.chatSessionId}`, { replace: true });
-            }
-          }
+          const chatSessionId = newEntityId('s');
+          navigate(`/agent/${currentAgentId}/${chatSessionId}`, { replace: true });
         }
 
         // Step 4: Delete the ChatSession for the corresponding chatSessionId
@@ -163,6 +170,18 @@ export const DeleteConfirmAtom = atom(zeroState, (get, set) => {
         showSuccess(
           `Session "${name}" deleted successfully`,
         );
+      } else if (type === 'schedule-run') {
+        const target = state.target;
+        if (target.type !== 'schedule-run') return;
+        if (target.isCurrentSession) {
+          navigate(`/agent/${target.agentId}/job/${target.jobId}`, { replace: true });
+        }
+        const deleteResult = await persistApi.deleteScheduleRun(target.agentId, target.jobId, target.id);
+        if (!deleteResult.success) {
+          showError(`Failed to delete schedule run: ${deleteResult.error}`);
+          return;
+        }
+        showSuccess(`Schedule run "${target.name}" deleted successfully`);
       }
     } catch (error) {
       const errorMessage =
@@ -173,7 +192,7 @@ export const DeleteConfirmAtom = atom(zeroState, (get, set) => {
     }
   }
 
-  return { cancel, confirm, showAgent, showChatSession };
+  return { cancel, confirm, showAgent, showChatSession, showScheduleRun };
 });
 
 export function DeleteOverlay() {
@@ -193,14 +212,20 @@ export function DeleteOverlay() {
       <AlertDialogContent className="max-w-md" initialFocusRef={deleteActionRef}>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {deleteConfirmState.type === 'agent' ? 'Delete Agent' : 'Delete Chat Session'}
+            {deleteConfirmState.isOpen && deleteConfirmState.target.type === 'agent'
+              ? 'Delete Agent'
+              : deleteConfirmState.isOpen && deleteConfirmState.target.type === 'schedule-run'
+                ? 'Delete Schedule Run'
+                : 'Delete Chat Session'}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete <strong>{deleteConfirmState.name}</strong>?
+            Are you sure you want to delete <strong>{deleteConfirmState.isOpen ? deleteConfirmState.target.name : ''}</strong>?
           </AlertDialogDescription>
         </AlertDialogHeader>
         <p className="text-sm text-sc-destructive">
-          {deleteConfirmState.type === 'chat-session' && deleteConfirmState.isCurrentSession
+          {deleteConfirmState.isOpen
+            && deleteConfirmState.target.type === 'chat-session'
+            && deleteConfirmState.target.isCurrentSession
             ? "This is the currently selected session. After deletion, it will switch to a new conversation. This action cannot be undone and all chat history will be permanently deleted."
             : "This action cannot be undone. All chat history will be permanently deleted."
           }
@@ -212,7 +237,7 @@ export function DeleteOverlay() {
             className="bg-sc-destructive text-sc-destructive-foreground hover:bg-sc-destructive/90"
             onClick={() => actions.confirm(toast, navigate, location.pathname)}
           >
-            {deleteConfirmState.type === 'agent' ? 'Delete Agent' : 'Delete'}
+            {deleteConfirmState.isOpen && deleteConfirmState.target.type === 'agent' ? 'Delete Agent' : 'Delete'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -190,6 +190,10 @@ type RenderToMain = {
   renameSession:    { call: [agentId: string, sessionId: string, newTitle: string]; return: PersistResult };
   setSessionStarred:{ call: [agentId: string, sessionId: string, starred: boolean]; return: PersistResult };
   deleteSession:    { call: [agentId: string, sessionId: string]; return: PersistResult };
+  /** 删除一条已结束的 schedule run；运行中的 run 拒绝删除，避免与执行写盘竞态。 */
+  deleteScheduleRun: { call: [agentId: string, jobId: string, runId: string]; return: PersistResult };
+  /** 将一条已结束的 schedule run fork 为新的 regular session；原 run 保留作调度历史。 */
+  forkJobRunToSession: { call: [agentId: string, jobId: string, runId: string]; return: PersistResult<{ sessionId: string }> };
   /** 取 session 的 data.json + messages.jsonl 全量。session 不存在时返 null。 */
   getSessionMessages: { call: [agentId: string, sessionId: string]; return: PersistResult<{ data: SessionDataFile; messages: ChatHistoryItem[] } | null> };
   /** 单 agent 未读统计（regular 全量 + schedule_run 窗口内）。 */
@@ -269,6 +273,10 @@ export type MainToRender = {
   /** 单次 schedule run 状态变化。 */
   'schedule:run:updated':
     { profileId: string; agentId: string; jobId: string; sessionId: string; status: 'running' | 'completed' | 'failed' };
+
+  /** 单条 schedule run 被删除。 */
+  'schedule:run:removed':
+    { profileId: string; agentId: string; jobId: string; sessionId: string };
 
   /** profile 偏好变化。 */
   'settings:updated':

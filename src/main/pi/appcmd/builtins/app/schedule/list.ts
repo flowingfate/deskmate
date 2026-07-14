@@ -26,7 +26,7 @@ DESCRIPTION
   List registered schedules. Read-only.
 
   Output (human mode): one line per schedule, columns:
-    <job_id>  <name>  [<type>/<enabled>/<status>]  <trigger>  <last_run>
+    <job_id>  <name>  [<type>/<enabled>]  <trigger>  <last_started>
 
 OPTIONS
   --agent <id>   Only list schedules owned by this agent agent_id.

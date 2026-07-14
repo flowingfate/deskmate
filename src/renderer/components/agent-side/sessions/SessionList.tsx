@@ -119,8 +119,8 @@ export const SessionList: React.FC<SessionListProps> = ({
   onDeleteChatSession,
   onForkChatSession,
 }) => {
-  const [{ isOpen: menuIsOpen, sessionId: menuSessionId }, menuActions] = ChatSessionMenuAtom.use();
-  const openMenuSessionId = menuIsOpen ? menuSessionId : null;
+  const [menuState, menuActions] = ChatSessionMenuAtom.use();
+  const openMenuSessionId = menuState.isOpen ? menuState.sessionId : null;
 
   const sessions = useAgentSessions(agentId);
   const hydrated = useAgentSessionsHydrated(agentId);

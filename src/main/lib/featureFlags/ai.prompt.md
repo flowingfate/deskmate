@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-04-29 -->
+<!-- Last verified: 2026-07-15 -->
 # Feature Flags
 
 > 主进程单例，负责定义、解析并向主进程和渲染进程（通过 IPC）提供 feature flag 值。

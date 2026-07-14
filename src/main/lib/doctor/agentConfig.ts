@@ -166,7 +166,7 @@ Only present if \`get_crash_status\` returned non-empty results; omit this secti
 ### From Schedules
 <!--
 Only present if the user's description involves scheduled tasks and \`read_schedules\` was called; otherwise omit this section.
-Content: name / scheduleType / cronExpression (or runAt) / status / lastRunAt / lastFinishedAt for relevant schedules; if the user reports "something that should have fired didn't", cross-reference current time against cron/runAt to determine whether behavior was expected, and note this in the Analysis section.
+Content: name / scheduleType / trigger / enabled / lastStartedAt for relevant schedules; inspect individual run records for completion or failure. If the user reports "something that should have fired didn't", cross-reference current time against cron/runAt to determine whether behavior was expected, and note this in the Analysis section.
 -->
 
 ### From Chat Session

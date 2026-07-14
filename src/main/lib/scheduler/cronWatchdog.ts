@@ -1,8 +1,10 @@
 import { log } from '@main/log';
+import type { SchedulerJob } from '@shared/ipc/scheduler';
+import { settleWithConcurrency } from './concurrency';
 import { findMissedCronOccurrence, getSchedulerTimeZone } from './cronRecovery';
-import type { SchedulerJob } from './types';
 
-const logger = log;
+const logger = log.child({ mod: 'SchedulerCronWatchdog' });
+const MAX_WATCHDOG_CATCH_UP_CONCURRENCY = 2;
 
 export interface CronWatchdogTaskRuntimeMeta {
   jobId: string;
@@ -41,7 +43,7 @@ export async function runCronWatchdog(options: CronWatchdogOptions): Promise<voi
   }
 
   const schedulerTimeZone = getSchedulerTimeZone();
-  for (const jobId of options.cronJobIds) {
+  await settleWithConcurrency(options.cronJobIds, MAX_WATCHDOG_CATCH_UP_CONCURRENCY, async (jobId) => {
     try {
       await handleCronWatchdogJob({
         ...options,
@@ -52,9 +54,9 @@ export async function runCronWatchdog(options: CronWatchdogOptions): Promise<voi
         schedulerTimeZone,
       });
     } catch (error) {
-      logger.warn({ msg: 'scheduler.cron.watchdog.job-failed', mod: 'handleCronWatchdog', profileId, jobId, err: error });
+      logger.warn({ msg: 'Cron watchdog check failed', profileId, jobId, err: error });
     }
-  }
+  });
 }
 
 async function handleCronWatchdogJob(
@@ -91,17 +93,17 @@ async function handleCronWatchdogJob(
 
   const job = await options.getJob(options.jobId);
   if (!job || !job.enabled || job.scheduleType !== 'cron' || !job.cronExpression) {
-    logger.info({ msg: 'scheduler.cron.watchdog.skip-inactive', mod: 'handleCronWatchdog', profileId: options.profileId, jobId: options.jobId, missedScheduledAt: missedOccurrence.toISOString(), reason: !job ? 'job-not-found' : 'job-disabled-or-not-cron' });
+    logger.info({ msg: 'Skipped inactive cron job', profileId: options.profileId, jobId: options.jobId, missedScheduledAt: missedOccurrence.toISOString(), reason: !job ? 'job-not-found' : 'job-disabled-or-not-cron' });
     return;
   }
 
-  const lastRunAtMs = job.lastRunAt ? Date.parse(job.lastRunAt) : Number.NaN;
-  if (Number.isFinite(lastRunAtMs) && lastRunAtMs >= missedOccurrence.getTime()) {
-    logger.info({ msg: 'scheduler.cron.watchdog.skip-started', mod: 'handleCronWatchdog', profileId: options.profileId, jobId: options.jobId, name: job.name, cron: job.cronExpression, missedScheduledAt: missedOccurrence.toISOString(), lastRunAt: job.lastRunAt });
+  const lastStartedAtMs = job.lastStartedAt ? Date.parse(job.lastStartedAt) : Number.NaN;
+  if (Number.isFinite(lastStartedAtMs) && lastStartedAtMs >= missedOccurrence.getTime()) {
+    logger.info({ msg: 'Skipped cron watchdog catch-up for started occurrence', profileId: options.profileId, jobId: options.jobId, name: job.name, cron: job.cronExpression, missedScheduledAt: missedOccurrence.toISOString(), lastStartedAt: job.lastStartedAt });
     return;
   }
 
-  logger.warn({ msg: 'scheduler.cron.watchdog.catch-up', mod: 'handleCronWatchdog', profileId: options.profileId, jobId: options.jobId, name: job.name, cron: job.cronExpression, missedScheduledAt: missedOccurrence.toISOString(), checkedAt: new Date(options.checkedAtMs).toISOString(), schedulerTimeZone: options.schedulerTimeZone });
+  logger.warn({ msg: 'Detected missed cron occurrence', profileId: options.profileId, jobId: options.jobId, name: job.name, cron: job.cronExpression, missedScheduledAt: missedOccurrence.toISOString(), checkedAt: new Date(options.checkedAtMs).toISOString(), schedulerTimeZone: options.schedulerTimeZone });
 
   const latestMeta = options.getRuntimeMeta(options.jobId);
   if (latestMeta) {

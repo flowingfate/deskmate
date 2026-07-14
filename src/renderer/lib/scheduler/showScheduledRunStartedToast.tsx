@@ -7,17 +7,6 @@ import { schedulerApi } from '@renderer/ipc/scheduler';
 
 type NavigateFn = (to: string) => void
 
-export interface ShowScheduledRunStartedToastNavigateOptions {
-  state?: {
-    intent?: 'open-session'
-    source?: string
-    targetAgentId?: string
-    targetSessionId?: string
-  }
-}
-
-type NavigateWithOptionsFn = (to: string, options?: ShowScheduledRunStartedToastNavigateOptions) => void
-
 type ShowToastFn = (
   message: string | React.ReactNode,
   type?: ToastMessage['type'],
@@ -30,7 +19,7 @@ type ShowSuccessFn = (message: string | React.ReactNode, duration?: number) => v
 export async function runScheduleNow(
   agentId: string,
   jobId: string,
-  navigate: NavigateWithOptionsFn,
+  navigate: NavigateFn,
   showToast: ShowToastFn,
   showSuccess: ShowSuccessFn,
   showError: ShowSuccessFn,
@@ -46,14 +35,7 @@ export async function runScheduleNow(
             {
               label: 'Open schedule run',
               onClick: () => {
-                navigate(`/agent/${agentId}/job/${jobId}/${chatSessionId}`, {
-                  state: {
-                    intent: 'open-session',
-                    source: 'schedule-run-toast',
-                    targetAgentId: agentId,
-                    targetSessionId: chatSessionId,
-                  },
-                })
+                navigate(`/agent/${agentId}/job/${jobId}/${chatSessionId}`)
               },
             },
           ],

@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-14 (持久化 schema 拆至 `shared/persist/types/`，唯一入口为 `types/index.ts`) -->
+<!-- Last verified: 2026-07-15 (terminal schedule run 可派生独立 regular continuation) -->
 
 ## 1. 范围
 
@@ -29,8 +29,9 @@
 | Session 内容 | `data.json`(元数据 + `contextState` 压缩栈 + `turn.status` resume flag)+ `messages.jsonl`(append-only,3 种 line:`PersistedUserMessage` / `PersistedAssistantMessage` / `PersistedToolResponse`)+ 可选 `files/`(session 私有 sandbox) |
 | Session 索引 | `profiles/{p}/index.db`:SQLite,`regular_sessions` + `job_runs` 两张表(**派生缓存**,可由扫盘 `data.json` 重建) |
 | Starred 真值 | `regular_sessions.starred_at` 列;schedule_run 不可 star |
+| Schedule run 继续对话 | 已结束 run 只能派生新的 regular session：复制消息 / sandbox / contextState，重置 run 元数据；原 run 和 `job_runs` 行保留 |
 | ID 体系 | ULID(Crockford Base32,26 字符)+ 类型前缀,如 `s_01KT0JY38BMDCCDA2W3X3YDMCV`。深路径在 Windows 260 字符上限留余量 |
-| IPC | 12 条细粒度通道(按域),每域独立 150ms 防抖;老 `profile:updated` 全量广播已废 |
+| IPC | 13 条细粒度通道(按域),每域独立 150ms 防抖;老 `profile:updated` 全量广播已废 |
 
 **关键不变量**:
 
@@ -142,7 +143,7 @@ Profiles.get().active()        → Profile
 | 通道 | 用途 |
 |---|---|
 | `getSnapshot` | 一次性拉取 active profile + agent registry + settings + starred(含 inflight 合并) |
-| `switchProfile` | 切换 active profile |
+| `switchProfile` | 切换 active profile；切换成功后调用启动期注入的生命周期回调，scheduler 以新旧 Profile 后台重建任务 |
 | `listAllSessions(agentId)` | 该 agent 全部 regular session entries,按 `updatedAt` 倒序(SQL 直查) |
 | `listAllScheduleRuns(agentId)` | 跨 job 聚合 schedule_run,按 `startedAt` 倒序,返 `JobRunRow[]` |
 | `getSession(agentId, sessionId)` | 单条 `SessionDataFile` |
@@ -150,7 +151,7 @@ Profiles.get().active()        → Profile
 | `getSessionFilesDir(agentId, sessionId)` | session 私有 sandbox 绝对路径 |
 | `createAgent / patchAgentFront / archiveAgent / unarchiveAgent / duplicateAgent / setPrimaryAgent / listArchivedAgents` | Agent CRUD(取代老 `profile.*` 通道) |
 | `getAgentDetail(agentId)` | 懒读单个 agent 的 cold 字段(解析对应 AGENT.md) |
-| `renameSession / setSessionStarred / deleteSession` | session 写路径 |
+| `renameSession / setSessionStarred / deleteSession / deleteScheduleRun / forkJobRunToSession` | regular session 与已结束的 schedule run 写路径；fork 会创建新 regular session，原 run 保留；运行中的 run 拒绝删除或 fork |
 | `getUnreadSummary(agentId)` | 未读统计(regular 全量 + schedule_run 窗口),两条 SQL |
 | `updateConfirmationSettings` | confirmation settings 写入 |
 | `updateWebSearchSettings` | webSearch settings 写入(Tavily API key) |
@@ -171,6 +172,7 @@ Profiles.get().active()        → Profile
 | `schedule:updated` | `{ profileId, agentId, jobId, job, entry }` | `Agent.upsertJob` |
 | `schedule:removed` | `{ profileId, agentId, jobId }` | `Agent.deleteJob` |
 | `schedule:run:updated` | `{ profileId, agentId, jobId, sessionId, status }` | `JobRun.afterPersist` |
+| `schedule:run:removed` | `{ profileId, agentId, jobId, sessionId }` | `ScheduleJob.deleteRun` |
 | `settings:updated` | `{ profileId, settings }` | `Profile.settings` 写盘 |
 | `starred:updated` | `{ profileId, items }` | `RegularSession.setStar` 引发的 starred 集合变化 |
 
@@ -187,7 +189,7 @@ Profiles.get().active()        → Profile
 | `agentDetail.atom` | `agent:updated`(拿 `payload.detail` 刷 cache)/ `agent:removed` | cold 字段 `AgentDetail`;按 agentId lazy fetch via `getAgentDetail`,命中 cache 同步返;并发同 id 合并 |
 | `sessionIndex.atom` | `session:index:updated` / `session:updated` | 按 agentId slot |
 | `sessionData.atom` | `session:updated` | 按 sessionId 按需 hydrate |
-| `scheduleRuns.atom` | `schedule:run:updated` / `schedule:removed` | 与 `sessionIndex.atom` 物理分开(schedule_run 字段差异大);payload 字段不全 → 整 agent 重 fetch |
+| `scheduleRuns.atom` | `schedule:run:updated` / `schedule:run:removed` / `schedule:removed` | 与 `sessionIndex.atom` 物理分开(schedule_run 字段差异大);payload 字段不全 → 整 agent 重 fetch |
 | `schedules.atom` | `schedule:*` | — |
 | `settings.atom` | `settings:updated` | — |
 | `starred.atom` | `starred:updated` | — |
@@ -301,6 +303,7 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 | 加 AGENT.md 字段 | `types/agent.ts`（经 `types/index.ts` 导出）+ `agent.ts` `AgentConfig.assign/toFrontMatter` + markdown 测试 |
 | 加 regular session 索引字段 | `types/session.ts`（`RegularSessionRow`，经 `types/index.ts` 导出）+ `lib/db/schema.ts` DDL + `sessionIdx.ts` marshal/unmarshal + `RegularSession.toRegularRow` + `rebuildFromDisk` 投影 |
 | 加 job_run 索引字段 | 同上但走 `JobRunRow` / `JobRun.toJobRunRow` / `JobRunIdx` 路径 |
+| 将 schedule run 继续为 regular session | `session.ts#JobRun.forkToSession` + persist IPC / preload；clone messages/files/contextState，终态校验在 source JobRun | 原 run 不删、不改 |
 | 加 SQLite 偏序索引 | `lib/db/schema.ts` `CREATE INDEX IF NOT EXISTS ix_xxx ON ... WHERE ...;` + `EXPLAIN QUERY PLAN` 验命中(候选清单见 §9.2) |
 | 加 IPC 通道 | `src/shared/ipc/persist.ts` + `ipc.ts` handler + `preload/persist/invoke.ts` allowlist;renderer 自动类型推导 |
 | 加新 profile 级共享资源(如 prompts/) | `path.ts` 加路径常量 + 新 store class + Profile 字段 + Profiles.bootstrap 装载步骤;仿 `mcp.ts` |

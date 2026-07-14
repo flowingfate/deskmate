@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import type { UserMessage } from '@shared/persist/types'
 import { agentChatEvents } from '@/ipc/agentChat';
+import { persistEvents } from '@/ipc/persist';
 import { log } from '@/log';
 import { external } from '@/atom/external';
 
@@ -113,14 +114,22 @@ export class AgentSessionCacheManager {
     // 注：渲染端不再监听主进程推送的 current/cache 生命周期事件——
     // "哪个 session 活跃" 由路由直接写 currentSessionStore；
     // "cache 数据" 由 ensureCache 主动 pull。
-    const cleanupStreamingChunk = agentChatEvents.streamingChunk(
-      (_event, chunk) => {
-        if (chunk.chatSessionId) {
-          this.sessions.handleStreamingChunk(chunk.chatSessionId, chunk);
-        }
-      }
-    );
+    const cleanupStreamingChunk = agentChatEvents.streamingChunk((_event, chunk) => {
+      if (!chunk.chatSessionId) return;
+      this.sessions.handleStreamingChunk(chunk.chatSessionId, chunk);
+    });
     this.ipcCleanupFunctions.push(cleanupStreamingChunk);
+
+    const cleanupScheduleRunUpdate = persistEvents['schedule:run:updated']((_event, payload) => {
+      if (payload.status === 'running' || !this.sessions.hasChatSessionCache(payload.sessionId)) return;
+      this.refreshJobRunCache(payload.agentId, payload.jobId, payload.sessionId);
+    });
+
+    const cleanupScheduleRunRemoved = persistEvents['schedule:run:removed']((_event, payload) => {
+      this.sessions.handleChatSessionCacheDestroyed(payload.sessionId);
+    });
+
+    this.ipcCleanupFunctions.push(cleanupScheduleRunUpdate, cleanupScheduleRunRemoved);
   }
 
 
@@ -272,6 +281,18 @@ export class AgentSessionCacheManager {
     });
   }
 
+  /** 刷新已打开的 job run；静默运行不会经普通聊天的 streaming chunk 通道更新 cache。 */
+  private async refreshJobRunCache(agentId: string, jobId: string, runId: string): Promise<void> {
+    const snapshot = await agentIpc.loadJobRunSnapshot(agentId, jobId, runId);
+    if (!snapshot || !this.sessions.hasChatSessionCache(runId)) return;
+
+    this.sessions.handleChatSessionCacheCreated(runId, agentId, {
+      messages: snapshot.messages.map(liftToRender),
+      chatStatus: snapshot.chatStatus as ChatStatus,
+      contextTokenUsage: snapshot.contextTokenUsage,
+    });
+  }
+
   replaceMessages(chatSessionId: string, messages: RenderMessage[], updates?: Partial<ChatSessionCache>): void {
     this.sessions.replaceMessages(chatSessionId, messages, updates);
   }
@@ -375,7 +396,7 @@ export class AgentSessionCacheManager {
     this.sessions.cleanup();
     this.renderItems.clearCaches();
     // Reset the current session (atom) so React components re-render to a clean state.
-    currentSessionStore.set({ agentId: null, chatSessionId: null });
+    currentSessionStore.set({ agentId: null, jobId: null, chatSessionId: null });
 
     logger.debug({ msg: "✅ Cleanup completed, listeners preserved" });
   }

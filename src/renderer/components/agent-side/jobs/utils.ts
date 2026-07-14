@@ -59,28 +59,21 @@ export function formatRunTime(iso?: string): string {
  */
 export function describeSchedule(job: SchedulerJob): string {
   if (job.scheduleType === 'once') {
-    return job.runAt ? `One-time at ${formatDateTime(job.runAt)}` : 'One-time schedule';
+    return `One-time at ${formatDateTime(job.runAt)}`;
   }
   return describeCronExpression(job.cronExpression);
 }
 
 /**
  * Pick the visual status bucket for a job row's leading dot.
- * - `expired`: one-time job whose `runAt` is in the past — regardless of
- *   `enabled` and regardless of the adapter's projected `job.status`.
- *   The adapter labels any `enabled=false && once && pending` job as
- *   `'expired'` for legacy compat, but that conflates "user paused a
- *   future-dated once-job" with "the once-job's time has come and gone".
- *   Renderer derives the bucket from `runAt` directly so paused future
- *   one-time jobs stay toggleable.
- * - `enabled` / `disabled`: derived from `job.enabled`.
+ * A one-time task is expired only after its configured `runAt`; a paused future
+ * task remains toggleable. Recurring task state is derived from `job.enabled`.
  */
 export type JobRowStatus = 'enabled' | 'disabled' | 'expired';
 
 export function deriveJobRowStatus(job: SchedulerJob): JobRowStatus {
-  if (job.scheduleType === 'once' && job.runAt) {
-    const runAtMs = Date.parse(job.runAt);
-    if (!Number.isNaN(runAtMs) && runAtMs < Date.now()) return 'expired';
+  if (job.scheduleType === 'once' && Date.parse(job.runAt) < Date.now()) {
+    return 'expired';
   }
   return job.enabled ? 'enabled' : 'disabled';
 }

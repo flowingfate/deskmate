@@ -58,7 +58,6 @@ const SessionPanel: React.FC = () => {
         agentId={displayAgentId}
         agent={currentAgent}
         mode={inJobsMode ? 'jobs' : 'sessions'}
-        sessionId={sessionId ?? null}
       />
       {!displayAgentId && null}
 

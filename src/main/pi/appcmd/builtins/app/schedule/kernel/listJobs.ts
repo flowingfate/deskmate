@@ -8,7 +8,7 @@
  * 没有挂中止的实际意义。
  */
 
-import { schedulerManager } from '@main/lib/scheduler/SchedulerManager';
+import { schedulerManager } from '@main/lib/scheduler';
 
 import { jobToView, type JobView } from './types';
 

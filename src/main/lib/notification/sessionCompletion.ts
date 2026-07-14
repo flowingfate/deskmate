@@ -90,12 +90,6 @@ function showSystemNotification(args: SessionCompletionArgs): void {
       target.focus();
       navigateMainToRender.bindWebContents(target.webContents).to({
         route: `/agent/${agentId}/job/${jobId}/${sessionId}`,
-        state: {
-          source: 'system-notification',
-          intent: 'open-session',
-          targetAgentId: agentId,
-          targetSessionId: sessionId,
-        },
       });
     });
 

@@ -12,6 +12,7 @@ export interface FileTreeExplorerProps {
   workspacePath: string;
   onFileClick?: (node: FileTreeNode) => void;
   className?: string;
+  readOnly?: boolean;
   /** 懒加载回调：展开目录时调用，父组件负责拉取并注入子节点 */
   onLoadChildren?: (dirPath: string) => Promise<void>;
 }
@@ -25,6 +26,7 @@ const FileTreeExplorer: React.FC<FileTreeExplorerProps> = ({
   workspacePath,
   onFileClick,
   className,
+  readOnly,
   onLoadChildren,
 }) => {
   const storageKey = `fileTree_expanded_${workspacePath}`;
@@ -97,6 +99,7 @@ const FileTreeExplorer: React.FC<FileTreeExplorerProps> = ({
             key={node.path}
             node={node}
             workspacePath={workspacePath}
+            readOnly={readOnly}
             level={0}
             onFileClick={onFileClick}
             expandedDirs={expandedDirs}

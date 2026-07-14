@@ -10,7 +10,6 @@ interface SessionPanelHeaderProps {
   agentId: string | null;
   agent: AgentRecord | null;
   mode: SessionPanelMode;
-  sessionId: string | null;
 }
 
 /**
@@ -18,7 +17,7 @@ interface SessionPanelHeaderProps {
  * The alarm and the rest of the panel below derive their state from the URL
  * (see `SessionPanel`); this component is purely presentational.
  */
-const SessionPanelHeader: React.FC<SessionPanelHeaderProps> = ({ agentId, agent, mode, sessionId }) => {
+const SessionPanelHeader: React.FC<SessionPanelHeaderProps> = ({ agentId, agent, mode }) => {
   const agentMenuActions = AgentMenuAtom.useChange();
 
   const handleMore = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
@@ -51,7 +50,7 @@ const SessionPanelHeader: React.FC<SessionPanelHeaderProps> = ({ agentId, agent,
         data-dbg="session-panel-header-actions"
         className="flex items-center gap-0.5 shrink-0"
       >
-        <AlarmToggleButton agentId={agentId} mode={mode} sessionId={sessionId} />
+        <AlarmToggleButton agentId={agentId} mode={mode} />
         <Button
           variant="ghost"
           size="icon-sm"

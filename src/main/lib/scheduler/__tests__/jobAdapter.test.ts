@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CronScheduleJobFile, JobRunState, OnceScheduleJobFile } from '@shared/persist/types';
+import type { CronScheduleJobFile, OnceScheduleJobFile } from '@shared/persist/types';
 import {
   toPersistScheduleJobUpdate,
   toScheduleJobInput,
@@ -38,99 +38,36 @@ function onceFile(over: Partial<OnceScheduleJobFile> = {}): OnceScheduleJobFile 
   };
 }
 
-describe('toSchedulerJob: runState 状态机映射', () => {
-  it('pending → status=pending, lastRunAt/lastFinishedAt undefined', () => {
-    const sj = toSchedulerJob(cronFile(), { status: 'pending' });
-    expect(sj.status).toBe('pending');
-    expect(sj.lastRunAt).toBeUndefined();
-    expect(sj.lastFinishedAt).toBeUndefined();
-  });
-
-  it('running → status=pending + lastRunAt=startedAt（旧 UI 兼容写法）', () => {
-    const rs: JobRunState = { status: 'running', startedAt: '2026-06-04T01:00:00.000Z' };
-    const sj = toSchedulerJob(cronFile(), rs);
-    expect(sj.status).toBe('pending');
-    expect(sj.lastRunAt).toBe('2026-06-04T01:00:00.000Z');
-    expect(sj.lastFinishedAt).toBeUndefined();
-  });
-
-  it('completed → 全字段填齐', () => {
-    const rs: JobRunState = {
+describe('toSchedulerJob', () => {
+  it('projects a cron job and its latest run start time', () => {
+    const job = toSchedulerJob(cronFile(), {
       status: 'completed',
       startedAt: '2026-06-04T01:00:00.000Z',
       finishedAt: '2026-06-04T01:05:00.000Z',
-    };
-    const sj = toSchedulerJob(cronFile(), rs);
-    expect(sj.status).toBe('completed');
-    expect(sj.lastRunAt).toBe('2026-06-04T01:00:00.000Z');
-    expect(sj.lastFinishedAt).toBe('2026-06-04T01:05:00.000Z');
-  });
-
-  it('failed → status=failed，error 字段不上抛旧 IPC', () => {
-    const rs: JobRunState = {
-      status: 'failed',
-      startedAt: '2026-06-04T01:00:00.000Z',
-      finishedAt: '2026-06-04T01:05:00.000Z',
-      error: 'boom',
-    };
-    const sj = toSchedulerJob(cronFile(), rs);
-    expect(sj.status).toBe('failed');
-    expect(sj.lastFinishedAt).toBe('2026-06-04T01:05:00.000Z');
-    // SchedulerJob 没有 error 字段
-    expect((sj as unknown as { error?: unknown }).error).toBeUndefined();
-  });
-});
-
-describe('toSchedulerJob: enabled=false + once + pending → 反推 expired', () => {
-  it('once + enabled=false + pending → expired', () => {
-    const sj = toSchedulerJob(onceFile({ enabled: false }), { status: 'pending' });
-    expect(sj.status).toBe('expired');
-    expect(sj.enabled).toBe(false);
-  });
-
-  it('cron + enabled=false 不反推 expired，留 pending', () => {
-    const sj = toSchedulerJob(cronFile({ enabled: false }), { status: 'pending' });
-    expect(sj.status).toBe('pending');
-  });
-
-  it('once + enabled=false + completed 不反推，保留 completed', () => {
-    const sj = toSchedulerJob(onceFile({ enabled: false }), {
-      status: 'completed',
-      startedAt: 'a',
-      finishedAt: 'b',
     });
-    expect(sj.status).toBe('completed');
+
+    expect(job).toMatchObject({
+      scheduleType: 'cron',
+      cronExpression: '0 6 * * *',
+      lastStartedAt: '2026-06-04T01:00:00.000Z',
+      notifyOnCompletion: true,
+    });
+  });
+
+  it('projects a one-time job as the matching discriminated branch', () => {
+    const job = toSchedulerJob(onceFile(), { status: 'pending' });
+
+    expect(job).toMatchObject({
+      scheduleType: 'once',
+      runAt: '2026-06-10T12:00:00.000Z',
+    });
+    expect(job.lastStartedAt).toBeUndefined();
   });
 });
 
-describe('toSchedulerJob: 字段映射', () => {
-  it('cron file → cronExpression 填，runAt 不填', () => {
-    const sj = toSchedulerJob(cronFile(), { status: 'pending' });
-    expect(sj.cronExpression).toBe('0 6 * * *');
-    expect(sj.runAt).toBeUndefined();
-  });
-
-  it('once file → runAt 填，cronExpression 不填', () => {
-    const sj = toSchedulerJob(onceFile(), { status: 'pending' });
-    expect(sj.runAt).toBe('2026-06-10T12:00:00.000Z');
-    expect(sj.cronExpression).toBeUndefined();
-  });
-
-  it('executedAt 永远 undefined', () => {
-    const sj = toSchedulerJob(onceFile(), { status: 'pending' });
-    expect(sj.executedAt).toBeUndefined();
-  });
-
-  it('notifyOnCompletion 默认 true', () => {
-    const sj = toSchedulerJob(cronFile({ notifyOnCompletion: undefined }), { status: 'pending' });
-    expect(sj.notifyOnCompletion).toBe(true);
-  });
-});
-
-describe('toScheduleJobInput: 老 createJob 入参投射', () => {
-  it('cron 分支 → kind=cron + cron 字段', () => {
+describe('toScheduleJobInput', () => {
+  it('maps a cron create request to the persist cron branch', () => {
     const input = toScheduleJobInput({
-      id: 'ignored',
       description: 'd',
       name: 'n',
       scheduleType: 'cron',
@@ -138,14 +75,13 @@ describe('toScheduleJobInput: 老 createJob 入参投射', () => {
       enabled: true,
       agentId: 'a_X',
       message: 'm',
-      status: 'pending',
+      notifyOnCompletion: true,
     });
-    expect(input.scheduleType).toBe('cron');
-    if (input.scheduleType === 'cron') expect(input.cron).toBe('*/5 * * * *');
-    expect(input.name).toBe('n');
+
+    expect(input).toMatchObject({ scheduleType: 'cron', cron: '*/5 * * * *', name: 'n' });
   });
 
-  it('once 分支 → kind=once + runAt 字段', () => {
+  it('maps a one-time create request to the persist once branch', () => {
     const input = toScheduleJobInput({
       description: 'd',
       name: 'n',
@@ -154,68 +90,46 @@ describe('toScheduleJobInput: 老 createJob 入参投射', () => {
       enabled: true,
       agentId: 'a_X',
       message: 'm',
-      status: 'pending',
+      notifyOnCompletion: true,
     });
-    expect(input.scheduleType).toBe('once');
-    if (input.scheduleType === 'once') expect(input.runAt).toBe('2026-06-10T12:00:00.000Z');
+
+    expect(input).toMatchObject({ scheduleType: 'once', runAt: '2026-06-10T12:00:00.000Z', name: 'n' });
   });
 
-  it('cron 缺 cronExpression → 抛错', () => {
-    expect(() =>
-      toScheduleJobInput({
-        description: '', name: 'n', scheduleType: 'cron', enabled: true,
-        agentId: 'a', message: 'm', status: 'pending',
-      }),
-    ).toThrow(/cronExpression required/);
-  });
-
-  it('once 缺 runAt → 抛错', () => {
-    expect(() =>
-      toScheduleJobInput({
-        description: '', name: 'n', scheduleType: 'once', enabled: true,
-        agentId: 'a', message: 'm', status: 'pending',
-      }),
-    ).toThrow(/runAt required/);
+  it('rejects invalid cron and one-time values before persistence', () => {
+    expect(() => toScheduleJobInput({
+      name: 'invalid cron', description: '', message: 'do it', enabled: true, notifyOnCompletion: true,
+      agentId: 'a_TEST', scheduleType: 'cron', cronExpression: 'not a cron expression',
+    })).toThrow('Invalid cron expression');
+    expect(() => toScheduleJobInput({
+      name: 'invalid once', description: '', message: 'do it', enabled: true, notifyOnCompletion: true,
+      agentId: 'a_TEST', scheduleType: 'once', runAt: 'not-a-date',
+    })).toThrow('Invalid one-time schedule time');
   });
 });
 
-describe('toPersistScheduleJobUpdate: updateJob 投射', () => {
-  it('仅普通字段 → 不带 schedule', () => {
-    const u = toPersistScheduleJobUpdate(cronFile(), { name: 'new', enabled: false });
-    expect(u.name).toBe('new');
-    expect(u.enabled).toBe(false);
-    expect(u.schedule).toBeUndefined();
+describe('toPersistScheduleJobUpdate', () => {
+  it('maps ordinary fields without replacing the schedule', () => {
+    const update = toPersistScheduleJobUpdate({ name: 'new', enabled: false });
+
+    expect(update).toEqual({ name: 'new', enabled: false });
   });
 
-  it('改 cronExpression → schedule kind=cron 带新值', () => {
-    const u = toPersistScheduleJobUpdate(cronFile(), { cronExpression: '0 9 * * *' });
-    expect(u.schedule).toEqual({ kind: 'cron', cron: '0 9 * * *' });
+  it('replaces a cron schedule atomically', () => {
+    const update = toPersistScheduleJobUpdate({
+      scheduleType: 'cron',
+      cronExpression: '0 9 * * *',
+    });
+
+    expect(update.schedule).toEqual({ kind: 'cron', cron: '0 9 * * *' });
   });
 
-  it('改 runAt（once→once）→ schedule kind=once 带新值', () => {
-    const u = toPersistScheduleJobUpdate(onceFile(), { runAt: '2026-07-01T00:00:00.000Z' });
-    expect(u.schedule).toEqual({ kind: 'once', runAt: '2026-07-01T00:00:00.000Z' });
-  });
-
-  it('cron → once 切换需要带 runAt', () => {
-    expect(() =>
-      toPersistScheduleJobUpdate(cronFile(), { scheduleType: 'once' }),
-    ).toThrow(/runAt required/);
-  });
-
-  it('cron → once 切换 + runAt 一起给 → ok', () => {
-    const u = toPersistScheduleJobUpdate(cronFile(), {
+  it('replaces a one-time schedule atomically', () => {
+    const update = toPersistScheduleJobUpdate({
       scheduleType: 'once',
       runAt: '2026-07-01T00:00:00.000Z',
     });
-    expect(u.schedule).toEqual({ kind: 'once', runAt: '2026-07-01T00:00:00.000Z' });
-  });
 
-  it('status / lastRunAt / executedAt 不在投射范围（runState 不允许外部 mutate）', () => {
-    const u = toPersistScheduleJobUpdate(cronFile(), {
-      name: 'n',
-    } as Parameters<typeof toPersistScheduleJobUpdate>[1]);
-    expect(u.name).toBe('n');
-    expect(u.schedule).toBeUndefined();
+    expect(update.schedule).toEqual({ kind: 'once', runAt: '2026-07-01T00:00:00.000Z' });
   });
 });

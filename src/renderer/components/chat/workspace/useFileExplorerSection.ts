@@ -257,8 +257,9 @@ export function useFileExplorerSection({
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (readOnly) return;
     setIsDraggingOver(true);
-  }, []);
+  }, [readOnly]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -270,6 +271,7 @@ export function useFileExplorerSection({
     e.preventDefault();
     e.stopPropagation();
     setIsDraggingOver(false);
+    if (readOnly) return;
 
     if (!isValidWorkspacePath(workspacePath)) return;
 
@@ -291,7 +293,7 @@ export function useFileExplorerSection({
         await reloadRootTree(workspacePath);
       } catch { /* ignore */ }
     }
-  }, [workspacePath, reloadRootTree]);
+  }, [readOnly, workspacePath, reloadRootTree]);
 
   // 文件树（带路径安全校验，过滤掉不在 workspacePath 下的节点）
   const fileTreeWithRoot = useMemo(() => {
@@ -314,7 +316,7 @@ export function useFileExplorerSection({
   // ========== 菜单动作 ==========
 
   const handleAddFiles = useCallback(async () => {
-    if (!isValidWorkspacePath(workspacePath)) return;
+    if (readOnly || !isValidWorkspacePath(workspacePath)) return;
     try {
       const result = await fsApi.selectFiles({ title: 'Select Files or Folders to Add', allowMultiple: true });
       if (!result?.success || !result.filePaths || result.filePaths.length === 0) return;
@@ -329,10 +331,10 @@ export function useFileExplorerSection({
         } catch { /* ignore */ }
       }
     } catch { /* ignore */ }
-  }, [workspacePath, reloadRootTree]);
+  }, [readOnly, workspacePath, reloadRootTree]);
 
   const handleAddFolder = useCallback(async () => {
-    if (!isValidWorkspacePath(workspacePath)) return;
+    if (readOnly || !isValidWorkspacePath(workspacePath)) return;
     try {
       const result = await workspaceApi.selectFolder();
       if (!result?.success || !result.folderPath) return;
@@ -343,14 +345,14 @@ export function useFileExplorerSection({
         } catch { /* ignore */ }
       }
     } catch { /* ignore */ }
-  }, [workspacePath, reloadRootTree]);
+  }, [readOnly, workspacePath, reloadRootTree]);
 
   const handleOpenPasteDialog = useCallback(() => {
-    if (!isValidWorkspacePath(workspacePath)) return;
+    if (readOnly || !isValidWorkspacePath(workspacePath)) return;
     openPasteDialog(workspacePath, workspacePath, () => {
       void reloadRootTree(workspacePath);
     });
-  }, [workspacePath, openPasteDialog, reloadRootTree]);
+  }, [readOnly, workspacePath, openPasteDialog, reloadRootTree]);
 
   const handleMenuToggle = useCallback((event: React.MouseEvent) => {
     event.stopPropagation();

@@ -10,7 +10,6 @@ const invoke = renderToMain.provideInvokeForPreload(
     'toggleJob',
     'updateJob',
     'runJobNow',
-    'getJobSessions',
   ],
 );
 

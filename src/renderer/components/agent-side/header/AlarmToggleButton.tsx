@@ -13,19 +13,11 @@ interface AlarmToggleButtonProps {
   agentId: string | null;
   /** Whether the panel is currently in jobs mode (alarm icon stays in selected state). */
   mode: SessionPanelMode;
-  /**
-   * The currently selected session id, if any. Used to restore the previous chat
-   * when toggling jobs → sessions so the right pane stays on the same conversation.
-   */
-  sessionId: string | null;
+  /** The panel mode is URL-derived; job runs never become regular-session routes. */
 }
 
-/**
- * Header alarm icon + scheduled-unread badge. Clicking toggles between
- * `/agent/:agentId` (sessions) and `/agent/:agentId/job` (jobs); when leaving
- * jobs mode it restores any active session selection by including it in the URL.
- */
-const AlarmToggleButton: React.FC<AlarmToggleButtonProps> = ({ agentId, mode, sessionId }) => {
+/** Header alarm icon + scheduled-unread badge. Clicking switches between the sessions and jobs roots. */
+const AlarmToggleButton: React.FC<AlarmToggleButtonProps> = ({ agentId, mode }) => {
   const navigate = useNavigate();
   const profileId = useProfileId();
   const { scheduledUnreadCount } = useAgentUnreadSummary(agentId, profileId);
@@ -33,11 +25,11 @@ const AlarmToggleButton: React.FC<AlarmToggleButtonProps> = ({ agentId, mode, se
   const handleClick = useCallback(() => {
     if (!agentId) return;
     if (mode === 'jobs') {
-      navigate(sessionId ? `/agent/${agentId}/${sessionId}` : `/agent/${agentId}`);
+      navigate(`/agent/${agentId}`);
     } else {
       navigate(`/agent/${agentId}/job`);
     }
-  }, [agentId, mode, sessionId, navigate]);
+  }, [agentId, mode, navigate]);
 
   // Selected (jobs mode): keep the ghost variant but layer on a tinted brand
   // pill — colored border + soft blue fill + saturated icon — so the toggle

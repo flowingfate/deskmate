@@ -7,7 +7,7 @@ import { shouldShowAddToKnowledgeBaseOption } from '../../lib/chat/addToKnowledg
 import { isInstallableSkillArtifact } from '../../lib/skills/installableSkillArtifacts';
 import { atom } from '@/atom';
 import { log } from '@/log';
-import { workspaceOps } from '@renderer/lib/chat/workspaceOps';
+import { type FileTreeNode, workspaceOps } from '@renderer/lib/chat/workspaceOps';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -21,17 +21,18 @@ import { requestConfirmation } from '@/components/ui/ConfirmationDialog';
 const zeroState: {
   isOpen: boolean;
   position: { top: number; left: number } | null;
-  node: any | null;
+  node: FileTreeNode | null;
   workspacePath: string | null;
-} = { isOpen: false, position: null, node: null, workspacePath: null };
+  canDelete: boolean;
+} = { isOpen: false, position: null, node: null, workspacePath: null, canDelete: false };
 
 export const FileTreeNodeMenuAtom = atom(zeroState, (get, set) => {
   function close() {
     set(zeroState);
   }
 
-  function open(clientX: number, clientY: number, node: any, workspacePath: string) {
-    set({ isOpen: true, position: { top: clientY, left: clientX }, node, workspacePath });
+  function open(clientX: number, clientY: number, node: FileTreeNode, workspacePath: string, canDelete = true) {
+    set({ isOpen: true, position: { top: clientY, left: clientX }, node, workspacePath, canDelete });
   }
 
   async function remove() {
@@ -54,8 +55,9 @@ interface MenuProps {
 
 interface InnerProps extends MenuProps {
   position: { top: number; left: number };
-  node: any;
+  node: FileTreeNode;
   workspacePath: string;
+  canDelete: boolean;
 }
 
 const FileTreeNodeContextMenu: React.FC<InnerProps> = ({
@@ -64,6 +66,7 @@ const FileTreeNodeContextMenu: React.FC<InnerProps> = ({
   position,
   node,
   workspacePath,
+  canDelete,
 }) => {
   const { close: onClose, remove: onRemove } = FileTreeNodeMenuAtom.useChange();
   const { chatStatus } = CurrentSessionStatus.use();
@@ -119,7 +122,7 @@ const FileTreeNodeContextMenu: React.FC<InnerProps> = ({
       if (!result?.success) {
         let errorMsg = result?.error || 'Unknown error';
         if (result?.results && result.results.length > 0) {
-          const failedResult = result.results.find((r: any) => !r.success);
+          const failedResult = result.results.find((item) => !item.success);
           if (failedResult?.error) {
             errorMsg = failedResult.error;
           }
@@ -230,19 +233,23 @@ const FileTreeNodeContextMenu: React.FC<InnerProps> = ({
           </>
         )}
 
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={handleDelete}>
-          <Trash2 size={16} strokeWidth={1.5} />
-          Delete
-        </DropdownMenuItem>
+        {canDelete && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={handleDelete}>
+              <Trash2 size={16} strokeWidth={1.5} />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 };
 
 export default (props: MenuProps) => {
-  const [{ isOpen, position, node, workspacePath }] = FileTreeNodeMenuAtom.use();
+  const [{ isOpen, position, node, workspacePath, canDelete }] = FileTreeNodeMenuAtom.use();
   if (!isOpen || !position || !node || !workspacePath) return null;
-  return createElement(FileTreeNodeContextMenu, { ...props, position, node, workspacePath });
+  return createElement(FileTreeNodeContextMenu, { ...props, position, node, workspacePath, canDelete });
+
 };

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-14 -->
+<!-- Last verified: 2026-07-15 -->
 # 布局
 
 > 渲染进程 SPA 的外壳：采用 AppShell（Sidebar + StatusBar + Titlebar） + AgentLayout（SessionPanel + 主内容区 + 右侧面板）两层架构。
@@ -45,7 +45,7 @@ RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
 - **状态所有权**：侧边栏宽度由 `LeftNavSizeAtom`（宽度、拖拽、持久化）管理，折叠状态由 `LeftNavCollapsedAtom` 管理，位于 `src/renderer/states/left-nav.atom.ts`。右面板使用 `RightPaneCollapsedAtom`（`src/renderer/states/right-pane.atom.ts`）。
 - **Settings shell**：`SettingsPage` 仅渲染 Settings 侧栏、分隔线、内容容器与无 context 的 `<Outlet />`。MCP、Skills、Sub-agents 自己渲染行内菜单、确认框及最小状态；不得把操作回调、DOM anchor 或临时 `window` 字段上提到 shell。
 - **Agent 路由的下拉框/覆盖层**：全局 Agent 上下文菜单和覆盖层通过 atom 管理，在 `AgentLayout` 层级渲染，无需 props 逐层传递。
-- **Agent 编辑命令**：改用普通函数 `lib/chat/editAgent.ts#editAgent(agentId?, tab?)`（不碰 atom，只用 `router` + `agentSessionCacheManager`），菜单/ChatView 直接 import 调用。ChatSession CRUD（删除/fork/重命名/收藏/下载）走 `states/chatSessionCommands.ts` 的 `chatSessionCommands`（`mutate` 无状态命令 dispatcher，组合既有 DeleteConfirm/Rename/toast atom）。**不再有 `agent:editAgent` / `chatSession:*` 自定义 DOM 事件**。
+- **Agent 编辑命令**：使用普通函数 `lib/chat/editAgent.ts#editAgent(agentId?, tab?)`（不碰 atom，通过 `lib/navigation/appNavigation.ts` 的窄 navigation bridge 导航，并读取 `agentSessionCacheManager`）。bridge 由 `entries/main.routes.tsx` 创建 router 后注册，业务组件不得反向 import 路由表，否则会形成 ESM 循环依赖。菜单/ChatView 直接调用 `editAgent`。ChatSession CRUD（删除/fork/重命名/收藏/下载）走 `states/chatSessionCommands.ts` 的 `chatSessionCommands`（`mutate` 无状态命令 dispatcher，fork 同样走 navigation bridge）。**不再有 `agent:editAgent` / `chatSession:*` 自定义 DOM 事件**。
 - **全局确认框**：`components/ui/ConfirmationDialog.tsx` 挂在 RootLayout，`requestConfirmation(...)` 可由 React 组件或 atom/action 路径调用。只保留一个待决请求；新请求以 `false` 结算旧请求，Cancel/Esc/外部关闭同样结算 `false`。
 
 ## 常见变更
@@ -87,7 +87,7 @@ RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
 - `WindowsTitleBar` 在 macOS 上渲染 `null`。任何添加到其中的侧边栏切换逻辑在非 Windows 平台上会静默缺失。
 - `SettingsNavigation.tsx` 复用了 `LeftNavigation.css` 中的 `.left-navigation` 样式类，修改该 CSS 时需注意不要影响 Settings 页面。
 - macOS 标题栏缩放补偿使用直接设置在 `documentElement` 上的 CSS 自定义属性（`--mac-zoom-factor`），以避免 React 渲染延迟引起的抖动。
-- **数据路由（data router）**：路由在 `entries/main.routes.tsx` 用 config-first 对象数组 `const routes: RouteObject[]` 定义、`createBrowserRouter(routes)` 构建，`main.tsx` 用 `<RouterProvider router={router}/>` 挂载。`RouterProvider` 不接受 children，故所有依赖路由 context 的全局节点（`McpConnectionFailureToastListener`、`WindowZoomHotkeys`、MCP dialog）与全局 effect（`navigate:to` 事件、crash 面包屑）都迁进了根路由 `RootLayout`。不再有 `AppRoutes` / `AppRoutesWithTitleBar` 组件。
+- **数据路由（data router）**：路由在 `entries/main.routes.tsx` 用 config-first 对象数组 `const routes: RouteObject[]` 定义、`createBrowserRouter(routes)` 构建，`main.tsx` 用 `<RouterProvider router={router}/>` 挂载。`RouterProvider` 不接受 children，故所有依赖路由 context 的全局节点（`McpConnectionFailureToastListener`、`WindowZoomHotkeys`、MCP dialog）与全局 effect（`navigate:to` 事件、crash 面包屑）都迁进了根路由 `RootLayout`。命令式业务导航统一通过 `lib/navigation/appNavigation.ts` 的 bridge；业务模块禁止 import `entries/main.routes.tsx`。不再有 `AppRoutes` / `AppRoutesWithTitleBar` 组件。
 - **`Component:` vs `element:` 选择**：无 props 的路由用 `Component: X`（传组件类型，react-router 内部 `createElement`，官方推荐、省一层）；**需要给组件传 props 的路由必须用 `element: <X prop=.../>`**（`Component` 与 `element` 互斥且 `Component` 无法传 props）。当前需 `element:` 的三类：`<ChatView kind="job-run"/>`、重定向 `<Navigate to=.../>`、feature-gate `<FeatureGate flag=.../>`。
 - **静态路由 + feature flag**：data router 的路由表是静态对象，无法像旧 `<Routes>` 那样用 `useFeatureFlag` 条件注册。sub-agent 路由始终注册，`element` 外包 `FeatureGate`，flag 关闭时 `<Navigate to="/" replace/>` 复现旧的 fall-through 行为。新增受 flag 门控的路由沿用此模式。
 - **TitleBar 历史导航（`HistoryNav`）**：`canGoBack/canGoForward` 直接读 react-router 写入 `window.history.state.idx` 的真实历史光标 + `useNavigationType()` 的 `PUSH/POP/REPLACE` 信号，`goBack/goForward` 用 `navigate(-1)/navigate(1)`。**不再维护手搓镜像栈**——旧实现的镜像栈无法区分 push/replace，与真实历史漂移，是“后退无反应”的根因。切勿回退到镜像栈方案。

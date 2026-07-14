@@ -1,8 +1,7 @@
 import { app, ipcMain } from 'electron';
 import { renderToMain as updateRenderToMain } from '@shared/ipc/update';
 import type { UpdateManager } from '../../lib/autoUpdate/updateManager';
-import { isFeatureEnabled } from '../../lib/featureFlags';
-import { schedulerManager } from '../../lib/scheduler/SchedulerManager';
+import { schedulerManager } from '../../lib/scheduler';
 import { log } from '@main/log';
 import { safeConsole } from '../../lib/utilities/safeConsole';
 import type { Context } from './shared';
@@ -62,14 +61,12 @@ export default function handleUpdateIPC(ctx: Context) {
   });
 
   handle.quitAndInstall(async (_event, filePath) => {
-    if (isFeatureEnabled('deskmateFeatureScheduler')) {
-      try {
-        logger.info({ msg: 'scheduler.lifecycle.updater-handoff', mod: 'update:quitAndInstall', stage: 'before-dispose', filePath, schedulerState: schedulerManager.getRuntimeDiagnostics() });
-        await schedulerManager.dispose('updater-handoff');
-        logger.info({ msg: 'scheduler.lifecycle.updater-handoff', mod: 'update:quitAndInstall', stage: 'after-dispose', filePath, schedulerState: schedulerManager.getRuntimeDiagnostics() });
-      } catch (schedulerError) {
-        logger.warn({ msg: 'scheduler.lifecycle.updater-handoff', mod: 'update:quitAndInstall', stage: 'dispose-failed', filePath, err: schedulerError });
-      }
+    try {
+      logger.info({ msg: 'scheduler.lifecycle.updater-handoff', mod: 'update:quitAndInstall', stage: 'before-dispose', filePath, schedulerState: schedulerManager.getRuntimeDiagnostics() });
+      await schedulerManager.dispose('updater-handoff');
+      logger.info({ msg: 'scheduler.lifecycle.updater-handoff', mod: 'update:quitAndInstall', stage: 'after-dispose', filePath, schedulerState: schedulerManager.getRuntimeDiagnostics() });
+    } catch (schedulerError) {
+      logger.warn({ msg: 'scheduler.lifecycle.updater-handoff', mod: 'update:quitAndInstall', stage: 'dispose-failed', filePath, err: schedulerError });
     }
 
     safeConsole.log('[MAIN] 🚀 update:quitAndInstall IPC handler called!', {

@@ -21,7 +21,7 @@ export type {
   SubAgentConfig,
   SubAgentContextAccess,
 } from '@shared/persist/types';
-export type { SchedulerJob } from '../../../../main/lib/scheduler/types'
+export type { SchedulerJob } from '@shared/ipc/scheduler'
 
 // Re-export App configuration types
 export type { AppConfig, RuntimeEnvironment } from '@shared/types/appConfig'

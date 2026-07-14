@@ -24,19 +24,18 @@ const HELP = `USAGE
 DESCRIPTION
   Edit fields of an existing schedule. At least one --* field is required.
 
-  Switching the schedule type:
-    --schedule-type cron   reuse existing cron; clears run_at
-    --schedule-type once   reuse existing run_at; clears cron_expression
-  Or just pass new --cron / --at — type aligns automatically and the
-  job's run state (completed/expired) is reset back to "pending" so it
-  fires on the next trigger.
+  Replacing the schedule is atomic:
+    --schedule-type cron --cron <expr>
+    --schedule-type once --at <ISO>
+  Passing --cron or --at also selects the matching schedule type. Existing run
+  history remains intact; it is separate from the task configuration.
 
 OPTIONS
   --name <text>            New human-readable name.
   --description <text>     New description.
-  --schedule-type <kind>   "cron" or "once".
-  --cron <expr>            New cron expression (forces type=cron, resets run state).
-  --at <ISO>               New one-time ISO timestamp (forces type=once, resets run state).
+  --schedule-type <kind>   "cron" or "once"; requires --cron or --at.
+  --cron <expr>            New cron expression (selects type=cron).
+  --at <ISO>               New one-time ISO timestamp (selects type=once).
   --message <text>         New prompt for the agent.
   --enabled <true|false>   Enable or disable future runs.
   --dry-run                Show what would change without applying.

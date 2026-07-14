@@ -6,13 +6,15 @@ import { useSyncExternalStore } from 'react';
 
 export type CurrentSession = {
   agentId: null;
+  jobId: null;
   chatSessionId: null;
 } | {
   agentId: string;
+  jobId: string | null;
   chatSessionId: string | null;
 }
 
-const EMPTY: CurrentSession = { agentId: null, chatSessionId: null };
+const EMPTY: CurrentSession = { agentId: null, jobId: null, chatSessionId: null };
 
 let state: CurrentSession = EMPTY;
 const listeners = new Set<() => void>();
@@ -26,7 +28,7 @@ export const currentSessionStore = {
     return state;
   },
   set(next: CurrentSession): void {
-    if (state.agentId === next.agentId && state.chatSessionId === next.chatSessionId) return;
+    if (state.agentId === next.agentId && state.jobId === next.jobId && state.chatSessionId === next.chatSessionId) return;
     state = next;
     emit();
   },

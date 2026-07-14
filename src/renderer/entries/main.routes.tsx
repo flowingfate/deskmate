@@ -42,6 +42,7 @@ import McpAuthConsentDialog from '../components/mcp/McpAuthConsentDialog';
 import RequestOAuthClientIdDialog from '../components/mcp/RequestOAuthClientIdDialog';
 import { useMcpConnectionFailureToast } from '../lib/mcp/useMcpConnectionFailureToast';
 import { settingsEntryLoader } from '@renderer/lib/navigation/settingsEntry';
+import { registerAppNavigateHandler } from '@renderer/lib/navigation/appNavigation';
 import { ConfirmationDialogHost } from '../components/ui/ConfirmationDialog';
 
 const logger = log.child({ mod: 'AppRoutes' });
@@ -138,9 +139,9 @@ const routes: RouteObject[] = [
               { path: 'creation', Component: AgentCreationView },
               { path: 'creation/custom-agent', Component: CreateCustomAgentView },
               { path: ':agentId', Component: ChatView },
-              { path: ':agentId/job', element: <ChatView kind="job-run" /> },
-              { path: ':agentId/job/:jobId', element: <ChatView kind="job-run" /> },
-              { path: ':agentId/job/:jobId/:sessionId', element: <ChatView kind="job-run" /> },
+              { path: ':agentId/job', element: <ChatView kind="job" /> },
+              { path: ':agentId/job/:jobId', element: <ChatView kind="job" /> },
+              { path: ':agentId/job/:jobId/:sessionId', element: <ChatView kind="job" /> },
               { path: ':agentId/:sessionId', Component: ChatView },
               { path: ':agentId/settings', Component: AgentEditingView },
               { path: ':agentId/settings/*', Component: AgentEditingView },
@@ -190,3 +191,7 @@ const routes: RouteObject[] = [
 ];
 
 export const router = createBrowserRouter(routes);
+
+// 这里做是为了避免反向依赖，进而导致出现一些 runtime 的报错，比如：
+// Cannot access 'ChatView' before initialization
+registerAppNavigateHandler((path, replace) => router.navigate(path, { replace }));

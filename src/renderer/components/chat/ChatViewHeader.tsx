@@ -6,17 +6,7 @@ import { useCurrentAgent } from '@/states/agents.atom';
 import { AgentAvatar } from '../common/AgentAvatar';
 
 
-interface ChatViewHeaderProps {
-  onOpenMcpTools?: () => void;
-  onOpenTools?: () => void;
-  onOpenSkills?: () => void;
-}
-
-const ChatViewHeader: React.FC<ChatViewHeaderProps> = ({
-  onOpenMcpTools,
-  onOpenSkills,
-  onOpenTools,
-}) => {
+const ChatViewHeader: React.FC = () => {
   // Get current agent configuration data - depends on currentAgentId to update on switch
   const agent = useCurrentAgent();
 
@@ -35,11 +25,7 @@ const ChatViewHeader: React.FC<ChatViewHeaderProps> = ({
           </span>
         )}
         <span>{agent ? agent.name : 'Chat'}</span>
-        <StatusBadges
-          onOpenMcpTools={onOpenMcpTools}
-          onOpenSkills={onOpenSkills}
-          onOpenTools={onOpenTools}
-        />
+        <StatusBadges />
       </div>
       <div className="flex shrink-0 items-center">
         <ContextBadge />
