@@ -14,10 +14,10 @@ function mix(props: Props, cls: string) {
 
 function Head(props: Props) {
   return (
-    <header className={mix(props, 'h-[45px] shrink-0 border-b border-black/7 flex items-center justify-between pl-4 pr-[31px]')}>
+    <header className={mix(props, 'h-11.25 shrink-0 border-b border-black/7 flex items-center justify-between px-3.5')}>
       {props.children}
     </header>
-  )
+  );
 }
 
 function Body(props: Props) {

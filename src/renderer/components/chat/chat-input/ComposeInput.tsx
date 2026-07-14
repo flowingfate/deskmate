@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { promptHistory } from '@/lib/chat/promptHistory';
-import { agentSessionCacheManager, ChatStatus, CurrentSessionError } from '@/lib/chat/agentSessionCacheManager';
+import { agentSessionCacheManager, ChatStatus } from '@/lib/chat/agentSessionCacheManager';
 import type { UserMessage } from '@shared/persist/types'
-import ErrorBar from '../ErrorBar';
 import { getChatInputShortcutHint } from '@/lib/chat/chatInputKeyboard';
 import { log } from '@/log';
 import { AttachmentList, AttachmentsStatus } from './Attachments';
@@ -42,7 +41,6 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
   isReadOnly,
   isInputLocked = false,
 }) => {
-  const errorMessage = CurrentSessionError.use();
   const editAgentMenuActions = EditAgentMenuAtom.useChange();
   const attachMenuActions = AttachMenuAtom.useChange();
   const { textareaStateAtom, attachmentsStateAtom, textareaManager, attachmentManager, hasValidInput } = useChatInputState('compose');
@@ -166,9 +164,6 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
       onDragLeave={dragHandlers.handleDragLeave}
       onDrop={dragHandlers.handleDrop}
     >
-      {errorMessage && chatSessionId && (
-        <ErrorBar errorMessage={errorMessage} chatSessionId={chatSessionId} />
-      )}
 
       {isInputLocked && (
         <div className="bg-black/8 border-black/28 text-gray-800 text-xs py-1 px-4">

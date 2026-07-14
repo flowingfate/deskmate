@@ -11,12 +11,13 @@
 import { router } from '@/entries/main.routes';
 import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 
-export type AgentEditTab = 'basic' | 'mcp' | 'skills' | 'prompt';
+export type AgentEditTab = 'basic' | 'mcp' | 'tools' | 'skills' | 'prompt';
 
 // Tab → 路由段映射，与 AgentEditingView 的 tabToRouteMap 保持同步。
 const tabToRouteMap: Record<AgentEditTab, string> = {
   basic: 'basic',
   mcp: 'mcp_servers',
+  tools: 'tools',
   skills: 'skills',
   prompt: 'system_prompt',
 };

@@ -6,11 +6,22 @@
 ## 关键文件
 | 文件 | 职责 | 规模 |
 |------|------|------|
-| `ChatView.tsx` | 主聊天视图容器；负责路由↔会话同步、会话分叉/选择、编辑 agent 导航 | ~300 LOC |
-| `ChatViewContent.tsx` | 可滚动的消息列表区域，带回放逻辑；处理会话切换占位，将渲染委托给 `ChatContainer`，主输入委托给 `ComposeInput` | ~200 LOC |
-| `ChatViewHeader.tsx` | 顶部栏，包含 agent 名称、会话控制和工作区切换 | — |
+| `ChatView.tsx` | 主聊天视图容器；负责路由↔会话同步、会话分叉/选择与 agent 编辑导航 | ~300 LOC |
+| `ChatViewContent.tsx` | 可滚动的消息列表区域；处理会话切换占位、回放与输入委托，不承载 ribbon 业务状态 | ~200 LOC |
+| `ChatViewHeader.tsx` | 顶部栏：左侧组合 agent 身份、技能、本地工具与 MCP 工具状态（徽标可跳转各自设置）；右侧 `ContextBadge` 点击向下展开用量详情 | —
+| `ribbon/index.tsx` | 输入框上方的紧凑控制条：左侧弹性槽渲染提示或错误，保留右侧会话操作的固定宽度 | 小 |
+| `ribbon/RibbonItem.tsx` | ribbon 专用紧凑按钮：由 ribbon 的交叉轴拉伸铺满高度、无圆角；统一 hover / active / disabled 状态，并通过包裹 disabled button 的 tooltip trigger 保证所有项目均可显示提示 | 小 |
+| `ribbon/DevInfoBadge.tsx` | 开发环境的版本、Agent ID、会话 ID 信息及复制菜单；自行获取 app version，菜单向上展开 | 小 |
+| `ribbon/RibbonTip.tsx` | 左侧垂直居中的灯泡图标 + 操作提示轮播；每次仅以一次 state 更新并行挂载当前/下一项，分别播放 `ribbon-tip-exit` 与 `ribbon-tip-enter` CSS 关键帧，避免 rAF 状态切换导致的闪跳；文本省略但保留悬浮全文 | 小 |
+| `ribbon/ErrorBar.tsx` | 无背景的紧凑错误行；重试按钮紧随消息，错误文本在左侧弹性槽内单行截断并经悬浮全文暴露诊断建议 | 小 |
+| `ribbon/JumpToLatest.tsx` | 始终显示的跳转控件 `JumpToLatestItem`：不可跳转时 disabled，滚离最新消息后激活并显示 `Jump to latest` 文案；同文件定义 `JumpToLatestAtom` 状态机 | 小 |
+| `ribbon/useSessionActionTarget.ts` | 导出 `SessionActionTarget` 可辨识联合，并在 ribbon 内聚路由会话操作判定：匹配 job-run 路由、核对当前 route/cache、以消息数识别新建空会话；不经 `ChatView` / `ChatViewContent` 透传 | 小 |
+| `ribbon/ForkSessionItem.tsx` | 仅对已就绪且已有消息的 regular session 启用；job run、无会话与切换中均 disabled，通过 `chatSessionCommands` 复用 fork + 路由跳转逻辑 | 小 |
+| `ribbon/OpenSessionFolderItem.tsx` | 仅对已就绪且已有消息的 regular session 启用；使用 `FolderTree` 区别工作区开关图标。`getFilePath` 主进程端经 `Agent.getSession()` 解析真实 ULID session 目录，避免旧时间戳 ID 路径推导失败 | 小 |
+| `ribbon/ToggleWorkspaceExplorer.tsx` | 工作区侧栏的可见性切换按钮，使用 `RibbonItem` | 小 |
 | `ChatRenderItem.tsx` | `ChatRenderItemComponent` — 把扁平的 `ChatRenderItem[]`（来源于 `render-items-manager`）按类型分发到对应渲染器，并通过 `React.memo` + 自定义浅比较跳过未变化的项 | ~200 LOC |
-| `ChatContainer.tsx` | 消息列表的滚动容器；管理跟随滚动（首屏 / 会话切换 / 用户新消息 → force；流式 chunk → 内容驱动）、`ResizeObserver` 稳定窗口；将每项渲染委托给 `ChatRenderItemComponent` | ~590 LOC |
+| `ChatContainer.tsx` | 消息列表渲染容器；组合 `useChatAutoScroll`、渲染项派生与编辑动作，不持有 ribbon 桥接状态 | ~410 LOC |
+| `useChatAutoScroll.ts` | 自动滚动、流式跟随、稳定窗口与 `ResizeObserver`；持有滚动 DOM refs，消费/发布跳转最新消息状态机 | ~185 LOC |
 | `message/MarkdownView.tsx` | 唯一的 Markdown 渲染器：无 state / 无 effect / 无打字机，输入即输出；封装 react-markdown + remark 插件 + Prism 语法高亮 + Mermaid + 本地路径检测；用 `React.memo` 包裹 | ~160 LOC |
 | `message/AssistantMessage.tsx` | 渲染单条 assistant 文本消息；消费 `render-items-manager` 预清洗好的 `cleanedText` / `scheduleIds`，装配 MarkdownView、GeneratedFileCards、GeneratedScheduleCards、CopyButton | ~140 LOC |
 | `message/UserMessage.tsx` | 渲染单条用户消息：MarkdownView + AttachmentList + Copy/Edit 按钮 | ~75 LOC |
@@ -33,7 +44,7 @@
 | `interactive/RequestCard.tsx` | 时间线原生渲染器，用于待处理的 `approval`、`choice` 和 `form` 交互；Tailwind className 直接内联，无独立样式模块 | — |
 | `interactive/SearchCard.tsx` | `web research` 的轻量控制卡；三态由全局 `activeChanged` 单飞信号驱动——未开窗时「开始研究」(`startRequest` 才真正打开 research window)、其他研究占用窗口时置灰等待、已开窗时聚焦/取消；含 query/source 计数 | — |
 | `interactive/AuthCard.tsx` | 时间线原生渲染器，用于交互式 CLI 认证提示（设备码、链接、倒计时），使用相同的卡片样式系统 | — |
-| `chat-input/ComposeInput.tsx` | 主聊天输入组件；负责新消息编写、附件/截图、上下文 @-提及、模型选择、thinking level 选择、取消生成与 ErrorBar 展示 | ~290 LOC |
+| `chat-input/ComposeInput.tsx` | 主聊天输入组件；负责新消息编写、附件/截图、上下文 @-提及、模型选择、thinking level 选择与取消生成；会话错误由 ribbon 统一展示 | ~290 LOC |
 | `chat-input/EditInlineInput.tsx` | 内联编辑输入组件；负责编辑已有 user message、附件补充、确认弹窗触发和重新生成提交 | ~220 LOC |
 | `chat-input/shared/useFileHandling.ts` | 输入组件共享 hook;封装拖拽、Electron 文件选择器、浏览器 fallback、截图捕获与 MIME 推断。**附件只「暂存」不落盘**:`addImage`/`addFile`/`addOffice`/`addOthers` 都把原始 `File` 存进 atom 内 `pendingFiles` WeakMap(image 另存 objectURL 预览),附件 URI/dataUrl 留空占位。真正物化推迟到 `attachmentManager.createMessage(text, ctx)`(= 点击发送):image 走 `processImage` IPC(main 用 sharp 按【解码尺寸】判别 inline/sandbox)、其余走 `copyFileToSandbox` → `local://uploads/<name>`。落盘 = 发送,取消/不发则永不进 session `files/uploads/`。**图片阈值判别已搬到 main**(`startup/ipc/attachment.ts` 的 `processImageAttachment`,`width×height×4` vs `IMAGE_INLINE_MAX_BYTES`=256KB,≈256×256;不看编码字节 —— PNG 对截图压得太好):小图回原始 base64 建 `image`+`dataUrl` 内联随消息发送(不压缩),大图落 sandbox 建 `image`+`fileRef` 附件(原图;非 opaque),annotation 把 URI+尺寸告诉模型,模型按需 `read local://uploads/<name>.png`(read backend 按 OpenAI vision 指南压缩后回 base64)。useFileHandling 不再读尺寸、不再判别 | ~300 LOC |
 | `chat-input/shared/useChatInputState.ts` | 输入组件共享 hook；按 `scope`('compose' \| 'edit')选定一组**模块级** textarea/attachments/valid atom（`composeXxxAtom` / `editXxxAtom`，定义在 `Textarea.tsx` / `Attachments.tsx`），并在卸载时清理草稿状态。**不再用工厂动态建 atom** —— compose 与 inline-edit 各自一组具名模块级 atom 即可隔离（框架按 store 懒初始化，每个 atom 持有独立闭包状态），避免旧工厂把 per-mount atom 槽位永久泄漏进 `WithStore` 根 store | 小 |
@@ -41,7 +52,6 @@
 | `chat-input/ThinkingLevelSelector.tsx` | 单聊会话的 thinking level 选择器（pi-ai `ThinkingLevel` 枚举：`minimal/low/medium/high/xhigh`）；仅在活跃模型支持 ≥2 个等级时渲染；写入 `chat.agent.thinkingLevel`，通过 `updateAgent` 持久化到 AGENT.md front-matter。dropdown 顶部 "Auto" 项写入 `thinkingLevel: null` 清除字段，回到 provider 默认 —— 前端不假装知道默认值。运行时由 `pi.streamSimple({ reasoning })` 翻译给各 provider，不再走旧的"Claude→high / GPT→medium"启发式 | 小 |
 | `chat-input/ContextMenu.tsx` | @-提及下拉菜单，用于文件、技能和工作区项目 | — |
 | `chat-input/chatInputCommands.ts` | compose 聊天输入子树的**命令句柄注册表**（替代旧 `chatInput:selectFiles`/`chatInput:screenshot`/`agent:fillInput`/`context:mentionSelect`/`context:skillMentionSelect` window 事件）。consumer 挂载期用 `useRegisterComposeTextHandle`（compose Textarea，`enableContextMenu` 门控，edit 实例不注册）/ `useRegisterComposeFileHandle`（ComposeInput）注册自身方法到模块单例（内部经 ref 转发器，handler 闭包变化免重注册）；producer 直接调 `composeTextCommands.*`（insertMention/insertSkillMention/fillInput）/ `composeFileCommands.*`（selectFiles/screenshot）。**不是 state**——命令式句柄，无 atom/无 re-render/无 nonce diff，只把无类型 `CustomEvent` 换成编译期类型契约 + 可跳转引用。选注册表而非 context：producer 之一 `context-menu.atom.ts` 非 React 组件读不了 context | 小 |
-| `ErrorBar.tsx` | 聊天中的内联错误显示 | — |
 | `../filePreview/ChatFilePreviewOverlay.tsx` | 聊天页 inline 文件预览浮层;满铺 chat-content 区(连 ComposeInput 一起遮住),纯订阅 `ChatFilePreviewAtom` 渲染。聊天子树被 `ChatFilePreviewScope` 包裹，producer 经 `useOpenFilePreview()` 就近命中此 atom（不再监听 `fileViewer:open` 事件）。**外壳薄,渲染共用 `filePreview/FilePreviewPanel`** | — |
 | `chat-side.atom.ts` | `WorkspaceExplorerAtom`（右侧工作区侧栏可见性 + reveal）的 atom；`effectiveToggle` 打开侧栏时顺带 `ChatFilePreviewAtom.cancel()`。文件预览状态已迁到 `filePreview/filePreview.atom.ts` | — |
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
@@ -108,11 +118,13 @@ ChatView (路由同步, 会话操作)
 - `ToolCallsSection` 只收 `isLive: boolean`(连 `chatStatus` 都不再要),状态函数 3 行: `allDone? completed : !isLive? interrupted : (有部分? partial : executing)`。
 
 ### 滚动管理
-`ChatContainer.useAutoScroll` 把滚动所有权与反向消息布局分离：外层 `.chat-container-reverse` 是滚动容器，内层反向流包装器处理 `column-reverse`。触发跟随滚动的入口：
+`useChatAutoScroll` 把滚动所有权与反向消息布局分离：外层 `.chat-container-reverse` 是滚动容器，内层反向流包装器处理 `column-reverse`。触发跟随滚动的入口：
 - **首屏 / 会话切换 / 用户消息追加** → `messages.length` effect，`force: true`
 - **流式 chunk** → 监听 streaming message 的文本长度变化（`streamingMessageTextLength` memo + effect），每个 chunk 顺势 `scheduleLatestScroll`
 - **ResizeObserver** → 在 1500ms `stabilizationWindow` 内对 message-flow 容器尺寸变化做兜底
-- **手动跳转** → `JumpToLatest` 按钮
+- **手动跳转** → `JumpToLatestItem` 仅在 `JumpToLatestAtom.isAvailable` 时可点；其 action 递增 request nonce，`useChatAutoScroll` 消费后执行强制滚动
+
+`ChatViewContent` 不参与跳转状态传递：ribbon 与滚动 hook 通过 `ribbon/JumpToLatest.tsx` 内联的 atom 通信，DOM refs 与实际滚动仍完全归 `useChatAutoScroll` 所有。
 
 流式与 ResizeObserver 驱动的滚动都会受 `userScrolledAwayRef` 阈值保护（用户上滚后不再被拉下去），只有 `force: true` 调用才会复位该标志。`agentId` 不得用来驱动重置 — 会话历史切换可以在相同的聊天标识下发生。
 
@@ -137,13 +149,13 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 添加新的工具调用展示 | 顶层工具：新建 `tool/renderers/<tool>/index.tsx`（export `<tool>Renderer: ToolRenderer`）+ `tool/registerBuiltins.ts` 加一行 `registerToolRenderer('<tool>', <tool>Renderer)`。子命令域（如 `app mcp`）：新建 `tool/renderers/app/<sub>/`（export 子 renderer + `resolve<Sub>Renderer(tokens)` 路由），在 `tool/renderers/app/index.tsx` 的 `pickSubRenderer` 加一行委派 | 三个点位 chip / input / output 每个可细（label / argsText / resultText）或粗（Chip / InputBlock / OutputSuccessBlock）二选一覆盖；output 额外允许 OutputExecutingBlock。**注意**：粗粒度 block 一旦提供就完全接管该 slot，多层兜底由 renderer 自己内部承担 |
 | 区分 MCP 工具调用 | `shared/persist/types/message.ts` 的 `ToolCall.mcp` 是 Domain / 历史真值，值为 MCP server 名称；`session/regular.ts` 从本轮 catalog 投影，`streamingTypes.ts` / `session-manager.ts` 保持流式首帧一致；`ToolChip.tsx` 用字段是否存在展示 Plug + 紫色变体,并把 server 名称放进 hover tooltip | 旧历史无 `mcp`，按本地工具样式兼容 |
 | 添加新的渲染项类型 | `lib/chat/render-items-manager.ts`（`ChatRenderItem` 联合类型 + `computeRenderItems` + `isSameRenderItem`） + `ChatRenderItem.tsx`（`ChatRenderItemComponent` 分发） | derived 字段一并加入 `MessageDerived` + `reuseUnchangedItems` 复用判定 |
-| 修改主聊天输入行为 | `chat-input/ComposeInput.tsx` | 涉及发送、取消生成、模型选择和 ErrorBar |
+| 修改主聊天输入行为 | `chat-input/ComposeInput.tsx` + `ribbon/ErrorBar.tsx` | 涉及发送、取消生成、模型选择和会话错误展示 |
 | 修改内联编辑输入行为 | `chat-input/EditInlineInput.tsx` | 涉及编辑确认、重新生成、编辑态附件与取消按钮 |
 | 修改两种输入共享的附件/截图逻辑 | `chat-input/shared/useFileHandling.ts` + `chat-input/Attachments.tsx`(atom) | 同时影响 compose 和 inline edit,两边都要回归。物化推迟到发送:新增 attach 路径(自定义来源等)只需把原始 `File` 交给 `attachmentManager.addXxx`,`createMessage` 发送时统一走 `copyFileToSandbox` 落盘;**切勿在 attach 阶段调 `copyFileToSandbox`**,否则又会未发送先落盘 |
 | 修改用户消息附件展示 | `message/AttachmentList.tsx` | image / file / office / others 共用 |
 | 更改 approval / choice / form 交互 | `interactive/RequestCard.tsx`、`ChatRenderItem.tsx`、`agentSessionCacheManager.ts` | 待处理请求经 `render-items-manager` 进入渲染流水线，由 `ChatRenderItemComponent` 分发 |
 | 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`entries/main.routes.tsx` 中的路由、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS`、`agent-area/AgentEditingView.tsx` 的 Tab 渲染分支 | 遵循现有标签页外壳模式 |
-| 修改滚动行为 | `ChatContainer.tsx` — `useAutoScroll` hook | 始终验证基于 `chatSessionId` 的重置；流式跟随由 `streamingMessageTextLength` effect 驱动 |
+| 修改滚动行为 | `useChatAutoScroll.ts` hook（由 `ChatContainer.tsx` 消费） | 始终验证基于 `chatSessionId` 的重置；流式跟随由 `streamingMessageTextLength` effect 驱动 |
 
 ## 联动变更映射
 | 变更内容 | 同时需要修改 |

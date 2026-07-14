@@ -68,55 +68,6 @@
   }
 }
 
-// Jump-to-latest 悬浮按钮：伪类 + dark media，shadcn Button 之外的完整视觉
-.chat-jump-to-latest-button {
-  position: absolute;
-  left: 20px;
-  bottom: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid rgba(166, 166, 166, 0.35);
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.85);
-  color: rgb(68, 68, 68);
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(28, 28, 28, 0.12);
-  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
-  z-index: 5;
-
-  &:hover {
-    background: rgba(255, 255, 255, 1);
-    box-shadow: 0 6px 16px rgba(28, 28, 28, 0.18);
-    transform: translateY(-1px);
-  }
-
-  &:active {
-    transform: translateY(0);
-    box-shadow: 0 3px 8px rgba(28, 28, 28, 0.14);
-  }
-
-  &:focus-visible {
-    outline: 2px solid rgba(0, 0, 0, 0.6);
-    outline-offset: 2px;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    background: rgba(45, 45, 45, 0.85);
-    color: rgb(233, 233, 233);
-    border-color: rgba(166, 166, 166, 0.25);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-
-    &:hover {
-      background: rgba(45, 45, 45, 1);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
-    }
-  }
-}
-
 // Loading boundary 容器：height/opacity 过渡 + :has() / .has-loading 展开态
 .message-boundary-container {
   height: 0;

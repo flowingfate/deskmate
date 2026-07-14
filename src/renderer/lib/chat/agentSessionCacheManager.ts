@@ -462,9 +462,7 @@ export function useStreamingMessageId(): string | null {
   return cache?.streamingMessageId || null;
 }
 
-const SubCurrentSid = external(currentSessionStore.subscribe);
-
-export const CurrentSessionError = SubCurrentSid(() => {
+export const CurrentSessionError = SubCurrentSession(() => {
   const cache = agentSessionCacheManager.getCurrentChatSessionCache();
   return cache?.errorMessage || null;
 });

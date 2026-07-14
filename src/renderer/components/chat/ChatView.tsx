@@ -128,6 +128,12 @@ const ChatView: React.FC<ChatViewProps> = memo(({ kind = 'regular' }) => {
     }
   }, [agentId, handleEditAgent]);
 
+  const handleOpenTools = useCallback(() => {
+    if (agentId) {
+      handleEditAgent(agentId, 'tools');
+    }
+  }, [agentId, handleEditAgent]);
+
   // Skills handler - open editor and navigate to Skills tab
   const handleOpenSkills = useCallback(() => {
     if (agentId) {
@@ -143,7 +149,7 @@ const ChatView: React.FC<ChatViewProps> = memo(({ kind = 'regular' }) => {
           <ChatViewHeader
             onOpenMcpTools={handleOpenMcpTools}
             onOpenSkills={handleOpenSkills}
-            currentChatSessionId={chatSessionId}
+            onOpenTools={handleOpenTools}
           />
         </AgentPane.Head>
         <AgentPane.Body>

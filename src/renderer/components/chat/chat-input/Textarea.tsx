@@ -412,12 +412,8 @@ export function TextArea(props: TextAreaProps) {
         onPaste={handlePaste}
         readOnly={readOnly}
         title={title}
-        placeholder={
-          supportsImages
-            ? 'Type a message, drag files/images, paste screenshot, @ to mention files & skills...'
-            : 'Type a message, drag files, @ to mention files & skills...'
-        }
-        className="w-full resize-none border-none px-5 py-0 m-0 text-[13px] leading-[1.6] bg-transparent text-[#1a1a1a] outline-none font-[inherit] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden relative z-2 field-sizing-content min-h-[3lh] max-h-[8lh] placeholder:text-[#a3a3a3] disabled:opacity-50 disabled:cursor-not-allowed"
+        placeholder="Message Deskmate…"
+        className="w-full resize-none border-none px-5 py-0 m-0 text-[13px] leading-[1.6] bg-transparent text-[#1a1a1a] outline-none font-[inherit] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden relative z-2 field-sizing-content min-h-[3lh] max-h-[8lh] placeholder:text-black/25 disabled:opacity-50 disabled:cursor-not-allowed"
       />
     </div>
   );
