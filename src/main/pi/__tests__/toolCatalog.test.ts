@@ -26,7 +26,7 @@ vi.mock('@earendil-works/pi-ai', async () => ({
 }));
 
 import { listAllMcpTools } from '../mcp';
-import { buildToolCatalogForAgent, buildToolCatalogForSubAgent, ToolCatalog } from '../toolCatalog';
+import { buildToolCatalogForAgent, buildToolCatalogForSubAgent, ToolCatalog } from '../tool';
 import { tools as localRegistry } from '../tools/registry';
 
 // 把 tools/index 副作用先跑一遍(它会注册所有真实工具),让后续

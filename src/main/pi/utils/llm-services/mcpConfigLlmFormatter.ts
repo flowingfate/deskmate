@@ -1,4 +1,4 @@
-import { runUtilityCompletion } from '@main/pi/utility';
+import { runUtilityCompletion } from '@main/pi/utils/utilityCompletion'
 import type { McpConfigFormatterResponse } from '@shared/types/llmTypes';
 export type { McpConfigFormatterResponse } from '@shared/types/llmTypes';
 

@@ -34,13 +34,18 @@ import { parseAgentModel } from '@shared/utils/agentModelId';
 import { CancellationError } from '@main/lib/utilities/errors';
 import { log } from '@main/log';
 
-import { resolveModel, resolveCredentials } from '@main/pi/model';
-import { toPiContext, fromPiAssistantMessage } from '@main/pi/utils/messageBridge';
-import { deriveToolTracer, executeToolCall } from '@main/pi/tool';
-import type { ToolCatalog } from '@main/pi/toolCatalog';
-import type { ToolContext } from '@main/pi/tools/types';
-import { checkAndCompress } from '@main/pi/compression';
-import { classifyError } from '@main/pi/errors';
+import {
+  checkAndCompress,
+  classifyError,
+  deriveToolTracer,
+  executeToolCall,
+  fromPiAssistantMessage,
+  resolveCredentials,
+  resolveModel,
+  toPiContext,
+  type ToolCatalog,
+  type ToolContext,
+} from '@main/pi';
 import { Tracer } from '@shared/log/trace';
 const logger = log;
 

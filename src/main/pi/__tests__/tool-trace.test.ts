@@ -9,9 +9,8 @@ vi.mock('@main/pi/mcp', () => ({
   listAllMcpTools: vi.fn().mockResolvedValue([]),
 }));
 
-import { executeToolCall, type ToolCallInput } from '../tool';
+import { executeToolCall, ToolCatalog, type ToolCallInput } from '../tool';
 import type { ToolContext } from '../tools/types';
-import { ToolCatalog } from '../toolCatalog';
 import { Tracer } from '@shared/log/trace';
 import { executeMcpToolOnServer } from '../mcp';
 

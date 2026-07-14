@@ -89,7 +89,7 @@ export const tools = new ToolsRegistry();
  * 部分 wrapper(`createScheduleTool` → `SchedulerManager` → `@main/pi`)
  * 会回引 pi 子树,直接静态 import 会形成循环。
  *
- * 所有需要"工具已注册"的入口(`toolCatalog.buildToolCatalogFor*`、
+ * 所有需要"工具已注册"的入口(`tool.ts::buildToolCatalogFor*`、
  * `startup/ipc/tools.ts`)统一调本函数,内部惰性 dynamic import
  * `./index.ts`,首次触发其顶层 `registerAllTools()`,后续命中
  * module cache;并发首调由共享的 `toolsReady` promise 去重。

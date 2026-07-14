@@ -23,7 +23,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { InternalUrlRouter } from '@main/pi/internal-urls';
+import { InternalUrlRouter } from '@main/pi';
 
 export interface AttachContext {
   agentId: string;

@@ -25,15 +25,18 @@ import type { SubAgentConfig } from '@shared/persist/types'
 import { log } from '@main/log';
 import { Tracer } from '@shared/log/trace';
 
-import { wrapInSystemReminder } from '@main/pi/utils/systemReminderUtils';
+import {
+  ToolCatalog,
+  buildToolCatalogForSubAgent,
+  runUtilityCompletion,
+  wrapInSystemReminder,
+} from '@main/pi';
 import { getProfileSkillsDir } from '@main/persist/lib/path';
 import { skillManager } from '../skill';
-import { runUtilityCompletion } from '@main/pi/utility';
 import { createUserMessage } from '@shared/utils/messageFactory';
 
 import type { SubAgentChatOptions } from './types';
 import { SubAgentSession, type SubAgentSessionHooks } from './subAgentSession';
-import { buildToolCatalogForSubAgent, ToolCatalog } from '@main/pi/toolCatalog';
 const logger = log;
 
 // ---------------------------------------------------------------------------

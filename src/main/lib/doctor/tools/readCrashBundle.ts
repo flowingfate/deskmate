@@ -11,7 +11,7 @@
  */
 
 import type { Tool } from '@earendil-works/pi-ai';
-import { jsonSchema } from '@main/pi/tools/schema';
+import { jsonSchema } from '@main/pi';
 import * as fs from 'fs';
 import * as path from 'path';
 import { crashCaptureManager } from '../../crash/CrashCaptureManager';

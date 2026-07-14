@@ -53,7 +53,7 @@ vi.mock('@main/pi/appcmd/builtins/web/kernel/download', () => ({
 // 被测对象 —— 必须在 vi.mock 之后再 import
 // ---------------------------------------------------------------------------
 import { dispatchAppCommand, formatAppCmdContent } from '@main/pi/appcmd/dispatcher';
-import { makeRouterCommand } from '@main/pi/appcmd/router';
+import { makeRouterCommand } from '@main/pi/appcmd/makeRouterCommand';
 // side-effect import:把 hello / mcp / ... 注册进全局 appCommands(其它 test
 // 可能依赖)。`web` 自己不再进 appCommands —— 它有独立的 `webCommands` 注册表。
 import '@main/pi/appcmd/builtins/app';

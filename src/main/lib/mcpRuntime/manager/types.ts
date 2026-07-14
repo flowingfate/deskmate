@@ -8,11 +8,11 @@
 import type { Tool as SdkTool } from '@modelcontextprotocol/sdk/types.js';
 
 /**
- * MCP tool as surfaced to `mcpClientManager` / `pi/toolCatalog`.
+ * MCP tool as surfaced to `mcpClientManager` / `pi/tool`.
  *
  * 结构对齐 `McpClient.getTools()` 与 `mcpClientManager.getAllTools()`:
  * `inputSchema` 保持 `unknown`(等价于历史 `any`,但在本模块内不再引入 `any`),
- * 由 `toolCatalog` 侧包成 typebox `Type.Unsafe`。
+ * 由 `pi/tool.ts` 的 catalog 段包成 typebox `Type.Unsafe`。
  */
 export interface Tool {
   name: string;

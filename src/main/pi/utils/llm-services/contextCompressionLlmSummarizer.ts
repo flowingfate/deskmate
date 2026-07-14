@@ -1,4 +1,4 @@
-import { runUtilityCompletion } from '@main/pi/utility';
+import { runUtilityCompletion } from '@main/pi/utils/utilityCompletion'
 import { log } from '@main/log';
 import { TokenCounter } from '@main/lib/token';
 import { Tracer } from '@shared/log/trace';

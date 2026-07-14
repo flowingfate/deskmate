@@ -23,8 +23,7 @@
 import { ipcMain } from 'electron';
 
 import type { Context } from './shared';
-import { getPiAuthManager } from '@main/pi/auth';
-import { listModels, getModelInfo, type ResolvedModel } from '@main/pi/model';
+import { getModelInfo, getPiAuthManager, listModels, type ResolvedModel } from '@main/pi';
 import { parseAgentModel } from '@shared/utils/agentModelId';
 import { Profiles } from '@main/persist';
 import { renderToMain, mainToRender, type PiModelListItem, type PiModelInfo } from '@shared/ipc/pi';

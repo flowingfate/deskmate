@@ -30,7 +30,7 @@
 ## 架构
 
 ```
-pi/session.ts (RegularSession / JobRun)
+pi/session/ (RegularSession / JobRun)
         │
         ▼
 pi/tool.ts::executeToolCall(call, catalog, ctx)
@@ -56,7 +56,7 @@ pi/tool.ts::executeToolCall(call, catalog, ctx)
 查全局 toolToServerMap"的歧义路径 —— 后者已删,task.md §1 描述的"同名工具
 后连接者覆盖前者"bug 不再可能复现。
 
-LLM-facing MCP 名称由 `pi/toolCatalog.ts` 组合为 `serverName/toolName`，以便多个
+LLM-facing MCP 名称由 `pi/tool.ts` 的 catalog 段组合为 `serverName/toolName`，以便多个
 server 同时暴露同名 tool；执行前通过本轮 `ToolCatalog.getRoute(llmName)` **精确查表**恢复
 原始 server / tool 名，绝不按 `/` 字符串反解。
 
@@ -156,7 +156,7 @@ consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
 
 - 依赖:[Terminal Manager](../terminal/) —— stdio MCP server 作为受管终端进程生成。
 - 被依赖:[`src/main/pi/`](../../pi/ai.prompt.md) —— `pi/mcp.ts::executeMcpToolOnServer`
-  调本子系统;`pi/toolCatalog.ts` 用 `getAllTools()` 列举 external MCP server 工具。
+  调本子系统;`pi/tool.ts` 的 catalog 段用 `getAllTools()` 列举 external MCP server 工具。
 - 被依赖:[`src/main/pi/tools/`](../../pi/tools/ai.prompt.md) —— 本地工具子系统
   独立,仅在文档层引用本模块。
 - 被依赖:[Renderer MCP UI](../../../renderer/components/mcp/) —— 通过 `mcp:*` IPC

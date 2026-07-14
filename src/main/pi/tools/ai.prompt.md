@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-13 -->
+<!-- Last verified: 2026-07-14 (pi session 重构为 session/ 子模块) -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -67,7 +67,7 @@ interface ToolContext {
   null chunkStream;chat-bound 工具(executeCommand / spawn 等)在此路径会因
   ctx 不全在 handler 内抛错(预期行为)。
 
-### per-turn ToolCatalog(`pi/toolCatalog.ts`)
+### per-turn ToolCatalog(`pi/tool.ts` 的 catalog 段)
 
 ```ts
 class ToolCatalog {
@@ -189,7 +189,7 @@ async function loadImpl() {
 
 ## 相关模块
 
-- 被依赖:[Chat 引擎(pi)](../ai.prompt.md) —— `pi/tool.ts` / `pi/session.ts`
+- 被依赖:[Chat 引擎(pi)](../ai.prompt.md) —— `pi/tool.ts` / `pi/session/`
   per-turn 构建 catalog 后透传 ctx 到 `executeToolCall`。
 - 被依赖:[Sub-Agent](../../lib/subAgent/) —— `subAgentChat.buildToolCatalog` +
   `subAgentSession.runTurn(catalog)` 给 sub-agent 也走 catalog + ctx。

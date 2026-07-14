@@ -37,7 +37,7 @@ Message,
 ToolCall,
 UserMessage, } from '@shared/persist/types'
 import { newMessageId } from '@shared/utils/messageFactory';
-import type { ToolCatalog } from '../toolCatalog';
+import type { ToolCatalog } from '../tool';
 import { buildFileAnnotationText } from './fileAnnotation';
 import { formatClientLocalTime } from './localTime';
 

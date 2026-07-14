@@ -1,9 +1,7 @@
 import { ipcMain } from 'electron';
 
 import type { Context } from './shared';
-import { SystemPromptLlmWriter } from "@main/pi/utils/systemPromptLlmWritter";
-import { McpConfigLlmFormatter } from "@main/pi/utils/mcpConfigLlmFormatter";
-import { FileNameLlmGenerator } from "@main/pi/utils/fileNameLlmGenerator";
+import { FileNameLlmGenerator, McpConfigLlmFormatter, SystemPromptLlmWriter } from '@main/pi';
 import { Profiles } from '@main/persist';
 import { renderToMain } from '@shared/ipc/llm';
 

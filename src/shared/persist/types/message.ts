@@ -10,7 +10,7 @@
  * 本文件是 IPC 契约 + 主进程 canonical：跨进程类型只能从这里 import。
  * Domain ↔ Persisted 的互转 (rehydrate / dehydrate) 落在 `main/persist/messageWire.ts`，
  * Render 形态 (RenderMessage) 落在渲染进程，不在 shared 层堆积；Resume 判定
- * (`ResumeAction` + `planResume`) 是主进程内部状态机，定义落在 `main/pi/resume.ts`。
+ * (`ResumeAction` + `planResume`) 是主进程内部状态机，定义落在 `main/pi/utils/resume.ts`。
  * 设计原则：
  *   - **数组字段必填，默认空数组**。消费方不写 `?? []`；Persisted 落盘时空数组省略。
  *   - **Message 顶层只有 user / assistant** —— tool 结果折进 ToolCall.response，

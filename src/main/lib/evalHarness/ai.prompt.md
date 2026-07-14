@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-14 (会话上下文 schema 统一由 shared/persist/types 导出) -->
+<!-- Last verified: 2026-07-14 (pi 外部依赖统一经 @main/pi 根入口) -->
 # Eval Harness
 
 > 用于与 AgenticEval（外部 agent 评估系统）集成的 HTTP 服务器。暴露 `/eval/health`、`/eval/run` 和 `/eval/judge` 接口，支持单轮和多轮评估会话。
@@ -21,7 +21,7 @@
 - **多轮：** 带 `session_id` 的 `run_test` 会复用缓存的 `AgentChat`。每个会话通过基于 Promise 的锁串行化轮次，防止并发修改。会话在闲置 15 分钟后或超出容量（10 个会话）时被驱逐。
 - **超时安全：** 首轮请求传入 `AbortSignal`，防止超时的运行泄漏到会话缓存。若信号在缓存前被终止，agent 立即销毁。
 - **无持久化：** Eval 会话使用 `setSkipPersistence(true)`，`AgentChatSessionService.saveChatSession()` 会短路。不向磁盘写入会话数据，也无需 UI 过滤。
-- `judge` 走 `pi/utility#runUtilityChat`（多 provider；非流式；不带工具）。
+- `judge` 走 `@main/pi` 导出的 `runUtilityChat`（实现位于 `pi/utils/utilityCompletion.ts`；多 provider；非流式；不带工具）。
 
 ## Endpoints
 | Method | Path | Purpose |

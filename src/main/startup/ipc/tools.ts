@@ -17,8 +17,8 @@ import { Tracer } from '@shared/log/trace';
 // `tools/registry` 是纯模块级单例,不会触发 cycle —— 真正注册副作用在
 // `tools/index`,由每个 handler 入口 `await ensureToolsRegistered()` 懒拉。
 // **不要**在本文件顶层 static-import `../../pi/tools`:那会与
-// `pi/toolCatalog` 的 dynamic import 形成 mixed-import,被 repo lint 拒。
-import { tools, ensureToolsRegistered } from '../../pi/tools/registry';
+// `pi/tools/registry.ts` 对 `./index` 的 dynamic import 形成 mixed-import,被 repo lint 拒。
+import { tools, ensureToolsRegistered } from '@main/pi';
 
 import type { Context } from './shared';
 export default function setUpToolsIPC(_ctx: Context) {

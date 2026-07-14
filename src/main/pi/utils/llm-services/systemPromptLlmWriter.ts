@@ -1,4 +1,4 @@
-import { runUtilityCompletion } from '@main/pi/utility';
+import { runUtilityCompletion } from '@main/pi/utils/utilityCompletion'
 import type { SystemPromptWriterResponse } from '@shared/types/llmTypes';
 export type { SystemPromptWriterResponse } from '@shared/types/llmTypes';
 

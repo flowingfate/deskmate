@@ -16,7 +16,7 @@
 import type { Api, Model, Message as PiMessage } from '@earendil-works/pi-ai';
 import type { ThinkingLevel } from '@shared/persist/types'
 
-import { resolveModel, resolveCredentials } from './model';
+import { resolveModel, resolveCredentials } from '../model';
 import { parseAgentModel } from '@shared/utils/agentModelId';
 
 /** 与 OpenAI chat completion 协议三角色对齐；utility 不带工具 */
@@ -84,14 +84,14 @@ export async function runUtilityCompletion(opts: RunUtilityCompletionOptions): P
 export async function runUtilityChat(opts: RunUtilityChatOptions): Promise<string> {
   const parsed = parseAgentModel(opts.modelKey);
   if (!parsed) {
-    throw new Error(`[pi/utility] Invalid modelKey: ${opts.modelKey}`);
+    throw new Error(`[pi/utilityCompletion] Invalid modelKey: ${opts.modelKey}`);
   }
   const profileId = opts.profileId;
   if (!profileId) {
-    throw new Error('[pi/utility] profileId is required');
+    throw new Error('[pi/utilityCompletion] profileId is required');
   }
   if (opts.messages.length === 0) {
-    throw new Error('[pi/utility] messages must not be empty');
+    throw new Error('[pi/utilityCompletion] messages must not be empty');
   }
 
   const baseModel: Model<Api> = await resolveModel(parsed);
@@ -99,7 +99,7 @@ export async function runUtilityChat(opts: RunUtilityChatOptions): Promise<strin
 
   const { systemPrompt, piMessages } = splitSystemAndChat(opts.messages);
   if (piMessages.length === 0) {
-    throw new Error('[pi/utility] messages must include at least one user/assistant turn');
+    throw new Error('[pi/utilityCompletion] messages must include at least one user/assistant turn');
   }
 
   const pi = await import('@earendil-works/pi-ai');

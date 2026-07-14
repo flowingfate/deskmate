@@ -6,12 +6,12 @@
 import { ContextCompressionLlmSummarizer } from '../contextCompressionLlmSummarizer';
 import { TokenCounter } from '@main/lib/token';
 
-// Mock pi/utility to prevent real API calls
-vi.mock('@main/pi/utility', () => ({
+// Mock utility completion to prevent real API calls
+vi.mock('@main/pi/utils/utilityCompletion', () => ({
   runUtilityCompletion: vi.fn(),
 }));
 
-import { runUtilityCompletion } from '@main/pi/utility';
+import { runUtilityCompletion } from '@main/pi/utils/utilityCompletion'
 const mockRun = vi.mocked(runUtilityCompletion);
 
 describe('ContextCompressionLlmSummarizer', () => {

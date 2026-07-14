@@ -13,7 +13,7 @@
  *   - `executeToolOnServer` 的最终派发。
  *
  * **执行入口只有 `executeToolOnServer({ serverName, ... })`**,server 必须
- * 由 `pi/toolCatalog` 的 route 显式给出。历史"按裸 toolName 查全局 map"的
+ * 由 `pi/tool` 的 route 显式给出。历史"按裸 toolName 查全局 map"的
  * 路径已删,详见 [ai.prompt.md] "注意事项 > server-scoped"。
  */
 
@@ -120,7 +120,7 @@ export class MCPClientManager {
   }
 
   /**
-   * Server-scoped 工具执行。caller 必须已经通过 `toolCatalog.routes` 按 LLM
+   * Server-scoped 工具执行。caller 必须已经通过 `pi/tool.ts` 的 `ToolCatalog.getRoute`
    * 限定名精确拿到 `{ kind: 'mcp', serverName, toolName }`，不要新增按裸
    * toolName 查全局 map 的 API；那条路径存在同名工具后连接者覆盖前者的 bug。
    */

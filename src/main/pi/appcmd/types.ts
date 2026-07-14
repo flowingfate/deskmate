@@ -57,8 +57,8 @@ export interface AppCmdContext {
 
   /**
    * sub-agent 链路标记。`subagent` 命令用它做递归保护:`true` 时拒绝
-   * spawn(返回 exit 1)。其它 AppCommand 一律忽略 —— 是否允许 sub-agent
-   * 调用本命令由 toolCatalog 决定,不在命令内部判断。
+   * spawn(返回 exit 1)。其它 AppCommand 一律忽略此标记；是否允许调用由各命令
+   * 自身契约决定，不在共享类型层判断。
    */
   isSubAgent: boolean;
 

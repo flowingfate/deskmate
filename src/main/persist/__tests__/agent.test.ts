@@ -337,7 +337,7 @@ describe('Agent rename via patchFront', () => {
    *
    * 这里只验证持久化形态:patchFront 写入 → AGENT.md 落盘 → reload 后 round-trip
    * 一致(不会被序列化器悄悄丢字段,也不会回读时归一掉显式空数组)。
-   * "默认全开"的运行语义由 `pi/toolCatalog.test.ts` 覆盖。
+   * "默认全开"的运行语义由 `pi/__tests__/toolCatalog.test.ts` 覆盖。
    */
   it('patchFront({ tools }) 落盘 + reload round-trip;空数组与具体列表都保留', async () => {
     const { Profiles } = await freshModules();
@@ -359,7 +359,7 @@ describe('Agent rename via patchFront', () => {
     expect(reloaded1?.toDetail().tools).toEqual(['read', 'write']);
 
     // 2. 改为显式空数组 ⇒ 仍是空数组(而不是被序列化器吞成 undefined)
-    //    —— "[] = 全开" 的语义解释由 toolCatalog 负责,持久化层只负责忠实落盘。
+    //    —— "[] = 全开" 的语义解释由 ToolCatalog 负责,持久化层只负责忠实落盘。
     await reloaded1!.patchFront({ tools: [] });
     expect(reloaded1!.config.tools).toEqual([]);
 

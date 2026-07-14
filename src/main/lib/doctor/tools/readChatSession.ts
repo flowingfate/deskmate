@@ -6,7 +6,7 @@
  */
 
 import type { Tool } from '@earendil-works/pi-ai';
-import { jsonSchema } from '@main/pi/tools/schema';
+import { jsonSchema } from '@main/pi';
 import type { DoctorSessionFile } from '../chatSession/types';
 import { Profiles } from '../../../persist';
 import { formatSkeleton } from '../chatSession/skeletonFormatter';

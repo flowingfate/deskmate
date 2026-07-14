@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-03 (完成通知分流：主窗口前台走 in-app toast，后台走系统通知) -->
+<!-- Last verified: 2026-07-14 (pi session 重构为 session/ 子模块) -->
 # Scheduler
 
 > 注册并触发基于时间的任务（cron 或一次性）。每次触发由 `ScheduleJob.startRun` 在 persist 内开一个独立的 schedule_run session，`pi.JobRun` 跑静默 turn loop，跑完 `finishRun` 落 runState 并发完成通知（`notifyOnCompletion !== false`）。完成通知分流：主窗口前台聚焦时经 `notification` IPC 通道让 renderer 弹 in-app toast（macOS 会静默丢弃前台 App 自发的系统通知），否则回落系统级 `new Notification`。
@@ -124,6 +124,6 @@ pending → running → completed | failed
 - [persist/schedulerState.ts](../../persist/schedulerState.ts) — `SchedulerState`：cold-start baseline + pending catchup store
 - [persist/agent.ts](../../persist/agent.ts) — `Agent.createJob / getJob / scheduleRegistry`
 - [persist/profile.ts](../../persist/profile.ts) — `listJobsFlat / findJob`
-- [pi/session.ts](../../pi/session.ts) — `BaseSession` / `RegularSession` / `JobRun`（`JobRun` 即静默 turn loop）
+- [pi/session/](../../pi/session/) — `BaseSession` / `RegularSession` / `JobRun`（`JobRun` 即静默 turn loop）
 - [lib/notification/sessionCompletion.ts](../notification/sessionCompletion.ts) — 系统通知
 - [ai.prompt/persist.md](../../../../ai.prompt/persist.md) — Schedule 物理隔离、`runState` 状态机、SQLite 索引架构

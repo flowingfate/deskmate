@@ -14,7 +14,7 @@ import type { Usage as PiUsage } from '@earendil-works/pi-ai';
 
 import { buildLlmContext } from '@main/pi/utils/buildLlmContext';
 import { createFullModeCompressor, type FullModeCompressor, type SummarizeImpl } from '@main/lib/compression/fullModeCompressor';
-import { contextCompressionLlmSummarizer } from '@main/pi/utils/contextCompressionLlmSummarizer';
+import { contextCompressionLlmSummarizer } from '@main/pi/utils/llm-services/contextCompressionLlmSummarizer';
 import { Tracer } from '@shared/log/trace';
 import { log } from '@main/log';
 

@@ -1,4 +1,4 @@
-import { runUtilityCompletion } from '@main/pi/utility';
+import { runUtilityCompletion } from '@main/pi/utils/utilityCompletion'
 import { log } from '@main/log';
 import type { FileNameGeneratorResponse } from '@shared/types/llmTypes';
 export type { FileNameGeneratorResponse } from '@shared/types/llmTypes';

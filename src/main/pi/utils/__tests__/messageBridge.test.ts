@@ -13,7 +13,7 @@ import type {
   AssistantMessage as PiAssistantMessage,
   Tool as PiTool,
 } from '@earendil-works/pi-ai';
-import { ToolCatalog, type ToolRoute } from '../../toolCatalog';
+import { ToolCatalog, type ToolRoute } from '../../tool';
 
 const piAssistant = (overrides: Partial<PiAssistantMessage> = {}): PiAssistantMessage => ({
   role: 'assistant',

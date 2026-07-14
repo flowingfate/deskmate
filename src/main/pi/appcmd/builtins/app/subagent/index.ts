@@ -17,7 +17,7 @@
  *     `ParallelSubAgentsToolCallView` 解析的就是这个;`--json` flag 走 forward-
  *     compat 但不改变输出形态。
  *   - 递归保护(`isSubAgent` 拦截)在每个 subcommand 里 `ensureSpawnPrerequisites`
- *     做,**不**依赖 toolCatalog 二次过滤 —— `app` 工具本身不能从 sub-agent
+ *     做,**不**依赖 catalog 构建阶段按名称二次过滤 —— `app` 工具本身不能从 sub-agent
  *     catalog 移除(那等于禁掉所有应用能力),所以保护必须下沉到命令内部。
  */
 import type { AppCommand } from '../../../types';

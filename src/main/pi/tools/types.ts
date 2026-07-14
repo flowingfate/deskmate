@@ -21,7 +21,7 @@ import type { Tracer } from '@shared/log/trace';
 import type { SubAgentConfig } from '@shared/persist/types'
 import type { WebContents } from 'electron';
 
-import type { ToolCatalog } from '../toolCatalog';
+import type { ToolCatalog } from '../tool';
 
 /**
  * Tool 结果。成功时 `content` 是 LLM 可见的字符串(与 MCP tool result 等价

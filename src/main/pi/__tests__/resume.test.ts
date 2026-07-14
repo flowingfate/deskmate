@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { planResume } from '../resume';
+import { planResume } from '../utils/resume';
 import type { AssistantMessage,
 Message,
 ToolCall,

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-14 (SubAgentConfig schema 收敛至 shared/persist/types/) -->
+<!-- Last verified: 2026-07-14 (pi 外部依赖统一经 @main/pi 根入口) -->
 # Sub-Agent System
 
 > 在父 agent 对话中按需 spawn / 控制生命周期 / 报告结果的轻量 sub-agent。
@@ -20,11 +20,11 @@
   - **追踪 deliverables**：两条来源 —— ① `write`（顶层工具）按 `toolArgs.fileUri` 入册；② shell 命令（`web download` 等）经**结构化 `ToolResult.deliverables` 回流**入册（`AppCmdContext.addDeliverable` → dispatcher → facade → `executeToolCall` → hook，toolName 无关，不解析 cmdline）。最终结果末尾汇报。`present_deliverables` 工具已下线，UI 端改为扫描 assistant 收尾文字里的 URI 渲染卡片；后台 audit 仍由这两条自动追踪兜底。
 - **SubAgentSession** 自己维护内存 messages 数组（不落盘）。不继承 `BaseSession` —— sub-agent 是 wrapper 控 turn 节奏，借不到 30-轮 for loop 抽象，自己写 ~200 行 turn loop 复用 pi 原子能力：
   - `pi.stream`（动态 import）做 SSE 解析与 tool call args parse
-  - `pi/compression.checkAndCompress` —— 阈值通过构造参数注入 0.60（vs 主 chat 0.85）
-  - `pi/tool.executeToolCall(scope)` 透传 `isSubAgent: true`，让 `app subagent ...` 的递归保护生效
-  - `pi/model.resolveModel + resolveCredentials` 跨 provider 解析（baseUrl 按 fresh OAuth credentials 派生，GHC enterprise 账户必经；`resolveApiKey` 不要用，stream 路径只用 `resolveCredentials`）
+  - `@main/pi` 导出的 `checkAndCompress` —— 阈值通过构造参数注入 0.60（vs 主 chat 0.85）
+  - `@main/pi` 导出的 `executeToolCall(scope)` 透传 `isSubAgent: true`，让 `app subagent ...` 的递归保护生效
+  - `@main/pi` 导出的 `resolveModel + resolveCredentials` 跨 provider 解析（baseUrl 按 fresh OAuth credentials 派生，GHC enterprise 账户必经；`resolveApiKey` 不在公共入口，stream 路径只用 `resolveCredentials`）
 - **模型解析**：sub-agent `model` 字段为空 / `'inherit'` → 取父 `pi.RegularSession.getCurrentModelId()`；不是合法 `provider::id` 复合 key → 回退到父模型并打 warn；父没模型 → spawn 直接 fail。
-- **工具来源**:走 `pi/toolCatalog.buildToolCatalogForSubAgent(cfg, mcpSelections)` —— 父继承 + 本地 `tools` 白名单 + `disallowTools` 二次过滤。MCP tool 以 `serverName/toolName` 给 LLM，route 精确保留原始 server / tool 名；sub-agent 历史由 `messageBridge.fromPiAssistantMessage(final, catalog)` demux 回自然 toolName + MCP server（出境回放由 `toLlmToolName` 再限定），**不**按 `/` 反解。**`app` 工具不再被按 name 移除**(`app` 是 sub-agent 触达全部应用能力的唯一入口,移除等于禁掉所有应用能力);递归保护下沉到 `app subagent ...` 命令内部 `ensureSpawnPrerequisites`,sub-agent 调 spawn 时 exit 1 + stderr。MCP 工具按 server-scoped 路由到 `executeToolOnServer`,本地工具按 `route.kind === 'local'` 路由到 `pi/tools/registry.tools.execute(name, args, ctx)`。
+- **工具来源**:走 `@main/pi` 导出的 `buildToolCatalogForSubAgent(cfg, mcpSelections)` —— 父继承 + 本地 `tools` 白名单 + `disallowTools` 二次过滤。MCP tool 以 `serverName/toolName` 给 LLM，route 精确保留原始 server / tool 名；sub-agent 历史由同一入口的 `fromPiAssistantMessage(final, catalog)` demux 回自然 toolName + MCP server（出境回放由 `toLlmToolName` 再限定），**不**按 `/` 反解。**`app` 工具不再被按 name 移除**(`app` 是 sub-agent 触达全部应用能力的唯一入口,移除等于禁掉所有应用能力);递归保护下沉到 `app subagent ...` 命令内部 `ensureSpawnPrerequisites`,sub-agent 调 spawn 时 exit 1 + stderr。MCP 工具按 server-scoped 路由到 `executeToolOnServer`,本地工具按 `route.kind === 'local'` 路由到 `pi/tools/registry.tools.execute(name, args, ctx)`。
 - **取消传播**：sub-agent 共享父 `cancellationSignal` —— 取消父 session 自动终止所有运行中 sub-agent；超大 LLM 摘要走 `Promise.race` 超时兜底。
 - **不持久化**：results 仅记录在父 `AgentChat` 的 tool-result 消息中。
 - **状态推送**：`SubAgentStepUpdate` → `SubAgentManager.sendStateUpdate` → IPC `subAgent:stateUpdate`，100ms 节流（leading + trailing），terminal 状态 force=true 直发。
