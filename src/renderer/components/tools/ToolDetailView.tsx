@@ -63,14 +63,13 @@ const ToolDetailView: React.FC<ToolDetailViewProps> = ({ tool }) => {
             Input Schema
           </h3>
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon-sm"
             className="gap-1"
             onClick={copySchema}
             title="Copy schema as JSON"
           >
             <Copy size={14} data-icon="inline-start" />
-            Copy
           </Button>
         </div>
         <pre className="min-h-0 flex-1 overflow-auto rounded-md border border-sc-border bg-sc-muted/40 p-3 font-mono text-xs leading-relaxed text-sc-foreground">

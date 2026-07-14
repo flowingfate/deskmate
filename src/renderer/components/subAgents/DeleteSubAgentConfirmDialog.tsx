@@ -1,7 +1,7 @@
 /**
  * DeleteSubAgentConfirmDialog
  *
- * Sub-agent 删除确认框。常驻挂载（SettingsDialogs），通过 `deleteSubAgentDialogAtom`
+ * Sub-agent 删除确认框。常驻挂载于 `SubAgentsView`，通过 `DeleteSubAgentDialogAtom`
  * 控制 open。SubAgentListItem 调 requestDelete(name)（异步扫「被哪些 agent 使用」后开框），
  * 本组件订阅 atom 渲染确认框并执行真正的 subAgentApi.delete。
  *

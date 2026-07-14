@@ -7,17 +7,12 @@ import ServerCard from './McpServerCard';
 import ListSearchBox from '../ui/ListSearchBox';
 import { ScrollArea } from '@/shadcn/scroll-area';
 import { MCPServerExtended } from '../../lib/userData/types';
+import type { McpServerOperationState } from './useMcpServerActions';
 
 interface McpServerListViewProps {
   servers: MCPServerExtended[];
   isLoading: boolean;
-  operationStates: Record<
-    string,
-    {
-      isOperating: boolean;
-      operation?: 'connect' | 'disconnect' | 'reconnect';
-    }
-  >;
+  operationStates: Record<string, McpServerOperationState>;
   onConnect: (serverName: string) => void;
   onDisconnect: (serverName: string) => void;
   onReconnect: (serverName: string) => void;
@@ -25,19 +20,6 @@ interface McpServerListViewProps {
   onEdit: (serverName: string) => void;
   selectedServer?: MCPServerExtended | null;
   onSelectServer?: (server: MCPServerExtended | null) => void;
-  onMcpServerMenuToggle?: (serverName: string, buttonElement: HTMLElement) => void;
-  mcpServerMenuState?: {
-    isOpen: boolean;
-    serverName: string | null;
-    anchorElement: HTMLElement | null;
-  };
-  mcpServerOperations?: {
-    onConnect: (serverName: string) => void;
-    onDisconnect: (serverName: string) => void;
-    onReconnect: (serverName: string) => void;
-    onDelete: (serverName: string) => void;
-    onEdit: (serverName: string) => void;
-  };
 }
 
 /**
@@ -61,26 +43,7 @@ const McpServerListView: React.FC<McpServerListViewProps> = ({
   onEdit,
   selectedServer,
   onSelectServer,
-  onMcpServerMenuToggle,
-  mcpServerMenuState,
-  mcpServerOperations,
 }) => {
-  // 把 ops 挂 window —— AgentLayout 集中渲染 dropdown 时按需取
-  React.useEffect(() => {
-    if (mcpServerOperations) {
-      (window as unknown as { __mcpServerOperations?: unknown }).__mcpServerOperations = mcpServerOperations;
-    }
-    return () => {
-      delete (window as unknown as { __mcpServerOperations?: unknown }).__mcpServerOperations;
-    };
-  }, [mcpServerOperations]);
-
-  const handleMenuToggle = (serverName: string) => (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (onMcpServerMenuToggle) {
-      onMcpServerMenuToggle(serverName, event.currentTarget as HTMLElement);
-    }
-  };
 
   const sortedServers = useMemo(() => servers.slice().reverse(), [servers]);
 
@@ -152,8 +115,6 @@ const McpServerListView: React.FC<McpServerListViewProps> = ({
           {filteredServers.map((server, index) => {
             const isSelected = selectedServer?.name === server.name;
             const serverName = server.name || `Server ${index + 1}`;
-            const isMenuOpen =
-              mcpServerMenuState?.isOpen && mcpServerMenuState?.serverName === serverName;
             return (
               <li key={server.name || index}>
                 <div
@@ -175,14 +136,11 @@ const McpServerListView: React.FC<McpServerListViewProps> = ({
                   <ServerCard
                     serverName={serverName}
                     operationState={operationStates[serverName]}
-                    onConnect={() => onConnect(serverName)}
-                    onDisconnect={() => onDisconnect(serverName)}
-                    onReconnect={() => onReconnect(serverName)}
-                    onDelete={() => onDelete(serverName)}
-                    onEdit={() => onEdit(serverName)}
-                    onMenuToggle={handleMenuToggle(serverName)}
-                    isMenuOpen={isMenuOpen}
-                    isSelected={isSelected}
+                    onConnect={onConnect}
+                    onDisconnect={onDisconnect}
+                    onReconnect={onReconnect}
+                    onDelete={onDelete}
+                    onEdit={onEdit}
                   />
                 </div>
               </li>

@@ -65,7 +65,7 @@ const McpToolDetailView: React.FC<McpToolDetailViewProps> = ({
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-hidden">
+    <div className="flex h-full w-full flex-col gap-4 overflow-hidden">
       <div className="flex items-center gap-2">
         {onBack && (
           <Button
@@ -81,9 +81,8 @@ const McpToolDetailView: React.FC<McpToolDetailViewProps> = ({
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-sc-foreground">
           {tool.name}
         </h2>
-        <Button variant="outline" size="sm" onClick={copyToolInfo} title="Copy full tool info" className="gap-1">
+        <Button variant="ghost" size="icon-sm" onClick={copyToolInfo} title="Copy full tool info" className="gap-1">
           <Copy data-icon="inline-start" size={14} />
-          Copy
         </Button>
       </div>
 
@@ -107,9 +106,8 @@ const McpToolDetailView: React.FC<McpToolDetailViewProps> = ({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-sc-muted-foreground">
             Input Schema
           </h3>
-          <Button variant="outline" size="sm" onClick={copySchema} title="Copy schema as JSON" className="gap-1">
+          <Button variant="ghost" size="icon-sm" onClick={copySchema} title="Copy schema as JSON" className="gap-1">
             <Copy data-icon="inline-start" size={14} />
-            Copy
           </Button>
         </div>
         <pre className="min-h-0 flex-1 overflow-auto rounded-md border border-sc-border bg-sc-muted/40 p-3 font-mono text-xs leading-relaxed text-sc-foreground">

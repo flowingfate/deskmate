@@ -1,34 +1,27 @@
 'use client'
 
-import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom'
-import { Users, RefreshCw, Plus } from 'lucide-react'
-import { Badge } from '@/shadcn/badge'
-import { Button } from '@/shadcn/button'
-import { useSubAgents, useSkills } from '../userData/userDataProvider'
-import { useMcpRuntimeServers } from '@/states/mcpRuntime.atom'
-import { useToast } from '../ui/ToastProvider'
-import SettingsLayout from '../settings/SettingsLayout'
-import SubAgentListItem from './SubAgentListItem'
-import { AgentContextType } from '../../types/agentContextTypes'
-import type { SubAgentConfig } from '../../lib/userData/types'
-import { subAgentApi } from '@/ipc/subAgent'
-import { SubAgentImportAtom } from './subAgentCommands.atom'
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Users, RefreshCw } from 'lucide-react';
+import { Badge } from '@/shadcn/badge';
+import { Button } from '@/shadcn/button';
+import { useSubAgents, useSkills } from '../userData/userDataProvider';
+import { useMcpRuntimeServers } from '@/states/mcpRuntime.atom';
+import { useToast } from '../ui/ToastProvider';
+import SettingsLayout from '../settings/SettingsLayout';
+import DeleteSubAgentConfirmDialog from './DeleteSubAgentConfirmDialog';
+import SubAgentsAddMenu from './SubAgentsAddMenu';
+import SubAgentListItem from './SubAgentListItem';
+import { subAgentApi } from '@/ipc/subAgent';
 import { log } from '@/log';
+
 const logger = log.child({ mod: 'SubAgentsView' });
 
 /**
- * SubAgentsView - Sub-agent management view in the Settings page
- *
- * Design reference: SkillsView.tsx
- * - Uses unified-header + sub-agents-content-view layout
- * - useOutletContext<AgentContextType>() to get SettingsPage handlers
- * - useSubAgents() to get global sub-agent data
+ * Sub-agent management view for `/settings/sub-agents`.
+ * The list owns its import trigger and delete confirmation host.
  */
 const SubAgentsView: React.FC = () => {
-  const {
-    onSubAgentsAddMenuToggle,
-  } = useOutletContext<AgentContextType>()
 
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -78,12 +71,6 @@ const SubAgentsView: React.FC = () => {
     )
   }, [searchParams, subAgents, setSearchParams])
 
-  // 「Import from Claude Code」隐藏 file input 注册进 atom，菜单项调 open() 触发。
-  const importActions = SubAgentImportAtom.useChange()
-  useEffect(() => {
-    importActions.register(() => importFileInputRef.current?.click())
-    return () => importActions.unregister()
-  }, [importActions])
 
   // Handle import after file selection
   const handleImportFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,17 +132,9 @@ const SubAgentsView: React.FC = () => {
     }
   }, [isSyncing, showSuccess, showError])
 
-  // Handle add button click
-  const handleAddClick = useCallback(
-    (buttonElement: HTMLElement) => {
-      if (onSubAgentsAddMenuToggle) {
-        onSubAgentsAddMenuToggle(buttonElement)
-      }
-    },
-    [onSubAgentsAddMenuToggle],
-  )
 
   return (
+    <>
     <SettingsLayout
       icon={<Users size={18} />}
       title="Sub-Agents"
@@ -175,14 +154,7 @@ const SubAgentsView: React.FC = () => {
           >
             <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => handleAddClick(e.currentTarget)}
-            title="Add Sub-Agent"
-          >
-            <Plus size={14} />
-          </Button>
+          <SubAgentsAddMenu onImport={() => importFileInputRef.current?.click()} />
         </>
       }
     >
@@ -240,7 +212,9 @@ const SubAgentsView: React.FC = () => {
         )}
       </div>
     </SettingsLayout>
-  )
+    <DeleteSubAgentConfirmDialog />
+    </>
+  );
 }
 
 export default SubAgentsView

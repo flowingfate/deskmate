@@ -1,23 +1,19 @@
 'use client'
 
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BookMarked, Plus } from 'lucide-react';
 import { Badge } from '@/shadcn/badge';
 import { Button } from '@/shadcn/button';
 import { useSkills } from '../userData/userDataProvider';
 import SettingsLayout from '../settings/SettingsLayout';
 import SkillsContentView from './SkillsContentView';
-import { SkillConfig } from '../../lib/userData/types';
-import { AgentContextType } from '../../types/agentContextTypes';
+import type { SkillConfig } from '../../lib/userData/types';
+import ApplySkillToAgentsDialog from './ApplySkillToAgentsDialog';
+import DeleteSkillConfirmDialog from './DeleteSkillConfirmDialog';
 import SkillsAddButton from './SkillsAddButton';
 
 const SkillsView: React.FC = () => {
-  const {
-    onSkillMenuToggle,
-  } = useOutletContext<AgentContextType>();
-
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Use ProfileDataManager for Skills data
@@ -91,9 +87,10 @@ const SkillsView: React.FC = () => {
         selectedSkill={selectedSkill}
         isLoading={isLoading}
         onSelectSkill={handleSkillSelect}
-        onSkillMenuToggle={onSkillMenuToggle}
       />
 
+      <DeleteSkillConfirmDialog />
+      <ApplySkillToAgentsDialog />
     </SettingsLayout>
   );
 };

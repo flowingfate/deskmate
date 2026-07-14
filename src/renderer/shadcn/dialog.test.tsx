@@ -67,8 +67,9 @@ describe('dialog initialFocusRef', () => {
     }
 
     expect(target).toHaveAttribute('data-initial-focus');
-    fireEvent.blur(target);
-    expect(target).not.toHaveAttribute('data-initial-focus');
+    // 原生 blur()：焦点真正移出（activeElement → body），属性在下一帧被移除。
+    target.blur();
+    await waitFor(() => expect(target).not.toHaveAttribute('data-initial-focus'));
   });
 
   it('overrides AlertDialog default Cancel focus with the supplied action target', async () => {
@@ -171,5 +172,40 @@ describe('dialog initialFocusRef', () => {
     }
 
     expect(target).not.toHaveAttribute('data-initial-focus');
+  });
+
+  it('keeps the focus indicator through a transient blur that immediately refocuses the target', async () => {
+    const targetRef = React.createRef<HTMLButtonElement>();
+
+    render(
+      <Dialog>
+        <DialogTrigger>Open dialog</DialogTrigger>
+        <DialogContent initialFocusRef={targetRef}>
+          <DialogTitle>Dialog title</DialogTitle>
+          <button ref={targetRef} type="button">
+            Delete
+          </button>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open dialog' }));
+    await waitFor(() => expect(document.activeElement).toBe(targetRef.current));
+
+    const target = targetRef.current;
+    if (!target) {
+      throw new Error('Initial focus target was not rendered');
+    }
+
+    // 复现 DropdownMenu 关闭抢焦点：blur 触发，但焦点立刻被 focus-scope 拉回本元素。
+    expect(target).toHaveAttribute('data-initial-focus');
+    fireEvent.blur(target);
+    expect(document.activeElement).toBe(target);
+
+    // 等待 blur 的下一帧判断跑完，属性应保留（焦点从未真正离开）。
+    const frame = Promise.withResolvers<void>();
+    requestAnimationFrame(() => frame.resolve());
+    await frame.promise;
+    expect(target).toHaveAttribute('data-initial-focus');
   });
 });

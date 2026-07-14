@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-13 -->
+<!-- Last verified: 2026-07-14 -->
 # 布局
 
 > 渲染进程 SPA 的外壳：采用 AppShell（Sidebar + StatusBar + Titlebar） + AgentLayout（SessionPanel + 主内容区 + 右侧面板）两层架构。
@@ -43,7 +43,8 @@ RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
 - **Sidebar**：使用图标模式展示 agent 列表（头像 + 未读指示），替代旧的 LeftNavigation 全宽侧边栏。Sidebar 宽度固定，不可调整。
 - **SessionPanel**：搬迁到 [`components/agent-side/`](../../components/agent-side/ai.prompt.md)。在 sessions 模式渲染会话列表 + 搜索 + 新建按钮；在 jobs 模式渲染 schedule 主从二级视图（jobs CRUD ↔ runs 列表）。模式来自 URL（`/agent/:agentId/job/*`），不存在表示模式的 atom。
 - **状态所有权**：侧边栏宽度由 `LeftNavSizeAtom`（宽度、拖拽、持久化）管理，折叠状态由 `LeftNavCollapsedAtom` 管理，位于 `src/renderer/states/left-nav.atom.ts`。右面板使用 `RightPaneCollapsedAtom`（`src/renderer/states/right-pane.atom.ts`）。
-- **下拉框/覆盖层**：所有上下文菜单和覆盖层通过 atom 管理，在 `AgentLayout` 层级渲染，无需 props 逐层传递。
+- **Settings shell**：`SettingsPage` 仅渲染 Settings 侧栏、分隔线、内容容器与无 context 的 `<Outlet />`。MCP、Skills、Sub-agents 自己渲染行内菜单、确认框及最小状态；不得把操作回调、DOM anchor 或临时 `window` 字段上提到 shell。
+- **Agent 路由的下拉框/覆盖层**：全局 Agent 上下文菜单和覆盖层通过 atom 管理，在 `AgentLayout` 层级渲染，无需 props 逐层传递。
 - **Agent 编辑命令**：改用普通函数 `lib/chat/editAgent.ts#editAgent(agentId?, tab?)`（不碰 atom，只用 `router` + `agentSessionCacheManager`），菜单/ChatView 直接 import 调用。ChatSession CRUD（删除/fork/重命名/收藏/下载）走 `states/chatSessionCommands.ts` 的 `chatSessionCommands`（`mutate` 无状态命令 dispatcher，组合既有 DeleteConfirm/Rename/toast atom）。**不再有 `agent:editAgent` / `chatSession:*` 自定义 DOM 事件**。
 - **全局确认框**：`components/ui/ConfirmationDialog.tsx` 挂在 RootLayout，`requestConfirmation(...)` 可由 React 组件或 atom/action 路径调用。只保留一个待决请求；新请求以 `false` 结算旧请求，Cancel/Esc/外部关闭同样结算 `false`。
 

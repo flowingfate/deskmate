@@ -1,35 +1,14 @@
 /**
- * subAgents 跨组件命令 atom（替代旧的 `subAgents:importFromClaudeCode` /
- * `subAgent:delete` 自定义 window 事件）。
+ * Sub-agent 删除确认状态。
  *
- * - SubAgentImportAtom：SubAgentsView 里的「Import from Claude Code」隐藏 file input
- *   注册进 atom，菜单项（SubAgentsAddMenuDropdown）调 open() 触发它。属于「菜单→宿主
- *   视图命令」，因 DOM ref 只在 SubAgentsView 内，用 register/open 而非直接调用。
- * - DeleteSubAgentDialogAtom：删除确认框状态。SubAgentListItem 调 requestDelete(name)
- *   （异步扫「被哪些 agent 使用」后开框），SettingsDialogs 订阅渲染确认框并执行真正删除。
+ * SubAgentListItem 调 requestDelete(name) 异步计算使用该 sub-agent 的 agents；
+ * SubAgentsView 挂载确认框并消费此状态。
  */
 
 import { atom } from '@/atom';
 import { getAgents } from '@/states/agents.atom';
 import { persistApi } from '@/ipc/persist';
 
-// ─────────────── Import from Claude Code ───────────────
-
-interface SubAgentImportState {
-  trigger: (() => void) | null;
-}
-
-const zeroImportState: SubAgentImportState = { trigger: null };
-export const SubAgentImportAtom = atom(
-  zeroImportState,
-  (get, set) => ({
-    register: (fn: () => void) => set({ trigger: fn }),
-    unregister: () => set({ trigger: null }),
-    open: () => get().trigger?.(),
-  }),
-);
-
-// ─────────────── Delete confirmation ───────────────
 
 interface DeleteSubAgentDialogState {
   open: boolean;
