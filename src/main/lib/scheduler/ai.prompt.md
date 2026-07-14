@@ -86,9 +86,9 @@ pending → running → completed | failed
 
 | Scenario | Files |
 |---|---|
-| 加 SchedulerJob 字段 | `types.ts` + `shared/persist/types.ts` (`ScheduleJobFile*`) + `persist/schedule.ts` (`ScheduleJobConfig.assign/applyUpdate/toFile`) + `jobAdapter.ts` 双向投射 + renderer schedule UI |
+| 加 SchedulerJob 字段 | `types.ts` + `shared/persist/types/index.ts`（`ScheduleJobFile*`）+ `persist/schedule.ts` (`ScheduleJobConfig.assign/applyUpdate/toFile`) + `jobAdapter.ts` 双向投射 + renderer schedule UI |
 | 加 IPC 通道 | `shared/ipc/scheduler.ts` + `SchedulerIPC.ts` |
-| runState 状态机改动 | `shared/persist/types.ts` (`JobRunState`) + `persist/session.ts` (`finishScheduleRun`) + `persist/schedule.ts` (`startRun/finishRun`) + `jobAdapter.toSchedulerJob` 映射表 |
+| runState 状态机改动 | `shared/persist/types/index.ts`（`JobRunState`）+ `persist/session.ts` (`finishScheduleRun`) + `persist/schedule.ts` (`startRun/finishRun`) + `jobAdapter.toSchedulerJob` 映射表 |
 | 改补偿窗口 (6h 限制) | `cronRecovery.ts` (`MAX_RESUME_CATCH_UP_DELAY_MS`) |
 | 加新 triggerSource | `SchedulerManager.executeJob` 签名 + 调用方 |
 

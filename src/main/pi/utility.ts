@@ -14,7 +14,7 @@
  */
 
 import type { Api, Model, Message as PiMessage } from '@earendil-works/pi-ai';
-import type { ThinkingLevel } from '@shared/types/thinkingLevel';
+import type { ThinkingLevel } from '@shared/persist/types'
 
 import { resolveModel, resolveCredentials } from './model';
 import { parseAgentModel } from '@shared/utils/agentModelId';

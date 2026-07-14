@@ -7,7 +7,7 @@
 
 import { Profiles } from '@main/persist';
 import type { Mcp } from '@main/persist';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 /**
  * 拿当前 profile 的 `Mcp` 持久化 handle。bootstrap 后从 cache 出,无 I/O。

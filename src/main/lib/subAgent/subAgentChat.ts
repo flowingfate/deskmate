@@ -20,8 +20,8 @@
 
 import * as path from 'path';
 
-import type { AssistantMessage, Message, UserMessage } from '@shared/types/message';
-import type { SubAgentConfig } from '@shared/types/profileTypes';
+import type { AssistantMessage, Message, UserMessage } from '@shared/persist/types'
+import type { SubAgentConfig } from '@shared/persist/types'
 import { log } from '@main/log';
 import { Tracer } from '@shared/log/trace';
 

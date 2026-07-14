@@ -1,12 +1,5 @@
-import type { SkillBindings } from '@shared/types/profileTypes'
-
-// Agent Chat Editor type definitions
-
-// Agent MCP Server config - contains server name and selected tools
-export interface AgentMcpServer {
-  name: string;
-  tools: string[]; // Empty array means use all tools; otherwise only use specified tools
-}
+import type { AgentMcpServer, SkillBindings } from '@shared/persist/types';
+export type { AgentMcpServer };
 
 export interface AgentConfig {
   id: string

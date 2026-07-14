@@ -14,10 +14,8 @@
  */
 
 import React, { useMemo } from 'react';
-import type {
-  Attachment,
-  UserMessage,
-} from '@shared/types/message';
+import type { Attachment,
+UserMessage, } from '@shared/persist/types'
 import { useCurrentSession } from '@/states/currentSession.atom';
 import { toMediaUrl, type MediaUrlContext } from '@/lib/mediaUrl';
 import FileTypeIcon from '../../ui/FileTypeIcon';

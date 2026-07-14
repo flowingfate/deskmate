@@ -1,17 +1,8 @@
+# Shared Persist
 
-这里定义持久化存储的数据结构和相关操作。核心概念包括 Profile、Agent、Session 等，具体实现细节请参见各个类的定义和方法。
-这里就算有工具方法，也是存内存操作，不依赖额外的环境 api。
+`src/shared/persist/` 包含 main、renderer 与 worker 共享的持久化 schema 和纯数据工具；不依赖 Node 或 Electron API。
 
-## 模块清单
-
-| 文件 | 内容 |
-|---|---|
-| `types.ts` | 全部磁盘 schema 类型（ProfilesIndexFile、ProfileFile、AgentRecord、SessionDataFile、ScheduleJobFile、...）|
-| `id.ts` | UUIDv7 包装，生成带前缀的实体 id（`p_/a_/s_/j_`）|
-| `markdown.ts` | AGENT.md 解析 / 序列化 / front-matter 局部 patch |
-| `path.ts` | 持久化布局的纯路径拼接（不创建目录） |
-
-## 约束
-
-- **0 fs / 0 electron / 0 Node 环境 api**：所有 io 在 `src/main/persist/` 下完成。
-- 这里的代码可以在 renderer / main / worker / 测试 中任意复用。
+- `types/index.ts` 是所有持久化 schema 的唯一公共入口。
+- `types/` 按磁盘资源域拆分：`profile`、`settings`、`auth`、`agent`、`session`、`message`、`schedule`、`resource`、`subAgent`、`thinking`。
+- 新增任何会写入本地磁盘的字段或结构时，先在对应 `types/` 模块定义，再由 `types/index.ts` 统一导出；不得从 `src/shared/types/` 反向引用运行时数据形态。
+- 运行时算法、文件 I/O 和主进程 store 仍分别属于 `src/main/`；此目录只承载 schema 与无环境依赖的纯数据工具。

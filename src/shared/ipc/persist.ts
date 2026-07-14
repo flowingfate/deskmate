@@ -25,9 +25,9 @@ import type {
   SkillRecord,
   StarredSessionEntry,
   WebSearchSettings,
+  SubAgentConfig,
+  ChatHistoryItem,
 } from '../persist/types';
-import type { ChatHistoryItem } from '../persist/types';
-import type { SubAgentConfig } from '../types/profileTypes';
 
 // ──────────────────────────────────────────────
 // 共享 envelope

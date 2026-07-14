@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-13 -->
+<!-- Last verified: 2026-07-14 (MCP 配置 schema 统一由 shared/persist/types 导出) -->
 # MCP Runtime
 
 > 仅管理 **外部 MCP server** 的连接生命周期、OAuth、工具元数据缓存与

@@ -29,15 +29,13 @@ import type {
   UserMessage as PiUserMessage,
 } from '@earendil-works/pi-ai';
 
-import type {
-  AssistantMessage,
-  AssistantOutcome,
-  Attachment,
-  ErrorCategory,
-  Message,
-  ToolCall,
-  UserMessage,
-} from '@shared/types/message';
+import type { AssistantMessage,
+AssistantOutcome,
+Attachment,
+ErrorCategory,
+Message,
+ToolCall,
+UserMessage, } from '@shared/persist/types'
 import { newMessageId } from '@shared/utils/messageFactory';
 import type { ToolCatalog } from '../toolCatalog';
 import { buildFileAnnotationText } from './fileAnnotation';

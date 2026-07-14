@@ -14,7 +14,7 @@
  * - Relaying status through profileDataManager
  */
 
-import type { McpServerConfig } from '@shared/types/profileTypes'
+import type { McpServerConfig } from '@shared/persist/types';
 import { log } from '@/log';
 import { mcpApi, mcpEvents } from '@/ipc/mcp';
 const logger = log.child({ mod: 'McpClientCacheManager' });

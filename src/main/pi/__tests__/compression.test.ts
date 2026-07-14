@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ContextState } from '@shared/types/agentChatTypes';
-import type { AssistantMessage, Message } from '@shared/types/message';
+import type { ContextState } from '@shared/persist/types'
+import type { AssistantMessage, Message } from '@shared/persist/types'
 import type { Usage as PiUsage } from '@earendil-works/pi-ai';
 
 // pi/compression 直接吃 Domain Message;mock 整个 fullModeCompressor 工厂,

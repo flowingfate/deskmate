@@ -18,7 +18,7 @@
 
 import type { Tracer } from '@shared/log/trace';
 import type { ChunkStream } from '@shared/types/streamingTypes';
-import type { SubAgentConfig } from '@shared/types/profileTypes';
+import type { SubAgentConfig } from '@shared/persist/types'
 import type { WebContents } from 'electron';
 
 /**

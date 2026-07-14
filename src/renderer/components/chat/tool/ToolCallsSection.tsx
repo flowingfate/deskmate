@@ -3,7 +3,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { Wrench, ChevronRight, X } from 'lucide-react';
-import type { ToolCall } from '@shared/types/message';
+import type { ToolCall } from '@shared/persist/types'
 import { AnimatedHeight } from './AnimatedHeight';
 import { ToolChip } from './ToolChip';
 import { ToolDetailView } from './ToolDetailView';

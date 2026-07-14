@@ -18,13 +18,11 @@ import type {
   PersistedJsonLine,
   PersistedToolResponse,
   PersistedUserMessage,
-} from '../../shared/persist/types';
-import type {
   AssistantMessage,
   Message,
   ToolCall,
   UserMessage,
-} from '../../shared/types/message';
+} from '../../shared/persist/types';
 
 /**
  * 把 JSONL 行序列折回成 Domain 消息数组。

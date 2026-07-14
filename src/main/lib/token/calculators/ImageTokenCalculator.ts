@@ -110,7 +110,7 @@ export class ImageTokenCalculator {
    *
    * 仅消费三个字段,刻意不依赖完整 `Attachment.image` 类型 ——
    * 调用方拆出 `{ detail, width, height }` 即可,避免 token 子系统耦合
-   * `@shared/types/message` 的 attachment 形态。
+   * `@shared/persist/types` 的 attachment 形态。
    */
   calculateFromAttachment(att: {
     detail?: 'low' | 'high' | 'auto';

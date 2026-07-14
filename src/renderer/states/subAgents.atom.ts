@@ -17,7 +17,7 @@ import { unit } from '@/atom/unit';
 import { persistEvents } from '@/ipc/persist';
 import { getInitialSnapshot } from '@/states/_snapshot';
 import { subAgentApi } from '@/ipc/subAgent';
-import type { SubAgentConfig } from '@shared/types/profileTypes';
+import type { SubAgentConfig } from '@shared/persist/types';
 import { log } from '@/log';
 
 const logger = log.child({ mod: 'subAgents.atom' });

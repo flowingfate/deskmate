@@ -1,4 +1,4 @@
-import type { UserMessage } from '@shared/types/message';
+import type { UserMessage } from '@shared/persist/types'
 import { agentSessionCacheManager } from './agentSessionCacheManager';
 import { agentIpc } from './agentIpc';
 import { traceContext } from './traceContext';

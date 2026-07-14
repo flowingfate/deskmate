@@ -27,7 +27,7 @@
  *     `messages.slice(0, index)` 截断),不再走私进 render items。
  */
 
-import type { ToolCall } from '@shared/types/message';
+import type { ToolCall } from '@shared/persist/types'
 import { extractFilePathsFromText } from './extractFilePaths';
 import type { SessionManager } from './session-manager';
 import type {

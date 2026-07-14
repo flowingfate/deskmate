@@ -6,7 +6,7 @@ import { Profiles } from '@main/persist';
 import { PERSIST_PATH, MONTH_KEY } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
 import { extractMonthFromChatSessionIdValue } from '@shared/utils/idFormats';
-import type { ChatSessionFile } from '@shared/types/agentChatTypes';
+import type { ChatSessionFile } from '@shared/persist/types'
 import { renderToMain } from '@shared/ipc/chatSession';
 
 export default function handleChatSessionIPC(_ctx: Context): void {

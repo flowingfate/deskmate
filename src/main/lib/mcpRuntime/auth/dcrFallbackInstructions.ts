@@ -17,7 +17,7 @@
  */
 
 import type { McpResolvedAuthMetadata } from './types';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 export interface ProviderHelp {
   /** Display label for the provider, falls back to the metadata-derived label. */

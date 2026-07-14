@@ -10,7 +10,7 @@ import {
   SUPPORTED_TEXT_TYPES,
   FILE_ATTACHMENT_LIMITS,
 } from '@shared/types/chatTypes';
-import type { Attachment, FileUri } from '@shared/types/message';
+import type { Attachment, FileUri } from '@shared/persist/types'
 import { getImageDimensions, smartCompressImage, shouldCompressImageAdvanced } from './imageCompression';
 import { log } from '@/log';
 const logger = log.child({ mod: 'ContentUtils' });

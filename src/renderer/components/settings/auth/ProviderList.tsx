@@ -13,7 +13,7 @@ import { Badge } from '@/shadcn/badge';
 import SettingsLayout from '../SettingsLayout';
 import { useToast } from '../../ui/ToastProvider';
 import { piApi } from '@/ipc/pi';
-import type { ProviderAccountSummary } from '@shared/types/piAuthTypes';
+import type { ProviderAccountSummary } from '@shared/persist/types';
 import { PROVIDER_REGISTRY, getProviderDescriptor, type ProviderDescriptor } from './providerRegistry';
 import DeviceCodeDialog from './DeviceCodeDialog';
 import ApiKeyForm from './ApiKeyForm';

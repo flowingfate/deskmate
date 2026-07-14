@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
-import type { Attachment, UserMessage } from '@shared/types/message';
-import { asFileUri } from '@shared/types/message';
+import type { Attachment, UserMessage } from '@shared/persist/types'
+import { asFileUri } from '@shared/persist/types'
 import { createUserMessage } from '@shared/utils/messageFactory';
 import { copyFileToSandbox, type AttachContext } from '@/lib/attachment/copyToSandbox';
 import { attachmentApi } from '@/ipc/attachment';

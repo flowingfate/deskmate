@@ -13,8 +13,9 @@ import type {
   SessionDataFile,
   SessionOverrides,
   StarMark,
+  Message,
+  ToolResult,
 } from '../../shared/persist/types';
-import type { Message, ToolResult } from '../../shared/types/message';
 import { PERSIST_PATH } from '../../shared/persist/path';
 import { emit } from './lib/emit';
 import { getAppRoot } from './lib/root';
@@ -133,8 +134,8 @@ export abstract class Session extends PersistBase {
   /**
    * in-memory message buffer（仅写时用作 append batch）。
    *
-   * 元素类型 `ChatHistoryItem` = `PersistedJsonLine`(`shared/persist/types.ts`
-   * Phase 5 已对齐),包含 user / assistant / `tool_res` 三种 line。
+   * 元素类型 `ChatHistoryItem` = `PersistedJsonLine`(`shared/persist/types/index.ts`
+   * 导出；Phase 5 已对齐),包含 user / assistant / `tool_res` 三种 line。
    */
   private pendingMessages: ChatHistoryItem[] = [];
   /** 串行化 flushMessages —— 并发 appendText 会破坏 jsonl 行边界。 */

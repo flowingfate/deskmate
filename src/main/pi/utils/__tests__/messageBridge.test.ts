@@ -5,12 +5,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { fromPiAssistantMessage, toPiContext } from '../messageBridge';
-import type {
-  AssistantMessage,
-  Message,
-  ToolCall,
-  UserMessage,
-} from '@shared/types/message';
+import type { AssistantMessage,
+Message,
+ToolCall,
+UserMessage, } from '@shared/persist/types'
 import type {
   AssistantMessage as PiAssistantMessage,
   Tool as PiTool,

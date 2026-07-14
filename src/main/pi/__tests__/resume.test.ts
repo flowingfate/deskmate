@@ -4,12 +4,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { planResume } from '../resume';
-import type {
-  AssistantMessage,
-  Message,
-  ToolCall,
-  UserMessage,
-} from '@shared/types/message';
+import type { AssistantMessage,
+Message,
+ToolCall,
+UserMessage, } from '@shared/persist/types'
 
 const u = (id = 'u1'): UserMessage => ({
   role: 'user',

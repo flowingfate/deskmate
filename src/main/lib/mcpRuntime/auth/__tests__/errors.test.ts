@@ -1,6 +1,6 @@
 import { mcpAuthService } from '..';
 import { mcpAuthPromptRegistry, type McpAuthConsentDecision } from '../mcpAuthPromptRegistry';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 vi.mock('electron', async () => ({
   app: {

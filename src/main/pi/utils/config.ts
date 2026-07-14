@@ -10,8 +10,8 @@
 
 import { Profiles } from '@main/persist';
 import { parseAgentModel, type ParsedAgentModel } from '@shared/utils/agentModelId';
-import type { ThinkingLevel } from '@shared/types/thinkingLevel';
-import type { SkillBindings } from '@shared/types/profileTypes';
+import type { ThinkingLevel } from '@shared/persist/types'
+import type { SkillBindings } from '@shared/persist/types'
 
 /**
  * pi 内部使用的 agent runtime 视图。字段名以新 persist (camelCase) 为准。

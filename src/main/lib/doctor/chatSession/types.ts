@@ -2,8 +2,8 @@
  * Internal types for the Doctor chatSession module.
  */
 
-import type { Message } from '@shared/types/message';
-import type { ContextState } from '@shared/types/agentChatTypes';
+import type { Message } from '@shared/persist/types'
+import type { ContextState } from '@shared/persist/types'
 
 export type HistoryView = 'ui' | 'llm';
 

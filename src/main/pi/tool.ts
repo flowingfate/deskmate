@@ -17,7 +17,7 @@ import { executeMcpToolOnServer } from './mcp';
 import type { ToolCatalog } from './toolCatalog';
 import { tools as localTools } from './tools/registry';
 import type { ToolContext } from './tools/types';
-import type { ToolResultImage } from '@shared/types/message';
+import type { ToolResultImage } from '@shared/persist/types'
 
 // ─── 执行 ────────────────────────────────────────────────────────────────────
 

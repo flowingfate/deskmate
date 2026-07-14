@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { getProviderHelp, substituteStepPlaceholders } from '../dcrFallbackInstructions';
 import type { McpResolvedAuthMetadata } from '../types';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 function md(overrides: Partial<McpResolvedAuthMetadata> = {}): McpResolvedAuthMetadata {
   return {

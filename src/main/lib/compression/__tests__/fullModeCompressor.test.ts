@@ -51,12 +51,10 @@ import { analyzeMessageStructure, findFirstSkillToolCallIndices } from '../messa
 import { prepareMessagesForCompression } from '../messagePreview';
 import { RecursiveSummarizer } from '../recursiveSummarizer';
 import { TokenCounter } from '../../token';
-import type {
-  AssistantMessage,
-  Message,
-  ToolCall,
-  UserMessage,
-} from '@shared/types/message';
+import type { AssistantMessage,
+Message,
+ToolCall,
+UserMessage, } from '@shared/persist/types'
 import { contextCompressionLlmSummarizer as _contextCompressionLlmSummarizerImport } from '@main/pi/utils/contextCompressionLlmSummarizer';
 
 // ─── Domain message helpers ─────────────────────────────────────────────────

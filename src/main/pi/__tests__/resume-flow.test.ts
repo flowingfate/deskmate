@@ -23,7 +23,7 @@ vi.mock('electron', () => ({
 }));
 
 import { RegularSession, type PersistSessionLike } from '../session';
-import type { Message, ToolResult } from '@shared/types/message';
+import type { Message, ToolResult } from '@shared/persist/types'
 import type { PersistedToolResponse } from '@shared/persist/types';
 
 // in-memory PersistSessionLike —— 不写盘,所有数据全在闭包字段里。

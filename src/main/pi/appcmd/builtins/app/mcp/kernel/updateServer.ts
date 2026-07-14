@@ -9,7 +9,7 @@
 
 import { mcpClientManager } from '@main/lib/mcpRuntime'
 import { Profiles } from '@main/persist';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 export interface UpdateServerArgs {
   mcp_config: {

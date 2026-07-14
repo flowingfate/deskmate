@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-07 -->
+<!-- Last verified: 2026-07-14 (会话上下文 schema 统一由 shared/persist/types 导出) -->
 # Eval Harness
 
 > 用于与 AgenticEval（外部 agent 评估系统）集成的 HTTP 服务器。暴露 `/eval/health`、`/eval/run` 和 `/eval/judge` 接口，支持单轮和多轮评估会话。

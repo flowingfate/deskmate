@@ -1,5 +1,5 @@
-import type { Message } from '@shared/types/message';
-import type { ContextState } from '@shared/types/agentChatTypes';
+import type { Message } from '@shared/persist/types'
+import type { ContextState } from '@shared/persist/types'
 
 /**
  * 应用最新一次 CompressionSnapshot:把 [0..earlyPreservedCount) 与

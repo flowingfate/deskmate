@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-13 -->
+<!-- Last verified: 2026-07-14 (Domain / auth / thinking schema 收敛至 shared/persist/types/) -->
 # pi 模块 — Chat 引擎（pi-ai 底座）
 
 > Deskmate 的 chat orchestrator，基于 `@earendil-works/pi-ai` 适配多 provider。
@@ -20,7 +20,7 @@
 | `errors.ts` | classifyError + overflow / network / rate / auth 分类 | 小 |
 | `utility.ts` | 非 streaming 后台调用 `runUtilityCompletion`(doctor / eval / 后台 LLM utility 共用入口) | 小 |
 | `mcp.ts` | external MCP 工具薄包装:`listAllMcpTools()`(给 catalog 列举外部工具)/ `executeMcpToolOnServer(serverName, toolName, args, signal)`(server-scoped 执行,**不再**有按裸 toolName 查全局 map 的路径) | 小 |
-| `utils/messageBridge.ts` | Domain `Message`(`@shared/types/message`)↔ `pi.Message` **唯一翻译点**:入境 `fromPiAssistantMessage(final, catalog)`(把 ThinkingPart / TextPart / ToolCallPart 折成单串 `think` + `content` + `tool_calls[]`；MCP 的 LLM 限定名经 `catalog.resolveIdentity` 精确 demux 回自然 `name` + `mcp` server，与出境 `toLlmToolName` 对称)，出境以 `ToolCall.mcp` 重新组装 MCP LLM 名称，1→N 展开每个 `assistant.tool_calls[i].response` 为 `pi.toolResult` 行；内部把首个 user message 的持久化 `time` 投影为固定 reminder，`transientReminder` 仅附本次请求尾部，二者均不落盘 | 中 |
+| `utils/messageBridge.ts` | Domain `Message`(`@shared/persist/types`)↔ `pi.Message` **唯一翻译点**:入境 `fromPiAssistantMessage(final, catalog)`(把 ThinkingPart / TextPart / ToolCallPart 折成单串 `think` + `content` + `tool_calls[]`；MCP 的 LLM 限定名经 `catalog.resolveIdentity` 精确 demux 回自然 `name` + `mcp` server，与出境 `toLlmToolName` 对称)，出境以 `ToolCall.mcp` 重新组装 MCP LLM 名称，1→N 展开每个 `assistant.tool_calls[i].response` 为 `pi.toolResult` 行；内部把首个 user message 的持久化 `time` 投影为固定 reminder，`transientReminder` 仅附本次请求尾部，二者均不落盘 | 中 |
 | `utils/fileAnnotation.ts` | 附件文本渲染 | 小 |
 | `utils/localTime.ts` | 客户端本地 ISO 时间、IANA timezone 与 UTC offset 的共享格式化；`app time` 和会话时间锚点复用 | 小 |
 | `utils/config.ts` | agent 配置读取(`readAgentConfig` + `readAgentRuntimeConfig`,返回 `{agent, parsedModel}` 元组;capability 派生不在这里,见 `model.ts`) | 小 |
@@ -46,7 +46,7 @@ agent → session → prompt / tool / mcp / compression → utils/internal
 
 无环、无双向回调、按需注入纯函数 hook。
 
-**Domain Message 是事实源**:`src/shared/types/message.ts` 是主进程内存的 canonical 形态(也是 IPC 契约的入参/出参)。`pi.Message` 仅作 LLM 协议适配。`shared/types/chatTypes.ts` 在 Phase 5 后只剩 LlmApi / 文件常量,不再承载 Message shape。
+**Domain Message 是事实源**:`src/shared/persist/types/message.ts` 定义主进程内存 canonical 形态（也是 IPC 契约的入参/出参），并由 `src/shared/persist/types/index.ts` 统一导出。`pi.Message` 仅作 LLM 协议适配。`shared/types/chatTypes.ts` 在 Phase 5 后只剩 LlmApi / 文件常量,不再承载 Message shape。
 
 **bridge 单点**:`utils/messageBridge.ts` 是 Domain Message ↔ pi.Message 唯一翻译点。其他任何模块(renderer / IPC / persist / skill / prompt)都不感知 pi。
 
@@ -85,7 +85,7 @@ agent → session → prompt / tool / mcp / compression → utils/internal
 
 ### 新增 reasoning 相关字段 / 改 thinking level 行为
 - `pi.streamSimple` / `pi.completeSimple` 接受 `reasoning: ThinkingLevel`（`minimal/low/medium/high/xhigh`），pi-ai 内部按 provider 翻译为 `reasoning_effort` / `thinkingEnabled+thinkingBudgetTokens` / `thinking.{level,budgetTokens}` / `enable_thinking` 等。**不要回退到 `pi.stream` + 手写 provider 分支** —— 重复 pi-ai 的桥接逻辑会立刻失同步。
-- agent 持久化字段叫 `thinkingLevel`（AGENT.md front-matter + `AgentDetail` + `AgentConfig`），值是 pi-ai `ThinkingLevel` 联合（`@shared/types/thinkingLevel` 自定义同枚举，避免 renderer 引 pi-ai）。`undefined` 表示"不传 reasoning，让 provider 走默认"；UI 端的 "Auto" 用 `null` sentinel 走 `AgentFrontPatch` 三态写回 `undefined`。
+- agent 持久化字段叫 `thinkingLevel`（AGENT.md front-matter + `AgentDetail` + `AgentConfig`），值是 `@shared/persist/types` 的 `ThinkingLevel` 联合（避免 renderer 引 pi-ai）。`undefined` 表示"不传 reasoning，让 provider 走默认"；UI 端的 "Auto" 用 `null` sentinel 走 `AgentFrontPatch` 三态写回 `undefined`。
 - 渲染端唯一选择器：`renderer/components/chat/chat-input/ThinkingLevelSelector.tsx`。**不要**在前端做 "Claude→high / GPT→medium" 这种 provider heuristic，pi-ai 已知道每个 model 的 `thinkingLevelMap`。
 - turn loop 在 `session.ts::runTurnLoop` 把 `agentCfg.thinkingLevel` 透传给 `streamOneRound({ thinkingLevel })`；子类 `RegularSession` / `JobRun` 都在 `pi.streamSimple({ reasoning: thinkingLevel })` 处把它接到出站请求。两条形态都接，保证交互聊天 vs schedule run 的 reasoning 强度一致（同一 agent 不会因运行形态不同回复风格漂移）。
 - **切 model 自动清 thinkingLevel**：`Agent.patchFront({ model })` 在检测到 model 实际变化时把 `thinkingLevel` 清掉（同 patch 同时显式给 thinkingLevel 时以显式为准）。原因是 pi-ai `thinkingLevelMap` per-model：旧 level 在新 model 下要么不支持要么语义不等价（OpenAI `high` token budget ≠ Claude `high`），不清的话 pi-ai 会 `clampThinkingLevel` 静默兜底，UI 显示 "Auto" 而 runtime 实际发 clamp 后的等级——三条入口（renderer ModelSelector / agent editor BasicTab / `update_agent` builtin tool）全部走 `patchFront`，invariant 写一处即可覆盖。回归用例见 `persist/__tests__/agent.test.ts`。

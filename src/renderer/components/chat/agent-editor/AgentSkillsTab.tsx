@@ -9,7 +9,7 @@ import { cn } from '@/lib/utilities/utils';
 import { TabComponentProps } from './types';
 import { useSkills } from '../../userData/userDataProvider';
 import ListSearchBox from '../../ui/ListSearchBox';
-import type { SkillTier, SkillBindings } from '@shared/types/profileTypes';
+import type { SkillTier, SkillBindings } from '@shared/persist/types';
 import { useDirtyTracker, mapEquals, mapFingerprint } from './useDirtyTracker';
 
 /**

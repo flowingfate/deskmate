@@ -10,7 +10,7 @@
 //
 // 蓝本:ai.prompt/message.md
 
-import type { Message } from '@shared/types/message';
+import type { Message } from '@shared/persist/types'
 
 /** `analyzeMessageStructure` 返回的结构化结论。`middleMessagesRange === null` 即不需要压缩。 */
 export interface MessageStructureAnalysis {

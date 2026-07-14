@@ -24,13 +24,11 @@ import type {
   Usage as PiUsage,
 } from '@earendil-works/pi-ai';
 
-import type {
-  AssistantMessage,
-  Message,
-  ToolResult,
-  UserMessage,
-} from '@shared/types/message';
-import type { ContextState } from '@shared/types/agentChatTypes';
+import type { AssistantMessage,
+Message,
+ToolResult,
+UserMessage, } from '@shared/persist/types'
+import type { ContextState } from '@shared/persist/types'
 
 import { parseAgentModel } from '@shared/utils/agentModelId';
 import { CancellationError } from '@main/lib/utilities/errors';

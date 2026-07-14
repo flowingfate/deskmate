@@ -1,4 +1,4 @@
-import type { Attachment } from '@shared/types/message';
+import type { Attachment } from '@shared/persist/types'
 
 /**
  * 把 user 消息里的「需注解」附件渲染成一段说明文本。这段文本会被 messageBridge

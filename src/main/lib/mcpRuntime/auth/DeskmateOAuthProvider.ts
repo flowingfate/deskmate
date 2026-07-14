@@ -19,7 +19,7 @@ import { shell } from 'electron';
 import { APP_NAME } from '../../../../shared/constants/branding';
 import { DeskmateTokenCache, type PersistedMcpOAuthEntry } from './DeskmateTokenCache';
 import { log } from '@main/log';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 import { getCallbackServer, DESKMATE_DEFAULT_OAUTH_CALLBACK_PORT } from './CallbackServer';
 import { getMcpOAuthServerKey } from './serverKey';
 

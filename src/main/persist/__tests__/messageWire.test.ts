@@ -12,11 +12,9 @@ import type {
   PersistedToolResponse,
   PersistedUserMessage,
 } from '@shared/persist/types';
-import type {
-  AssistantMessage,
-  Message,
-  UserMessage,
-} from '@shared/types/message';
+import type { AssistantMessage,
+Message,
+UserMessage, } from '@shared/persist/types'
 
 const u = (overrides: Partial<UserMessage> = {}): UserMessage => ({
   role: 'user',

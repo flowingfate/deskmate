@@ -5,7 +5,7 @@ import type {
   ImportForeignSkillItem,
   ImportForeignSkillItemResult,
 } from '@shared/types/skillTypes';
-import type { ForeignSkillSourceId, SkillConfig } from '@shared/types/profileTypes';
+import type { ForeignSkillSourceId, SkillConfig } from '@shared/persist/types'
 
 import { addSkillFromDevice } from './skillDeviceImporter';
 import { determineVersion } from './skillVersion';

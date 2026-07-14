@@ -1,9 +1,6 @@
 import { connectRenderToMain, connectMainToRender } from './base';
-import type { Message, UserMessage } from '../types/message';
-import type {
-  ContextTokenUsage,
-  ChatStatus,
-} from '../types/agentChatTypes';
+import type { ContextTokenUsage, Message, UserMessage } from '../persist/types';
+import { ChatStatus } from '../types/agentChatTypes';
 import type { StreamingChunk } from '../types/streamingTypes';
 import type { TraceContext } from '../log/trace';
 // ──────────────────────────────────────────

@@ -2,7 +2,7 @@ import { atom } from '@/atom';
 import { ToastActions } from '../../ui/toast.atom';
 type ToastContextType = ToastActions;
 import { agentIpc } from '@/lib/chat/agentIpc';
-import type { UserMessage } from '@shared/types/message';
+import type { UserMessage } from '@shared/persist/types'
 import type { RenderMessage, RenderUserMessage } from '@/lib/chat/renderMessage';
 import { agentSessionCacheManager } from '@/lib';
 

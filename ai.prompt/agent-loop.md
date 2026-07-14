@@ -1,6 +1,6 @@
 # Agent Loop（pi chat 引擎）
 
-<!-- Last verified: 2026-06-15 (Phase 5 Domain Message + Resume + PersistedJsonLine) -->
+<!-- Last verified: 2026-07-14 (Domain / auth / thinking schema 统一至 shared/persist/types/) -->
 
 ## 1. 范围
 
@@ -16,9 +16,9 @@
 
 | 约束 | 说明 |
 |---|---|
-| **Domain Message 是事实源** | `src/shared/types/message.ts` 是主进程内存的 canonical 形态(IPC 契约也直接消费)。`pi.Message` 仅作 LLM 协议适配,不为它给 Domain 加字段。`shared/types/chatTypes.ts` 在 Phase 5 后只剩 LlmApi / 文件常量,**不再承载 Message shape**。 |
+| **Domain Message 是事实源** | `src/shared/persist/types/message.ts` 定义主进程内存 canonical 形态（IPC 契约也直接消费），并由 `types/index.ts` 统一导出。`pi.Message` 仅作 LLM 协议适配,不为它给 Domain 加字段。`shared/types/chatTypes.ts` 在 Phase 5 后只剩 LlmApi / 文件常量,**不再承载 Message shape**。 |
 | **bridge 单点** | Domain Message ↔ pi.Message 翻译唯一发生在 `pi/utils/messageBridge.ts`(入境 `fromPiAssistantMessage`、出境 `toPiContext` 1→N 展开 ToolCall.response)。renderer / IPC / persist / skill / prompt 都不感知 pi。 |
-| **持久化形态独立** | `messages.jsonl` 行类型是 `PersistedJsonLine = PersistedUserMessage \| PersistedAssistantMessage \| PersistedToolResponse`(`shared/persist/types.ts`),与 Domain Message 通过 `main/persist/messageWire.ts` 的 `rehydrate` / `dehydrate` 互转。Persisted 只是空字段省略后的 Domain。 |
+| **持久化形态独立** | `messages.jsonl` 行类型是 `PersistedJsonLine = PersistedUserMessage \| PersistedAssistantMessage \| PersistedToolResponse`(`shared/persist/types/message.ts`),与 Domain Message 通过 `main/persist/messageWire.ts` 的 `rehydrate` / `dehydrate` 互转。Persisted 只是空字段省略后的 Domain。 |
 | **pi-ai 只在 pi/ 内 import** | 例外清单:`session.ts` / `model.ts` / `tool.ts` / `auth.ts` / `utility.ts`。其它任何模块 `import '@earendil-works/pi-ai'` 一律违规。 |
 | **profile 永远存在,登录是给 profile 贴身份** | 不要求用户登录任何 provider 才能启动;profile bootstrap 永远成功,认证态由 `pi/auth.ts` 一处管理。 |
 | **依赖规则** | `agent → session → prompt / tool / mcp / compression → utils/internal`。无环、无双向回调、按需注入纯函数 hook。 |
@@ -262,7 +262,7 @@ catch e:
 `pi/auth.ts` —— 每个 profile 一份 `PiAuthFile`(`auth.pi.json`)与 `PiAuthManager` 单例。
 
 ```
-auth.pi.json 磁盘 schema(shared/types/piAuthTypes.ts)
+auth.pi.json 磁盘 schema(shared/persist/types/auth.ts)
 {
   version: 'pi-v1',
   providers: {
@@ -293,7 +293,7 @@ PiAuthManager(profileId)                              auth.ts:48
 - 每个 `profileId` 一份独立实例,绑定 `{userData}/profiles/{p_ulid}/auth.pi.json`。
 - `REFRESH_SKEW_MS = 60_000`(auth.ts:28):expires 在这个安全垫内视为有效,否则提前 refresh。
 - `refresh` 不由后台 monitor 主动跑,只在 `getApiKey` 命中 expired 时按需触发 —— 避免后台 monitor 与请求路径竞写 `auth.json`。
-- 老 `MainAuthManager` 已下线;`shared/persist/types.ts#LegacyAuthFile` 仅供 `persist/auth.ts#LegacyAuth.load` 兼容读取磁盘残留(只读)。
+- 老 `MainAuthManager` 已下线;`shared/persist/types/index.ts#LegacyAuthFile` 仅供 `persist/auth.ts#LegacyAuth.load` 兼容读取磁盘残留(只读)。
 - OAuth provider 实现从 `@earendil-works/pi-ai/oauth` 子路径 import(根 index 只 re-export 类型)。
 
 ---

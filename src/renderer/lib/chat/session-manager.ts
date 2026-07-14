@@ -26,9 +26,9 @@ import type {
   StatusChangedChunk,
   StreamingChunk,
 } from '@shared/types/streamingTypes';
-import type { ToolResult } from '@shared/types/message';
+import type { ToolResult } from '@shared/persist/types'
 import type { InteractiveMap, InteractiveRequestType } from '@shared/types/interactiveRequestTypes';
-import type { ContextTokenUsage } from '@shared/types/agentChatTypes';
+import type { ContextTokenUsage } from '@shared/persist/types'
 import Resolveable from '@shared/resolveable-promise';
 import { log } from '@/log';
 import {

@@ -28,7 +28,7 @@ import {
   type McpTool,
 } from './manager/types';
 import { log } from '@main/log';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 // 供外部导入的公共类型 —— 保持与旧文件相同的模块出口。
 export type { MCPServerRuntimeState, MCPServerStatus } from './manager/types';

@@ -8,8 +8,8 @@
  * - 首请求或上一轮失败导致 `lastUsage` 为空时,用 `roughEstimate` 做保护性兜底
  */
 
-import type { CompressionSnapshot, ContextState, ContextTokenUsage } from '@shared/types/agentChatTypes';
-import type { AssistantMessage, Message } from '@shared/types/message';
+import type { CompressionSnapshot, ContextState, ContextTokenUsage } from '@shared/persist/types'
+import type { AssistantMessage, Message } from '@shared/persist/types'
 import type { Usage as PiUsage } from '@earendil-works/pi-ai';
 
 import { buildLlmContext } from '@main/pi/utils/buildLlmContext';

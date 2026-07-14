@@ -14,7 +14,7 @@
  */
 
 import { mcpClientManager } from '@main/lib/mcpRuntime'
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 export interface CreateServerArgs {
   mcp_config: {

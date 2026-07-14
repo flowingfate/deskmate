@@ -5,12 +5,12 @@
  * - view='llm' checks contextState to determine if a message was compressed away;
  *   returns a dropped signal when the message index falls within the compressed range.
  *
- * 形态:Domain Message (`@shared/types/message`)。Top-level 只有 user/assistant;
+ * 形态:Domain Message (`@shared/persist/types`)。Top-level 只有 user/assistant;
  * 工具结果折在 `assistant.tool_calls[i].response`,user 附件折在 `attachments[]`。
  */
 
-import type { Message, ToolCall, Attachment } from '@shared/types/message';
-import type { ContextState } from '@shared/types/agentChatTypes';
+import type { Message, ToolCall, Attachment } from '@shared/persist/types'
+import type { ContextState } from '@shared/persist/types'
 import { truncateMiddle } from './truncate';
 import type { DoctorSessionFile, HistoryView } from './types';
 

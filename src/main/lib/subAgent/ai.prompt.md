@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-13 -->
+<!-- Last verified: 2026-07-14 (SubAgentConfig schema 收敛至 shared/persist/types/) -->
 # Sub-Agent System
 
 > 在父 agent 对话中按需 spawn / 控制生命周期 / 报告结果的轻量 sub-agent。
@@ -9,7 +9,7 @@
 | `subAgentManager.ts` | 单例：生命周期 + 并行/总数限制 + 父子追踪 + IPC 节流推送 | medium |
 | `subAgentChat.ts` | Sub-agent runner wrapper：稳定的 4 层 system prompt + Phase 0 消息计数压缩 + 请求尾部 turn-progress reminder + 工具结果蒸馏 + follow-up 引导 + deliverables 跟踪 | medium |
 | `subAgentSession.ts` | 一轮对话最小单元：纯内存 messages 数组 + 复用 pi 原子（stream / executeToolCall / checkAndCompress / overflow 重试）；将 `transientReminder` 仅附到本次请求的消息尾部 | medium |
-| `types.ts` | 运行时类型（`SubAgent`、`SubAgentChatOptions`、`SubAgentStepUpdate`），独立于 shared persist 中的 `SubAgentConfig` | small |
+| `types.ts` | 运行时类型（`SubAgent`、`SubAgentChatOptions`、`SubAgentStepUpdate`），依赖 shared persist 的 `SubAgentConfig` | small |
 
 ## Architecture
 - **SubAgentManager** 是单例（`getInstance()`），硬限制来自 `shared/types/profileTypes` 的 `SUB_AGENT_LIMITS`：最多 5 个并行实例，每个父 session 最多 20 次 spawn。超出向父 LLM 返回错误而非抛异常。
@@ -33,7 +33,7 @@
 | Scenario | Files to Modify | Notes |
 |----------|----------------|-------|
 | 改 spawn 限制 | `shared/types/profileTypes.ts` (`SUB_AGENT_LIMITS`) | Manager 从此处读 |
-| 加 sub-agent 配置字段 | `shared/types/profileTypes.ts` (`SubAgentConfig`) + `persist/lib/subAgentMarkdown.ts` | 更新 YAML 序列化和迁移 |
+| 加 sub-agent 配置字段 | `shared/persist/types/subAgent.ts`（经 `types/index.ts` 导出）+ `persist/lib/subAgentMarkdown.ts` | 更新 YAML 序列化和迁移 |
 | 改单轮 / 单任务上限 | `subAgentChat.ts` 文件顶部常量 (`DEFAULT_MAX_TURNS`, `MSG_COUNT_*`, `TOOL_RESULT_SUMMARIZE_*`) | 同时检查 `SUB_AGENT_LIMITS.DEFAULT_MAX_TURNS` |
 | 改压缩阈值 | `subAgentChat.ts` (`SUB_AGENT_COMPRESSION_THRESHOLD`) 传入 `SubAgentSession` 构造 | 主 chat 的 0.85 在 `pi/compression.DEFAULT_COMPRESSION_THRESHOLD` |
 | 改 follow-up 启发式 | `subAgentChat.ts` (`INTENT_PATTERNS` / `shouldContinueAfterTextResponse`) | 不要下沉到 pi |

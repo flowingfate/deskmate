@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-13 -->
+<!-- Last verified: 2026-07-14 (SkillConfig / provenance schema 收敛至 shared/persist/types/) -->
 # Skills System
 
 > 管理以 `.zip`/`.skill` 归档形式交付的打包 AI prompt 模板的安装、版本控制和激活。
@@ -39,7 +39,7 @@
 | 添加新的激活模式 | `installAndActivateSkill.ts`（`ActivationMode` 类型 + switch） | 渲染进程也必须通过 IPC 传递新模式 |
 | 更改 skill 存储目录布局 | `skillInstall.ts`（`installSkill`） + `SecurityValidator` skills 路径白名单 | 路径在 `securityValidator.ts` 中被白名单 |
 | 新增外部 Agent skill 来源 | `foreignAgentSkillScanner.ts`（registry） + `ImportForeignAgentSkillsDialog.tsx`（UI 文案如需展示） | 只加固定 skills 根路径；不要扫描任意 home 目录 |
-| 更改 skill provenance | `shared/types/profileTypes.ts`（`ForeignSkillSource` / `SkillConfig.foreign`） + `shared/persist/types.ts` 文档注释 + `importForeignAgentSkills.ts` | 新增字段向后兼容；不要重命名/删除旧字段 |
+| 更改 skill provenance | `shared/persist/types/resource.ts`（`ForeignSkillSource` / `SkillConfig.foreign`，经 `types/index.ts` 导出）+ `importForeignAgentSkills.ts` | 新增字段向后兼容；不要重命名/删除旧字段 |
 
 ## Gotchas
 - ⚠️ skills 目录无论 workspace 范围如何都**始终被 `SecurityValidator` 批准**。更改其路径需要更新 `securityValidator.ts` 中的白名单。

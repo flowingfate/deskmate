@@ -30,7 +30,7 @@ import type {
   CallToolResult,
   CompatibilityCallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 import { log } from '@main/log';
 import {
   DeskmateHttpSdkTransport,

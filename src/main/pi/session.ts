@@ -8,19 +8,17 @@ import type {
   ToolCall as PiToolCall,
 } from '@earendil-works/pi-ai';
 
-import type {
-  AssistantMessage,
-  AssistantOutcome,
-  Message,
-  ToolResult,
-  UserMessage,
-} from '@shared/types/message';
-import type { ContextState } from '@shared/types/agentChatTypes';
+import type { AssistantMessage,
+AssistantOutcome,
+Message,
+ToolResult,
+UserMessage, } from '@shared/persist/types'
+import type { ContextState } from '@shared/persist/types'
 import type { StreamingChunk } from '@shared/types/streamingTypes';
 import { ChatStatus } from '@shared/types/agentChatTypes';
 import Stream from '@shared/stream-iterator';
-import type { ThinkingLevel } from '@shared/types/thinkingLevel';
-import type { SubAgentConfig } from '@shared/types/profileTypes';
+import type { ThinkingLevel } from '@shared/persist/types'
+import type { SubAgentConfig } from '@shared/persist/types'
 
 import { CancellationError } from '@main/lib/utilities/errors';
 

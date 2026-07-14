@@ -2,7 +2,7 @@
  * Resume 判定 —— 启动期决定怎么把"上次没收尾的 turn"接回去跑。
  *
  * 触发时机：`BaseSession.restore()` 完毕后，若 `SessionDataFile.turn.status ===
- * 'running'`（1-bit flag 位于 `shared/persist/types.ts`），就调一次 `planResume`，
+ * 'running'`（1-bit flag 位于 `shared/persist/types/index.ts`），就调一次 `planResume`，
  * 把结果缓存到 `BaseSession.pendingResume`；下一次 entry (startStream / retryStream)
  * 在常规流程前优先消化它。turn=idle 直接返 `markIdle`。
  *
@@ -20,7 +20,7 @@
  * 纯函数：只看 messages 尾部；不读盘、不写盘、不发 IPC。
  */
 
-import type { AssistantOutcome, Message } from '@shared/types/message';
+import type { AssistantOutcome, Message } from '@shared/persist/types'
 
 /**
  * `planResume` 看 messages 尾部得出该返回什么 ResumeAction。结果会缓存在

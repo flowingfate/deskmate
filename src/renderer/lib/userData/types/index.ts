@@ -5,20 +5,22 @@
 
 // Re-export backend types for consistency
 export type {
-  Profile,
-  GhcUser,
-  GhcTokens,
-  ModelConfig,
-  McpServerConfig,
-  AgentMcpServer,
   AgentEnvelope,
   AgentPersona,
+  GhcTokens,
+  GhcUser,
+  Profile,
+} from '@shared/types/profileTypes';
+export type {
+  AgentMcpServer,
   ChatSession,
-  StarredChatSessionIndexItem,
+  McpServerConfig,
+  ModelConfig,
   SkillConfig,
+  StarredChatSessionIndexItem,
   SubAgentConfig,
-  SubAgentContextAccess
-} from '@shared/types/profileTypes'
+  SubAgentContextAccess,
+} from '@shared/persist/types';
 export type { SchedulerJob } from '../../../../main/lib/scheduler/types'
 
 // Re-export App configuration types

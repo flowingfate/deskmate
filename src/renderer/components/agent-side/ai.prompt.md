@@ -92,7 +92,7 @@ const JobRunChatView = () => (<><JobRunBanner /><ChatView kind="job-run" /></>);
 | 变更内容 | 同时需要更新 |
 |----------|-------------|
 | jobs 路由形态变化 | `entries/main.routes.tsx` + `SessionPanel.tsx` + `AlarmToggleButton.tsx`（构造目标 URL）+ `showScheduledRunStartedToast.tsx`（toast 跳转目标）+ `GeneratedScheduleCards.tsx`（Manage / Run now 跳转） |
-| `JobRunRow` schema 变化 | `shared/persist/types.ts` + `RunRow.tsx`（状态字段消费）+ `jobs/utils.ts`（`getScheduledSessionDisplayState`） |
+| `JobRunRow` schema 变化 | `shared/persist/types/index.ts` + `RunRow.tsx`（状态字段消费）+ `jobs/utils.ts`（`getScheduledSessionDisplayState`） |
 | `SchedulerJob` schema 变化 | `main/lib/scheduler/types.ts` + `JobRow.tsx`（status / cron desc / 展开内的 `lastRunAt` / tooltip 内的 last run）+ `jobs/utils.ts`（`describeSchedule` / `deriveJobRowStatus`） |
 | 未读 badge 来源调整 | `lib/chat/useAgentUnreadSummary.ts` + `AlarmToggleButton.tsx` |
 | 删除 schedule 时的回退路径 | `JobsView.tsx#handleDelete`(主入口,删完原地刷新);`JobRunsView.tsx` (job 不存在时 3s auto-redirect 到 `/agent/:agentId/job`) |

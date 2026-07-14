@@ -9,8 +9,7 @@
  */
 
 import { connectRenderToMain, connectMainToRender } from './base';
-import type { ThinkingLevel } from '../types/thinkingLevel';
-import type { ProviderAccountSummary } from '../types/piAuthTypes';
+import type { ProviderAccountSummary, ThinkingLevel } from '../persist/types';
 
 export interface SuccessResult<T = void> {
   success: true;

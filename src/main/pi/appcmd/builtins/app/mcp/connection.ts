@@ -16,7 +16,7 @@ import {
   type MCPServerRuntimeState,
 } from '@main/lib/mcpRuntime';
 import { Profiles } from '@main/persist';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 import { COMMON_FLAGS, isHelp, isJson } from '../../../_commonFlags';
 import { parseFlags, type FlagSpec } from '../../../flags';

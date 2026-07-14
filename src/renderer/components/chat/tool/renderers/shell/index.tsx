@@ -8,7 +8,7 @@
 // executing / interrupted / failed 走默认渲染。
 
 import React from 'react';
-import type { ToolCall } from '@shared/types/message';
+import type { ToolCall } from '@shared/persist/types'
 import type {
   ToolRenderer,
   ToolSlotProps,

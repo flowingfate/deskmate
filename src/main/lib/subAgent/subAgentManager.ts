@@ -10,16 +10,10 @@
 
 import { SubAgentChat } from './subAgentChat';
 import type { SubAgent, SubAgentChatOptions, SubAgentStepUpdate } from './types';
-import type {
-  SubAgentConfig,
-  SubAgentContextAccess,
-  SubAgentTaskResult,
-  SubAgentRuntimeState,
-  SubAgentStep,
-  AgentMcpServer,
-} from '@shared/types/profileTypes';
+import type { AgentMcpServer, SubAgentConfig, SubAgentContextAccess } from '@shared/persist/types';
+import type { SubAgentRuntimeState, SubAgentStep, SubAgentTaskResult } from '@shared/types/profileTypes';
 import { SUB_AGENT_LIMITS } from '@shared/types/profileTypes';
-import type { Message } from '@shared/types/message';
+import type { Message } from '@shared/persist/types';
 import { log } from '@main/log';
 import { Profiles } from '@main/persist';
 import { Agent as PiAgent, type RegularSession } from '@main/pi';

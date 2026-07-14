@@ -9,7 +9,7 @@
  * `assistant.tool_calls[]` 列出工具调用 (并把 response 折在内部)。
  */
 
-import type { Message, ToolCall, Attachment } from '@shared/types/message';
+import type { Message, ToolCall, Attachment } from '@shared/persist/types'
 import { truncateMiddle } from './truncate';
 import type { DoctorSessionFile, SkeletonOptions } from './types';
 

@@ -1,14 +1,11 @@
 /**
  * Sub-Agent Runtime Type Definitions
  *
- * Persistence types live in `src/shared/types/profileTypes.ts` (SubAgentConfig
- * etc.); this file defines the **runtime** types used during sub-agent execution.
+ * 持久化 schema 位于 `src/shared/persist/types/index.ts`；本文件只定义子代理运行时状态。
  */
 
-import type {
-  SubAgentConfig,
-  SubAgentRuntimeState,
-} from '@shared/types/profileTypes';
+import type { SubAgentConfig } from '@shared/persist/types';
+import type { SubAgentRuntimeState } from '@shared/types/profileTypes';
 
 /**
  * Sub-Agent Runtime Entity

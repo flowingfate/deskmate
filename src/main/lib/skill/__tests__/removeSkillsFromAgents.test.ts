@@ -1,6 +1,6 @@
 import type { Mock } from 'vitest';
 import { removeSkillsFromAgents } from '../removeSkillsFromAgents';
-import type { SkillBindings } from '@shared/types/profileTypes';
+import type { SkillBindings } from '@shared/persist/types'
 
 const mockActive = vi.fn();
 
