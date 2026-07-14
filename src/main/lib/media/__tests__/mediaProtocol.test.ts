@@ -19,9 +19,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { resolveMediaRequest } from '../mediaProtocol';
-import { InternalUrlRouter } from '@main/pi/internal-urls/router';
-import { LocalProtocolHandler } from '@main/pi/internal-urls/handlers/local-protocol';
-import { KnowledgeProtocolHandler } from '@main/pi/internal-urls/handlers/knowledge-protocol';
+import { InternalUrlRouter, KnowledgeProtocolHandler, LocalProtocolHandler } from '@main/pi';
 
 import { Profile } from '@main/persist/profile';
 import { Profiles } from '@main/persist/profiles';

@@ -9,7 +9,7 @@
  *  - 不建跨 profile 表 —— 隔离不变量见 ai.prompt/persist.md §2；每 profile 一个 DB。
  *
  * 改 schema 时同步更新：
- *  - `RegularSessionRow` / `JobRunRow` 类型（`shared/persist/types.ts`）
+ *  - `RegularSessionRow` / `JobRunRow` 类型（`shared/persist/types/index.ts`）
  *  - `_meta.schema_version`（migrate 路径触发条件）
  */
 

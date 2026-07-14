@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Cable, Loader2 } from 'lucide-react';
 import { Button } from '@/shadcn/button';
@@ -18,9 +18,7 @@ import {
   type SelectionsMap,
 } from './toolConflictHelper';
 import AgentMcpServerCard from './AgentMcpServerCard';
-import { log } from '@/log';
-
-const logger = log.child({ mod: 'AgentMcpServersTab' });
+import { useDirtyTracker, setEquals } from './useDirtyTracker';
 
 /**
  * AgentMcpServersTab — Agent 关联的**外部 MCP server** 选择 tab。
@@ -46,17 +44,8 @@ const AgentMcpServersTab: React.FC<TabComponentProps> = ({
   const { showToast } = useToast();
 
   // 选中状态:serverName → 已勾工具名集合。空 Set ⇒ "全选该 server"。
-  const [serverSelections, setServerSelections] = useState<Map<string, Set<string>>>(
-    new Map(),
-  );
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());
-  const [isInitialized, setIsInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  // 初始数据用于 hasChanges 检测
-  const [initialSelections, setInitialSelections] = useState<Map<string, Set<string>>>(
-    new Map(),
-  );
 
   // 把 AgentMcpServer[] hydrate 成 Map<server, Set<tool>>。
   const hydrate = useCallback((list: AgentMcpServer[] | undefined): Map<string, Set<string>> => {
@@ -72,45 +61,40 @@ const AgentMcpServersTab: React.FC<TabComponentProps> = ({
     return result;
   }, []);
 
-  // hydrate 外部数据。cachedData(tab 编辑缓存)优先。
-  useEffect(() => {
-    if (!agentData?.id) return;
-    const base = hydrate(agentData.mcpServers);
-    const final = cachedData?.mcpServers !== undefined ? hydrate(cachedData.mcpServers) : base;
-    setServerSelections(final);
-    if (!isInitialized) {
-      setInitialSelections(new Map(base));
-      setIsInitialized(true);
-    }
-  }, [agentData?.id, agentData?.mcpServers, cachedData?.mcpServers, isInitialized, hydrate]);
+  const baseline = useMemo(() => hydrate(agentData?.mcpServers), [hydrate, agentData?.mcpServers]);
+  const cached = useMemo(
+    () => (cachedData?.mcpServers !== undefined ? hydrate(cachedData.mcpServers) : null),
+    [hydrate, cachedData?.mcpServers],
+  );
 
-  // hasChanges 比对
-  const hasChanges = useMemo(() => {
-    if (serverSelections.size !== initialSelections.size) return true;
-    for (const [name, selected] of serverSelections) {
-      const initial = initialSelections.get(name);
-      if (!initial) return true;
-      if (selected.size !== initial.size) return true;
-      for (const tool of selected) {
-        if (!initial.has(tool)) return true;
+  const { value: serverSelections, setValue: setServerSelections } = useDirtyTracker<Map<string, Set<string>>>({
+    tabName: 'mcp',
+    ready: !!agentData?.id,
+    agentId: agentData?.id,
+    baseline,
+    cached,
+    // 嵌套比较:server 键集合 + 每 server 的 tool 集合(顺序无关)。
+    equals: (a, b) => {
+      if (a.size !== b.size) return false;
+      for (const [name, selected] of a) {
+        const other = b.get(name);
+        if (!other) return false;
+        if (!setEquals(selected, other)) return false;
       }
-    }
-    return false;
-  }, [serverSelections, initialSelections]);
-
-  // 同步状态到父 tab cache
-  const lastNotifiedRef = React.useRef<string | null>(null);
-  useEffect(() => {
-    if (!isInitialized || !onDataChange) return;
-    const mcpServers: AgentMcpServer[] = Array.from(serverSelections.entries()).map(
-      ([name, tools]) => ({ name, tools: Array.from(tools) }),
-    );
-    const key = JSON.stringify(mcpServers);
-    if (lastNotifiedRef.current !== key) {
-      lastNotifiedRef.current = key;
-      onDataChange('mcp', { mcpServers }, hasChanges);
-    }
-  }, [serverSelections, hasChanges, isInitialized, onDataChange]);
+      return true;
+    },
+    // 规范化指纹:server 按名排序,每 server 的 tools 排序。
+    fingerprint: (map) =>
+      JSON.stringify(
+        Array.from(map.entries())
+          .map(([name, tools]) => [name, Array.from(tools).sort()] as const)
+          .sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)),
+      ),
+    toPayload: (map) => ({
+      mcpServers: Array.from(map.entries()).map(([name, tools]) => ({ name, tools: Array.from(tools) })),
+    }),
+    onDataChange,
+  });
 
   // 构造给 conflict helper 的 ToolSource[]
   const conflictSources = useMemo(

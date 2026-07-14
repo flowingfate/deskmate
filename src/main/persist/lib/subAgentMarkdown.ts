@@ -7,12 +7,10 @@
  */
 
 import { joinFrontMatter, splitFrontMatter } from '@shared/persist/markdown';
-import type {
-  SubAgentConfig,
-  SubAgentContextAccess,
-  SubAgentMcpServerConfig,
-  AgentMcpServer,
-} from '@shared/types/profileTypes';
+import type { SubAgentConfig,
+SubAgentContextAccess,
+SubAgentMcpServerConfig,
+AgentMcpServer, } from '@shared/persist/types'
 
 /** SubAgentConfig 默认值（仅取本模块用到的 2 项；与产品历史默认值一致）。 */
 const DEFAULT_EMOJI = '🤖';

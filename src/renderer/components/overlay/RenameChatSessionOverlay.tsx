@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { atom } from '@/atom';
 import { persistApi } from '@/ipc/persist';
 import { useToast, type ToastContextType } from '../ui/ToastProvider';
@@ -68,10 +69,11 @@ export const RenameChatSessionAtom = atom(zeroState, (get, set) => {
 export function RenameChatSessionOverlay() {
   const [state, actions] = RenameChatSessionAtom.use();
   const toast = useToast();
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   return (
     <Dialog open={state.isOpen} onOpenChange={(open) => { if (!open) actions.cancel(); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" initialFocusRef={titleInputRef}>
         <DialogHeader>
           <DialogTitle>Rename Chat Session</DialogTitle>
           <DialogDescription>
@@ -80,12 +82,12 @@ export function RenameChatSessionOverlay() {
         </DialogHeader>
         <div>
           <input
+            ref={titleInputRef}
             type="text"
             className="mt-3 w-full rounded-lg border border-sc-border bg-sc-background px-3 py-2.5 text-sm text-sc-foreground focus:outline-none focus:ring-2 focus:ring-sc-ring"
             value={state.newTitle}
             onChange={(e) => actions.setNewTitle(e.target.value)}
             placeholder="Enter session name"
-            autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter' && state.newTitle.trim()) {
                 actions.confirm(toast);

@@ -19,6 +19,7 @@ import SkillsView from '../components/skills/SkillsView';
 import SubAgentsView from '../components/subAgents/SubAgentsView';
 import CreateSubAgentView from '../components/subAgents/CreateSubAgentView';
 import EditSubAgentView from '../components/subAgents/EditSubAgentView';
+import SubAgentsSettingsLayout from '../components/subAgents/SubAgentsSettingsLayout';
 import RuntimeSettingsView from '../components/settings/runtime/RuntimeSettingsView';
 import { navigateEvents } from '@/ipc/navigate';
 import { useSessionCompletionToast } from '../lib/scheduler/useSessionCompletionToast';
@@ -41,6 +42,7 @@ import McpAuthConsentDialog from '../components/mcp/McpAuthConsentDialog';
 import RequestOAuthClientIdDialog from '../components/mcp/RequestOAuthClientIdDialog';
 import { useMcpConnectionFailureToast } from '../lib/mcp/useMcpConnectionFailureToast';
 import { settingsEntryLoader } from '@renderer/lib/navigation/settingsEntry';
+import { ConfirmationDialogHost } from '../components/ui/ConfirmationDialog';
 
 const logger = log.child({ mod: 'AppRoutes' });
 
@@ -105,6 +107,7 @@ const RootLayout: React.FC = () => {
       <WindowZoomHotkeys />
       <McpAuthConsentDialog />
       <RequestOAuthClientIdDialog />
+      <ConfirmationDialogHost />
       <div className="h-screen flex flex-col overflow-hidden">
         {!isAppShellRoute && <TitleBar />}
         <div className="flex-1 min-h-0">
@@ -162,25 +165,14 @@ const routes: RouteObject[] = [
                 path: 'sub-agents',
                 element: (
                   <FeatureGate flag="deskmateFeatureSubAgent">
-                    <SubAgentsView />
+                    <SubAgentsSettingsLayout />
                   </FeatureGate>
                 ),
-              },
-              {
-                path: 'sub-agents/new',
-                element: (
-                  <FeatureGate flag="deskmateFeatureSubAgent">
-                    <CreateSubAgentView />
-                  </FeatureGate>
-                ),
-              },
-              {
-                path: 'sub-agents/edit/:subAgentName',
-                element: (
-                  <FeatureGate flag="deskmateFeatureSubAgent">
-                    <EditSubAgentView />
-                  </FeatureGate>
-                ),
+                children: [
+                  { index: true, Component: SubAgentsView },
+                  { path: 'new', Component: CreateSubAgentView },
+                  { path: 'edit/:subAgentName', Component: EditSubAgentView },
+                ],
               },
               { path: 'about', Component: AboutAppView },
               { path: 'provider', Component: ProviderList },

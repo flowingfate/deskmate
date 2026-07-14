@@ -38,6 +38,8 @@ export interface ToolCallChunk extends StreamingChunkBase {
   args: Record<string, unknown>;
   /** Tool 被调用的时间戳 (Domain ToolCall.time)。 */
   time: number;
+  /** MCP server 名称；本地工具和旧调用缺席。 */
+  mcp?: string;
 }
 
 export interface ToolResultChunk extends StreamingChunkBase {

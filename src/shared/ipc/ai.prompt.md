@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-03 (新增 notification 纯 M→R 事件通道：schedule 完成 in-app toast) -->
+<!-- Last verified: 2026-07-14 (IPC 契约的持久化 schema 统一从 shared/persist/types 导入) -->
 # IPC 框架（`src/shared/ipc/`）
 
 > 基于 TypeScript 泛型 + Proxy 的框架，从单一共享定义文件出发，在 Electron 的三个层（main / preload / renderer）之间强制实现类型安全、编译期检查的 IPC。

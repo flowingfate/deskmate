@@ -7,11 +7,10 @@ import { mainWindow } from '@main/startup/wins';
 import { StreamingChunk } from '@shared/types/streamingTypes';
 import Stream from '@shared/stream-iterator';
 
-import { Agent } from '../../pi/agent';
-import type { RegularSession } from '../../pi/session';
+import { Agent, type RegularSession } from '@main/pi';
 import { Profiles } from '../../persist';
-import type { Message } from '@shared/types/message';
-import type { ChatSessionFile } from '@shared/types/agentChatTypes';
+import type { Message } from '@shared/persist/types'
+import type { ChatSessionFile } from '@shared/persist/types'
 import { ChatStatus } from '@shared/types/agentChatTypes';
 import { rehydrate } from '@main/persist/messageWire';
 import { log } from '@main/log';

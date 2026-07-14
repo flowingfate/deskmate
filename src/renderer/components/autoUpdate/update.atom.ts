@@ -1,4 +1,5 @@
 import { atom } from '@/atom';
+import { requestConfirmation } from '@/components/ui/ConfirmationDialog';
 import { UpdateInfo, CheckPhase } from './UpdateDialog';
 import { updateApi, updateEvents } from '@/ipc/update';
 import { log } from '@/log';
@@ -135,11 +136,10 @@ export const updateAtom = atom(zeroState, (get, set) => {
       const finalFilePath = typeof targetFilePath === 'string' ? targetFilePath : state.downloadedFilePath;
       if (!finalFilePath) return;
 
-      const confirmed = await new Promise<boolean>((resolve) => {
-        const result = window.confirm(
-          'Installing the new version requires closing the app.\n\nDo you want to continue with the installation?'
-        );
-        resolve(result);
+      const confirmed = await requestConfirmation({
+        title: 'Restart to install update?',
+        description: 'Installing the new version requires closing the app. Do you want to continue with the installation?',
+        confirmLabel: 'Restart now',
       });
       if (!confirmed) return;
 

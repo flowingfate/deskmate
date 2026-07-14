@@ -1,19 +1,18 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { BookMarked, MoreHorizontal, Loader2 } from 'lucide-react'
-import { cn } from '@/lib/utilities/utils'
-import { Button } from '@/shadcn/button'
-import { ScrollArea } from '@/shadcn/scroll-area'
-import { SkillConfig } from '../../lib/userData/types'
-import ListSearchBox from '../ui/ListSearchBox'
+import React, { useState, useEffect, useMemo } from 'react';
+import { BookMarked, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utilities/utils';
+import { ScrollArea } from '@/shadcn/scroll-area';
+import type { SkillConfig } from '../../lib/userData/types';
+import ListSearchBox from '../ui/ListSearchBox';
+import SkillDropdownMenu from './SkillDropdownMenu';
 
 interface SkillListPanelProps {
   skills: SkillConfig[]
   selectedSkill: SkillConfig | null
   isLoading: boolean
   onSelectSkill: (skill: SkillConfig | null) => void
-  onSkillMenuToggle?: (skillName: string, buttonElement: HTMLElement) => void
 }
 
 // Skill card — 与 MCP ServerCard / ToolListView 行项风格一致(Tailwind + semantic tokens)
@@ -21,14 +20,12 @@ interface SkillCardProps {
   skill: SkillConfig
   isSelected: boolean
   onSelect: () => void
-  onMenuClick: (e: React.MouseEvent) => void
 }
 
 const SkillCard: React.FC<SkillCardProps> = ({
   skill,
   isSelected,
   onSelect,
-  onMenuClick,
 }) => {
 
   return (
@@ -73,14 +70,7 @@ const SkillCard: React.FC<SkillCardProps> = ({
           <span className="text-xs text-sc-muted-foreground">v{skill.version}</span>
         )}
       </div>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-        onClick={onMenuClick}
-      >
-        <MoreHorizontal size={15} strokeWidth={1.5} />
-      </Button>
+      <SkillDropdownMenu skillName={skill.name} />
     </div>
   )
 }
@@ -90,7 +80,6 @@ const SkillListPanel: React.FC<SkillListPanelProps> = ({
   selectedSkill,
   isLoading,
   onSelectSkill,
-  onSkillMenuToggle,
 }) => {
   // Search filter — hooks must be at top level, before any early returns
   const [searchQuery, setSearchQuery] = useState('')
@@ -129,13 +118,6 @@ const SkillListPanel: React.FC<SkillListPanelProps> = ({
     }
   }, [searchQuery, filteredIdentity, selectedSkill?.name])
 
-  const handleMenuClick = (skill: SkillConfig, e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (onSkillMenuToggle) {
-      const buttonElement = e.currentTarget as HTMLElement
-      onSkillMenuToggle(skill.name, buttonElement)
-    }
-  }
 
   if (isLoading) {
     return (
@@ -175,7 +157,6 @@ const SkillListPanel: React.FC<SkillListPanelProps> = ({
                 skill={skill}
                 isSelected={selectedSkill?.name === skill.name}
                 onSelect={() => onSelectSkill(skill)}
-                onMenuClick={(e) => handleMenuClick(skill, e)}
               />
             </li>
           ))}

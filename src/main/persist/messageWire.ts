@@ -18,13 +18,11 @@ import type {
   PersistedJsonLine,
   PersistedToolResponse,
   PersistedUserMessage,
-} from '../../shared/persist/types';
-import type {
   AssistantMessage,
   Message,
   ToolCall,
   UserMessage,
-} from '../../shared/types/message';
+} from '../../shared/persist/types';
 
 /**
  * 把 JSONL 行序列折回成 Domain 消息数组。
@@ -63,6 +61,7 @@ export function rehydrate(lines: readonly PersistedJsonLine[]): {
         name: tc.name,
         time: tc.time,
         args: tc.args,
+        mcp: tc.mcp,
       }));
       const a: AssistantMessage = {
         role: 'assistant',
@@ -130,6 +129,7 @@ export function dehydrate(messages: readonly Message[]): PersistedJsonLine[] {
         name: tc.name,
         time: tc.time,
         args: tc.args,
+        mcp: tc.mcp,
       }));
     }
     if (m.outcome) line.outcome = m.outcome;

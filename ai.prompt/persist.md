@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-08 (运行时目录收进顶层 env/：bin/python-venv 等移入 ~/.deskmate/env/) -->
+<!-- Last verified: 2026-07-14 (持久化 schema 拆至 `shared/persist/types/`，唯一入口为 `types/index.ts`) -->
 
 ## 1. 范围
 
@@ -8,7 +8,7 @@
 
 代码位置:
 
-- `src/shared/persist/` — schema 类型 + 纯数据操作(id 生成、AGENT.md 解析、占位符、路径拼接、ULID)。**0 fs / 0 electron / 0 Node 环境 api**,main / renderer / worker 共用。
+- `src/shared/persist/` — 纯数据工具 + 本地 schema：`types/index.ts` 是唯一公共入口，`types/` 按磁盘资源域拆分；schema **不依赖** `src/shared/types/`。**0 fs / 0 electron / 0 Node 环境 api**,main / renderer / worker 共用。
 - `src/main/persist/` — class 风格、单实例缓存的 store 层;所有磁盘 io。**仅 main 进程使用**。
 - `src/shared/ipc/persist.ts` — IPC 通道契约(types only)。
 
@@ -298,8 +298,8 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 
 | 场景 | 入口提示 |
 |---|---|
-| 加 AGENT.md 字段 | `types.ts` + `agent.ts` `AgentConfig.assign/toFrontMatter` + markdown 测试 |
-| 加 regular session 索引字段 | `types.ts RegularSessionRow` + `lib/db/schema.ts` DDL + `sessionIdx.ts` marshal/unmarshal + `RegularSession.toRegularRow` + `rebuildFromDisk` 投影 |
+| 加 AGENT.md 字段 | `types/agent.ts`（经 `types/index.ts` 导出）+ `agent.ts` `AgentConfig.assign/toFrontMatter` + markdown 测试 |
+| 加 regular session 索引字段 | `types/session.ts`（`RegularSessionRow`，经 `types/index.ts` 导出）+ `lib/db/schema.ts` DDL + `sessionIdx.ts` marshal/unmarshal + `RegularSession.toRegularRow` + `rebuildFromDisk` 投影 |
 | 加 job_run 索引字段 | 同上但走 `JobRunRow` / `JobRun.toJobRunRow` / `JobRunIdx` 路径 |
 | 加 SQLite 偏序索引 | `lib/db/schema.ts` `CREATE INDEX IF NOT EXISTS ix_xxx ON ... WHERE ...;` + `EXPLAIN QUERY PLAN` 验命中(候选清单见 §9.2) |
 | 加 IPC 通道 | `src/shared/ipc/persist.ts` + `ipc.ts` handler + `preload/persist/invoke.ts` allowlist;renderer 自动类型推导 |
@@ -418,7 +418,7 @@ public async load() {
 | File | Relationship |
 |---|---|
 | [src/main/persist/ai.prompt.md](../src/main/persist/ai.prompt.md) | store 层 class 关系、常见修改场景、完整 26 条 Gotchas |
-| [src/shared/persist/types.ts](../src/shared/persist/types.ts) | 全部磁盘 schema 类型 |
+| [`src/shared/persist/types/index.ts`](../src/shared/persist/types/index.ts) | 本地磁盘 schema 的唯一入口；同目录按资源域拆分定义 |
 | [src/shared/persist/path.ts](../src/shared/persist/path.ts) | 持久化路径布局常量 |
 | [src/shared/persist/id.ts](../src/shared/persist/id.ts) | ULID + 类型前缀 |
 | [src/shared/persist/markdown.ts](../src/shared/persist/markdown.ts) | AGENT.md front-matter 解析 / 序列化 |

@@ -2,9 +2,9 @@
  * `buildToolCatalog*` 关键不变量:
  *
  * - 本地工具白名单空 ⇒ 全开;非空 ⇒ 仅列表内,未注册的名字直接跳过(不报错)。
- * - 外部 MCP 选择空 ⇒ 不出现外部工具;非空 ⇒ server-scoped 路由,
- *   每条 route 必须带 `serverName`(消灭旧路径"按裸 toolName 路由"歧义)。
- * - 同名工具(local ∩ mcp,或 mcp ∩ mcp)→ 构建期 throw,fail-fast。
+ * - 外部 MCP tool 以 `serverName/toolName` 注册给 LLM，同名 tool 可由多个
+ *   server 同时暴露；route 保存原始 serverName / toolName 供精确执行。
+ * - 仅 LLM 限定名碰撞才构建期 throw，避免静默覆盖。
  * - sub-agent catalog **不再**按 spec.name 二次过滤(spawn_* 防递归保护已下沉
  *   到 `app subagent` 命令内部的 `ensureSpawnPrerequisites`)—— `app` 是
  *   sub-agent 触达全部应用能力的唯一入口,按 name 移除等于禁掉所有能力。
@@ -26,7 +26,7 @@ vi.mock('@earendil-works/pi-ai', async () => ({
 }));
 
 import { listAllMcpTools } from '../mcp';
-import { buildToolCatalogForAgent, buildToolCatalogForSubAgent } from '../toolCatalog';
+import { buildToolCatalogForAgent, buildToolCatalogForSubAgent, ToolCatalog } from '../tool';
 import { tools as localRegistry } from '../tools/registry';
 
 // 把 tools/index 副作用先跑一遍(它会注册所有真实工具),让后续
@@ -68,9 +68,9 @@ describe('buildToolCatalogForAgent', () => {
       mcpServers: [], systemPrompt: '',
     });
     expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a', 'local_b']);
-    for (const route of catalog.routes.values()) {
-      expect(route.kind).toBe('local');
-    }
+    expect(catalog.getRoute('local_a')).toEqual({ kind: 'local', toolName: 'local_a' });
+    expect(catalog.getRoute('local_b')).toEqual({ kind: 'local', toolName: 'local_b' });
+    expect(catalog.getRoute('app')).toEqual({ kind: 'local', toolName: 'app' });
   });
 
   it('tools=[] ⇒ 全开(与缺席等价)', async () => {
@@ -89,7 +89,7 @@ describe('buildToolCatalogForAgent', () => {
     expect(catalog.specs.map((s) => s.name)).toEqual(['local_a']);
   });
 
-  it('mcpServers 注入 server-scoped 路由', async () => {
+  it('mcpServers 以 serverName/toolName 注入 LLM 目录', async () => {
     mockedListAllMcp.mockResolvedValue([
       { serverName: 'srv1', name: 'mcp_x', description: 'x', inputSchema: { type: 'object' } },
       { serverName: 'srv2', name: 'mcp_y', description: 'y', inputSchema: { type: 'object' } },
@@ -100,40 +100,41 @@ describe('buildToolCatalogForAgent', () => {
       mcpServers: [{ name: 'srv1', tools: [] }],
       systemPrompt: '',
     });
-    expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a', 'local_b', 'mcp_x']);
-    expect(catalog.routes.get('mcp_x')).toEqual({ kind: 'mcp', serverName: 'srv1' });
-    expect(catalog.routes.get('mcp_y')).toBeUndefined();
+    expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a', 'local_b', 'srv1/mcp_x']);
+    expect(catalog.getRoute('srv1/mcp_x')).toEqual({ kind: 'mcp', serverName: 'srv1', toolName: 'mcp_x' });
+    expect(catalog.getRoute('srv2/mcp_y')).toBeUndefined();
   });
 
-  it('本地与 mcp 同名 ⇒ 构建期 throw', async () => {
+  it('本地与 MCP 同名 tool 可同时暴露', async () => {
     mockedListAllMcp.mockResolvedValue([
       { serverName: 'srv1', name: 'local_a', description: 'collision', inputSchema: { type: 'object' } },
     ]);
-    await expect(
-      buildToolCatalogForAgent({
-        emoji: '', name: 'A', model: 'p::m',
-        tools: [], mcpServers: [{ name: 'srv1', tools: [] }], systemPrompt: '',
-      }),
-    ).rejects.toThrow(/duplicate tool name "local_a"/);
+    const catalog = await buildToolCatalogForAgent({
+      emoji: '', name: 'A', model: 'p::m',
+      tools: [], mcpServers: [{ name: 'srv1', tools: [] }], systemPrompt: '',
+    });
+    expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a', 'local_b', 'srv1/local_a']);
+    expect(catalog.getRoute('local_a')).toEqual({ kind: 'local', toolName: 'local_a' });
+    expect(catalog.getRoute('srv1/local_a')).toEqual({ kind: 'mcp', serverName: 'srv1', toolName: 'local_a' });
   });
 
-  it('两个 mcp server 同名 ⇒ 构建期 throw', async () => {
+  it('两个 MCP server 的同名 tool 可同时暴露', async () => {
     mockedListAllMcp.mockResolvedValue([
       { serverName: 'srv1', name: 'shared', description: 'x', inputSchema: { type: 'object' } },
       { serverName: 'srv2', name: 'shared', description: 'y', inputSchema: { type: 'object' } },
     ]);
-    await expect(
-      buildToolCatalogForAgent({
-        emoji: '', name: 'A', model: 'p::m',
-        // 给一个不存在的名字 -> 本地白名单结果为空集,避免 local_a 占用 'shared'。
-        tools: ['nothing'],
-        mcpServers: [
-          { name: 'srv1', tools: [] },
-          { name: 'srv2', tools: [] },
-        ],
-        systemPrompt: '',
-      }),
-    ).rejects.toThrow(/duplicate tool name "shared"/);
+    const catalog = await buildToolCatalogForAgent({
+      emoji: '', name: 'A', model: 'p::m',
+      tools: ['nothing'],
+      mcpServers: [
+        { name: 'srv1', tools: [] },
+        { name: 'srv2', tools: [] },
+      ],
+      systemPrompt: '',
+    });
+    expect(catalog.specs.map((s) => s.name).sort()).toEqual(['srv1/shared', 'srv2/shared']);
+    expect(catalog.getRoute('srv1/shared')).toEqual({ kind: 'mcp', serverName: 'srv1', toolName: 'shared' });
+    expect(catalog.getRoute('srv2/shared')).toEqual({ kind: 'mcp', serverName: 'srv2', toolName: 'shared' });
   });
 });
 
@@ -159,5 +160,25 @@ describe('buildToolCatalogForSubAgent', () => {
       [],
     );
     expect(catalog.specs.map((s) => s.name)).toEqual(['local_a']);
+  });
+});
+
+describe('ToolCatalog.resolveIdentity', () => {
+  it('MCP 限定名 → 自然 toolName + mcp server', () => {
+    const catalog = new ToolCatalog([], new Map([
+      ['brave/search', { kind: 'mcp', serverName: 'brave', toolName: 'search' }],
+    ]));
+    expect(catalog.resolveIdentity('brave/search')).toEqual({ name: 'search', mcp: 'brave' });
+  });
+
+  it('local 名 → 自然 toolName, mcp 缺席', () => {
+    const catalog = new ToolCatalog([], new Map([
+      ['read', { kind: 'local', toolName: 'read' }],
+    ]));
+    expect(catalog.resolveIdentity('read')).toEqual({ name: 'read', mcp: undefined });
+  });
+
+  it('route 缺席 → name 回退到 llmName, mcp 缺席', () => {
+    expect(ToolCatalog.empty().resolveIdentity('ghost')).toEqual({ name: 'ghost', mcp: undefined });
   });
 });

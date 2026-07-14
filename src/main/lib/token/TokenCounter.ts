@@ -6,7 +6,7 @@
 import { TextTokenCalculator } from './calculators/TextTokenCalculator';
 import { ImageTokenCalculator } from './calculators/ImageTokenCalculator';
 import { ToolsTokenCalculator } from './calculators/ToolsTokenCalculator';
-import type { Message } from '@shared/types/message';
+import type { Message } from '@shared/persist/types'
 import {
   TokenCounterConfig,
   ImageTokenResult,

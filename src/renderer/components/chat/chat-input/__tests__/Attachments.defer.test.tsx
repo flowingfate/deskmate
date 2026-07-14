@@ -6,8 +6,8 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 
-import type { Attachment, UserMessage } from '@shared/types/message';
-import { asFileUri } from '@shared/types/message';
+import type { Attachment, UserMessage } from '@shared/persist/types'
+import { asFileUri } from '@shared/persist/types'
 
 // copyFileToSandbox = 唯一的落盘入口。整体 mock 以观测调用时机。
 const copyMock = vi.fn(async (_file: File, _ctx: unknown) => 'local://uploads/materialized');

@@ -1,8 +1,6 @@
 import { connectRenderToMain, connectMainToRender } from './base';
-import type {
-  SubAgentConfig,
-  SubAgentRuntimeState,
-} from '../types/profileTypes';
+import type { SubAgentConfig } from '../persist/types';
+import type { SubAgentRuntimeState } from '../types/profileTypes';
 
 type SubAgentRenderToMain = {
   getAll: { call: []; return: { success: boolean; data?: SubAgentConfig[]; error?: string } };

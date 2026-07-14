@@ -78,7 +78,8 @@ vi.mock('@main/pi', async () => ({
 }));
 
 import { SubAgentManager } from '../subAgentManager';
-import type { SubAgentConfig, SubAgentRuntimeState } from '@shared/types/profileTypes';
+import type { SubAgentConfig } from '@shared/persist/types';
+import type { SubAgentRuntimeState } from '@shared/types/profileTypes';
 import { SUB_AGENT_LIMITS } from '@shared/types/profileTypes';
 
 // ─── Helpers ───

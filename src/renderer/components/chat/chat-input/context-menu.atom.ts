@@ -5,7 +5,7 @@ import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { ensureAgentDetail, getAgentDetailSync } from '@/states/agentDetail.atom';
 import { getSkills as getSkillsAtom } from '@/states/skills.atom';
 import { currentSessionStore } from '@/states/currentSession.atom';
-import type { SkillConfig } from '@shared/types/profileTypes';
+import type { SkillConfig } from '@shared/persist/types';
 import { boundSkillNames } from '@shared/types/profileTypes';
 import { composeTextCommands } from './chatInputCommands';
 

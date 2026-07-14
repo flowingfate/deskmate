@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import React, { useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { Settings, Loader2 } from 'lucide-react';
 import { Button } from '@/shadcn/button'
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utilities/utils';
 
 import { TabComponentProps } from './types';
 import { useSubAgents } from '../../userData/userDataProvider';
+import { useDirtyTracker, setEquals, setFingerprint } from './useDirtyTracker';
 
 /**
  * AgentSubAgentsTab - Agent Sub-Agents configuration tab
@@ -36,63 +37,27 @@ const AgentSubAgentsTab: React.FC<TabComponentProps> = ({
   const navigate = useNavigate();
 
   // Store selected sub-agent names
-  const [selectedSubAgents, setSelectedSubAgents] = useState<Set<string>>(new Set());
+  // 选中的 sub-agent 名字集合。基线由 agentData.subAgents 派生。
+  const baseline = useMemo(
+    () => new Set(agentData?.subAgents ?? []),
+    [agentData?.subAgents],
+  );
+  const cached = useMemo(
+    () => (cachedData?.subAgents !== undefined ? new Set(cachedData.subAgents) : null),
+    [cachedData?.subAgents],
+  );
 
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Initial data for comparison to detect modifications
-  const [initialSubAgents, setInitialSubAgents] = useState<Set<string>>(new Set());
-
-  // Load selected sub-agents - reload when agentData or cachedData changes
-  useEffect(() => {
-    if (agentData?.id) {
-      const baseSubAgents = new Set<string>();
-
-      if (agentData?.subAgents) {
-        agentData.subAgents.forEach((name) => {
-          baseSubAgents.add(name);
-        });
-      }
-
-      // If cached data exists, prefer cached data
-      let finalSubAgents = baseSubAgents;
-      if (cachedData?.subAgents) {
-        finalSubAgents = new Set(cachedData.subAgents);
-      }
-
-      setSelectedSubAgents(finalSubAgents);
-      if (!isInitialized) {
-        setInitialSubAgents(new Set(baseSubAgents)); // Initial data is always the original data
-        setIsInitialized(true);
-      }
-    }
-  }, [agentData?.id, agentData?.subAgents, cachedData?.subAgents, isInitialized]);
-
-  // Check if data has been modified
-  const hasChanges = useMemo(() => {
-    if (selectedSubAgents.size !== initialSubAgents.size) return true;
-
-    for (const name of selectedSubAgents) {
-      if (!initialSubAgents.has(name)) return true;
-    }
-    return false;
-  }, [selectedSubAgents, initialSubAgents]);
-
-  // Notify parent component when data changes - use useRef to track last notified data
-  const lastNotifiedDataRef = React.useRef<string | null>(null);
-
-  useEffect(() => {
-    if (isInitialized && onDataChange) {
-      const subAgents = Array.from(selectedSubAgents);
-      const dataKey = JSON.stringify(subAgents);
-
-      // Only notify parent when data actually changes to avoid infinite loops
-      if (lastNotifiedDataRef.current !== dataKey) {
-        lastNotifiedDataRef.current = dataKey;
-        onDataChange('sub_agents', { subAgents }, hasChanges);
-      }
-    }
-  }, [selectedSubAgents, hasChanges, isInitialized, onDataChange]);
+  const { value: selectedSubAgents, setValue: setSelectedSubAgents } = useDirtyTracker<Set<string>>({
+    tabName: 'sub_agents',
+    ready: !!agentData?.id,
+    agentId: agentData?.id,
+    baseline,
+    cached,
+    equals: setEquals,
+    fingerprint: setFingerprint,
+    toPayload: (set) => ({ subAgents: Array.from(set) }),
+    onDataChange,
+  });
 
   // Toggle sub-agent selection state
   const handleToggle = useCallback((subAgentName: string) => {

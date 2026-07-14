@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -43,6 +43,7 @@ const RequestOAuthClientIdDialog: React.FC = () => {
   const [clientSecret, setClientSecret] = useState('');
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const clientIdInputRef = useRef<HTMLInputElement>(null);
 
   const showPayload = useCallback((data: McpAuthClientIdRequestPayload) => {
     setState({ isOpen: true, payload: data });
@@ -138,7 +139,7 @@ const RequestOAuthClientIdDialog: React.FC = () => {
       open={state.isOpen}
       onOpenChange={(open) => { if (!open) handleCancel(); }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" initialFocusRef={clientIdInputRef}>
         <DialogHeader>
           <DialogTitle>
             Connect to {state.payload.providerLabel}
@@ -197,12 +198,12 @@ const RequestOAuthClientIdDialog: React.FC = () => {
               Client ID
             </label>
             <input
+              ref={clientIdInputRef}
               id="mcp-oauth-client-id"
               type="text"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
               placeholder="Paste the Client ID from your OAuth app"
-              autoFocus
               className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-500"
             />
           </div>

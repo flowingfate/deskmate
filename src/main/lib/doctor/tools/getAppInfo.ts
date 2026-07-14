@@ -3,7 +3,7 @@
  */
 
 import type { Tool } from '@earendil-works/pi-ai';
-import { jsonSchema } from '@main/pi/tools/schema';
+import { jsonSchema } from '@main/pi';
 import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';

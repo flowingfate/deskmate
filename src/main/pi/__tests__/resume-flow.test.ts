@@ -8,7 +8,7 @@
  * 状态"灌进去,断言 `pendingResume` 与 `messages` 重建的最终态。
  *
  * 注:`RegularSession.consumePendingResume` 把 runMissingTools / continueLoop /
- * startTurn 全部收敛回 `aborted` + idle (见 `session.ts` consumePendingResume
+ * startTurn 全部收敛回 `aborted` + idle (见 `session/regular.ts` consumePendingResume
  * 注释)。这是终态设计 —— 异常状态由 `loadChatSessionSnapshot` 的 `errorMessage`
  * 透到 UI,渲染端 ErrorBar + Retry 按钮让用户手动重试。本测试聚焦 restore →
  * planResume → pendingResume 的 wiring,不验证后续动作。
@@ -23,7 +23,7 @@ vi.mock('electron', () => ({
 }));
 
 import { RegularSession, type PersistSessionLike } from '../session';
-import type { Message, ToolResult } from '@shared/types/message';
+import type { Message, ToolResult } from '@shared/persist/types'
 import type { PersistedToolResponse } from '@shared/persist/types';
 
 // in-memory PersistSessionLike —— 不写盘,所有数据全在闭包字段里。

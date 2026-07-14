@@ -1,7 +1,7 @@
 import { log } from '@main/log';
 import { Profiles } from '../../persist';
 import type { Agent } from '../../persist/agent';
-import type { SkillBindings } from '@shared/types/profileTypes';
+import type { SkillBindings } from '@shared/persist/types'
 
 const logger = log;
 

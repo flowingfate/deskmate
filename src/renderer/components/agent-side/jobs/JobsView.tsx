@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { schedulerApi } from '@/ipc/scheduler';
 import { useSchedulesByAgentId } from '@/states/schedules.atom';
@@ -56,6 +56,7 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
   // calls `schedulerApi.deleteJob`. Centralized here (vs. per-row dialogs) so a
   // single AlertDialog instance handles every JobRow's delete action.
   const [pendingDelete, setPendingDelete] = useState<SchedulerJob | null>(null);
+  const deleteActionRef = useRef<HTMLButtonElement>(null);
 
   const templateContext = useMemo(() => ({ agentName: agent?.name }), [agent?.name]);
 
@@ -233,7 +234,7 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
             if (!open) setPendingDelete(null);
           }}
         >
-          <AlertDialogContent>
+          <AlertDialogContent initialFocusRef={deleteActionRef}>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete this schedule?</AlertDialogTitle>
               <AlertDialogDescription>
@@ -245,6 +246,7 @@ const JobsView: React.FC<JobsViewProps> = ({ agentId }) => {
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
+                ref={deleteActionRef}
                 onClick={handleConfirmDelete}
                 className="bg-sc-destructive text-sc-destructive-foreground hover:bg-sc-destructive/90"
               >

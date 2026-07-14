@@ -14,10 +14,10 @@
 //
 // 蓝本:ai.prompt/message.md
 
-import type { AssistantMessage, Message, UserMessage } from '@shared/types/message';
+import type { AssistantMessage, Message, UserMessage } from '@shared/persist/types'
 import { createAssistantMessage } from '@shared/utils/messageFactory';
 import type { TokenCounter } from '../token';
-import { contextCompressionLlmSummarizer } from '@main/pi/utils/contextCompressionLlmSummarizer';
+import { contextCompressionLlmSummarizer } from '@main/pi';
 
 /**
  * 调用方注入的 summarize 实现 —— 给一段对话文本,返回 summary。

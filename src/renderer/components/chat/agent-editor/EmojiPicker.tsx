@@ -1,6 +1,7 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 
 import { Button } from '@/shadcn/button'
+import { Dialog, DialogContent, DialogTitle } from '@/shadcn/dialog'
 import { EmojiPickerProps } from './types'
 import { X } from 'lucide-react'
 
@@ -78,6 +79,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
 }) => {
   const [selectedEmoji, setSelectedEmoji] = useState(currentEmoji || '🤖')
   const [activeCategory, setActiveCategory] = useState(CATEGORY_NAMES[0])
+  const confirmActionRef = useRef<HTMLButtonElement>(null)
 
   // Sync selectedEmoji and activeCategory state when currentEmoji prop changes
   useEffect(() => {
@@ -95,21 +97,21 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
     onClose()
   }, [selectedEmoji, onEmojiSelect, onClose])
 
-  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
-  }, [onClose])
 
   if (!isOpen) return null
 
   return (
-    <div data-dbg="EmojiPicker" className="fixed inset-0 flex items-center justify-center p-8 z-1100 bg-black/30 animate-[fadeIn_0.2s_ease-out]" onClick={handleOverlayClick}>
-      <div className="w-[min(400px,90vw)] bg-white rounded-2xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.3)] animate-[slideIn_0.3s_ease-out]">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent
+        hideCloseButton
+        initialFocusRef={confirmActionRef}
+        data-dbg="EmojiPicker"
+        className="w-[min(400px,90vw)] overflow-hidden rounded-2xl p-0 gap-0"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-2 border-b border-border bg-slate-50">
-          <h3 className="m-0 text-lg font-semibold text-content-strong">Choose Agent Avatar</h3>
-          <Button variant="ghost" size="icon-sm" onClick={onClose}>
+          <DialogTitle className="m-0 text-lg font-semibold text-content-strong">Choose Agent Avatar</DialogTitle>
+          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close emoji picker">
             <X size={14} />
           </Button>
         </div>
@@ -155,12 +157,12 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({
           <Button variant="secondary" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleConfirm}>
+          <Button ref={confirmActionRef} size="sm" onClick={handleConfirm}>
             Confirm
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

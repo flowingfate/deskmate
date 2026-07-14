@@ -10,7 +10,7 @@
  *   - saveTokens / saveClientInformation persistence
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 import type { PersistedMcpOAuthEntry } from '../DeskmateTokenCache';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────

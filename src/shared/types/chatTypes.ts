@@ -2,10 +2,9 @@
  * Phase 5 后的 chatTypes —— 只剩文件 / 图片相关常量与 LLM API 凭据形态。
  *
  * 历史:这里曾经承载 `Message` / `ContentPart` / `MessageHelper` / `ToolCall`
- * 等全套 Chat 形态。`ai.prompt/message.md` 重构把 Domain Message 沉到
- * `@shared/types/message`、把 Persisted 形态沉到 `@shared/persist/types`、
- * `fullModeCompressor` 算法整体迁到 Domain 形态后,本文件只留下不带 Message
- * 语义的工具常量(渲染端文件附件校验、LLM API 凭据)。
+ * 等全套 Chat 形态。`ai.prompt/message.md` 重构把 Domain / Persisted Message
+ * 一并沉到 `@shared/persist/types`，`fullModeCompressor` 算法整体迁到 Domain
+ * 形态后,本文件只留下不带 Message 语义的工具常量(渲染端文件附件校验、LLM API 凭据)。
  *
  * 新代码不要往这里加 Message 相关定义。
  */

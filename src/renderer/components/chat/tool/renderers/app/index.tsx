@@ -22,7 +22,7 @@
 // 优先级判定里,API 更脏;在 app 自己内部复刻细粒度兜底链路是更克制的代价。
 
 import React from 'react';
-import type { ToolCall } from '@shared/types/message';
+import type { ToolCall } from '@shared/persist/types'
 import type {
   ToolRenderer,
   ToolSlotProps,

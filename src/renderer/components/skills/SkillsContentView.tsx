@@ -13,7 +13,6 @@ interface SkillsContentViewProps {
   selectedSkill: SkillConfig | null
   isLoading: boolean
   onSelectSkill: (skill: SkillConfig | null) => void
-  onSkillMenuToggle?: (skillName: string, buttonElement: HTMLElement) => void
 }
 
 const SkillsContentView: React.FC<SkillsContentViewProps> = ({
@@ -21,7 +20,6 @@ const SkillsContentView: React.FC<SkillsContentViewProps> = ({
   selectedSkill,
   isLoading,
   onSelectSkill,
-  onSkillMenuToggle
 }) => {
 
   // Show empty state when there are no Skills and not loading
@@ -57,7 +55,6 @@ const SkillsContentView: React.FC<SkillsContentViewProps> = ({
           selectedSkill={selectedSkill}
           isLoading={isLoading}
           onSelectSkill={onSelectSkill}
-          onSkillMenuToggle={onSkillMenuToggle}
         />
       </div>
 

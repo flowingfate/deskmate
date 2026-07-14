@@ -14,7 +14,7 @@
  * Inspired by Claude Code's `getServerKey` (services/mcp/auth.ts:325).
  */
 import { createHash } from 'crypto';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 const KEY_HASH_LENGTH = 16;
 

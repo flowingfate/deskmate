@@ -1,8 +1,8 @@
 /**
  * ApplySkillToAgentsDialog
  *
- * Skill 添加后弹出，让用户选哪些 agent 应用该 skill。常驻挂载（AgentLayoutContent /
- * SettingsDialogs），通过 `ApplySkillDialogAtom` 控制 open。
+ * Skill 添加后弹出，让用户选哪些 agent 应用该 skill。常驻挂载于 `AgentLayoutContent`
+ *（agent 路由）或 `SkillsView`（Settings 路由），通过 `ApplySkillDialogAtom` 控制 open。
  *
  * 通用列表 + 状态机抽到 `components/agentSelection/`，本文件只剩：
  *   - 通过 atom 控制的 dialog 框架

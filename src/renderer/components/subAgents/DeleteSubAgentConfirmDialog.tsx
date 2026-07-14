@@ -1,14 +1,14 @@
 /**
  * DeleteSubAgentConfirmDialog
  *
- * Sub-agent 删除确认框。常驻挂载（SettingsDialogs），通过 `deleteSubAgentDialogAtom`
+ * Sub-agent 删除确认框。常驻挂载于 `SubAgentsView`，通过 `DeleteSubAgentDialogAtom`
  * 控制 open。SubAgentListItem 调 requestDelete(name)（异步扫「被哪些 agent 使用」后开框），
  * 本组件订阅 atom 渲染确认框并执行真正的 subAgentApi.delete。
  *
  * 删除后数据由 subAgents.atom 订阅 persist:agent:registry:updated[kind=subAgents] 自动刷新。
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,7 @@ const DeleteSubAgentConfirmDialog: React.FC = () => {
   const [{ open, subAgentName, usedByAgents }, actions] = DeleteSubAgentDialogAtom.use();
   const { showSuccess, showError } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
+  const deleteActionRef = useRef<HTMLButtonElement>(null);
 
   const handleConfirm = useCallback(async () => {
     if (!subAgentName) return;
@@ -48,7 +49,7 @@ const DeleteSubAgentConfirmDialog: React.FC = () => {
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) actions.close(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" initialFocusRef={deleteActionRef}>
         <DialogHeader>
           <DialogTitle className="text-left">Delete Sub-Agent</DialogTitle>
           <DialogDescription className="text-left">
@@ -70,6 +71,7 @@ const DeleteSubAgentConfirmDialog: React.FC = () => {
             No
           </Button>
           <Button
+            ref={deleteActionRef}
             variant="destructive"
             size="sm"
             onClick={handleConfirm}

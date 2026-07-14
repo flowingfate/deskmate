@@ -23,14 +23,12 @@ vi.mock('../calculators/ToolsTokenCalculator', () => {
 });
 
 import { TokenCounter } from '../TokenCounter';
-import {
-  type Message,
-  type UserMessage,
-  type AssistantMessage,
-  type Attachment,
-  type ToolCall,
-  asFileUri,
-} from '@shared/types/message';
+import { type Message,
+type UserMessage,
+type AssistantMessage,
+type Attachment,
+type ToolCall,
+asFileUri, } from '@shared/persist/types'
 
 function makeUser(overrides: Partial<UserMessage> = {}): UserMessage {
   return {

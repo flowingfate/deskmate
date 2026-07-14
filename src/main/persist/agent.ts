@@ -11,9 +11,9 @@ import type {
   ScheduleJobFile,
   ScheduleJobIndexEntry,
   SessionOverrides,
+  SkillBindings,
+  ThinkingLevel,
 } from '../../shared/persist/types';
-import type { ThinkingLevel } from '../../shared/types/thinkingLevel';
-import type { SkillBindings } from '../../shared/types/profileTypes';
 
 export type { AgentDetail, AgentFrontPatch } from '../../shared/persist/types';
 

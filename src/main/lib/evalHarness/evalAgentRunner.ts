@@ -1,9 +1,9 @@
 // src/main/lib/evalHarness/evalAgentRunner.ts
 import { generateEvalSessionId } from '../utilities/idFactory';
 import type { RunTestRequest, RunTestResponse, RunTestMessageOutput } from './evalProtocol';
-import type { Message, AssistantMessage } from '@shared/types/message';
+import type { Message, AssistantMessage } from '@shared/persist/types'
 import { createUserMessage } from '@shared/utils/messageFactory';
-import type { ContextState } from '@shared/types/agentChatTypes';
+import type { ContextState } from '@shared/persist/types'
 import type { StreamingChunk } from '@shared/types/streamingTypes';
 import Stream from '@shared/stream-iterator';
 import { Profiles } from '../../persist';

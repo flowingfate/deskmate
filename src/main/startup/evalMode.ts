@@ -2,7 +2,7 @@ import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Profiles } from '../persist/profiles';
-import { getPiAuthManager } from '../pi/auth';
+import { getPiAuthManager } from '@main/pi';
 import { mcpClientManager } from "../lib/mcpRuntime"
 
 /**

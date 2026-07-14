@@ -24,7 +24,7 @@ import { useAgentById } from '@/states/agents.atom';
 import { useAgentDetail } from '@/states/agentDetail.atom';
 import { updateAgent } from '../../../lib/chat/agentOps';
 import { useModelInfo } from '@/lib/models/useModelInfo';
-import type { ThinkingLevel } from '@shared/types/thinkingLevel';
+import type { ThinkingLevel } from '@shared/persist/types'
 import {
   DropdownMenu,
   DropdownMenuTrigger,

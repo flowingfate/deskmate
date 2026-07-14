@@ -17,7 +17,7 @@
  * 这个 result 形态。
  */
 import type { SubAgentManager } from '@main/lib/subAgent/subAgentManager';
-import type { SubAgentConfig } from '@shared/types/profileTypes';
+import type { SubAgentConfig } from '@shared/persist/types'
 import type { WebContents } from 'electron';
 import type { Tracer } from '@shared/log/trace';
 

@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
 } from '@/shadcn/dropdown-menu';
 const logger = log.child({ mod: 'FileTreeNodeContextMenu' });
+import { requestConfirmation } from '@/components/ui/ConfirmationDialog';
 
 const zeroState: {
   isOpen: boolean;
@@ -99,8 +100,12 @@ const FileTreeNodeContextMenu: React.FC<InnerProps> = ({
     const itemName = node.name || fullPath.split(/[/\\]/).pop();
     const itemType = node.type === 'directory' ? 'folder' : 'file';
 
-    const confirmMessage = `Are you sure you want to delete this ${itemType}?\n\n${itemName}\n\nThis action cannot be undone.`;
-    const confirmed = window.confirm(confirmMessage);
+    const confirmed = await requestConfirmation({
+      title: `Delete ${itemType}?`,
+      description: `Are you sure you want to delete this ${itemType}? ${itemName} This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
 
     if (!confirmed) {
       return;
@@ -128,7 +133,7 @@ const FileTreeNodeContextMenu: React.FC<InnerProps> = ({
       logger.error({ msg: "Error deleting:", err: error });
       window.alert(`Failed to delete ${itemType}: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [fullPath, node]);
+  }, [fullPath, node, onRemove]);
 
   const handleCopyPath = React.useCallback(async () => {
     try {

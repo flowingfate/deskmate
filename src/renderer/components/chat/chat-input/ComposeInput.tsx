@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { promptHistory } from '@/lib/chat/promptHistory';
 import { agentSessionCacheManager, ChatStatus, CurrentSessionError } from '@/lib/chat/agentSessionCacheManager';
-import type { UserMessage } from '@shared/types/message';
+import type { UserMessage } from '@shared/persist/types'
 import ErrorBar from '../ErrorBar';
 import { getChatInputShortcutHint } from '@/lib/chat/chatInputKeyboard';
 import { log } from '@/log';

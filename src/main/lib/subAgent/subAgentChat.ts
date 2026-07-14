@@ -20,20 +20,23 @@
 
 import * as path from 'path';
 
-import type { AssistantMessage, Message, UserMessage } from '@shared/types/message';
-import type { SubAgentConfig } from '@shared/types/profileTypes';
+import type { AssistantMessage, Message, UserMessage } from '@shared/persist/types'
+import type { SubAgentConfig } from '@shared/persist/types'
 import { log } from '@main/log';
 import { Tracer } from '@shared/log/trace';
 
-import { wrapInSystemReminder } from '@main/pi/utils/systemReminderUtils';
+import {
+  ToolCatalog,
+  buildToolCatalogForSubAgent,
+  runUtilityCompletion,
+  wrapInSystemReminder,
+} from '@main/pi';
 import { getProfileSkillsDir } from '@main/persist/lib/path';
 import { skillManager } from '../skill';
-import { runUtilityCompletion } from '@main/pi/utility';
 import { createUserMessage } from '@shared/utils/messageFactory';
 
 import type { SubAgentChatOptions } from './types';
 import { SubAgentSession, type SubAgentSessionHooks } from './subAgentSession';
-import { buildToolCatalogForSubAgent, type ToolCatalog } from '@main/pi/toolCatalog';
 const logger = log;
 
 // ---------------------------------------------------------------------------
@@ -178,7 +181,7 @@ export class SubAgentChat {
       await this.compactByMessageCount();
       if (this.options.cancellationSignal.aborted) break;
 
-      const dynamicSystemPrompt = systemPromptBase + '\n\n' + wrapInSystemReminder(this.buildTurnProgressHint());
+      const transientReminder = wrapInSystemReminder(this.buildTurnProgressHint());
 
       logger.info({
         msg: '[SubAgentChat] Turn calling LLM',
@@ -203,8 +206,9 @@ export class SubAgentChat {
       let summary: TurnSummary;
       try {
         summary = await this.runOneTurn(
-          dynamicSystemPrompt,
+          systemPromptBase,
           catalog,
+          transientReminder,
           subturnTracer,
         );
       } catch (err) {
@@ -274,6 +278,7 @@ export class SubAgentChat {
   private async runOneTurn(
     systemPrompt: string,
     catalog: ToolCatalog,
+    transientReminder: string,
     tracer?: Tracer,
   ): Promise<TurnSummary> {
     const hooks: SubAgentSessionHooks = {
@@ -320,6 +325,7 @@ export class SubAgentChat {
 
     return this.session.runTurn({
       systemPrompt,
+      transientReminder,
       catalog,
       signal: this.options.cancellationSignal,
       hooks,
@@ -673,7 +679,7 @@ export class SubAgentChat {
         msg: '[SubAgentChat] Failed to build tool catalog',
         err: err instanceof Error ? err.message : String(err),
       });
-      return { specs: [], routes: new Map() };
+      return ToolCatalog.empty();
     }
   }
 

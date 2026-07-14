@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shadcn/dialog';
 import { Button } from '@/shadcn/button';
 
@@ -18,6 +18,7 @@ const ErrorDetailsDialog: React.FC<ErrorDetailsDialogProps> = ({
   onOpenChange,
 }) => {
   const [copied, setCopied] = useState(false);
+  const closeActionRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!copied) {
@@ -39,7 +40,7 @@ const ErrorDetailsDialog: React.FC<ErrorDetailsDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden" initialFocusRef={closeActionRef}>
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-200">
           <DialogTitle className="text-left">{title}</DialogTitle>
           {subtitle ? <DialogDescription className="text-left">{subtitle}</DialogDescription> : null}
@@ -55,7 +56,7 @@ const ErrorDetailsDialog: React.FC<ErrorDetailsDialogProps> = ({
           <Button type="button" variant="outline" onClick={handleCopy}>
             {copied ? 'Copied' : 'Copy'}
           </Button>
-          <Button type="button" onClick={() => onOpenChange(false)}>
+          <Button ref={closeActionRef} type="button" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>

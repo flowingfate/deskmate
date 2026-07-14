@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyError } from '../errors';
+import { classifyError } from '../utils/errors';
 
 describe('classifyError - overflow', () => {
   const cases: Array<[string, string]> = [

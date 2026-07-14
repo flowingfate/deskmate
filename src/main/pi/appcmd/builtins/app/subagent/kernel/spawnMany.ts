@@ -17,7 +17,8 @@
  * `ParallelSubAgentsToolCallView` 完全兼容**。
  */
 import type { SubAgentManager } from '@main/lib/subAgent/subAgentManager';
-import { SUB_AGENT_LIMITS, type SubAgentConfig } from '@shared/types/profileTypes';
+import { SUB_AGENT_LIMITS } from '@shared/types/profileTypes';
+import type { SubAgentConfig } from '@shared/persist/types';
 import type { WebContents } from 'electron';
 import type { Tracer } from '@shared/log/trace';
 

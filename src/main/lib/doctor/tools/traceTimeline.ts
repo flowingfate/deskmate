@@ -4,7 +4,7 @@
  */
 
 import type { Tool } from '@earendil-works/pi-ai';
-import { jsonSchema } from '@main/pi/tools/schema';
+import { jsonSchema } from '@main/pi';
 import * as fs from 'fs';
 import Database from 'better-sqlite3';
 import { getLogDbPath, flushLogs } from '@main/log';

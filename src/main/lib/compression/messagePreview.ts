@@ -8,7 +8,7 @@
 // 保持 message 不可变:返回的对象与原对象不共享被改写的字段。
 // 全部纯函数。无 I/O、无 LLM 调用。
 
-import type { AssistantMessage, Message, ToolCall } from '@shared/types/message';
+import type { AssistantMessage, Message, ToolCall } from '@shared/persist/types'
 
 /** 预压缩配置。FullModeCompressor 默认值在 `DEFAULT_PREVIEW_OPTIONS`。 */
 export interface PreviewOptions {

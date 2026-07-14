@@ -7,18 +7,16 @@
  * - 禁止在业务模块里再写 `${prefix}_${Date.now()}_${Math.random()...}` 拼装
  *   message id —— 历史上同一个字段在四个文件里漂出四种长度,trace 难对齐。
  *
- * 与 `@shared/types/message` 的关系:类型定义留在 message.ts(IPC 契约纯类型),
+ * 与 `@shared/persist/types` 的关系:类型定义留在 `types/message.ts`(共享 schema),
  * 创建逻辑放这里(实现 + 默认值),双方互不污染。
  */
 
-import type {
-  AssistantMessage,
-  AssistantOutcome,
-  Attachment,
-  TokenUsage,
-  ToolCall,
-  UserMessage,
-} from '@shared/types/message';
+import type { AssistantMessage,
+AssistantOutcome,
+Attachment,
+TokenUsage,
+ToolCall,
+UserMessage, } from '@shared/persist/types'
 
 /**
  * 生成 Domain Message 的全局唯一 id。

@@ -2,7 +2,7 @@
 // Singleton chat-session state manager for the frontend
 
 import { useState, useEffect } from 'react';
-import type { UserMessage } from '@shared/types/message';
+import type { UserMessage } from '@shared/persist/types'
 import { agentChatEvents } from '@/ipc/agentChat';
 import { log } from '@/log';
 import { external } from '@/atom/external';

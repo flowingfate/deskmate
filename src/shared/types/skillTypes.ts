@@ -1,4 +1,4 @@
-import type { ForeignSkillSourceId, ForeignSkillSourceKind } from './profileTypes';
+import type { ForeignSkillSourceId, ForeignSkillSourceKind } from '../persist/types'
 
 export interface SkillLibraryItem {
   name: string;

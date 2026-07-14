@@ -2,7 +2,7 @@
  * Skill 子系统共享类型定义
  */
 
-import type { SkillConfig } from '@shared/types/profileTypes';
+import type { SkillConfig } from '@shared/persist/types'
 
 export type { SkillConfig };
 

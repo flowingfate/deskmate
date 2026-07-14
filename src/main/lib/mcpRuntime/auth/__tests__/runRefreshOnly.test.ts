@@ -19,7 +19,7 @@
  *     thrown error (not a successful "REDIRECT" return).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 

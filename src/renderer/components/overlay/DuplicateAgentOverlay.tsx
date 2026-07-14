@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { atom } from '@/atom';
 import { duplicateAgent } from '@renderer/lib/chat/agentOps';
 import { useToast, type ToastContextType } from '../ui/ToastProvider';
@@ -79,6 +80,7 @@ export function DuplicateAgentOverlay() {
   const [state, actions] = DuplicateAgentAtom.use();
   const toast = useToast();
   const agents = useAgents();
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const isDuplicateNameExists = state.newName.trim()
     ? agents.some(agent => agent.name?.toLowerCase() === state.newName.trim().toLowerCase())
@@ -86,7 +88,7 @@ export function DuplicateAgentOverlay() {
 
   return (
     <Dialog open={state.isOpen} onOpenChange={(open) => { if (!open) actions.cancel(); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" initialFocusRef={nameInputRef}>
         <DialogHeader>
           <DialogTitle>Duplicate Agent</DialogTitle>
           <DialogDescription>
@@ -95,12 +97,12 @@ export function DuplicateAgentOverlay() {
         </DialogHeader>
         <div>
           <input
+            ref={nameInputRef}
             type="text"
             className={`mt-3 w-full rounded-lg border border-sc-border bg-sc-background px-3 py-2.5 text-sm text-sc-foreground focus:outline-none focus:ring-2 focus:ring-sc-ring ${isDuplicateNameExists ? 'border-yellow-500 bg-yellow-50' : ''}`}
             value={state.newName}
             onChange={(e) => actions.setNewName(e.target.value)}
             placeholder="Enter new agent name"
-            autoFocus
           />
           {isDuplicateNameExists && (
             <p className="mt-2 text-sm text-yellow-600">⚠️ Agent name already exists</p>

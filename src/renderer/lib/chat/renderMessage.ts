@@ -2,8 +2,8 @@
  * RenderMessage —— 渲染进程使用的消息形态。
  *
  *   ┌─────────────────────────────────────────────────────────────────────┐
- *   │  Domain    (shared/types/message.ts)         主进程内存 + IPC 契约    │
- *   │  Persisted (shared/persist/types.ts)         JSONL 行,从 Domain 派生  │
+ *   │  Domain    (shared/persist/types/message.ts) 主进程内存 + IPC 契约    │
+ *   │  Persisted (同模块，`PersistedJsonLine`)      JSONL 行,从 Domain 派生  │
  *   │  Render    (本文件)                          渲染进程,UI flag 极简加挂 │
  *   └─────────────────────────────────────────────────────────────────────┘
  *
@@ -16,7 +16,7 @@
  * UI 字段一律加在本文件,**禁止**回流到 shared / Domain 层。
  */
 
-import type { UserMessage, AssistantMessage } from '@shared/types/message';
+import type { UserMessage, AssistantMessage } from '@shared/persist/types'
 
 export type RenderUserMessage = UserMessage;
 

@@ -18,8 +18,7 @@ import { Profile } from '@main/persist/profile';
 import { Profiles } from '@main/persist/profiles';
 import { setRootForTesting } from '@main/persist/lib/root';
 import { ProfileDb } from '@main/persist/lib/db/db';
-import { InternalUrlRouter } from '@main/pi/internal-urls';
-import { LocalProtocolHandler } from '@main/pi/internal-urls/handlers/local-protocol';
+import { InternalUrlRouter, LocalProtocolHandler } from '@main/pi';
 
 let tmpRoot = '';
 let profileId = '';

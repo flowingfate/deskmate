@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { useSupportsImages } from '@/lib/models/useSupportsImages';
 import { ChatStatus } from '@/lib/chat/agentSessionCacheManager';
-import type { UserMessage } from '@shared/types/message';
+import type { UserMessage } from '@shared/persist/types'
 import { getChatInputShortcutHint } from '@/lib/chat/chatInputKeyboard';
 import { log } from '@/log';
 import { AttachmentList, AttachmentsStatus } from './Attachments';

@@ -4,7 +4,7 @@
 
 import { EventEmitter } from 'events';
 import { McpAuthMetadataService, mcpAuthService, type McpResolvedAuthMetadata } from '../../auth';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 export interface HttpTransportConfig {
   serverName: string;

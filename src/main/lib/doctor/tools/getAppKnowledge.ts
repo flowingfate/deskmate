@@ -6,7 +6,7 @@
  */
 
 import type { Tool } from '@earendil-works/pi-ai';
-import { jsonSchema } from '@main/pi/tools/schema';
+import { jsonSchema } from '@main/pi';
 import { APP_DETAIL_L2 } from '../appKnowledge';
 
 export const getAppKnowledgeToolDef: Tool = {

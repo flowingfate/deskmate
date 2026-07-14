@@ -15,7 +15,7 @@
 
 import React from 'react';
 import { ArrowDownRight, ArrowUpRight, Loader2 } from 'lucide-react';
-import type { ToolCall } from '@shared/types/message';
+import type { ToolCall } from '@shared/persist/types'
 import type { ToolCallExecutionStatus, ToolRenderer } from './types';
 
 export interface ToolDetailViewProps {

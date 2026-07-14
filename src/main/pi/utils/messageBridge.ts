@@ -1,13 +1,16 @@
 /**
  * Domain Message ↔ pi.Context 翻译。本文件是两个方向的**唯一**入口:
- *   - 入境: `fromPiAssistantMessage(pi.AssistantMessage) → Domain.AssistantMessage`
+ *   - 入境: `fromPiAssistantMessage(pi.AssistantMessage, catalog) → Domain.AssistantMessage`
  *           pi 把 streaming 拼好的 final 还回来 → 聚合 thinking/text 双串、提 tool_calls、
- *           结构化 outcome (stopReason 翻 AssistantOutcome)
- *   - 出境: `toPiContext(Domain.Message[], systemPrompt, tools) → pi.Context`
- *           **1→N 展开**: 每条 Domain.AssistantMessage 之后,按其 tool_calls 顺序
+ *           结构化 outcome (stopReason 翻 AssistantOutcome)。MCP 工具的 LLM 限定名
+ *           `serverName/toolName` 在此借 catalog 精确 demux 回自然 `name` + `mcp` server。
+ *   - 出境: `toPiContext(Domain.Message[], systemPrompt, tools, options?) → pi.Context`
+ *           **1→N 展开**:每条 Domain.AssistantMessage 之后,按其 tool_calls 顺序
  *           为已 response 的 ToolCall 紧跟一条 pi.toolResult message;无 response 的
- *           ToolCall 不输出 (这是 resume 的核心约束 —— 所有 ToolCall 必须先补跑出
- *           response 才能再调 LLM,见 `planResume.runMissingTools`)
+ *           ToolCall 不输出(这是 resume 的核心约束 —— 所有 ToolCall 必须先补跑出
+ *           response 才能再调 LLM,见 `planResume.runMissingTools`)。
+ *           首个 user message 的持久化 `time` 在本地转换为固定时间 reminder；
+ *           `transientReminder` 只附本次请求消息尾部且不落盘。
  *
  * 没有 SystemMessage 翻译入口 —— system prompt 由 `buildSystemPrompt` 现拼,
  * 不进 messages 序列。
@@ -26,33 +29,41 @@ import type {
   UserMessage as PiUserMessage,
 } from '@earendil-works/pi-ai';
 
-import type {
-  AssistantMessage,
-  AssistantOutcome,
-  Attachment,
-  ErrorCategory,
-  Message,
-  ToolCall,
-  UserMessage,
-} from '@shared/types/message';
-
+import type { AssistantMessage,
+AssistantOutcome,
+Attachment,
+ErrorCategory,
+Message,
+ToolCall,
+UserMessage, } from '@shared/persist/types'
 import { newMessageId } from '@shared/utils/messageFactory';
+import type { ToolCatalog } from '../tool';
 import { buildFileAnnotationText } from './fileAnnotation';
+import { formatClientLocalTime } from './localTime';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 出境: Domain → pi.Context
 // ═══════════════════════════════════════════════════════════════════════════
 
+interface PiContextOptions {
+  readonly transientReminder?: string;
+}
+
+const EMPTY_CONTEXT_OPTIONS: PiContextOptions = {};
+
 export function toPiContext(
   messages: readonly Message[],
   systemPrompt: string,
   tools: PiTool[],
+  options: PiContextOptions = EMPTY_CONTEXT_OPTIONS,
 ): PiContext {
   const piMessages: PiMessage[] = [];
+  let isFirstUserMessage = true;
 
   for (const m of messages) {
     if (m.role === 'user') {
-      piMessages.push(userToPi(m));
+      piMessages.push(userToPi(m, isFirstUserMessage));
+      isFirstUserMessage = false;
       continue;
     }
     piMessages.push(assistantToPi(m));
@@ -69,12 +80,20 @@ export function toPiContext(
       piMessages.push({
         role: 'toolResult',
         toolCallId: tc.id,
-        toolName: tc.name,
+        toolName: toLlmToolName(tc),
         content,
         isError: tc.response.status === 'fail',
         timestamp: tc.response.time,
       } satisfies PiToolResultMessage);
     }
+  }
+  const trimmedReminder = options.transientReminder?.trim();
+  if (trimmedReminder) {
+    piMessages.push({
+      role: 'user',
+      content: [{ type: 'text', text: trimmedReminder }],
+      timestamp: Date.now(),
+    } satisfies PiUserMessage);
   }
 
   const trimmedSystem = systemPrompt.trim();
@@ -84,7 +103,7 @@ export function toPiContext(
   return ctx;
 }
 
-function userToPi(msg: UserMessage): PiUserMessage {
+function userToPi(msg: UserMessage, includeTimeReminder: boolean): PiUserMessage {
   const content: (PiTextContent | PiImageContent)[] = [];
   // text + file/office/opaque annotation 合并成一段
   const annotation = buildFileAnnotationText(msg.attachments);
@@ -97,12 +116,20 @@ function userToPi(msg: UserMessage): PiUserMessage {
     if (att.kind !== 'image' || att.source.kind !== 'dataUrl') continue;
     content.push(attachmentImageToPi(att.mimeType, att.source.data));
   }
+  if (includeTimeReminder) {
+    content.push({ type: 'text', text: buildTimeReminder(msg.time) });
+  }
 
   return {
     role: 'user',
     content,
     timestamp: msg.time,
   };
+}
+
+function buildTimeReminder(time: number): string {
+  const localTime = formatClientLocalTime(time);
+  return `<system-reminder>\nThis user message was sent at ${localTime.localTime} ${localTime.timeZone} (${localTime.utcOffset}). This is a stable timestamp, not the current time.\n</system-reminder>`;
 }
 
 function assistantToPi(msg: AssistantMessage): PiAssistantMessage {
@@ -153,11 +180,15 @@ function attachmentImageToPi(mimeType: string, dataUrlBase64: string): PiImageCo
   };
 }
 
+function toLlmToolName(tc: ToolCall): string {
+  return tc.mcp ? `${tc.mcp}/${tc.name}` : tc.name;
+}
+
 function toolCallToPi(tc: ToolCall): PiToolCall {
   return {
     type: 'toolCall',
     id: tc.id,
-    name: tc.name,
+    name: toLlmToolName(tc),
     arguments: tc.args,
   };
 }
@@ -166,7 +197,7 @@ function toolCallToPi(tc: ToolCall): PiToolCall {
 // 入境: pi.AssistantMessage → Domain.AssistantMessage
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function fromPiAssistantMessage(msg: PiAssistantMessage): AssistantMessage {
+export function fromPiAssistantMessage(msg: PiAssistantMessage, catalog: ToolCatalog): AssistantMessage {
   let think = '';
   let content = '';
   const tool_calls: ToolCall[] = [];
@@ -177,11 +208,13 @@ export function fromPiAssistantMessage(msg: PiAssistantMessage): AssistantMessag
     } else if (part.type === 'text') {
       content += part.text;
     } else if (part.type === 'toolCall') {
+      const { name, mcp } = catalog.resolveIdentity(part.name);
       tool_calls.push({
         id: part.id,
-        name: part.name,
+        name,
         time: msg.timestamp,
         args: part.arguments ?? {},
+        mcp,
       });
     }
   }

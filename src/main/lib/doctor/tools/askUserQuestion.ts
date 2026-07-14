@@ -4,7 +4,7 @@
  */
 
 import type { Tool } from '@earendil-works/pi-ai';
-import { jsonSchema } from '@main/pi/tools/schema';
+import { jsonSchema } from '@main/pi';
 import type { AgentQuestion, QuestionInputType } from '@shared/ipc/doctor';
 import { doctorManager } from '../manager';
 

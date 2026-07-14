@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { getMcpOAuthServerKey } from '../serverKey';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 
 function makeCfg(overrides: Partial<McpServerConfig> = {}): McpServerConfig {
   return {

@@ -22,7 +22,7 @@
  */
 
 import { makeCommandFacade } from '../appcmd/_facade';
-import { makeRouterCommand } from '../appcmd/router';
+import { makeRouterCommand } from '../appcmd/makeRouterCommand';
 import { appCommands } from '../appcmd/builtins/app';
 
 export const app = makeCommandFacade(

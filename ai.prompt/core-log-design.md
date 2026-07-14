@@ -187,11 +187,11 @@
 | 文件 | 变更 |
 |------|------|
 | `src/main/startup/ipc/agent-chat.ts` | `streamMessage / retryChat / editUserMessage / cancelChatSession` handler 内：① `(msgTrace ? Tracer.deserialize(msgTrace) : Tracer.start()).derive().bind({mod:'chat.ipc', chatSessionId, agentId, profileId})` 起 chat.ipc tracer ② INFO `stream start` / `cancel start` ③ try/finally 出口 INFO 带 dur='self'；catch WARN ④ `runOrchestrator` 把整个 `tracer` 透传给 `session.startStream / retryStream / editUserMessage`（**形参直接是 Tracer 实例，不再是 tid 字符串**） |
-| `src/main/pi/session.ts` `BaseSession` 抽象 | ① `sessionTracer: Tracer = Tracer.noop`，入口（`startStream / retryStream / editUserMessage / JobRun.run`）调 `prepareSessionTracer(parent?: Tracer)`：parent 提供时 sessionTracer = parent（即 chat.ipc tracer），否则 `Tracer.start().bind({chatSessionId, agentId, profileId})` 兜底 ② `runTurnLoop` 起点 `turnTracer = sessionTracer.derive().bind({mod:'chat.turn'})`，psid 自动 = chat.ipc.sid ③ INFO start / finally INFO done（含 iters / stopReason / dur）/ cancelled / failed ④ overflow 重试路径单独 WARN `overflow retry` ⑤ doCompress 起 `chat.compress` 子 span，applied=true 时记 1 条 INFO（带 originalTokens / compressedTokens / dur） |
-| `src/main/pi/session.ts` `RegularSession.streamOneRound` | `streamOneRoundArgs.parent: Tracer` → `tracer = parent.derive().bind({mod:'chat.llm'})`：① 起 INFO（modelId, toolsCount） ② first delta 同步算 `ttft = tracer.dur` ③ 终 INFO（ttft, inputTokens, outputTokens, stopReason）/ WARN（pi 内部 error event）/ ERROR（throw）；用 `__chatLlmLogged` sentinel 避免双写 |
-| `src/main/pi/session.ts` `JobRun.streamOneRound` | 同 RegularSession（job 场景同样要 trace） |
+| `src/main/pi/session/base.ts` `BaseSession` 抽象 | ① `sessionTracer: Tracer = Tracer.noop`，入口（`startStream / retryStream / editUserMessage / JobRun.run`）调 `prepareSessionTracer(parent?: Tracer)`：parent 提供时 sessionTracer = parent（即 chat.ipc tracer），否则 `Tracer.start().bind({chatSessionId, agentId, profileId})` 兜底 ② `runTurnLoop` 起点 `turnTracer = sessionTracer.derive().bind({mod:'chat.turn'})`，psid 自动 = chat.ipc.sid ③ INFO start / finally INFO done（含 iters / stopReason / dur）/ cancelled / failed ④ overflow 重试路径单独 WARN `overflow retry` ⑤ doCompress 起 `chat.compress` 子 span，applied=true 时记 1 条 INFO（带 originalTokens / compressedTokens / dur） |
+| `src/main/pi/session/regular.ts` `RegularSession.streamOneRound` | `streamOneRoundArgs.parent: Tracer` → `tracer = parent.derive().bind({mod:'chat.llm'})`：① 起 INFO（modelId, toolsCount） ② first delta 同步算 `ttft = tracer.dur` ③ 终 INFO（ttft, inputTokens, outputTokens, stopReason）/ WARN（pi 内部 error event）/ ERROR（throw）；用 `__chatLlmLogged` sentinel 避免双写 |
+| `src/main/pi/session/job.ts` `JobRun.streamOneRound` | 同 RegularSession（job 场景同样要 trace） |
 | `src/main/pi/tool.ts` `executeToolCall` | `ToolContext.tracer: Tracer` → `(ctx.tracer ?? Tracer.noop).derive().bind({mod:'chat.tool', toolName, callId, ...})` 起 chat.tool span;并行 sibling 共享 psid（chat.turn.sid）;ToolContext.tracer 一路传给 handler,sub-agent / 嵌套 LLM 复用同一棵 trace 树 |
-| `src/main/pi/utils/contextCompressionLlmSummarizer.ts` | `summarize({tracer?})` 接收主链路 tracer，每个 attempt 起子 span `chat.compress.summary`，psid = chat.compress.sid；缺省 `Tracer.noop` 仍写完整业务 log |
+| `src/main/pi/utils/llm-services/contextCompressionLlmSummarizer.ts` | `summarize({tracer?})` 接收主链路 tracer，每个 attempt 起子 span `chat.compress.summary`，psid = chat.compress.sid；缺省 `Tracer.noop` 仍写完整业务 log |
 | `src/main/lib/subAgent/subAgentSession.ts` / `subAgentChat.ts` | sub-agent 一轮内 `chat.subturn` span（psid = 触发 spawn 的 chat.tool sid），复用主 tid；内部 LLM / tool 各自 derive 子 span |
 
 ### 3.5 持久化（**不需要**）
@@ -289,7 +289,7 @@
 |------|----------|
 | 新建 `src/shared/log/trace.ts` | renderer / main 各引入;在 `src/shared/log/ai.prompt.md` 「关键文件」表加一行 `trace.ts \| newTraceId / newSpanId (6/4 字符 Crockford32, 唯一性范围 life_id)`,并注明"不复用 `src/shared/persist/id.ts` 的 `ulid()`(那是持久化 entity id 专用)" |
 | IPC 契约 `agentChat.ts` 加 `traceId` 形参 | `src/renderer/lib/chat/agentIpc.ts` 透传；`src/main/startup/ipc/agent-chat.ts` 接收；`src/shared/ipc/ai.prompt.md` 标注 R→M 契约扩展 |
-| `pi.session.ts` 新增 `currentTid` | `src/main/pi/ai.prompt.md` 标注"主链路 tid 在 session 内透传，不入 persist" |
+| `pi/session/base.ts` 新增 `currentTid` | `src/main/pi/ai.prompt.md` 标注"主链路 tid 在 session 内透传，不入 persist" |
 | `ToolExecutionScope` 新增 `traceId / parentSpanId` | `src/main/pi/tool.ts` 类型 + `RegularSession.handleToolCalls` / `JobRun.handleToolCalls` 注入 |
 | 新增 mod 命名 `chat.send / chat.ipc / chat.turn / chat.compress / chat.llm / chat.tool / chat.subturn / chat.recv` | `ai.prompt/log-analysis.md`「常见场景 § 聊天 / Agent 错误」段补常用命令示例 `--component "chat.*"` |
 | 文档 | 本文件实施完结后翻修 `ai.prompt/log-analysis.md` 增加"按 tid 追一次聊天"小节 |

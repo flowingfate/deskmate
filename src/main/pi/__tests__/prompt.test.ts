@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SubAgentConfig } from '@shared/types/profileTypes';
+import type { SubAgentConfig } from '@shared/persist/types'
 import type { SkillRecord } from '@shared/persist/types';
 import type { AgentConfig } from '../utils/config';
 

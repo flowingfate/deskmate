@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { ExternalLink } from 'lucide-react';
-import type { ToolCall } from '@shared/types/message';
+import type { ToolCall } from '@shared/persist/types'
 import type {
   ToolRenderer,
   ToolOutputSuccessSlotProps,

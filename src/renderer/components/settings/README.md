@@ -21,6 +21,10 @@
 - `SettingsLayout` — 共享组件（`SettingsLayout.tsx`），提供固定头部与可滚动内容区。
 - `*ContentView.tsx` — 完全由 props 驱动（数据 + 回调），不直接调 IPC，便于独立测试。
 
+### Settings shell 边界
+
+`SettingsPage` 只负责侧栏、分隔线、内容容器和无 context 的 `<Outlet />`。子功能自己的 `*View` 必须持有菜单、确认框和最小 UI 状态：MCP、Skills、Sub-agents 均不得通过 Settings shell 传递操作回调、DOM 锚点或临时 `window` 字段。
+
 ---
 
 ## 2. 文件命名与目录结构

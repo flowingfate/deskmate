@@ -4,8 +4,7 @@
  * SkillsAddButton —— 「从设备添加/更新技能」下拉按钮。
  *
  * 自持下拉：`<DropdownMenu>` 直接包裹自己的触发器（`asChild`），开合状态全部内聚在
- * Radix 内部，不经 useSettingsMenus / SettingsFloatingMenus 等外部菜单注册表（旧实现
- * 把状态散落到四个文件，维护成本高）。
+ * Radix 内部，不经页面外部菜单注册表。
  *
  * 菜单两个动作：
  * - `Add from Device`：调共享 hook（不带 mode）→ main 弹一个原生对话框，用户在同一个
@@ -21,7 +20,7 @@
  * 下拉菜单、确认框与动作分发。
  */
 
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { Plus, RefreshCw, ScanSearch } from 'lucide-react'
 import {
   DropdownMenu,
@@ -53,6 +52,7 @@ const SkillsAddButton: React.FC<SkillsAddButtonProps> = ({ children, align = 'en
   const updateSkillFromDevice = useUpdateSkillFromDevice()
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false)
   const [showForeignImportDialog, setShowForeignImportDialog] = useState(false)
+  const chooseFileActionRef = useRef<HTMLButtonElement>(null)
 
   const confirmUpdate = () => {
     setShowUpdateConfirm(false)
@@ -85,7 +85,7 @@ const SkillsAddButton: React.FC<SkillsAddButtonProps> = ({ children, align = 'en
       />
 
       <AlertDialog open={showUpdateConfirm} onOpenChange={setShowUpdateConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent initialFocusRef={chooseFileActionRef}>
           <AlertDialogHeader>
             <AlertDialogTitle>Update a skill from device</AlertDialogTitle>
             <AlertDialogDescription>
@@ -96,7 +96,7 @@ const SkillsAddButton: React.FC<SkillsAddButtonProps> = ({ children, align = 'en
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmUpdate}>Choose File...</AlertDialogAction>
+            <AlertDialogAction ref={chooseFileActionRef} onClick={confirmUpdate}>Choose File...</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

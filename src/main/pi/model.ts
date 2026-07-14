@@ -25,9 +25,9 @@
  *
  * 这意味着 provider 真的发了新模型要等 pi-ai 升级（依赖 npm 包版本），
  * 但换来的是 model registry 真正一条路径，不再为单个 provider 维护拉取/
- * 缓存/白名单代码。`providers/ghc/ghcModelsManager` 仍在启动链路里跑（保留
- * `/models` 拉取 + 本地缓存文件 `models/github-copilot.json`），但 model
- * registry 不再消费它的数据 —— 留作未来恢复"动态拉模型"路径的备用。
+ * 缓存/白名单代码。曾经的 `providers/ghc/ghcModelsManager`（启动拉 `/models`
+ * + 本地缓存 `models/github-copilot.json`）已整体移除，github-copilot 直接走
+ * pi-ai 内置表 —— 需要"动态拉模型"路径时从 git 历史取回参考。
  *
  * IPC 请求路径上**零网络、零 IO**：listModels / getModelInfo / resolveModel
  * 都是从 pi-ai 编译时常量 + 同步派生。`resolveCredentials` 不算 IPC 路径

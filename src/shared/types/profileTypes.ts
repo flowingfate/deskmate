@@ -5,66 +5,17 @@
  * types without importing from the main process.
  */
 
-import type { ThinkingLevel } from './thinkingLevel';
+import type {
+  AgentMcpServer,
+  ConfirmationSettings,
+  McpServerConfig,
+  SkillBindings,
+  SkillTier,
+  SubAgentConfig,
+  SubAgentIndex,
+  ThinkingLevel,
+} from '../persist/types';
 
-/**
- * 支持导入的外部 Agent skills 来源 registry id 枚举。
- * 权威运行时清单是 `main/lib/skill/foreignAgentSkillScanner.ts` 的 `FOREIGN_SKILL_SOURCES`
- * （其数组按 `ForeignSkillSourceDefinition[]` 定型，新增来源时若 id 不在本枚举内会编译失败）。
- */
-export type ForeignSkillSourceId =
-  | 'claude-code'
-  | 'codex'
-  | 'cursor'
-  | 'agents'
-  | 'universal-agents'
-  | 'opencode'
-  | 'gemini-cli'
-  | 'copilot';
-
-/**
- * 外部 Agent 导入 skill 的来源溯源。仅外部 Agent 导入会写入（设备/zip 导入不记录）。
- * `kind` 区分 link/copy 安装形态；字段全部必填，与 `importForeignAgentSkills` 写入处一致。
- */
-export type ForeignSkillSourceKind = 'link' | 'copy';
-
-export interface ForeignSkillSource {
-  kind: ForeignSkillSourceKind;
-  /** 来源 Agent 的 registry id，如 `claude-code`。 */
-  id: ForeignSkillSourceId;
-  /** 来源 Agent 的展示名，如 `Claude Code`。 */
-  label: string;
-  /** 外部源目录绝对路径（仅本地 UI / 管理用，不进入 LLM prompt）。 */
-  originalPath: string;
-  importedAt: number;
-}
-
-/**
- * Skill configuration
- */
-export interface SkillConfig {
-  /** Skill name (also used as folder name) */
-  name: string;
-  /** Skill description */
-  description: string;
-  /** Skill version */
-  version: string;
-  /** 外部 Agent 导入的来源溯源；仅 foreign-agent 导入的 skill 有此字段。 */
-  foreign?: ForeignSkillSource;
-}
-
-/**
- * Agent 对单个 skill 的启用档位。缺席（skill 不在 `SkillBindings` map 中）= 完全禁用（第三档）。
- *   - `'live'`：元数据始终注入 system prompt。
- *   - `'lazy'`：元数据不进入 system prompt；用户显式引用 URI 后，模型可按稳定指引自行读取。
- */
-export type SkillTier = 'live' | 'lazy';
-
-/**
- * Skill 启用档位映射：key = skill name，value = 档位。单一真值，结构上保证
- * 每个 skill 至多一个档位。落 AGENT.md front-matter `skills`。
- */
-export type SkillBindings = Record<string, SkillTier>;
 
 /** `skills` 映射中档位为 `'live'` 的 skill 名字（第一档，稳定顺序）。 */
 export function liveSkillNames(bindings: SkillBindings | undefined): string[] {
@@ -130,102 +81,6 @@ export interface AgentSkillSnapshot {
   prompt: string;
 }
 
-/**
- * Sub-agent context access mode
- */
-export type SubAgentContextAccess = 'isolated' | 'parent_summary' | 'full_history';
-
-/**
- * Sub-Agent lightweight index — stored in profile.json
- * Only retains the minimum fields needed for ProfileCacheManager notification mechanism.
- * Full configuration is read from agents/{name}/AGENT.md files.
- */
-export interface SubAgentIndex {
-  /** Sub-agent unique name (matches directory name and name in AGENT.md) */
-  name: string;
-  /** Local version number */
-  version: string;
-}
-
-/**
- * Sub-Agent MCP server configuration
- * Compatible with Claude Code's mcpServers (supports referencing by name or inline definition)
- */
-export type SubAgentMcpServerConfig =
-  | string                          // Reference a configured server name (Claude Code format)
-  | AgentMcpServer;                 // DESKMATE inline definition format
-
-/**
- * Sub-Agent full configuration — parsed from AGENT.md files
- * Compatible with Claude Code sub-agent front-matter standard fields
- *
- * Design principles:
- * - Claude Code standard fields at top, DESKMATE extension fields isolated via x-deskmate namespace
- * - system_prompt is parsed from AGENT.md Markdown body, not present in YAML front-matter
- */
-export interface SubAgentConfig {
-  // ========== Claude Code Standard Fields ==========
-  /** Unique identifier (lowercase letters + digits + hyphens), required */
-  name: string;
-  /** Sub-agent display name */
-  display_name: string;
-  /** Description used by Claude for delegation decisions, required */
-  description: string;
-  /** Sub-agent emoji icon */
-  emoji: string;
-  /** Version number */
-  version: string;
-  /** Model selection: specific model name or 'inherit' (default: inherit) */
-  model?: string;
-  /** Maximum agent turns (camelCase, aligned with Claude Code maxTurns) */
-  maxTurns?: number;
-  /** Pre-loaded Skills name list */
-  skills?: string[];
-  /** MCP server configuration (camelCase, compatible with Claude Code mcpServers) */
-  mcpServers?: SubAgentMcpServerConfig[];
-
-  // ========== DESKMATE Native ==========
-  /**
-   * 本地工具白名单(deskmate 原生);名字与主 agent 的 `tools` 字段一致。
-   * 缺席 / 空 ⇒ 全开;非空 ⇒ 仅列表内。
-   */
-  tools?: string[];
-  /** 本地工具黑名单(deskmate 原生)。语义:从全集减去本列表。 */
-  disallowTools?: string[];
-  /** Sub-agent workspace path (optional, independent from parent) */
-  workspace?: string;
-  /**
-   * Sub-agent knowledge base path (optional)
-   * - Non-empty: use the specified path as knowledge base
-   * - Empty string with inherit_knowledge_base=true: inherit from parent
-   * - Empty string with inherit_knowledge_base=false: no knowledge base
-   */
-  knowledgeBase?: string;
-  /** Context access mode */
-  context_access: SubAgentContextAccess;
-  /**
-   * Whether to inherit parent Agent's MCP server configuration (default: true)
-   * - true: merge parent + sub-agent's own MCP servers at runtime (sub-agent's same-name servers take priority)
-   * - false: only use sub-agent's own configured MCP servers
-   */
-  inherit_mcp_servers?: boolean;
-  /**
-   * Whether to inherit parent Agent's Skills configuration (default: true)
-   * - true: union of parent + sub-agent's own Skills at runtime (deduplicated)
-   * - false: only use sub-agent's own configured Skills
-   */
-  inherit_skills?: boolean;
-  /**
-   * Whether to inherit parent Agent's Knowledge Base configuration (default: true)
-   * - true: if sub-agent's knowledgeBase is empty, inherit parent's knowledgeBase
-   * - false: only use sub-agent's own configured knowledgeBase (empty = no knowledge base)
-   */
-  inherit_knowledge_base?: boolean;
-
-  // ========== Runtime Fields (not persisted to AGENT.md YAML, parsed from Markdown body) ==========
-  /** Sub-agent system prompt (parsed from AGENT.md Markdown body) */
-  system_prompt: string;
-}
 
 /**
  * Sub-agent task execution result
@@ -292,77 +147,6 @@ export interface SubAgentRuntimeState {
 
 
 
-/**
- * MCP Server configuration
- */
-export interface McpServerConfig {
-  /** Name of the MCP server */
-  name: string;
-  /** Transport type ('stdio', 'sse', or 'StreamableHttp') */
-  transport: 'stdio' | 'sse' | 'StreamableHttp' | string;
-  /** Command to execute (for stdio transport) */
-  command: string;
-  /** Command line arguments */
-  args: string[];
-  /** Environment variables */
-  env: Record<string, string>;
-  /** Server URL (for sse/http transport) */
-  url: string;
-  /** Whether this server is currently in use */
-  in_use: boolean;
-  /** MCP server version */
-  version?: string;
-  /** HTTP headers for sse/http transports (e.g. Authorization) */
-  headers?: Record<string, string>;
-  /**
-   * Optional OAuth 2.0 configuration for HTTP/SSE servers.
-   *
-   * Most fields are optional. When the authorization server supports
-   * Dynamic Client Registration (RFC 7591) the runtime can auto-register
-   * a client and persist its credentials; if not, the user (or plugin
-   * author) must provide `clientId` manually.
-   */
-  oauth?: {
-    /**
-     * Pre-registered OAuth client_id. Required when the authorization
-     * server does not support Dynamic Client Registration.
-     */
-    clientId?: string;
-    /**
-     * OAuth client secret for confidential clients. Most public OAuth
-     * apps registered for desktop tools are public clients (PKCE only)
-     * and should leave this unset.
-     */
-    clientSecret?: string;
-    /**
-     * Override the local OAuth callback port. Defaults to the global
-     * Deskmate OAuth callback port (33420). Set this only when the
-     * provider's redirect URI is fixed to a specific port.
-     */
-    callbackPort?: number;
-    /**
-     * Direct URL to the OAuth authorization server metadata document.
-     * When set, the runtime skips RFC 9728 protected-resource discovery
-     * and fetches this URL directly. Useful for providers that do not
-     * publish `/.well-known/oauth-protected-resource`.
-     */
-    authServerMetadataUrl?: string;
-    /**
-     * URL where the user can register a new OAuth app for this server.
-     * Surfaced in the DCR-fallback dialog when the runtime cannot
-     * auto-register a client. Plugin authors who know their server's
-     * developer-portal URL should populate this so users see a one-click
-     * jump-off button.
-     */
-    setupUrl?: string;
-    /**
-     * Step-by-step instructions for registering an OAuth app. Each entry
-     * is rendered as a list item. Use `{redirectUri}` and `{serverName}`
-     * placeholders that the dialog substitutes at render time.
-     */
-    setupInstructions?: string[];
-  };
-}
 
 /**
  * User information from GitHub Copilot
@@ -394,128 +178,9 @@ export interface GhcTokens {
   expires: number;
 }
 
-/**
- * Input/Output modalities supported by a model
- */
-export interface ModelModalities {
-  /** Supported input types */
-  input: string[];
-  /** Supported output types */
-  output: string[];
-}
-
-/**
- * Model context and output limits
- */
-export interface ModelLimit {
-  /** Maximum context length */
-  context: number;
-  /** Maximum output length */
-  output: number;
-}
-
-/**
- * Model configuration
- */
-export interface ModelConfig {
-  /** Model ID */
-  id: string;
-  /** Human-readable model name */
-  name: string;
-  /** Whether model supports attachments */
-  attachment: boolean;
-  /** Whether model supports reasoning */
-  reasoning: boolean;
-  /** Whether model supports temperature adjustment */
-  temperature: boolean;
-  /** Whether model supports tool calling */
-  tool_call: boolean;
-  /** Knowledge cutoff date */
-  knowledge: string;
-  /** Model release date */
-  release_date: string;
-  /** Last updated date */
-  last_updated: string;
-  /** Supported modalities */
-  modalities: ModelModalities;
-  /** Whether model has open weights */
-  open_weights: boolean;
-  /** Model limits */
-  limit: ModelLimit;
-}
 
 
-export type SchedulerExecutionStatus = 'running' | 'completed' | 'failed';
-export type ChatSessionReadStatus = 'read' | 'unread';
 
-/**
- * ChatSession configuration (V2)
- */
-export interface ChatSession {
- /** ChatSession ID, format: chatSession_YYYYMMDDHHMMSS_<deviceid>_<random> */
-  chatSession_id: string;
-  /** Last updated time */
-  last_updated: string;
-  /** ChatSession title */
-  title: string;
-  /** ID of the scheduler job that created this session, if any */
-  schedulerJobId?: string;
-  /** Execution status for scheduled sessions */
-  schedulerExecutionStatus?: SchedulerExecutionStatus;
-  /** Start time for scheduled execution */
-  schedulerStartedAt?: string;
-  /** Completion time for scheduled execution */
-  schedulerCompletedAt?: string;
-  /** Error summary when scheduled execution fails */
-  schedulerError?: string;
-  /** Read status for unread indicator */
-  readStatus?: ChatSessionReadStatus;
-  /** Whether the session is explicitly starred by the user */
-  starred?: boolean;
-  /** Timestamp of the latest star action */
-  starredAt?: string;
-  /** Session source; treated as a local session when not set */
-  source?: { type: 'local' } | null;
-}
-
-/**
- * Starred ChatSession lightweight index item persisted in profile.json.
- * Used by the sidebar to render starred sessions without scanning all chats.
- */
-export interface StarredChatSessionIndexItem {
-  /** Chat ID owning the session */
-  agentId: string;
-  /** ChatSession ID */
-  chatSessionId: string;
-  /** Session title snapshot */
-  title: string;
-  /** Session last updated timestamp snapshot */
-  lastUpdated: string;
-  /** Latest read status snapshot */
-  readStatus?: ChatSessionReadStatus;
-  /** Session source snapshot */
-  source?: { type: 'local' } | null;
-  /** Agent display name snapshot */
-  agentName: string;
-  /** Agent emoji snapshot */
-  agentEmoji?: string;
-  /** Agent avatar snapshot */
-  agentAvatar?: string;
-  /** Agent version snapshot */
-  agentVersion?: string;
-  /** Timestamp of the latest star action */
-  starredAt: string;
-}
-
-/**
- * Agent MCP Server configuration (with selected tools)
- */
-export interface AgentMcpServer {
-  /** MCP server name */
-  name: string;
-  /** Selected tool list for the current agent */
-  tools: string[];
-}
 
 /**
  * Agent persona shape (snake_case，落盘形态由 AGENT.md front-matter 反序列化得到)。
@@ -598,21 +263,6 @@ export interface AgentEnvelope {
 
 
 
-export interface InlineEditRegenerateConfirmationSettings {
-  /** Skip the confirmation dialog when regenerating from an edited message */
-  skipConfirmation: boolean;
-}
-
-export interface ConfirmationSettings {
-  /** Confirmation preference for inline edit regenerate flow */
-  inlineEditRegenerate: InlineEditRegenerateConfirmationSettings;
-}
-
-/** `web search` 配置 —— 当前仅承载 Tavily Search API key。 */
-export interface WebSearchSettings {
-  /** Tavily Search API key（`tvly-...`）。供 `web search` 调用 Tavily REST API；缺省回退环境变量 `TAVILY_API_KEY`。 */
-  tavilyApiKey?: string;
-}
 
 /**
  * Profile configuration interface

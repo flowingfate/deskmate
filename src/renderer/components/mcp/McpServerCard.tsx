@@ -1,26 +1,21 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, MoreHorizontal } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useMcpRuntimeServers } from '@/states/mcpRuntime.atom';
-import { Button } from '@/shadcn/button';
 import { Badge } from '@/shadcn/badge';
+import McpServerDropdownMenu from './McpServerDropdownMenu';
 import StatusBadge from './StatusBadge';
+import type { McpServerOperationState } from './useMcpServerActions';
 
 interface ServerCardProps {
   serverName: string;
-  operationState?: {
-    isOperating: boolean;
-    operation?: 'connect' | 'disconnect' | 'reconnect';
-  };
-  onConnect: () => void;
-  onDisconnect: () => void;
-  onReconnect: () => void;
-  onDelete: () => void;
-  onEdit: () => void;
-  onMenuToggle?: (event: React.MouseEvent) => void;
-  isMenuOpen?: boolean;
-  isSelected?: boolean;
+  operationState?: McpServerOperationState;
+  onConnect: (serverName: string) => void;
+  onDisconnect: (serverName: string) => void;
+  onReconnect: (serverName: string) => void;
+  onDelete: (serverName: string) => void;
+  onEdit: (serverName: string) => void;
 }
 
 /**
@@ -30,14 +25,15 @@ interface ServerCardProps {
  * 视觉全 Tailwind + semantic tokens + 共享 StatusBadge;不再依赖
  * `ServerCard.scss` 任何选择器。
  *
- * 注:从父 `McpServerListView` 已经渲染了选中边框与背景,因此本组件不重复
- * 渲染 wrapper —— 仅渲染卡片内容。`isSelected` 仅用于读但目前不直接影响样式。
  */
 const ServerCard: React.FC<ServerCardProps> = ({
   serverName,
   operationState,
-  onMenuToggle,
-  isMenuOpen = false,
+  onConnect,
+  onDisconnect,
+  onReconnect,
+  onDelete,
+  onEdit,
 }) => {
   const servers = useMcpRuntimeServers();
   const server = servers.find((s) => s.name === serverName);
@@ -102,18 +98,16 @@ const ServerCard: React.FC<ServerCardProps> = ({
         </div>
       </div>
 
-      {onMenuToggle && (
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onMenuToggle}
-          title="More options"
-          aria-label={`Actions for ${serverName}`}
-          className={isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}
-        >
-          <MoreHorizontal className="size-4" />
-        </Button>
-      )}
+      <McpServerDropdownMenu
+        serverName={serverName}
+        status={server.status}
+        operationState={operationState}
+        onConnect={onConnect}
+        onDisconnect={onDisconnect}
+        onReconnect={onReconnect}
+        onDelete={onDelete}
+        onEdit={onEdit}
+      />
     </div>
   );
 };

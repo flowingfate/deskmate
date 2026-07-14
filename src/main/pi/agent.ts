@@ -22,9 +22,7 @@ export class Agent {
   constructor(
     public readonly profileId: string,
     public readonly id: string,
-  ) {
-    
-  }
+  ) {}
 
   /**
    * 内存命中就直接返回；首次访问到 persist 层把 persist.Session 拿出来，

@@ -6,8 +6,8 @@
  */
 
 // Mock context compression summarizer to avoid actual API calls
-vi.mock('@main/pi/utils/contextCompressionLlmSummarizer', async () => {
-  const actual = await vi.importActual('@main/pi/utils/contextCompressionLlmSummarizer') as any;
+vi.mock('@main/pi', async () => {
+  const actual = await vi.importActual<typeof import('@main/pi')>('@main/pi');
   const PROMPT_OVERHEAD_TOKENS = 1500;
 
   return {
@@ -51,13 +51,11 @@ import { analyzeMessageStructure, findFirstSkillToolCallIndices } from '../messa
 import { prepareMessagesForCompression } from '../messagePreview';
 import { RecursiveSummarizer } from '../recursiveSummarizer';
 import { TokenCounter } from '../../token';
-import type {
-  AssistantMessage,
-  Message,
-  ToolCall,
-  UserMessage,
-} from '@shared/types/message';
-import { contextCompressionLlmSummarizer as _contextCompressionLlmSummarizerImport } from '@main/pi/utils/contextCompressionLlmSummarizer';
+import type { AssistantMessage,
+Message,
+ToolCall,
+UserMessage, } from '@shared/persist/types'
+import { contextCompressionLlmSummarizer as _contextCompressionLlmSummarizerImport } from '@main/pi';
 
 // ─── Domain message helpers ─────────────────────────────────────────────────
 
@@ -459,7 +457,8 @@ describe('FullModeCompressor', () => {
 
     it('counts system prompt inside summary prompt overhead budgeting', async () => {
       const { TokenCounter: RealTokenCounter } = await vi.importActual('../../token') as any;
-      const { contextCompressionLlmSummarizer: realSummarizer } = await vi.importActual('@main/pi/utils/contextCompressionLlmSummarizer') as any;
+      // 测试边界:动态取真实实现验证 overhead 预算,importActual 泛型精确定型
+      const { contextCompressionLlmSummarizer: realSummarizer } = await vi.importActual<typeof import('@main/pi')>('@main/pi');
       const realTokenCounter = new RealTokenCounter({ enableCache: true });
 
       const overheadTokens = realSummarizer.getPromptOverheadTokens(realTokenCounter);
@@ -877,7 +876,8 @@ describe('FullModeCompressor', () => {
     });
 
     it('does not include SKILL.md content in summary generation', async () => {
-      const { contextCompressionLlmSummarizer } = await import('@main/pi/utils/contextCompressionLlmSummarizer');
+      // 测试边界:在用例内取被 vi.mock 的模块实例
+      const { contextCompressionLlmSummarizer } = await import('@main/pi');
       const pinnedCompressor = createFullModeCompressor({
         preserveRecentMessages: 3,
         preserveFirstSkillToolCall: true,

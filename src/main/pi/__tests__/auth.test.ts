@@ -33,7 +33,7 @@ vi.mock('@earendil-works/pi-ai/oauth', () => ({
 
 import { PiAuthManager, __resetPiAuthManagers } from '../auth';
 import { setRootForTesting } from '@main/persist/lib/root';
-import { PI_AUTH_VERSION, type PiAuthFile } from '@shared/types/piAuthTypes';
+import { PI_AUTH_VERSION, type PiAuthFile } from '@shared/persist/types'
 
 const USER = 'alice';
 const AUTH_PATH = path.join(tmpRoot, 'profiles', USER, 'auth.pi.json');

@@ -12,11 +12,9 @@ import type {
   PersistedToolResponse,
   PersistedUserMessage,
 } from '@shared/persist/types';
-import type {
-  AssistantMessage,
-  Message,
-  UserMessage,
-} from '@shared/types/message';
+import type { AssistantMessage,
+Message,
+UserMessage, } from '@shared/persist/types'
 
 const u = (overrides: Partial<UserMessage> = {}): UserMessage => ({
   role: 'user',
@@ -99,6 +97,26 @@ describe('messageWire.dehydrate', () => {
     // assistant 行内 tool_calls 不含 response 字段
     const assistantLine = lines[0] as PersistedAssistantMessage;
     expect(assistantLine.tool_calls?.[0]).not.toHaveProperty('response');
+  });
+
+  it('MCP tool 的 server 名称随 assistant 行落盘', () => {
+    const lines = dehydrate([
+      a({
+        tool_calls: [{
+          id: 't1',
+          name: 'search',
+          time: 2001,
+          args: { query: 'deskmate' },
+          mcp: 'brave-search',
+        }],
+      }),
+    ]);
+
+    const assistantLine = lines[0] as PersistedAssistantMessage;
+    expect(assistantLine.tool_calls?.[0].mcp).toBe('brave-search');
+    expect(rehydrate(lines).messages[0]).toMatchObject({
+      tool_calls: [{ mcp: 'brave-search' }],
+    });
   });
 });
 

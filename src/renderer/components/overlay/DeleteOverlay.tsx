@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { atom } from '@/atom';
 import { agentSessionCacheManager } from '@renderer/lib/chat/agentSessionCacheManager';
 import { deleteAgentConfig } from '@renderer/lib/chat/agentOps';
@@ -180,6 +181,7 @@ export function DeleteOverlay() {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const deleteActionRef = useRef<HTMLButtonElement>(null);
 
   return (
     <AlertDialog
@@ -188,7 +190,7 @@ export function DeleteOverlay() {
         if (!open) actions.cancel();
       }}
     >
-      <AlertDialogContent className="max-w-md">
+      <AlertDialogContent className="max-w-md" initialFocusRef={deleteActionRef}>
         <AlertDialogHeader>
           <AlertDialogTitle>
             {deleteConfirmState.type === 'agent' ? 'Delete Agent' : 'Delete Chat Session'}
@@ -206,6 +208,7 @@ export function DeleteOverlay() {
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
+            ref={deleteActionRef}
             className="bg-sc-destructive text-sc-destructive-foreground hover:bg-sc-destructive/90"
             onClick={() => actions.confirm(toast, navigate, location.pathname)}
           >

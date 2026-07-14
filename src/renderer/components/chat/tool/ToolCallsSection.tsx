@@ -3,11 +3,12 @@
 
 import React, { useCallback, useState } from 'react';
 import { Wrench, ChevronRight, X } from 'lucide-react';
-import type { ToolCall } from '@shared/types/message';
+import type { ToolCall } from '@shared/persist/types'
 import { AnimatedHeight } from './AnimatedHeight';
 import { ToolChip } from './ToolChip';
 import { ToolDetailView } from './ToolDetailView';
 import { resolveToolRenderer } from './toolRendererRegistry';
+import { TooltipProvider } from '@/shadcn/tooltip';
 import type { ToolCallExecutionStatus, ToolRenderer } from './types';
 
 export interface ToolCallsSectionProps {
@@ -54,29 +55,31 @@ export const ToolCallsSection: React.FC<ToolCallsSectionProps> = ({
   if (validToolCalls.length === 0) return null;
 
   return (
-    <AnimatedHeight
-      duration={220}
-      className="tool-calls-section min-w-0 mb-3 flex flex-col items-stretch"
-      data-section-key={sectionKey}
-      data-mode={mode}
-      isLive={isLive}
-    >
-      {mode === 'expanded' ? (
-        <ExpandedView
-          toolCalls={validToolCalls}
-          isLive={isLive}
-          onCollapse={handleCollapse}
-        />
-      ) : (
-        <CollapsedView
-          toolCalls={validToolCalls}
-          isLive={isLive}
-          selectedId={selectedId}
-          onSelect={handleChipClick}
-          onExpand={handleExpand}
-        />
-      )}
-    </AnimatedHeight>
+    <TooltipProvider delayDuration={200}>
+      <AnimatedHeight
+        duration={220}
+        className="tool-calls-section min-w-0 mb-3 flex flex-col items-stretch"
+        data-section-key={sectionKey}
+        data-mode={mode}
+        isLive={isLive}
+      >
+        {mode === 'expanded' ? (
+          <ExpandedView
+            toolCalls={validToolCalls}
+            isLive={isLive}
+            onCollapse={handleCollapse}
+          />
+        ) : (
+          <CollapsedView
+            toolCalls={validToolCalls}
+            isLive={isLive}
+            selectedId={selectedId}
+            onSelect={handleChipClick}
+            onExpand={handleExpand}
+          />
+        )}
+      </AnimatedHeight>
+    </TooltipProvider>
   );
 };
 
@@ -267,6 +270,7 @@ const ChipSlot: React.FC<ChipSlotProps> = ({ toolCall, status, renderer, selecte
       status={status}
       failed={failed}
       selected={selected}
+      mcpServer={toolCall.mcp}
       onClick={onClick}
     />
   );

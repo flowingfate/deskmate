@@ -1,14 +1,14 @@
 /**
  * DeleteSkillConfirmDialog
  *
- * Skill 删除确认框。常驻挂载（SettingsDialogs），通过 `DeleteSkillDialogAtom` 控制 open。
- * SkillDropdownMenu 调 requestDelete(name)（异步扫「被哪些 agent 使用」后开框），本组件
+ * Skill 删除确认框。常驻挂载于 `SkillsView`，通过 `DeleteSkillDialogAtom` 控制 open。
+ * 行内 `SkillDropdownMenu` 调 requestDelete(name)（异步扫「被哪些 agent 使用」后开框），本组件
  * 订阅 atom 渲染确认框并执行真正的 skillsApi.deleteSkill。
  *
  * 删除后数据由 skills.atom 订阅 persist:agent:registry:updated[kind=skills] 自动刷新。
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,7 @@ const DeleteSkillConfirmDialog: React.FC = () => {
   const [{ open, skillName, usedByAgents }, actions] = DeleteSkillDialogAtom.use();
   const { showSuccess, showError } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
+  const deleteActionRef = useRef<HTMLButtonElement>(null);
 
   const handleConfirm = useCallback(async () => {
     if (!skillName) return;
@@ -52,7 +53,7 @@ const DeleteSkillConfirmDialog: React.FC = () => {
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) actions.close(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" initialFocusRef={deleteActionRef}>
         <DialogHeader>
           <DialogTitle className="text-left">Delete Skill</DialogTitle>
           <DialogDescription className="text-left">
@@ -74,6 +75,7 @@ const DeleteSkillConfirmDialog: React.FC = () => {
             No
           </Button>
           <Button
+            ref={deleteActionRef}
             variant="destructive"
             size="sm"
             onClick={handleConfirm}

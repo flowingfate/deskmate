@@ -28,6 +28,7 @@ import { agentCommand } from './agent';
 import { mcpCommand } from './mcp';
 import { scheduleCommand } from './schedule';
 import { skillCommand } from './skill';
+import { timeCommand } from './time';
 import { subagentCommand } from './subagent';
 
 /** app 域专属注册表 —— 与 `webCommands` 同形,只装 app 的子命令。 */
@@ -38,6 +39,7 @@ appCommands.register(agentCommand);
 appCommands.register(mcpCommand);
 appCommands.register(skillCommand);
 
+appCommands.register(timeCommand);
 // 批 Capability(feature-gated):scheduler 默认开,关掉时绝不注册。
 if (isFeatureEnabled('deskmateFeatureScheduler')) {
   appCommands.register(scheduleCommand);

@@ -8,7 +8,7 @@ import { ipcMain } from 'electron';
 
 import { renderToMain } from '@shared/ipc/internalUrls';
 import { Profiles } from '@main/persist';
-import { InternalUrlRouter } from '@main/pi/internal-urls/router';
+import { InternalUrlRouter } from '@main/pi';
 import { log } from '@main/log';
 
 const logger = log.child({ mod: 'InternalUrlsIpc' });

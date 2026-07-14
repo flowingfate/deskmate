@@ -1,7 +1,6 @@
 import { connectRenderToMain, connectMainToRender } from './base';
-import type { ChatSession } from '../types/profileTypes';
+import type { ChatSession, ChatSessionFile } from '../persist/types';
 import type { AgentUnreadSummary } from '../types/chatSessionTypes';
-import type { ChatSessionFile } from '../types/agentChatTypes';
 
 type IpcResult<T> =
   | { success: true } & T

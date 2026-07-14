@@ -6,32 +6,20 @@ import { useSearchParams } from 'react-router-dom';
 import McpServerListView from './McpServerListView';
 import McpToolListView from './McpToolListView';
 import McpToolDetailView from './McpToolDetailView';
-import { Card } from '@/shadcn/card';
 import { ScrollArea } from '@/shadcn/scroll-area';
 import { MCPServerExtended } from '../../lib/userData/types';
 import { MCPTool } from '../../types/mcpTypes';
+import type { McpServerOperationState } from './useMcpServerActions';
 
 interface McpContentViewProps {
   servers: MCPServerExtended[];
   isLoading: boolean;
-  operationStates: Record<
-    string,
-    {
-      isOperating: boolean;
-      operation?: 'connect' | 'disconnect' | 'reconnect';
-    }
-  >;
+  operationStates: Record<string, McpServerOperationState>;
   onConnect: (serverName: string) => void;
   onDisconnect: (serverName: string) => void;
   onReconnect: (serverName: string) => void;
   onDelete: (serverName: string) => void;
   onEdit: (serverName: string) => void;
-  onMcpServerMenuToggle?: (serverName: string, buttonElement: HTMLElement) => void;
-  mcpServerMenuState?: {
-    isOpen: boolean;
-    serverName: string | null;
-    anchorElement: HTMLElement | null;
-  };
 }
 
 /**
@@ -54,8 +42,6 @@ const McpContentView: React.FC<McpContentViewProps> = ({
   onReconnect,
   onDelete,
   onEdit,
-  onMcpServerMenuToggle,
-  mcpServerMenuState,
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectServerFromUrl = searchParams.get('selectServer');
@@ -126,15 +112,6 @@ const McpContentView: React.FC<McpContentViewProps> = ({
           onEdit={onEdit}
           selectedServer={selectedServer}
           onSelectServer={handleServerSelect}
-          onMcpServerMenuToggle={onMcpServerMenuToggle}
-          mcpServerMenuState={mcpServerMenuState}
-          mcpServerOperations={{
-            onConnect,
-            onDisconnect,
-            onReconnect,
-            onDelete,
-            onEdit,
-          }}
         />
       </div>
 

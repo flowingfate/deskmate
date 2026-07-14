@@ -2,7 +2,7 @@
  * TokenCounter type definitions
  * Defines all types and interfaces used by the Token calculation system
  *
- * 注:消息形态由 `@shared/types/message` 提供;此处不再 re-export。
+ * 注:消息形态由 `@shared/persist/types` 提供;此处不再 re-export。
  * Image attachment 的 detail/width/height 由调用方拆出后传给
  * `ImageTokenCalculator.calculateFromAttachment`。
  */

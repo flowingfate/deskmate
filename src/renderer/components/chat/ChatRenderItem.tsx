@@ -1,5 +1,5 @@
 import React from 'react';
-import type { UserMessage as UserMessageType } from '@shared/types/message';
+import type { UserMessage as UserMessageType } from '@shared/persist/types'
 import UserMessage from './message/UserMessage';
 import AssistantMessage from './message/AssistantMessage';
 import { EditInlineInput } from './chat-input';

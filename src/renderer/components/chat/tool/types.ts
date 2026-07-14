@@ -12,7 +12,7 @@
 //                粗 = OutputSuccessBlock(替换成功时的 <pre> 块)
 //                额外 = OutputExecutingBlock(替换 executing 状态的 <pre> 块,仅粗粒度)
 //                ⚠ 失败 / interrupted 一律走默认渲染,工具不接管。
-import type { ToolCall } from '@shared/types/message';
+import type { ToolCall } from '@shared/persist/types'
 
 export type ToolCallExecutionStatus = 'executing' | 'completed' | 'interrupted';
 

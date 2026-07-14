@@ -12,7 +12,7 @@
 import { Profiles } from '@main/persist';
 import type { Agent } from '@main/persist/agent';
 import type { AgentMcpServer } from '@shared/persist/types';
-import type { SkillBindings } from '@shared/types/profileTypes';
+import type { SkillBindings } from '@shared/persist/types'
 
 interface AgentMcpServerInput {
   name: string;

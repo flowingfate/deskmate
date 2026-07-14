@@ -1,7 +1,7 @@
 // src/renderer/lib/chat/agentIpc.ts
 // AgentChat IPC wrapper - calls main process via IPC
 
-import type { Message, UserMessage } from '@shared/types/message';
+import type { Message, UserMessage } from '@shared/persist/types'
 import type { ChatSessionSnapshot } from '@shared/ipc/agentChat';
 import type { TraceContext } from '@shared/log/trace';
 import { agentChatApi } from '@/ipc/agentChat';

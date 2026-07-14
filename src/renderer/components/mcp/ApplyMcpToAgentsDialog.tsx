@@ -9,7 +9,7 @@
  * 通用列表 + 状态机抽到 `components/agentSelection/`。
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -53,6 +53,7 @@ const ApplyMcpToAgentsDialog: React.FC<ApplyMcpToAgentsDialogProps> = ({
   const [isApplying, setIsApplying] = useState(false);
   const [conflictReports, setConflictReports] = useState<AgentConflictReport[]>([]);
   const [showConflictSummary, setShowConflictSummary] = useState(false);
+  const conflictCloseRef = useRef<HTMLButtonElement>(null);
 
   // Display label for the dialog description
   const displayLabel = useMemo(() => {
@@ -254,7 +255,7 @@ const ApplyMcpToAgentsDialog: React.FC<ApplyMcpToAgentsDialogProps> = ({
   if (showConflictSummary && conflictReports.length > 0) {
     return (
       <Dialog open={open} onOpenChange={handleCloseConflictSummary}>
-        <DialogContent className="w-[480px] max-w-[480px]">
+        <DialogContent className="w-[480px] max-w-[480px]" initialFocusRef={conflictCloseRef}>
           <DialogHeader>
             <DialogTitle>Tool Conflict Report</DialogTitle>
             <DialogDescription>
@@ -293,7 +294,7 @@ const ApplyMcpToAgentsDialog: React.FC<ApplyMcpToAgentsDialogProps> = ({
           </div>
 
           <DialogFooter>
-            <Button onClick={handleCloseConflictSummary}>OK</Button>
+            <Button ref={conflictCloseRef} onClick={handleCloseConflictSummary}>OK</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

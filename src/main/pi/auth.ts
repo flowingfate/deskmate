@@ -14,12 +14,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import type { OAuthCredentials } from '@earendil-works/pi-ai';
-import {
-  PI_AUTH_VERSION,
-  type PiAuthFile,
-  type ProviderAuth,
-  type ProviderAccountSummary,
-} from '@shared/types/piAuthTypes';
+import { PI_AUTH_VERSION,
+type PiAuthFile,
+type ProviderAuth,
+type ProviderAccountSummary, } from '@shared/persist/types'
 import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
 

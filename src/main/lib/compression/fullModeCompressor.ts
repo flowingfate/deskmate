@@ -11,7 +11,7 @@
 // 与 IPC / persist 同形 → compression.ts 不再需要边界翻译。
 // 蓝本:ai.prompt/message.md
 
-import type { AssistantMessage, Message } from '@shared/types/message';
+import type { AssistantMessage, Message } from '@shared/persist/types'
 import { createAssistantMessage } from '@shared/utils/messageFactory';
 import { TokenCounter } from '../token';
 import {

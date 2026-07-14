@@ -16,7 +16,7 @@
  */
 
 import type { Tool } from '@earendil-works/pi-ai';
-import { jsonSchema } from '@main/pi/tools/schema';
+import { jsonSchema } from '@main/pi';
 import * as fs from 'fs';
 import { Profiles } from '@main/persist';
 import { toSchedulerJob } from '../../scheduler/jobAdapter';

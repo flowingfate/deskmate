@@ -16,7 +16,7 @@ import {
   type ConsentHandler,
   type McpAuthConsentDecision,
 } from './mcpAuthPromptRegistry';
-import type { McpServerConfig } from '@shared/types/profileTypes';
+import type { McpServerConfig } from '@shared/persist/types'
 import type { McpAuthClientIdRequestPayload, McpAuthClientIdResponse } from '@shared/types/mcpAuth';
 
 /** Renderer-prompt timeout matches `CallbackServer.waitForCode`. On

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -41,6 +41,7 @@ const EMPTY: PresetPromptInput = {
  */
 export function PresetEditorDialog({ open, editing, onOpenChange, onSubmit }: PresetEditorDialogProps) {
   const [form, setForm] = useState<PresetPromptInput>(EMPTY);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   // 每次打开时用 editing（或空）重置表单；关闭态不重置，避免关闭动画期间闪值。
   useEffect(() => {
@@ -72,7 +73,7 @@ export function PresetEditorDialog({ open, editing, onOpenChange, onSubmit }: Pr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" initialFocusRef={titleInputRef}>
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit quick prompt' : 'New quick prompt'}</DialogTitle>
           <DialogDescription>
@@ -102,6 +103,7 @@ export function PresetEditorDialog({ open, editing, onOpenChange, onSubmit }: Pr
               Title
             </Label>
             <Input
+              ref={titleInputRef}
               id="preset-title"
               value={form.title}
               maxLength={40}

@@ -24,25 +24,28 @@ import type {
   Usage as PiUsage,
 } from '@earendil-works/pi-ai';
 
-import type {
-  AssistantMessage,
-  Message,
-  ToolResult,
-  UserMessage,
-} from '@shared/types/message';
-import type { ContextState } from '@shared/types/agentChatTypes';
+import type { AssistantMessage,
+Message,
+ToolResult,
+UserMessage, } from '@shared/persist/types'
+import type { ContextState } from '@shared/persist/types'
 
 import { parseAgentModel } from '@shared/utils/agentModelId';
 import { CancellationError } from '@main/lib/utilities/errors';
 import { log } from '@main/log';
 
-import { resolveModel, resolveCredentials } from '@main/pi/model';
-import { toPiContext, fromPiAssistantMessage } from '@main/pi/utils/messageBridge';
-import { deriveToolTracer, executeToolCall } from '@main/pi/tool';
-import type { ToolCatalog } from '@main/pi/toolCatalog';
-import type { ToolContext } from '@main/pi/tools/types';
-import { checkAndCompress } from '@main/pi/compression';
-import { classifyError } from '@main/pi/errors';
+import {
+  checkAndCompress,
+  classifyError,
+  deriveToolTracer,
+  executeToolCall,
+  fromPiAssistantMessage,
+  resolveCredentials,
+  resolveModel,
+  toPiContext,
+  type ToolCatalog,
+  type ToolContext,
+} from '@main/pi';
 import { Tracer } from '@shared/log/trace';
 const logger = log;
 
@@ -92,6 +95,8 @@ export interface SubAgentSessionHooks {
 
 export interface RunTurnArgs {
   systemPrompt: string;
+  /** 仅附在本次请求消息尾部的非持久化动态提示。 */
+  transientReminder?: string;
   /**
    * 本轮工具目录。caller(SubAgentChat)在每轮 runTurn 之前用
    * `buildToolCatalogForSubAgent(cfg, resolvedMcpServers)` 构建,session
@@ -234,7 +239,9 @@ export class SubAgentSession {
 
       const { apiKey, model } = await resolveCredentials(baseModel, this.profileId);
       let llmMessages = compressionResult.llmContext;
-      let piContext = toPiContext(llmMessages, args.systemPrompt, piTools);
+      let piContext = toPiContext(llmMessages, args.systemPrompt, piTools, {
+        transientReminder: args.transientReminder,
+      });
 
       let final: PiAssistantMessage;
       try {
@@ -251,13 +258,15 @@ export class SubAgentSession {
         if (composedSignal.aborted) throw new CancellationError('Cancelled after overflow recovery compaction');
 
         llmMessages = forced.llmContext;
-        piContext = toPiContext(llmMessages, args.systemPrompt, piTools);
+        piContext = toPiContext(llmMessages, args.systemPrompt, piTools, {
+          transientReminder: args.transientReminder,
+        });
         final = await this.streamOneRound(model, apiKey, piContext, composedSignal, args.hooks, args.tracer);
       }
 
       // aborted：把已收到的 partial 落进历史并退出
       if (final.stopReason === 'aborted') {
-        const partial = fromPiAssistantMessage(final);
+        const partial = fromPiAssistantMessage(final, args.catalog);
         if (partial.content.length > 0 || (partial.tool_calls?.length ?? 0) > 0) {
           this.addAssistantMessage(partial);
         }
@@ -268,7 +277,7 @@ export class SubAgentSession {
         };
       }
 
-      const assistantMsg = fromPiAssistantMessage(final);
+      const assistantMsg = fromPiAssistantMessage(final, args.catalog);
       this.addAssistantMessage(assistantMsg);
 
       this.lastUsage = final.usage;
@@ -282,6 +291,10 @@ export class SubAgentSession {
         },
       };
 
+      // 执行侧必须用 final.content 的 raw toolCall（MCP 的 LLM 限定名
+      // serverName/toolName），executeToolCall 以此查 catalog.routes 命中。
+      // 切勿改用 assistantMsg.tool_calls —— 那是 demux 回自然名的持久化副本，
+      // 拿去查表会 miss，导致 MCP 工具全部执行失败。
       const toolCalls = final.content.filter((c): c is Extract<typeof c, { type: 'toolCall' }> => c.type === 'toolCall');
       const summary: RunTurnResult = {
         textContent: extractAssistantText(assistantMsg),
@@ -402,7 +415,8 @@ export class SubAgentSession {
     // 更易追踪日志)。每个 tool call 各自一个 chat.tool span。
     for (const tc of toolCalls) {
       const startTime = Date.now();
-      hooks.onToolStart?.(tc.id, tc.name, tc.arguments);
+      const { name: toolName } = catalog.resolveIdentity(tc.name);
+      hooks.onToolStart?.(tc.id, toolName, tc.arguments);
 
       const call = { id: tc.id, name: tc.name, arguments: tc.arguments };
       const ctx: ToolContext = {
@@ -429,11 +443,11 @@ export class SubAgentSession {
       let content = result.content;
       if (!result.isError && hooks.onToolResultPostprocess) {
         try {
-          content = await hooks.onToolResultPostprocess(tc.name, tc.arguments, content, result.deliverables);
+          content = await hooks.onToolResultPostprocess(toolName, tc.arguments, content, result.deliverables);
         } catch (err) {
           logger.warn({
             msg: '[SubAgentSession] tool result postprocess failed; using raw content',
-            toolName: tc.name,
+            toolName,
             err: err instanceof Error ? err.message : String(err),
           });
         }
@@ -449,9 +463,9 @@ export class SubAgentSession {
       this.applyToolResponse(call.id, toolResult);
 
       if (result.isError) {
-        hooks.onToolError?.(tc.id, tc.name, Date.now() - startTime);
+        hooks.onToolError?.(tc.id, toolName, Date.now() - startTime);
       } else {
-        hooks.onToolDone?.(tc.id, tc.name, Date.now() - startTime, content.length);
+        hooks.onToolDone?.(tc.id, toolName, Date.now() - startTime, content.length);
       }
     }
   }

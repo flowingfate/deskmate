@@ -20,7 +20,7 @@ import type {
 } from '@earendil-works/pi-ai';
 
 import { Profiles } from '@main/persist';
-import { resolveModel, resolveCredentials } from '@main/pi/model';
+import { resolveModel, resolveCredentials } from '@main/pi';
 import { parseAgentModel } from '@shared/utils/agentModelId';
 
 export async function callDoctorLlm(

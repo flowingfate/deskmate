@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { Settings, BookMarked, Loader2, Zap, Hand, Ban } from 'lucide-react';
 import { Button } from '@/shadcn/button';
@@ -9,7 +9,8 @@ import { cn } from '@/lib/utilities/utils';
 import { TabComponentProps } from './types';
 import { useSkills } from '../../userData/userDataProvider';
 import ListSearchBox from '../../ui/ListSearchBox';
-import type { SkillTier, SkillBindings } from '@shared/types/profileTypes';
+import type { SkillTier, SkillBindings } from '@shared/persist/types';
+import { useDirtyTracker, mapEquals, mapFingerprint } from './useDirtyTracker';
 
 /**
  * AgentSkillsTab - Agent Skills 三档配置
@@ -70,46 +71,29 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
   const skillNames = useMemo(() => (globalSkills ?? []).map((s) => s.name), [globalSkills]);
 
   // 每个 skill 的当前显示档位（含 off）。
-  const [tierMap, setTierMap] = useState<Map<string, DisplayTier>>(new Map());
-  const [initialTierMap, setInitialTierMap] = useState<Map<string, DisplayTier>>(new Map());
-  const [isInitialized, setIsInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const ready = !!agentData?.id && skillNames.length > 0;
 
-  // hydrate：base 来自 agentData（真值 SkillBindings），cachedData（tab 编辑缓存）优先。
-  useEffect(() => {
-    if (!agentData?.id || skillNames.length === 0) return;
+  const baseline = useMemo(
+    () => deriveTierMap(skillNames, agentData?.skills),
+    [skillNames, agentData?.skills],
+  );
+  const cached = useMemo(
+    () => (cachedData?.skills !== undefined ? deriveTierMap(skillNames, cachedData.skills) : null),
+    [skillNames, cachedData?.skills],
+  );
 
-    const base = deriveTierMap(skillNames, agentData.skills);
-    const current = cachedData?.skills !== undefined
-      ? deriveTierMap(skillNames, cachedData.skills)
-      : base;
-
-    setTierMap(current);
-    if (!isInitialized) {
-      setInitialTierMap(base);
-      setIsInitialized(true);
-    }
-  }, [agentData?.id, agentData?.skills, cachedData?.skills, skillNames, isInitialized]);
-
-  const hasChanges = useMemo(() => {
-    if (tierMap.size !== initialTierMap.size) return true;
-    for (const [name, tier] of tierMap) {
-      if ((initialTierMap.get(name) ?? 'off') !== tier) return true;
-    }
-    return false;
-  }, [tierMap, initialTierMap]);
-
-  // 变更时通知父组件（携带 SkillBindings 映射）。
-  const lastNotifiedRef = React.useRef<string | null>(null);
-  useEffect(() => {
-    if (!isInitialized || !onDataChange) return;
-    const skills = tierMapToBindings(tierMap);
-    const key = JSON.stringify(skills);
-    if (lastNotifiedRef.current !== key) {
-      lastNotifiedRef.current = key;
-      onDataChange('skills', { skills }, hasChanges);
-    }
-  }, [tierMap, hasChanges, isInitialized, onDataChange]);
+  const { value: tierMap, setValue: setTierMap } = useDirtyTracker<Map<string, DisplayTier>>({
+    tabName: 'skills',
+    ready,
+    agentId: agentData?.id,
+    baseline,
+    cached,
+    equals: (a, b) => mapEquals(a, b, 'off'),
+    fingerprint: mapFingerprint,
+    toPayload: (map) => ({ skills: tierMapToBindings(map) }),
+    onDataChange,
+  });
 
   const handleSetTier = useCallback((skillName: string, tier: DisplayTier) => {
     if (readOnly) return;
@@ -118,7 +102,7 @@ const AgentSkillsTab: React.FC<TabComponentProps> = ({
       next.set(skillName, tier);
       return next;
     });
-  }, [readOnly]);
+  }, [readOnly, setTierMap]);
 
   // 统计：只算实际存在的 skill。
   const { liveCount, lazyCount } = useMemo(() => {

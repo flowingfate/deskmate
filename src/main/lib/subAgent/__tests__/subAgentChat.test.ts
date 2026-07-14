@@ -40,8 +40,8 @@ vi.mock('@main/persist/lib/path', async () => ({
 
 import { SubAgentChat, truncateToLines } from '../subAgentChat';
 import type { SubAgentChatOptions } from '../types';
-import type { SubAgentConfig } from '@shared/types/profileTypes';
-import type { Message } from '@shared/types/message'
+import type { SubAgentConfig } from '@shared/persist/types'
+import type { Message } from '@shared/persist/types'
 
 // ─── Test helpers ───
 

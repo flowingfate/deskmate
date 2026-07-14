@@ -1,13 +1,13 @@
 // src/main/lib/evalHarness/evalJudgeRunner.ts
 import type { JudgeRequest, JudgeResultResponse, JudgeChatMessage } from './evalProtocol';
-import { runUtilityChat } from '@main/pi/utility';
+import { runUtilityChat } from '@main/pi'
 import { Profiles } from '../../persist';
 
 /**
  * Handles 'judge' requests: raw LLM call with caller-provided messages.
  * No agent loop, no tools, no agent system prompt.
  *
- * 走 pi/utility 的 runUtilityChat —— 不再绑死 GitHub Copilot；agent.model 是
+ * 走 pi/utils/utilityCompletion.ts 的 runUtilityChat —— 不再绑死 GitHub Copilot；agent.model 是
  * `${provider}::${modelId}` 复合 key，pi 自动按 provider 路由。
  */
 export class EvalJudgeRunner {

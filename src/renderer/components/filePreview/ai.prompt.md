@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-05 -->
+<!-- Last verified: 2026-07-13 -->
 
 # filePreview — 文件预览模块
 
@@ -7,7 +7,7 @@
 | 文件 | 职责 | 规模 |
 |---|---|---|
 | `FilePreviewPanel.tsx` | **纯受控**通用文件预览面板(无自有可见状态,全靠 props)。能力:Markdown(渲染/源码切换)、code / JSON / text(Monaco 只读)、HTML(iframe/源码)、PDF(iframe)、office / other(兜底"用默认应用打开")、就地编辑保存(Monaco)、磁盘 mtime 轮询自动刷新、原生全屏、Install Skill。形态与定位由外层容器决定。原 `chat/InlineFilePreviewPanel.tsx`,Phase 4 SCSS 迁移后无 scss | ~750 LOC |
-| `filePreview.atom.ts` | `createFilePreviewAtom()` 工厂 + 两个**独立实例** `ChatFilePreviewAtom` / `GlobalFilePreviewAtom`。state = `{ file, isDirty } \| null`;`open` 同文件 toggle、切文件时有脏改动弹 confirm;`markDirty` 由 panel 的 `onDirtyStateChange` 回填。两实例状态互不干扰 | 小 |
+| `filePreview.atom.ts` | `createFilePreviewAtom()` 工厂 + 两个**独立实例** `ChatFilePreviewAtom` / `GlobalFilePreviewAtom`。state = `{ file, isDirty } \| null`;`open` 同文件 toggle、切文件及 `cancel` 在脏改动时都通过 RootLayout 全局异步确认框确认 discard 后才改变状态；`markDirty` 由 panel 的 `onDirtyStateChange` 回填。两实例状态互不干扰 | 小 |
 | `filePreviewScope.tsx` | **「就近优先」路由**(替代旧 `useFilePreviewEvent.ts` 的 `fileViewer:open` 全局事件 + capture/bubble + coordinator 单例)。`useOpenFilePreview()` 按当前 React 作用域选 atom：聊天子树被 `<ChatFilePreviewScope>` 包裹 → context 提供绑定 `ChatFilePreviewAtom` 的 open；无 provider 兜底 → `GlobalFilePreviewAtom`。open 内部先 `resolveFileDescriptorUrl`(URI→绝对路径)再交 atom。producer 一律 `const open = useOpenFilePreview()` 后调 `open(descriptor)`，零事件、零 cast | 小 |
 | `ChatFilePreviewOverlay.tsx` | 聊天页 inline 容器:满铺 chat-content 区(`absolute inset-0`)。纯订阅 `ChatFilePreviewAtom.use()` 渲染，不再监听事件。挂载在 `ChatViewContent`(在 `ChatFilePreviewScope` 内) | ~25 LOC |
 | `GlobalFilePreviewOverlay.tsx` | 全局兜底容器:shadcn `Dialog` 居中弹窗(80vw×85vh)。纯订阅 `GlobalFilePreviewAtom.use()` 渲染。透传 `onInstallSkill`。挂载在 `AgentLayoutContent`,覆盖 agent 编辑器知识库 / 工作区侧栏等非聊天场景 | ~50 LOC |
@@ -27,6 +27,8 @@ useOpenFilePreview()(producer 侧)
 ```
 
 **就近优先靠 React context** —— `<ChatFilePreviewScope>` 包裹 `ChatViewContent` 全部子树(含消息附件、工具渲染器、工作区侧栏)；context 里带绑定 `ChatFilePreviewAtom` 的 open。scope 外的 producer(agent 编辑器知识库)拿不到 context，`useOpenFilePreview` 回退到 `GlobalFilePreviewAtom`。这精确复刻旧代码"聊天页在场则聊天预览优先"的语义，但用组件作用域而非 DOM 捕获阶段 + 模块单例实现——无事件总线、无 `stopImmediatePropagation`、无 coordinator。
+
+脏编辑确认是异步的：`FilePreviewPanel` 在 Cancel Edit / Close 前等待全局 `requestConfirmation` 的 `Discard changes` 结果；atom 的切文件、同文件 toggle 与外层关闭也执行同一门控。仅确认 discard 才 dispose Monaco 或改变预览 state。
 
 ### descriptor 收窄(零 cast)
 

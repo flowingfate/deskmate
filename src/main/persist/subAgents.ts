@@ -2,7 +2,7 @@ import type {
   SubAgentRecord,
   SubAgentsIndexFile,
 } from '../../shared/persist/types';
-import type { SubAgentConfig } from '@shared/types/profileTypes';
+import type { SubAgentConfig } from '@shared/persist/types'
 import { PERSIST_PATH } from '../../shared/persist/path';
 import { emit } from './lib/emit';
 import { getAppRoot } from './lib/root';

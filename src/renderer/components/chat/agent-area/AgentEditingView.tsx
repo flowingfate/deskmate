@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import AgentBasicTab from '../agent-editor/AgentBasicTab'
 import AgentKnowledgeBaseTab from '../agent-editor/AgentKnowledgeBaseTab'
@@ -116,8 +116,7 @@ const AgentEditingView: React.FC = () => {
   // Field-level error state
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
-  // Key for force-resetting Tab component states
-  const [tabResetKey, setTabResetKey] = useState(0)
+
 
   const readOnlyFlags = {
     basic: false,
@@ -225,53 +224,38 @@ const AgentEditingView: React.FC = () => {
     }))
   }, [])
 
-  // Validate all pending changes
-  const validateAllChanges = useCallback(() => {
+  // 汇总所有 pending tab 的变更为一个扁平 patch（camelCase）。校验与保存共用。
+  const collectPendingChanges = useCallback((): Partial<AgentConfig> => {
     const allChanges: Partial<AgentConfig> = {}
+    for (const [tab, changed] of Object.entries(pendingChanges)) {
+      if (!changed) continue
+      const cache = tabChangesCache[tab as AgentEditorTabName]
+      if (cache) Object.assign(allChanges, cache)
+    }
+    return allChanges
+  }, [pendingChanges, tabChangesCache])
 
-    if (pendingChanges.basic && tabChangesCache.basic) {
-      Object.assign(allChanges, tabChangesCache.basic)
-    }
-    if (pendingChanges.knowledge && tabChangesCache.knowledge) {
-      Object.assign(allChanges, tabChangesCache.knowledge)
-    }
-    if (pendingChanges.mcp && tabChangesCache.mcp) {
-      Object.assign(allChanges, tabChangesCache.mcp)
-    }
-    if (pendingChanges.tools && tabChangesCache.tools) {
-      Object.assign(allChanges, tabChangesCache.tools)
-    }
-    if (pendingChanges.skills && tabChangesCache.skills) {
-      Object.assign(allChanges, tabChangesCache.skills)
-    }
-    if (pendingChanges.sub_agents && tabChangesCache.sub_agents) {
-      Object.assign(allChanges, tabChangesCache.sub_agents)
-    }
-    if (pendingChanges.prompt && tabChangesCache.prompt) {
-      Object.assign(allChanges, tabChangesCache.prompt)
-    }
-    // Agent Name validation - check for duplicate names
+  // Check if there are any pending changes
+  const pendingCount = useMemo(
+    () => Object.values(pendingChanges).filter(Boolean).length,
+    [pendingChanges],
+  )
+  const hasAnyPendingChanges = pendingCount > 0
+
+  // Validate all pending changes（重名检查）。memoize 避免每帧线性扫全部 agent。
+  const validationResult = useMemo(() => {
+    const allChanges = collectPendingChanges()
     const currentName = allChanges.name || agentData?.name
-
     if (currentName && currentName.trim() !== '') {
-      const existingAgent = allAgents.find(a =>
-        a.name === currentName.trim() && a.id !== agentId
-      )
-
+      const existingAgent = allAgents.find(a => a.name === currentName.trim() && a.id !== agentId)
       if (existingAgent) {
         return { isValid: false, errorMessage: `Agent name "${currentName.trim()}" already exists. Please choose a different name.`, showError: true }
       }
     }
-
     return { isValid: true, errorMessage: null, showError: false }
-  }, [pendingChanges, tabChangesCache, agentData, agentId, allAgents])
-
-  // Check if there are any pending changes
-  const pendingCount = Object.values(pendingChanges).filter(Boolean).length
-  const hasAnyPendingChanges = pendingCount > 0
+  }, [collectPendingChanges, agentData?.name, allAgents, agentId])
 
   // Check if save is possible (has changes and validation passes)
-  const validationResult = validateAllChanges()
   const canSaveAll = hasAnyPendingChanges && validationResult.isValid
 
   // Use useEffect to update field errors
@@ -410,30 +394,8 @@ const AgentEditingView: React.FC = () => {
     setError(null)
 
     try {
-      // Collect all pending changes
-      const allChanges: Partial<AgentConfig> = {}
+      const allChanges = collectPendingChanges()
 
-      if (pendingChanges.basic && tabChangesCache.basic) {
-        Object.assign(allChanges, tabChangesCache.basic)
-      }
-      if (pendingChanges.knowledge && tabChangesCache.knowledge) {
-        Object.assign(allChanges, tabChangesCache.knowledge)
-      }
-      if (pendingChanges.mcp && tabChangesCache.mcp) {
-        Object.assign(allChanges, tabChangesCache.mcp)
-      }
-      if (pendingChanges.tools && tabChangesCache.tools) {
-        Object.assign(allChanges, tabChangesCache.tools)
-      }
-      if (pendingChanges.skills && tabChangesCache.skills) {
-        Object.assign(allChanges, tabChangesCache.skills)
-      }
-      if (pendingChanges.sub_agents && tabChangesCache.sub_agents) {
-        Object.assign(allChanges, tabChangesCache.sub_agents)
-      }
-      if (pendingChanges.prompt && tabChangesCache.prompt) {
-        Object.assign(allChanges, tabChangesCache.prompt)
-      }
       if (!agentId) {
         throw new Error('No chat ID found for update operation')
       }
@@ -502,10 +464,6 @@ const AgentEditingView: React.FC = () => {
         prompt: null,
         presets: null,
       })
-
-      // Force remount all Tab components
-      setTabResetKey(prev => prev + 1)
-
       showSuccess('All changes saved successfully')
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred'
@@ -513,7 +471,7 @@ const AgentEditingView: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [canSaveAll, pendingChanges, tabChangesCache, agentId, agentData, currentAgent, detail, showSuccess])
+  }, [canSaveAll, collectPendingChanges, agentId, agentData, currentAgent, detail, showSuccess])
 
   // Navigate back to chat page
   const handleBackToChat = useCallback(() => {
@@ -629,7 +587,7 @@ const AgentEditingView: React.FC = () => {
             {/* Render only the selected Tab content based on active state */}
             {tabState.activeTab === 'basic' && (
               <AgentBasicTab
-                key={`basic-${tabResetKey}`}
+                key={`basic-${agentId}`}
                 mode="update"
                 agentId={agentId}
                 agentData={agentData}
@@ -643,7 +601,7 @@ const AgentEditingView: React.FC = () => {
 
             {tabState.activeTab === 'knowledge' && tabState.tabsEnabled.knowledge && (
               <AgentKnowledgeBaseTab
-                key={`knowledge-${tabResetKey}`}
+                key={`knowledge-${agentId}`}
                 mode="update"
                 agentId={agentId}
                 agentData={agentData}
@@ -657,7 +615,7 @@ const AgentEditingView: React.FC = () => {
 
             {tabState.activeTab === 'mcp' && tabState.tabsEnabled.mcp && (
               <AgentMcpServersTab
-                key={`mcp-${tabResetKey}`}
+                key={`mcp-${agentId}`}
                 mode="update"
                 agentId={agentId}
                 agentData={agentData}
@@ -671,7 +629,7 @@ const AgentEditingView: React.FC = () => {
 
             {tabState.activeTab === 'tools' && tabState.tabsEnabled.tools && (
               <AgentToolsTab
-                key={`tools-${tabResetKey}`}
+                key={`tools-${agentId}`}
                 mode="update"
                 agentId={agentId}
                 agentData={agentData}
@@ -685,7 +643,7 @@ const AgentEditingView: React.FC = () => {
 
             {tabState.activeTab === 'skills' && tabState.tabsEnabled.skills && (
               <AgentSkillsTab
-                key={`skills-${tabResetKey}`}
+                key={`skills-${agentId}`}
                 mode="update"
                 agentId={agentId}
                 agentData={agentData}
@@ -700,7 +658,7 @@ const AgentEditingView: React.FC = () => {
 
             {subAgentEnabled && tabState.activeTab === 'sub_agents' && tabState.tabsEnabled.sub_agents && (
               <AgentSubAgentsTab
-                key={`sub_agents-${tabResetKey}`}
+                key={`sub_agents-${agentId}`}
                 mode="update"
                 agentId={agentId}
                 agentData={agentData}
@@ -714,7 +672,7 @@ const AgentEditingView: React.FC = () => {
 
             {tabState.activeTab === 'prompt' && tabState.tabsEnabled.prompt && (
               <AgentSystemPromptTab
-                key={`prompt-${tabResetKey}`}
+                key={`prompt-${agentId}`}
                 mode="update"
                 agentId={agentId}
                 agentData={agentData}

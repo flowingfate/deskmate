@@ -38,8 +38,7 @@ import { protocol } from 'electron';
 
 import { log } from '@main/log';
 import { Profiles } from '@main/persist';
-import { InternalUrlRouter } from '@main/pi/internal-urls/router';
-import type { ResolveContext } from '@main/pi/internal-urls/types';
+import { InternalUrlRouter, type ResolveContext } from '@main/pi';
 
 const logger = log.child({ mod: 'MediaProtocol' });
 

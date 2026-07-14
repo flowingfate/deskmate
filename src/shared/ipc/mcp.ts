@@ -1,6 +1,6 @@
 import { connectRenderToMain, connectMainToRender } from './base';
 import type { McpAuthClientIdRequestPayload, McpAuthClientIdResponse } from '../types/mcpAuth';
-import type { McpServerConfig } from '../types/profileTypes';
+import type { McpServerConfig } from '../persist/types';
 
 export type { McpAuthClientIdRequestPayload, McpAuthClientIdResponse };
 

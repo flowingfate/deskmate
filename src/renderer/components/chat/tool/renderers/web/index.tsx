@@ -15,7 +15,7 @@
 // cmdline 解析复用 app 目录的 helper —— `extractAppCmdline` / `firstNonFlagTokens`
 // 只读 `args.cmd` + 空白切分,与工具名无关,是通用逻辑。
 
-import type { ToolCall } from '@shared/types/message';
+import type { ToolCall } from '@shared/persist/types'
 import type { ToolRenderer } from '../../types';
 import { extractAppCmdline, firstNonFlagTokens } from '../app/cmdline';
 

@@ -65,13 +65,7 @@ const PasteToWorkspaceDialog: React.FC<PasteToWorkspaceDialogProps> = ({
     onClose();
   }, [resetState, onClose]);
 
-  // Focus textarea when dialog opens
   useEffect(() => {
-    if (isOpen && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-
-    // Clear old state
     if (isOpen) {
       resetState();
     }
@@ -181,6 +175,7 @@ const PasteToWorkspaceDialog: React.FC<PasteToWorkspaceDialogProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent
+        initialFocusRef={textareaRef}
         className="max-w-[560px] max-h-[80vh] flex flex-col p-0"
         onKeyDown={handleKeyDown}
       >
