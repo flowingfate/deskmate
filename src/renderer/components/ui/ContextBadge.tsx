@@ -4,7 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/shadcn/popover';
 import { cn } from '@/lib/utilities/utils';
 import { useCurrentAgent } from '@/states/agents.atom';
 import { useModelInfo } from '../../lib/models/useModelInfo';
-import { CurrentSessionTokenUsage } from '../../lib/chat/agentSessionCacheManager';
+import { CurrentSessionCumulativeTokenUsage, CurrentSessionTokenUsage } from '../../lib/chat/agentSessionCacheManager';
 
 function formatTokenCount(tokens: number): string {
   if (tokens >= 1000) {
@@ -14,11 +14,16 @@ function formatTokenCount(tokens: number): string {
   return tokens.toString();
 }
 
+function formatCumulativeTokenCount(tokens: number): string {
+  return `${tokens.toLocaleString()}（${Math.ceil(tokens / 1000)}K）`;
+}
+
 export const ContextBadge: React.FC = () => {
   const currentAgent = useCurrentAgent();
   const currentModel = currentAgent?.model ?? null;
   const { info } = useModelInfo(currentModel);
   const usage = CurrentSessionTokenUsage.use();
+  const cumulativeUsage = CurrentSessionCumulativeTokenUsage.use();
   const contextTokens = usage.tokenCount;
   const modelContextWindow = info?.contextWindow ?? 0;
   const utilizationRatio = modelContextWindow > 0 ? contextTokens / modelContextWindow : 0;
@@ -38,6 +43,7 @@ export const ContextBadge: React.FC = () => {
 
   const contextText = formatTokenCount(contextTokens);
   const windowText = formatTokenCount(modelContextWindow);
+  const promptInputTokens = cumulativeUsage.in + cumulativeUsage.cache[0] + cumulativeUsage.cache[1];
 
   return (
     <Popover>
@@ -91,6 +97,35 @@ export const ContextBadge: React.FC = () => {
             <dd className="mt-0.5 font-medium text-sc-foreground">{modelContextWindow > 0 ? `${remainingTokens.toLocaleString()} tokens` : 'Unavailable'}</dd>
           </div>
         </dl>
+        <section className="border-t border-sc-border pt-3">
+          <h3 className="text-sm font-medium text-sc-foreground">Cumulative token usage</h3>
+          <dl className="mt-2 space-y-1.5 text-xs tabular-nums">
+            <div className="flex items-center justify-between gap-4">
+              <dt className="font-medium text-sc-foreground">Prompt input</dt>
+              <dd className="font-medium text-sc-foreground">{formatCumulativeTokenCount(promptInputTokens)}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="pl-3 text-sc-muted-foreground">Uncached input</dt>
+              <dd className="text-sc-muted-foreground">{formatCumulativeTokenCount(cumulativeUsage.in)}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="pl-3 text-sc-muted-foreground">Cache read</dt>
+              <dd className="text-sc-muted-foreground">{formatCumulativeTokenCount(cumulativeUsage.cache[0])}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="pl-3 text-sc-muted-foreground">Cache write</dt>
+              <dd className="text-sc-muted-foreground">{formatCumulativeTokenCount(cumulativeUsage.cache[1])}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-t border-sc-border pt-1.5">
+              <dt className="font-medium text-sc-foreground">Output</dt>
+              <dd className="font-medium text-sc-foreground">{formatCumulativeTokenCount(cumulativeUsage.out)}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-t border-sc-border pt-1.5">
+              <dt className="font-medium text-sc-foreground">Total</dt>
+              <dd className="font-semibold text-sc-foreground">{formatCumulativeTokenCount(cumulativeUsage.total)}</dd>
+            </div>
+          </dl>
+        </section>
       </PopoverContent>
     </Popover>
   );

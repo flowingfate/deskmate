@@ -238,6 +238,12 @@ export class RegularSession extends BaseSession {
         timestamp: Date.now(),
         type: 'complete',
         hasToolCalls: final.content.some((c) => c.type === 'toolCall'),
+        usage: {
+          in: final.usage.input,
+          out: final.usage.output,
+          cache: [final.usage.cacheRead, final.usage.cacheWrite],
+          total: final.usage.totalTokens,
+        },
       });
 
       log.info(tracer.fields({

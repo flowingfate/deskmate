@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-14 (消息与 agent 配置 schema 统一从 shared/persist/types 导入；主进程 session 路径同步为 pi/session/) -->
+<!-- Last verified: 2026-07-14 (ContextBadge 将累计 token 以 Prompt input / Uncached input / cache read-write / output / total 的层级展示) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -8,7 +8,7 @@
 |------|------|------|
 | `ChatView.tsx` | 主聊天视图容器；负责路由↔会话同步、会话分叉/选择与 agent 编辑导航 | ~300 LOC |
 | `ChatViewContent.tsx` | 可滚动的消息列表区域；处理会话切换占位、回放与输入委托，不承载 ribbon 业务状态 | ~200 LOC |
-| `ChatViewHeader.tsx` | 顶部栏：左侧组合 agent 身份、技能、本地工具与 MCP 工具状态（徽标可跳转各自设置）；右侧 `ContextBadge` 点击向下展开用量详情 | —
+| `ChatViewHeader.tsx` | 顶部栏：左侧组合 agent 身份、技能、本地工具与 MCP 工具状态（徽标可跳转各自设置）；右侧 `ContextBadge` 点击向下展开 context window 详情及当前消息历史中 assistant usage 的累计 token 消耗：Prompt input（uncached input + cache read + cache write）、output、total | —
 | `ribbon/index.tsx` | 输入框上方的紧凑控制条：左侧弹性槽渲染提示或错误，保留右侧会话操作的固定宽度 | 小 |
 | `ribbon/RibbonItem.tsx` | ribbon 专用紧凑按钮：由 ribbon 的交叉轴拉伸铺满高度、无圆角；统一 hover / active / disabled 状态，并通过包裹 disabled button 的 tooltip trigger 保证所有项目均可显示提示 | 小 |
 | `ribbon/DevInfoBadge.tsx` | 开发环境的版本、Agent ID、会话 ID 信息及复制菜单；自行获取 app version，菜单向上展开 | 小 |
@@ -98,6 +98,9 @@ ChatView (路由同步, 会话操作)
 4. `ChatRenderItemComponent` 按类型将每项分发到对应的渲染器
 5. 所有 markdown 都经过 `MarkdownView`（同步无 state） — 流式与已完成走同一渲染路径，区别仅在容器外层的 `streaming` CSS 类
 
+
+### 累计 token 消耗
+`ContextBadge` 不使用 `contextState.lastTokenUsage`（它只表示最近一次调用后的 context window 占用）。会话 cache 初始化或消息被截断重写时，由 `SessionManager.aggregateTokenUsage()` 汇总当前 `RenderMessage[]` 中每条 assistant 的持久化 `usage`；流式 assistant 收到 `complete` chunk 时写入该次 provider usage 并立即重算。展示时 `Prompt input = uncached input + cache read + cache write`：Claude 等 provider 会将被缓存的首轮 prompt 或工具结果计入 cache write/read，而非 uncached input。故工具循环的每次 LLM call 都会计入，旧历史缺少 usage 时按零兼容；编辑截断掉的历史也不再计入。
 ### 渲染项系统
 `lib/chat/render-items-manager.ts` 把扁平的 `Message[]` 转换成类型化可辨识联合类型的渲染项 `ChatRenderItem[]`,并在 `recompute` 时通过 `reuseUnchangedItems()` 按 stable key 对齐前后两版,**复用未变化的 item 引用**,这样下游 `ChatRenderItemComponent` 的 `React.memo` 浅比较才能跳过未变项。
 
@@ -190,6 +193,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 6. 对于工具调用变更：展开工具调用折叠面板，验证正确的视图渲染且控制台无错误。
 7. 长会话里发一条新消息，观察历史消息**不重渲**（DevTools Profiler；ChatRenderItem 的 memo + render-items-manager 的引用复用应让旧 item 跳过）。
 8. 在流式生成中向上滚动，确认不会被拉回底部；向下滚到底部后流式应自动跟随。
+9. 打开 ContextBadge，确认累计 token 消耗等于当前 assistant 消息的 `usage` 之和；完成一轮流式回复后应立即更新，无需切换会话。
 
 ## 注意事项
 

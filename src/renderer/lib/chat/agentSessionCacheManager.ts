@@ -8,7 +8,7 @@ import { log } from '@/log';
 import { external } from '@/atom/external';
 
 import type { InteractiveMap } from '@shared/types/interactiveRequestTypes';
-import { SessionManager, liftToRender } from './session-manager';
+import { EMPTY_CUMULATIVE_TOKEN_USAGE, SessionManager, liftToRender } from './session-manager';
 import type { ChatSessionCache, ChatStatus, PendingInteractiveRequest } from './session-manager';
 import type { RenderMessage } from './renderMessage';
 import { RenderItemsManager, type ChatRenderItem } from './render-items-manager';
@@ -478,6 +478,11 @@ export const CurrentSessionTokenUsage = SubCurrentSession(() => {
   const cache = agentSessionCacheManager.getCurrentChatSessionCache();
   return cache?.contextTokenUsage ?? EMPTY_TOKEN_USAGE;
 }, (prev, next) => prev.tokenCount === next.tokenCount);
+
+export const CurrentSessionCumulativeTokenUsage = SubCurrentSession(() => {
+  const cache = agentSessionCacheManager.getCurrentChatSessionCache();
+  return cache?.cumulativeTokenUsage ?? EMPTY_CUMULATIVE_TOKEN_USAGE;
+});
 
 export const { useMessages, useMessagesWithStream } = (() => {
   const EMPTY_MESSAGES: RenderMessage[] = [];

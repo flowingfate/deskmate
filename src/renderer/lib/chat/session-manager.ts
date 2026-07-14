@@ -26,9 +26,8 @@ import type {
   StatusChangedChunk,
   StreamingChunk,
 } from '@shared/types/streamingTypes';
-import type { ToolResult } from '@shared/persist/types'
+import type { ContextTokenUsage, TokenUsage, ToolResult } from '@shared/persist/types'
 import type { InteractiveMap, InteractiveRequestType } from '@shared/types/interactiveRequestTypes';
-import type { ContextTokenUsage } from '@shared/persist/types'
 import Resolveable from '@shared/resolveable-promise';
 import { log } from '@/log';
 import {
@@ -72,6 +71,8 @@ export interface ChatSessionCache {
   /** 当前 streaming 中的 assistant message id;非流式时为 null。 */
   streamingMessageId: string | null;
   contextTokenUsage: ContextTokenUsage;
+  /** 当前消息历史内所有已完成模型调用的累计 token 用量。 */
+  cumulativeTokenUsage: TokenUsage;
   lastUpdated: number;
   pendingInteractiveRequests: PendingInteractiveRequest[];
   /** 显示在 ErrorBar 的错误。 */
@@ -93,6 +94,21 @@ const EMPTY_TOKEN_USAGE: ContextTokenUsage = {
   contextMessages: 0,
   compressionRatio: 1.0,
 };
+
+/** 汇总当前消息历史中的模型调用用量；没有 usage 的旧消息按零处理。 */
+export const EMPTY_CUMULATIVE_TOKEN_USAGE: TokenUsage = { in: 0, out: 0, cache: [0, 0], total: 0 };
+export function aggregateTokenUsage(messages: readonly RenderMessage[]): TokenUsage {
+  const result = structuredClone(EMPTY_CUMULATIVE_TOKEN_USAGE);
+  for (const message of messages) {
+    if (message.role !== 'assistant' || !message.usage) continue;
+    result.in += message.usage.in;
+    result.out += message.usage.out;
+    result.cache[0] += message.usage.cache[0];
+    result.cache[1] += message.usage.cache[1];
+    result.total += message.usage.total;
+  }
+  return result;
+}
 
 export class SessionManager {
   private chatSessionCaches: Sessions = {};
@@ -227,6 +243,9 @@ export class SessionManager {
           ? initialData.streamingMessageId
           : existing?.streamingMessageId ?? null,
       contextTokenUsage: initialData?.contextTokenUsage ?? existing?.contextTokenUsage ?? EMPTY_TOKEN_USAGE,
+      cumulativeTokenUsage: initialData?.messages !== undefined
+        ? aggregateTokenUsage(messages)
+        : existing?.cumulativeTokenUsage ?? EMPTY_CUMULATIVE_TOKEN_USAGE,
       pendingInteractiveRequests:
         initialData?.pendingInteractiveRequests ?? existing?.pendingInteractiveRequests ?? [],
       errorMessage:
@@ -474,6 +493,8 @@ export class SessionManager {
     const m = cache.messages[i];
     if (m.role !== 'assistant') return;
     m.streamingComplete = true;
+    m.usage = chunk.usage;
+    cache.cumulativeTokenUsage = aggregateTokenUsage(cache.messages);
     cache.streamingMessageId = null;
     this.markMessage(m as RenderAssistantMessage, 'update');
     cache.lastUpdated = Date.now();
@@ -552,6 +573,7 @@ export class SessionManager {
       (session) => {
         if (updates) Object.assign(session, updates);
         session.messages = messages;
+        session.cumulativeTokenUsage = aggregateTokenUsage(messages);
         session.lastUpdated = Date.now();
       },
       'replaceMessages',
