@@ -1,4 +1,5 @@
 import type { ChatStatus, ContextStats } from './agentChatTypes';
+import type { TokenUsage } from '../persist/types';
 import Stream from '../stream-iterator';
 
 // ---- Base metadata ----
@@ -57,6 +58,8 @@ export interface ToolResultChunk extends StreamingChunkBase {
 export interface CompleteChunk extends StreamingChunkBase {
   type: 'complete';
   hasToolCalls: boolean;
+  /** 本次模型调用的 provider 实际 token 用量。 */
+  usage: TokenUsage;
 }
 
 /** 会话状态变更，不关联具体消息，不继承 StreamingChunkBase */

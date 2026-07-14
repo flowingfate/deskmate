@@ -5,8 +5,8 @@ import { type ChatStatus, getRenderItems } from '../../lib/chat/agentSessionCach
 import { useToast } from '../ui/ToastProvider';
 import { EditingMessageState, editMessageAtom } from './message/edit-message.atom';
 import { getChatRenderItemStableKey, isVisibleChatRenderItem, ChatRenderItemComponent, type ChatRenderItem, hasTextContent } from './ChatRenderItem';
-import { Button } from '@/shadcn/button';
 import { CHAT_SCROLL_BOX_CLS } from './tool/AnimatedHeight';
+import { useChatAutoScroll } from './useChatAutoScroll';
 
 interface ChatContainerProps {
   messages: RenderMessage[];
@@ -18,175 +18,6 @@ interface ChatContainerProps {
   canEditUserMessage?: boolean;
 }
 
-const FOLLOW_LATEST_THRESHOLD_PX = 40;
-
-function useAutoScroll(
-  chatSessionId: string | null | undefined,
-  messages: RenderMessage[],
-  streamingMessageId: string | undefined,
-) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const messageFlowRef = useRef<HTMLDivElement>(null);
-  const previousChatSessionIdRef = useRef<string | null | undefined>(undefined);
-  const previousMessageCountRef = useRef<number | null>(null);
-  const latestScrollFrameRef = useRef<number | null>(null);
-  const trailingLatestScrollFrameRef = useRef<number | null>(null);
-  const latestScrollTimeoutRef = useRef<number | null>(null);
-  const latestScrollStabilizeUntilRef = useRef(0);
-  const userScrolledAwayRef = useRef(false);
-  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
-
-  const latestMessageRole = messages[messages.length - 1]?.role;
-
-  const handleContainerScroll = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) {
-      return;
-    }
-    const distanceFromLatest =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    const scrolledAway = distanceFromLatest > FOLLOW_LATEST_THRESHOLD_PX;
-    userScrolledAwayRef.current = scrolledAway;
-    setShowJumpToLatest((prev) => (prev === scrolledAway ? prev : scrolledAway));
-  }, []);
-
-  const scrollToLatestPosition = useCallback((reason: string, options?: { force?: boolean }) => {
-    const container = containerRef.current;
-    if (!container) {
-      return;
-    }
-
-    // Respect user's reading position: if they scrolled up, don't drag them back.
-    // Forced calls (session change, new user message, interactive request) override this.
-    if (!options?.force && userScrolledAwayRef.current) {
-      return;
-    }
-
-    container.scrollTop = container.scrollHeight;
-  }, []);
-
-  const openLatestScrollStabilizationWindow = useCallback(() => {
-    latestScrollStabilizeUntilRef.current = Date.now() + 1500;
-  }, []);
-
-  const isWithinLatestScrollStabilizationWindow = useCallback(() => {
-    return Date.now() <= latestScrollStabilizeUntilRef.current;
-  }, []);
-
-  const clearPendingLatestScroll = useCallback(() => {
-    if (latestScrollFrameRef.current !== null) {
-      window.cancelAnimationFrame(latestScrollFrameRef.current);
-      latestScrollFrameRef.current = null;
-    }
-
-    if (trailingLatestScrollFrameRef.current !== null) {
-      window.cancelAnimationFrame(trailingLatestScrollFrameRef.current);
-      trailingLatestScrollFrameRef.current = null;
-    }
-
-    if (latestScrollTimeoutRef.current !== null) {
-      window.clearTimeout(latestScrollTimeoutRef.current);
-      latestScrollTimeoutRef.current = null;
-    }
-  }, []);
-
-  const scheduleLatestScroll = useCallback((options?: { force?: boolean }) => {
-    if (options?.force) {
-      userScrolledAwayRef.current = false;
-      setShowJumpToLatest(false);
-    }
-
-    openLatestScrollStabilizationWindow();
-    clearPendingLatestScroll();
-    scrollToLatestPosition('immediate', options);
-
-    latestScrollFrameRef.current = window.requestAnimationFrame(() => {
-      scrollToLatestPosition('raf-1', options);
-      latestScrollFrameRef.current = null;
-
-      trailingLatestScrollFrameRef.current = window.requestAnimationFrame(() => {
-        scrollToLatestPosition('raf-2', options);
-        trailingLatestScrollFrameRef.current = null;
-      });
-    });
-
-    latestScrollTimeoutRef.current = window.setTimeout(() => {
-      scrollToLatestPosition('timeout-180ms', options);
-      latestScrollTimeoutRef.current = null;
-    }, 180);
-  }, [clearPendingLatestScroll, openLatestScrollStabilizationWindow, scrollToLatestPosition]);
-
-  const handleJumpToLatestClick = useCallback(() => {
-    scheduleLatestScroll({ force: true });
-    setShowJumpToLatest(false);
-  }, [scheduleLatestScroll]);
-
-  // Scroll to the latest message only for the initial load, session changes, or appended messages.
-  // This avoids viewport jumps during ordinary UI-only rerenders such as entering inline edit mode.
-  useEffect(() => {
-    const previousChatSessionId = previousChatSessionIdRef.current;
-    const previousMessageCount = previousMessageCountRef.current;
-    const currentChatSessionId = chatSessionId ?? null;
-    const isFirstRender = previousMessageCount === null;
-    const didChatSessionChange = currentChatSessionId !== previousChatSessionId;
-    const didMessageCountIncrease = previousMessageCount !== null && messages.length > previousMessageCount;
-    const shouldForceLatestScroll = isFirstRender || didChatSessionChange || latestMessageRole === 'user';
-
-    if (messages.length > 0 && (isFirstRender || didChatSessionChange || didMessageCountIncrease)) {
-      scheduleLatestScroll({ force: shouldForceLatestScroll });
-    }
-
-    previousChatSessionIdRef.current = currentChatSessionId;
-    previousMessageCountRef.current = messages.length;
-    return clearPendingLatestScroll;
-  }, [chatSessionId, clearPendingLatestScroll, latestMessageRole, messages.length, scheduleLatestScroll]);
-
-  // 流式期间消息数量不变（同一条 assistant 追加内容），messageCount effect 不会触发；
-  // 这里独立监听 streaming message 的文本长度变化，每个 chunk 都顺势触发跟随滚动。
-  const streamingMessageTextLength = useMemo(() => {
-    if (!streamingMessageId) return 0;
-    const msg = messages.find((m) => m.id === streamingMessageId);
-    if (!msg || msg.role !== 'assistant') return 0;
-    // Domain assistant.content / .think 是单串;长度直接累加
-    return msg.content.length + msg.think.length;
-  }, [messages, streamingMessageId]);
-
-  useEffect(() => {
-    if (!streamingMessageId || streamingMessageTextLength === 0) return;
-    scheduleLatestScroll();
-  }, [streamingMessageId, streamingMessageTextLength, scheduleLatestScroll]);
-
-  useEffect(() => {
-    const observedFlow = messageFlowRef.current;
-    if (!observedFlow || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      if (!isWithinLatestScrollStabilizationWindow()) {
-        return;
-      }
-
-      scrollToLatestPosition('resize-observer');
-    });
-
-    observer.observe(observedFlow);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [isWithinLatestScrollStabilizationWindow, scrollToLatestPosition]);
-
-  return {
-    containerRef,
-    messageFlowRef,
-    showJumpToLatest,
-    handleContainerScroll,
-    handleJumpToLatestClick,
-    isWithinLatestScrollStabilizationWindow,
-    scrollToLatestPosition,
-  };
-}
 
 async function hasFile(p: string) {
   try {
@@ -423,12 +254,11 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
   const {
     containerRef,
     messageFlowRef,
-    showJumpToLatest,
     handleContainerScroll,
-    handleJumpToLatestClick,
     isWithinLatestScrollStabilizationWindow,
     scrollToLatestPosition,
-  } = useAutoScroll(chatSessionId, messages, streamingMessageId);
+  } = useChatAutoScroll({ chatSessionId, messages, streamingMessageId });
+
 
   // Build render items from the data-layer RenderItemsManager (pre-computed, not derived per render)
   const renderItems = getRenderItems(chatSessionId);
@@ -523,7 +353,7 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
 
   useLayoutEffect(() => {
     if (messages.length === 0 || !isWithinLatestScrollStabilizationWindow()) return;
-    scrollToLatestPosition('layout-effect');
+    scrollToLatestPosition();
   }, [chatSessionId, isWithinLatestScrollStabilizationWindow, messages.length, renderItemsWithActivity.length, scrollToLatestPosition]);
 
   return (
@@ -574,22 +404,6 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
 
         </div>
       </div>
-      {showJumpToLatest && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="chat-jump-to-latest-button"
-          onClick={handleJumpToLatestClick}
-          aria-label="Scroll to latest message"
-          title="Scroll to latest message"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M3.5 4L8 8.5L12.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M3.5 8.5L8 13L12.5 8.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </Button>
-      )}
     </div>
   );
 };

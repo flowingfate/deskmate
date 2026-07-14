@@ -3,9 +3,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { Context } from './shared';
 import { Profiles } from '@main/persist';
-import { PERSIST_PATH, MONTH_KEY } from '@shared/persist/path';
-import { getAppRoot } from '@main/persist/lib/root';
-import { extractMonthFromChatSessionIdValue } from '@shared/utils/idFormats';
 import type { ChatSessionFile } from '@shared/persist/types'
 import { renderToMain } from '@shared/ipc/chatSession';
 
@@ -67,16 +64,18 @@ export default function handleChatSessionIPC(_ctx: Context): void {
     sessionId,
   ) => {
     try {
-      const profileId = Profiles.get().activeProfileId;
-      if (!profileId) {
-        return { success: false, error: 'No active profile' };
+      const profile = await Profiles.get().active();
+      const agent = await profile.getAgent(agentId);
+      if (!agent) {
+        return { success: false, error: 'Agent not found' };
       }
-      const month = extractMonthFromChatSessionIdValue(sessionId);
-      if (!month) {
-        return { success: false, error: `Invalid sessionId format: ${sessionId}` };
+
+      const session = await agent.getSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Chat session not found' };
       }
-      const dirPath = PERSIST_PATH.sessionDir(getAppRoot(), profileId, agentId, month, sessionId);
-      return { success: true, filePath: dirPath };
+
+      return { success: true, filePath: path.dirname(session.filesDir()) };
     } catch (error) {
       return {
         success: false,

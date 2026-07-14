@@ -13,6 +13,7 @@ import InteractiveAuthCard from './interactive/AuthCard';
 import InteractiveRequestCard from './interactive/RequestCard';
 import InteractiveSearchCard from './interactive/SearchCard';
 import { ZeroState } from './zero';
+import ChatRibbon from './ribbon';
 
 interface ChatViewContentProps {
   // ChatContainer props
@@ -108,7 +109,7 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
           <ChatWorkspaceSideOverlay />
         </div>
         <WithInteractive>
-          {/* <div className="bg-black/2 px-5 h-6">~</div> */}
+          <ChatRibbon />
           <ComposeInput
             onSendMessage={sendUserMessage}
             chatStatus={chatStatus}

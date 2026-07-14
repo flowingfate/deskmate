@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-14 (外部依赖统一收口到 pi/index.ts；仅导出实际外用符号) -->
+<!-- Last verified: 2026-07-14 (RegularSession 的 complete chunk 透传 provider TokenUsage，供 renderer 立即累计当前会话消耗) -->
 # pi 模块 — Chat 引擎（pi-ai 底座）
 
 > Deskmate 的 chat orchestrator，基于 `@earendil-works/pi-ai` 适配多 provider。
@@ -12,7 +12,7 @@
 | `index.ts` | **pi 子树唯一外部入口**。`src/main/pi/` 之外只能从 `@main/pi` 导入；使用显式 named export，只暴露仓库中真实存在的外部消费面。子树内部仍按依赖方向直接引用具体模块，避免 barrel 自引用；工具注册仍由 `ensureToolsRegistered()` 动态触发，根入口不得静态导入 `tools/index.ts` | 小 |
 | `agent.ts` | Agent 注册表 + getOrCreateSession | 小 |
 | `prompt.ts` | system prompt 拼装(identity + knowledge + skills + sub-agents + global) | 小 |
-| `session/` | turn loop 单一权威。`base.ts` = `BaseSession` 抽象基类(turn loop + tool 并行 + 压缩 + overflow 兜底 + 取消 + resume 消费 + 持久化 helper);`regular.ts` = `RegularSession`(UI 流式 + status 机 + WebContents 推流);`job.ts` = `JobRun`(scheduler 静默);`index.ts` re-export `BaseSession` / `RegularSession` / `JobRun` / `PersistSessionLike`。**per-turn 构建 `ToolCatalog`** 并把 `ToolContext` 显式透传给 `executeToolCall` | 中 |
+| `session/` | turn loop 单一权威。`base.ts` = `BaseSession` 抽象基类(turn loop + tool 并行 + 压缩 + overflow 兜底 + 取消 + resume 消费 + 持久化 helper);`regular.ts` = `RegularSession`(UI 流式 + status 机 + WebContents 推流；每个 `complete` chunk 附本次 provider `TokenUsage`，让 renderer 不等落盘即可计入累计消耗);`job.ts` = `JobRun`(scheduler 静默);`index.ts` re-export `BaseSession` / `RegularSession` / `JobRun` / `PersistSessionLike`。**per-turn 构建 `ToolCatalog`** 并把 `ToolContext` 显式透传给 `executeToolCall` | 中
 | `tool.ts` | **catalog + 执行**两段同住一文件。catalog 段:`ToolCatalog` class(`buildToolCatalogForAgent` / `buildToolCatalogForSubAgent` 构建;`ToolCatalog.empty()` 空目录)。`specs` 公开只读直喂 pi；`routes` 私有,消费方走方法:`getRoute(llmName)` 取 route、`resolveIdentity(llmName)` 把限定名 demux 回自然 `name` + `mcp`(此 demux 的**唯一实现**,messageBridge 入境 / session 流式 chunk / sub-agent hooks 都调它)。每条 route 都持原始 `toolName`,MCP route 额外持 `serverName`;本地 tool 保持原名,MCP tool 以 `serverName/toolName` 注册给 LLM(**不**按 `/` 反解),只有完整 LLM 名冲突才抛。执行段:`executeToolCall(call, catalog, ctx)` 用 `catalog.getRoute(name)` 取 route,按 `route.kind` 分发到本地 registry 或 `executeMcpToolOnServer`,MCP 调用用 route 原始 `toolName`;tracer 起 `chat.tool` span。**纯 dispatcher —— 不认识任何具体工具** | 中 |
 | `tools/` | **本地工具子系统** —— `LocalTool` registry + `ToolContext` + `lazy(spec, loader)` + 所有具体工具文件。**chat 主链路直接调 `tools.execute(name, args, ctx)`,不再绕 MCP 假 server**。详见 [`tools/ai.prompt.md`](./tools/ai.prompt.md) | 见子目录 |
 | `auth.ts` | PiAuthManager:OAuth + apiKey 存取 + expires-based refresh + inflight dedup | 中 |
@@ -52,6 +52,8 @@ agent → session → prompt / tool / mcp / compression → utils/internal
 **Domain Message 是事实源**:`src/shared/persist/types/message.ts` 定义主进程内存 canonical 形态（也是 IPC 契约的入参/出参），并由 `src/shared/persist/types/index.ts` 统一导出。`pi.Message` 仅作 LLM 协议适配。`shared/types/chatTypes.ts` 在 Phase 5 后只剩 LlmApi / 文件常量,不再承载 Message shape。
 
 **bridge 单点**:`utils/messageBridge.ts` 是 Domain Message ↔ pi.Message 唯一翻译点。其他任何模块(renderer / IPC / persist / skill / prompt)都不感知 pi。
+
+**流式用量契约**:`RegularSession.streamOneRound()` 在本次 provider 返回 `final` 后，将 `final.usage` 映射为 Domain `TokenUsage` 并随 `complete` chunk 发送。此 payload 与稍后 `fromPiAssistantMessage()` 落盘到 assistant message 的 `usage` 同口径；renderer 可在当前流式消息完成时立刻累计，无需重拉 snapshot。
 
 **时间与缓存**:`messageBridge` 内部读取当前 LLM context 的首个 user message 的持久化 `time`，将它投影为固定 reminder；调用者不感知时间锚点。该文本不写回 Domain / persist，当前 context 不变时字节稳定；实时当前时间才按需调用 `app time`。
 
