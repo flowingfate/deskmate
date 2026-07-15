@@ -1,21 +1,9 @@
 /**
- * Schedule "update" 内核 —— 更新一条 job 的字段。
- *
- * 被 `appcmd/builtins/app/schedule/update.ts` 调用。
- *
- * 业务规则(原样从老 `updateScheduleInternal` 搬过来,跑了无数生产 schedule):
- *   - 改 schedule_type 但没给新 cron / run_at → 清掉对应字段,让 manager
- *     用现有的另一种继续算。
- *   - 显式给 cron_expression / run_at → 强制对齐 scheduleType,并把
- *     status / executedAt / lastRunAt 复位(让被 completed/expired 的 job
- *     重新 pending,否则下次触发不会发生)。
- *   - 没字段可更新 → success=false + 提示。
- *
- * `signal` 形状对齐;`schedulerManager.updateJob` 内部是单次写。
+ * Schedule "update" 内核 —— 更新一条 job 的配置。
+ * schedule 是 discriminated union：切换类型时必须同时给出该类型的完整触发值。
  */
-
-import { schedulerManager } from '@main/lib/scheduler/SchedulerManager';
-import type { SchedulerJob } from '@main/lib/scheduler/types';
+import { schedulerManager } from '@main/lib/scheduler';
+import type { SchedulerJobUpdate } from '@shared/ipc/scheduler';
 
 import { jobToView, type JobView } from './types';
 
@@ -34,69 +22,58 @@ export type UpdateJobResult =
   | { success: true; message: string; job?: JobView }
   | { success: false; message: string };
 
-type SchedulerJobUpdates = Partial<
-  Pick<
-    SchedulerJob,
-    | 'name'
-    | 'description'
-    | 'scheduleType'
-    | 'cronExpression'
-    | 'runAt'
-    | 'message'
-    | 'enabled'
-    | 'status'
-    | 'executedAt'
-    | 'lastRunAt'
-  >
->;
-
 export async function updateJobInternal(
   args: UpdateJobArgs,
   _opts?: { signal?: AbortSignal },
 ): Promise<UpdateJobResult> {
   try {
-    const updates: SchedulerJobUpdates = {};
-    if (args.name !== undefined) updates.name = args.name;
-    if (args.description !== undefined) updates.description = args.description;
-    if (args.schedule_type !== undefined) updates.scheduleType = args.schedule_type;
-    if (args.cron_expression !== undefined) updates.cronExpression = args.cron_expression;
-    if (args.run_at !== undefined) updates.runAt = args.run_at;
-    if (args.message !== undefined) updates.message = args.message;
-    if (args.enabled !== undefined) updates.enabled = args.enabled;
+    const hasConfigUpdate =
+      args.name !== undefined ||
+      args.description !== undefined ||
+      args.message !== undefined ||
+      args.enabled !== undefined;
+    const hasCron = args.cron_expression !== undefined;
+    const hasRunAt = args.run_at !== undefined;
 
-    if (Object.keys(updates).length === 0) {
+    if (!hasConfigUpdate && !hasCron && !hasRunAt && args.schedule_type === undefined) {
       return {
         success: false,
         message:
           'No fields to update. Provide at least one of: --name, --description, --schedule-type, --cron, --at, --message, --enabled.',
       };
     }
+    if (hasCron && hasRunAt) {
+      return { success: false, message: 'Provide either --cron or --at, not both.' };
+    }
+    if (args.schedule_type === 'cron' && !hasCron) {
+      return { success: false, message: '--schedule-type cron requires --cron.' };
+    }
+    if (args.schedule_type === 'once' && !hasRunAt) {
+      return { success: false, message: '--schedule-type once requires --at.' };
+    }
+    if (args.schedule_type === 'once' && hasCron) {
+      return { success: false, message: '--schedule-type once conflicts with --cron.' };
+    }
+    if (args.schedule_type === 'cron' && hasRunAt) {
+      return { success: false, message: '--schedule-type cron conflicts with --at.' };
+    }
 
-    // 切换 scheduleType 但没给对应新值 → 清掉另一种(让 manager 用残留计算下次触发)。
-    if (args.schedule_type === 'cron' && args.cron_expression === undefined) {
-      updates.runAt = undefined;
-    }
-    if (args.schedule_type === 'once' && args.run_at === undefined) {
-      updates.cronExpression = undefined;
-    }
-    // 显式给 cron / run_at → 强制对齐 type + 复位执行态(把 expired/completed 拉回 pending)。
+    const common = {
+      name: args.name,
+      description: args.description,
+      message: args.message,
+      enabled: args.enabled,
+    };
+    let updates: SchedulerJobUpdate;
     if (args.cron_expression !== undefined) {
-      updates.scheduleType = 'cron';
-      updates.runAt = undefined;
-      updates.status = 'pending';
-      updates.executedAt = undefined;
-      updates.lastRunAt = undefined;
-    }
-    if (args.run_at !== undefined) {
-      updates.scheduleType = 'once';
-      updates.cronExpression = undefined;
-      updates.status = 'pending';
-      updates.executedAt = undefined;
-      updates.lastRunAt = undefined;
+      updates = { ...common, scheduleType: 'cron', cronExpression: args.cron_expression };
+    } else if (args.run_at !== undefined) {
+      updates = { ...common, scheduleType: 'once', runAt: args.run_at };
+    } else {
+      updates = common;
     }
 
     const success = await schedulerManager.updateJob(args.job_id, updates);
-
     if (!success) {
       return {
         success: false,
@@ -104,9 +81,8 @@ export async function updateJobInternal(
       };
     }
 
-    // 回读最新 job 投回 LLM,方便链式调用。
     const jobs = await schedulerManager.listJobs();
-    const updated = jobs.find((j) => j.id === args.job_id);
+    const updated = jobs.find((job) => job.id === args.job_id);
     return {
       success: true,
       message: 'Schedule updated.',

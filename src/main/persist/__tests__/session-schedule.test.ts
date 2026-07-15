@@ -13,7 +13,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ChatHistoryItem } from '@shared/persist/types';
+import type { AssistantMessage, ChatHistoryItem } from '@shared/persist/types';
 
 // 测试里只关心 messages.jsonl 的 round-trip，不关心 schema；
 // 用最少字段构造然后 cast 到 ChatHistoryItem。
@@ -263,6 +263,36 @@ describe('ScheduleJob run lifecycle', () => {
     }
   });
 
+  it('deleteRun removes a completed run from source storage and the index', async () => {
+    const { profile, agent } = await makeAgent();
+    const job = await agent.createJob({
+      name: 'daily', message: 'do stuff', enabled: true,
+      scheduleType: 'once', runAt: '2026-06-02T09:00:00Z',
+    });
+    const run = await job.startRun({ startedAt: '2026-06-02T09:00:00Z' });
+    await job.finishRun(run.id, { status: 'completed', completedAt: '2026-06-02T09:01:00Z' });
+
+    expect(await job.deleteRun(run.id)).toBe(true);
+    expect(agent.jobRunIdx.findById(run.id)).toBeUndefined();
+    expect(await job.listRunsOnDisk()).toEqual([]);
+    expect(fs.existsSync(path.join(
+      tmpRoot, 'profiles', profile.id, 'agents', agent.id, 'schedules', job.id, 'runs', '202606', run.id,
+    ))).toBe(false);
+  });
+
+  it('deleteRun rejects a running run', async () => {
+    const { agent } = await makeAgent();
+    const job = await agent.createJob({
+      name: 'daily', message: 'do stuff', enabled: true,
+      scheduleType: 'once', runAt: '2026-06-02T09:00:00Z',
+    });
+    const run = await job.startRun({ startedAt: '2026-06-02T09:00:00Z' });
+
+    await expect(job.deleteRun(run.id)).rejects.toThrow('Cannot delete a running schedule run.');
+    expect(agent.jobRunIdx.findById(run.id)?.runStatus).toBe('running');
+  });
+
+
   it('deleteJob cascade：jobs.json 行 + job_runs 行 + 物理目录全清', async () => {
     const { agent } = await makeAgent();
     const job = await agent.createJob({
@@ -280,6 +310,80 @@ describe('ScheduleJob run lifecycle', () => {
     const profile2 = await fresh.Profiles.get().active();
     const reloaded = await (await profile2.getAgent(agent.id))?.getJob(job.id);
     expect(reloaded).toBeUndefined();
+  });
+});
+
+describe('JobRun.forkToSession', () => {
+  it('copies terminal run history, context and sandbox into a new regular session', async () => {
+    const { agent } = await makeAgent();
+    const job = await agent.createJob({
+      name: 'nightly', message: 'create report', enabled: true,
+      scheduleType: 'once', runAt: '2026-06-02T09:00:00Z',
+    });
+    const run = await job.startRun({ startedAt: '2026-06-02T09:00:00Z' });
+    const summary: AssistantMessage = {
+      role: 'assistant',
+      id: 'm_summary',
+      time: 1,
+      think: '',
+      content: 'compressed history',
+      tool_calls: [],
+    };
+    run.config.contextState = {
+      compressions: [{
+        earlyPreservedCount: 1,
+        summary,
+        compressedBeforeIndex: 2,
+        appliedAt: '2026-06-02T09:00:30Z',
+      }],
+      lastTokenUsage: { tokenCount: 12, totalMessages: 2, contextMessages: 2, compressionRatio: 1 },
+    };
+    run.appendMessage(msg('user', 'create report'));
+    run.appendMessage(msg('assistant', 'report created'));
+    await run.flushMessages();
+    await run.setTitle('Nightly report');
+    const sourceFile = path.join(run.filesDir(), 'uploads', 'report.txt');
+    fs.mkdirSync(path.dirname(sourceFile), { recursive: true });
+    fs.writeFileSync(sourceFile, 'report body');
+    await job.finishRun(run.id, { status: 'completed', completedAt: '2026-06-02T09:01:00Z' });
+
+    const continued = await run.forkToSession(agent.sessionIdx);
+
+    expect(continued.id).not.toBe(run.id);
+    expect(continued.toDataFile().kind).toBe('regular');
+    expect(continued.title).toBe('Nightly report (continued)');
+    expect(continued.config.readStatus).toBe('unread');
+    expect(continued.contextState).toEqual(run.contextState);
+    expect(continued.contextState).not.toBe(run.contextState);
+    expect(continued.contextState.compressions).not.toBe(run.contextState.compressions);
+    expect(await continued.loadMessagesAll()).toEqual(await run.loadMessagesAll());
+    expect(fs.readFileSync(path.join(continued.filesDir(), 'uploads', 'report.txt'), 'utf8')).toBe('report body');
+    expect(agent.jobRunIdx.findById(run.id)?.runStatus).toBe('completed');
+    expect(agent.sessionIdx.findById(continued.id)?.agentId).toBe(agent.id);
+
+    const fresh = await freshModules();
+    await fresh.Profiles.get().bootstrap();
+    const reloadedAgent = await (await fresh.Profiles.get().active()).getAgent(agent.id);
+    const reloaded = await reloadedAgent?.getSession(continued.id);
+    expect(reloaded).toBeDefined();
+    if (!reloaded) throw new Error('Converted session did not survive reload');
+    expect(await reloaded.loadMessagesAll()).toEqual(await continued.loadMessagesAll());
+    expect(fs.readFileSync(path.join(reloaded.filesDir(), 'uploads', 'report.txt'), 'utf8')).toBe('report body');
+  });
+
+  it('rejects a running run without creating a regular session', async () => {
+    const { agent } = await makeAgent();
+    const job = await agent.createJob({
+      name: 'nightly', message: 'create report', enabled: true,
+      scheduleType: 'once', runAt: '2026-06-02T09:00:00Z',
+    });
+    const run = await job.startRun({ startedAt: '2026-06-02T09:00:00Z' });
+
+    await expect(run.forkToSession(agent.sessionIdx)).rejects.toThrow(
+      'Cannot continue a running schedule run.',
+    );
+    expect(agent.jobRunIdx.findById(run.id)?.runStatus).toBe('running');
+    expect((await agent.listSessionsFlat()).map((session) => session.id)).not.toContain(run.id);
   });
 });
 

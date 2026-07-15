@@ -405,7 +405,7 @@ export const FEATURE_FLAGS = {
 | MCP | `/settings/mcp` | — |
 | Skills | `/settings/skills` | — |
 | Sub-Agents | `/settings/sub-agents` | `deskmateFeatureSubAgent` |
-| Screenshot | `/settings/screenshot` | `deskmateFeatureScreenshot` |
+| Screenshot | `/settings/screenshot` | — |
 | Runtime | `/settings/runtime` | — |
 | Provider | `/settings/provider` | — |
 | About | `/settings/about` | — |

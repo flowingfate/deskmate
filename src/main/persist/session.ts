@@ -16,16 +16,20 @@ import type {
   Message,
   ToolResult,
 } from '../../shared/persist/types';
-import { PERSIST_PATH } from '../../shared/persist/path';
+import { MONTH_KEY, PERSIST_PATH } from '../../shared/persist/path';
+import { newEntityId } from '../../shared/persist/id';
 import { emit } from './lib/emit';
 import { getAppRoot } from './lib/root';
 import { PersistBase } from './lib/persistBase';
 import type { JobRunIdx } from './lib/db/jobRunIdx';
 import type { SessionIdx } from './lib/db/sessionIdx';
 import { dehydrate, rehydrate } from './messageWire';
+import * as fsp from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import {
   appendText,
   ensureDir,
+  pathExists,
   readJsonOrNull,
   readTextOrNull,
   removeDirIfExists,
@@ -598,6 +602,34 @@ export class RegularSession extends Session {
   }
 
   /**
+   * 以一次已结束的 schedule run 建立可继续对话的 regular session。
+   * 历史消息和 files 由 owner 在调用前复制；这里仅把 data.json 的共同状态投影为
+   * regular 形态，刻意移除 schedule run 的状态机与任何未完成 turn 标记。
+   */
+  public initAsContinuationOf(
+    src: SessionDataFile,
+    input: { month: string; title: string; nowIso?: string },
+  ): void {
+    if (src.kind !== 'schedule_run') {
+      throw new Error('RegularSession.initAsContinuationOf requires a schedule run source');
+    }
+    const ts = input.nowIso ?? new Date().toISOString();
+    this.month = input.month;
+    this.config.assign(src);
+    this.config.state = { kind: 'regular' };
+    this.config.title = input.title;
+    this.config.createdAt = ts;
+    this.config.updatedAt = ts;
+    this.config.readStatus = 'unread';
+    this.config.star = undefined;
+    this.config.turn = undefined;
+    this.config.contextState = {
+      ...src.contextState,
+      compressions: [...src.contextState.compressions],
+    };
+  }
+
+  /**
    * `regular_sessions` 行投影。afterPersist 内部喂给 `SessionIdx.upsert`。
    */
   public toRegularRow(): RegularSessionRow {
@@ -692,6 +724,50 @@ export class JobRun extends Session {
 
   public filesDir(): string {
     return `${this.sessionDir()}/files`;
+  }
+
+  /**
+   * 从当前已结束的 schedule run 创建独立的 regular session。
+   * 复制行为属于 source JobRun：它掌握自己的消息、sandbox 与 terminal 状态；
+   * 调用者只提供目标 regular index。
+   */
+  public async forkToSession(sessionIdx: SessionIdx): Promise<RegularSession> {
+    const source = this.toDataFile();
+    if (source.kind !== 'schedule_run') {
+      throw new Error(`JobRun.forkToSession: run ${this.id} kind mismatched`);
+    }
+    if (source.scheduleRun.status === 'running') {
+      throw new Error('Cannot continue a running schedule run.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const month = MONTH_KEY(new Date(nowIso));
+    const sessionId = newEntityId('s');
+    const target = new RegularSession(this.profileId, this.agentId, sessionId, sessionIdx);
+    const title = this.title ? `${this.title} (continued)` : 'Continued scheduled run';
+    target.initAsContinuationOf(source, { month, title, nowIso });
+    const root = getAppRoot();
+    const targetDir = PERSIST_PATH.sessionDir(root, this.profileId, this.agentId, month, sessionId);
+
+    try {
+      await fsp.mkdir(targetDir, { recursive: true });
+      const targetMessages = PERSIST_PATH.sessionMessages(root, this.profileId, this.agentId, month, sessionId);
+      if (await pathExists(this.messagesFile())) {
+        await fsp.copyFile(this.messagesFile(), targetMessages, fsConstants.COPYFILE_FICLONE);
+      }
+      if (await pathExists(this.filesDir())) {
+        await fsp.cp(this.filesDir(), target.filesDir(), {
+          recursive: true,
+          mode: fsConstants.COPYFILE_FICLONE,
+        });
+      }
+      await target.persist();
+    } catch (error) {
+      await removeDirIfExists(targetDir);
+      throw error;
+    }
+
+    return target;
   }
 
   /**

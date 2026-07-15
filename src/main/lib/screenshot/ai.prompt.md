@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-27 -->
+<!-- Last verified: 2026-07-15 -->
 # Screenshot Module
 
 > 先截图再选区的截屏系统：为每个显示器生成覆盖窗口、捕获原生图像，并在用户完成或取消时 resolve 一个 promise。
@@ -32,7 +32,7 @@
 所有通道通过 `src/shared/ipc/screenshot.ts` 中的 `connectRenderToMain('screenshot')` 命名空间在 `screenshot:*` 下。类型：`CaptureResult`、`SaveToFileResult`、`DisplayInfo`、`WindowFrame`、`ScreenshotSettings`。
 
 ### 设置
-存储在 `appCacheManager`（UserDataADO）中。Feature flag `deskmateFeatureScreenshot` 可在运行时强制设为 `enabled: false`。
+存储在 `appCacheManager`（UserDataADO）中；用户可通过 `enabled` 设置启用或禁用截图。
 
 ## Common Changes
 | Scenario | Files to Modify | Notes |
@@ -71,5 +71,5 @@
 - ⚠️ `captureReadyPromise` 初始为预拒绝的 `Promise`；`getInitData` 会 await 它，因此在 `capture()` 之前调用会抛出异常。
 
 ## Related
-- 依赖：[appCache](../appCache/)（`appCacheManager` 提供截屏设置）、[featureFlags](../featureFlags/ai.prompt.md)（`deskmateFeatureScreenshot`）、`src/shared/ipc/screenshot.ts`（IPC 类型契约）、`node-screenshots`（窗口枚举）
+- 依赖：[appCache](../appCache/)（`appCacheManager` 提供截屏设置）、`src/shared/ipc/screenshot.ts`（IPC 类型契约）、`node-screenshots`（窗口枚举）
 - 被依赖：`src/main/main.ts`（启动时注册 IPC + 快捷键）、渲染进程截屏覆盖 UI（`src/renderer/screenshot/`）

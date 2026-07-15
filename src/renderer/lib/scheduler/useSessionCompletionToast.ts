@@ -28,14 +28,7 @@ export const useSessionCompletionToast = (): null => {
           {
             label: 'View',
             onClick: () => {
-              navigate(`/agent/${agentId}/job/${jobId}/${sessionId}`, {
-                state: {
-                  intent: 'open-session',
-                  source: 'session-completion-toast',
-                  targetAgentId: agentId,
-                  targetSessionId: sessionId,
-                },
-              });
+              navigate(`/agent/${agentId}/job/${jobId}/${sessionId}`);
             },
           },
         ],

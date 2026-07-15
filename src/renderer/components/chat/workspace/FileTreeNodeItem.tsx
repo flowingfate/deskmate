@@ -14,6 +14,7 @@ export interface FileTreeNodeItemProps {
   workspacePath: string;
   level?: number;
   onFileClick?: (node: FileTreeNode) => void;
+  readOnly?: boolean;
   expandedDirs: Set<string>;
   onToggleExpand?: (path: string) => void;
   /** 懒加载回调：展开目录时调用，由父组件负责拉取并注入子节点 */
@@ -29,6 +30,7 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeItemProps> = React.memo(({
   workspacePath,
   level = 0,
   onFileClick,
+  readOnly,
   expandedDirs,
   onToggleExpand,
   onLoadChildren,
@@ -67,8 +69,8 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeItemProps> = React.memo(({
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    fileTreeNodeMenuActions.open(e.clientX, e.clientY, node, workspacePath);
-  }, [node, workspacePath, fileTreeNodeMenuActions]);
+    fileTreeNodeMenuActions.open(e.clientX, e.clientY, node, workspacePath, !readOnly);
+  }, [node, workspacePath, readOnly, fileTreeNodeMenuActions]);
 
   return (
     <>
@@ -111,6 +113,7 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeItemProps> = React.memo(({
               workspacePath={workspacePath}
               level={level + 1}
               onFileClick={onFileClick}
+              readOnly={readOnly}
               expandedDirs={expandedDirs}
               onToggleExpand={onToggleExpand}
               onLoadChildren={onLoadChildren}

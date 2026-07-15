@@ -5,7 +5,6 @@ import type { ScreenshotSettings } from '@shared/ipc/screenshot';
 import { mainToRender as navigateMainToRender } from '@shared/ipc/navigate';
 import { log } from '@main/log';
 import { registerScreenshotShortcut } from './screenshotShortcut';
-import { isFeatureEnabled } from '../featureFlags';
 import { appCacheManager } from "../appCache";
 import { mainWindow } from '@main/startup/wins';
 
@@ -17,13 +16,8 @@ export interface ScreenshotIPCOptions {
   // No options currently; kept as an empty interface for future extension.
 }
 
-async function getSettings(): Promise<ScreenshotSettings> {
-  const settings = appCacheManager.getScreenshotSettings();
-  // When the feature flag is disabled, force enabled=false
-  if (!isFeatureEnabled('deskmateFeatureScreenshot')) {
-    return { ...settings, enabled: false };
-  }
-  return settings;
+function getSettings(): ScreenshotSettings {
+  return appCacheManager.getScreenshotSettings();
 }
 
 export const registerScreenshotIPC = (options: ScreenshotIPCOptions): void => {

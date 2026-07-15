@@ -19,8 +19,8 @@ import type { Tool } from '@earendil-works/pi-ai';
 import { jsonSchema } from '@main/pi';
 import * as fs from 'fs';
 import { Profiles } from '@main/persist';
-import { toSchedulerJob } from '../../scheduler/jobAdapter';
-import type { SchedulerJob } from '../../scheduler/types';
+import { toSchedulerJob } from '../../scheduler';
+import type { SchedulerJob } from '@shared/ipc/scheduler';
 import { truncateMiddle } from '../chatSession/truncate';
 import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
@@ -29,8 +29,8 @@ import type { SchedulerStateFile } from '@shared/persist/types';
 export const readSchedulesToolDef: Tool = {
   name: 'read_schedules',
   description: `Read the current profile's scheduled jobs. Two modes:
-• "list" — markdown table of every job with skeleton columns: metadata (id, name, type, cron/runAt, enabled, status, agentId, lastRunAt, lastFinishedAt) plus message skeleton (msg.len, msg.lines, msg.firstLine preview) and description length. Includes scheduler runtime-state header.
-• "detail" — one job's prompt body (truncated to 2 KB) + description (truncated to 512 chars) + cold-start catch-up record if present. Call after "list" identifies a relevant job.
+• "list" — markdown table of every job with skeleton columns: metadata (id, name, type, trigger, enabled, agentId, lastStartedAt) plus message skeleton (msg.len, msg.lines, msg.firstLine preview) and description length. Includes scheduler runtime-state header.
+• "detail" — one job's prompt body (truncated to 2 KB) + description (truncated to 512 chars) + cold-start catch-up record. Call after list identifies a relevant job.
 ONLY call this when the user's bug description involves scheduled tasks / cron / "didn't trigger" — do not call for unrelated bugs.`,
   parameters: jsonSchema({
     type: 'object',
@@ -123,17 +123,16 @@ function formatList(
   }
 
   const sorted = [...allJobs].sort((a, b) => {
-    const ta = Date.parse(a.lastRunAt || a.executedAt || '') || 0;
-    const tb = Date.parse(b.lastRunAt || b.executedAt || '') || 0;
+    const ta = Date.parse(a.lastStartedAt ?? '') || 0;
+    const tb = Date.parse(b.lastStartedAt ?? '') || 0;
     if (ta !== tb) return tb - ta;
     return b.id.localeCompare(a.id);
   });
   const visible = sorted.slice(0, MAX_JOBS_IN_LIST);
 
   const cols = [
-    '#', 'id', 'name', 'type', 'cron/runAt', 'enabled', 'status',
-    'agentId', 'msg.len', 'msg.lines', 'msg.firstLine', 'desc.len',
-    'lastRunAt', 'lastFinishedAt',
+    '#', 'id', 'name', 'type', 'trigger', 'enabled',
+    'agentId', 'msg.len', 'msg.lines', 'msg.firstLine', 'desc.len', 'lastStartedAt',
   ] as const;
 
   out.push('### Jobs');
@@ -151,16 +150,14 @@ function formatList(
         j.id,
         escapeCell(j.name),
         j.scheduleType,
-        j.cronExpression || j.runAt || '',
+        formatTrigger(j),
         String(j.enabled),
-        j.status,
         j.agentId,
         String(j.message.length),
         String(msgLines.length),
         escapeCell(preview),
         String(j.description.length),
-        j.lastRunAt ?? '',
-        j.lastFinishedAt ?? '',
+        j.lastStartedAt ?? '',
       ];
     }),
   ));
@@ -192,14 +189,10 @@ function formatDetail(job: SchedulerJob, runtimeState: SchedulerStateFile | null
   out.push('');
   out.push(`- id: ${job.id}`);
   out.push(`- scheduleType: ${job.scheduleType}`);
-  if (job.cronExpression) out.push(`- cronExpression: ${job.cronExpression}`);
-  if (job.runAt) out.push(`- runAt: ${job.runAt}`);
+  out.push(`- trigger: ${formatTrigger(job)}`);
   out.push(`- enabled: ${job.enabled}`);
-  out.push(`- status: ${job.status}`);
   out.push(`- agentId: ${job.agentId}`);
-  if (job.lastRunAt) out.push(`- lastRunAt: ${job.lastRunAt}`);
-  if (job.lastFinishedAt) out.push(`- lastFinishedAt: ${job.lastFinishedAt}`);
-  if (job.executedAt) out.push(`- executedAt: ${job.executedAt}`);
+  if (job.lastStartedAt) out.push(`- lastStartedAt: ${job.lastStartedAt}`);
   out.push('');
 
   // Message body
@@ -239,6 +232,10 @@ function formatDetail(job: SchedulerJob, runtimeState: SchedulerStateFile | null
 // ---------------------------------------------------------------------------
 // shared helpers
 // ---------------------------------------------------------------------------
+
+function formatTrigger(job: SchedulerJob): string {
+  return job.scheduleType === 'cron' ? job.cronExpression : job.runAt;
+}
 
 function escapeCell(s: string): string {
   return s.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');

@@ -29,7 +29,6 @@ interface ComposeInputProps {
   chatStatus?: ChatStatus;
   enableContextMenu?: boolean;
   chatSessionId?: string | null;
-  isReadOnly?: boolean;
   isInputLocked?: boolean;
 }
 
@@ -38,7 +37,6 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
   chatStatus,
   enableContextMenu,
   chatSessionId,
-  isReadOnly,
   isInputLocked = false,
 }) => {
   const editAgentMenuActions = EditAgentMenuAtom.useChange();
@@ -145,16 +143,6 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
       }
     }
   };
-
-  if (isReadOnly) {
-    return (
-      <div className="flex items-center justify-center px-4 py-3 border-t border-white/10 bg-black/20">
-        <span className="text-sm text-gray-400">
-          This conversation is read-only.
-        </span>
-      </div>
-    );
-  }
 
   return (
     <div

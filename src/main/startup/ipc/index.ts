@@ -1,8 +1,6 @@
 import { app, ipcMain } from 'electron';
-import { registerSchedulerIPC } from '../../lib/scheduler/SchedulerIPC';
-import { schedulerManager } from '../../lib/scheduler/SchedulerManager';
+import { registerSchedulerIPC, schedulerManager } from '../../lib/scheduler';
 import { log } from '@main/log';
-import { isFeatureEnabled } from "../../lib/featureFlags";
 import { getAppDataPath } from "@main/persist/lib/path";
 import { listenInMain as listenHumanLoop } from '@shared/ipc/human-loop';
 
@@ -68,24 +66,21 @@ export function setUpIPC(ctx: Context) {
   setUpToolsIPC(ctx);
   handleUpdateIPC(ctx);
 
-  // Scheduler Management - IPC handlers are always registered;
-  // UI visibility is controlled by feature flag on the renderer side.
+  // Scheduler IPC handlers are always registered. Profile bootstrap completes
+  // before the scheduler starts so cron and one-shot tasks work for every profile.
   registerSchedulerIPC();
 
-  // scheduler 启动与登录解耦：profile bootstrap 完成即触发，未登录态下 cron /
-  // one-shot 任务也能跑。bootstrap 幂等，重复 await 安全。
-  if (isFeatureEnabled('deskmateFeatureScheduler')) {
-    void (async () => {
-      try {
-        await Profiles.get().bootstrap();
-        const profile = await Profiles.get().active();
-        log.info({ msg: 'scheduler.lifecycle.startup.before-init', mod: 'ipc:setup', profileId: profile.id, schedulerState: schedulerManager.getRuntimeDiagnostics() });
-        await schedulerManager.initialize(profile.id);
-        log.info({ msg: 'scheduler.lifecycle.startup.after-init', mod: 'ipc:setup', profileId: profile.id, schedulerState: schedulerManager.getRuntimeDiagnostics() });
-      } catch (err) {
-        log.warn({ msg: '[Startup] SchedulerManager initialization failed', mod: 'ipc:setup', err });
-      }
-    })();
-  }
-
+  // Scheduler startup is decoupled from sign-in: trigger after profile bootstrap;
+  // cron and one-shot tasks also run for guest profiles.
+  void (async () => {
+    try {
+      await Profiles.get().bootstrap();
+      const profile = await Profiles.get().active();
+      log.info({ msg: 'scheduler.lifecycle.startup.before-init', mod: 'ipc:setup', profileId: profile.id, schedulerState: schedulerManager.getRuntimeDiagnostics() });
+      await schedulerManager.initialize(profile);
+      log.info({ msg: 'scheduler.lifecycle.startup.after-init', mod: 'ipc:setup', profileId: profile.id, schedulerState: schedulerManager.getRuntimeDiagnostics() });
+    } catch (err) {
+      log.warn({ msg: '[Startup] SchedulerManager initialization failed', mod: 'ipc:setup', err });
+    }
+  })();
 }

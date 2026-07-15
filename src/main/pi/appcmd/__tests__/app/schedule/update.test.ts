@@ -111,7 +111,6 @@ describe('schedule update', () => {
         message: 'm',
         agent_id: 'a',
         enabled: true,
-        status: 'pending',
       },
     });
     const r = await runSchedule('update j_abc --name morning --json');

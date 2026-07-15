@@ -16,7 +16,7 @@
  * **feature-gated 域**:`subagent` 命令由 `deskmateFeatureSubAgent` 守卫;
  * 测试环境 `featureFlagManager` 未 initialize → 所有 flag 默认 false →
  * `builtins/app/index.ts` 不 register。fixture 顶层走 `has() ? noop : register`
- * 幂等模式(同 schedule 域)。
+ * 幂等模式。
  */
 
 import { vi } from 'vitest';

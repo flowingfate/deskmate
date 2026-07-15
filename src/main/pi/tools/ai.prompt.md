@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-14 (pi session 重构为 session/ 子模块) -->
+<!-- Last verified: 2026-07-15 (schedule command is always registered) -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -136,8 +136,8 @@ async function loadImpl() {
 批 G:shell facade。`app` 与 `web` **完全对等** —— 都是 `makeCommandFacade(makeRouterCommand({ name, synopsis, registry }))`(facade + router 工厂在 `appcmd/_facade.ts` / `appcmd/makeRouterCommand.ts`)。`app` 路由 `appCommands`,`web` 路由 `webCommands`。两个注册表各自与成员同住一包(`appcmd/builtins/app/index.ts` / `appcmd/builtins/web/index.ts`)并在模块加载期 eager 注册;`app.ts` / `web.ts` import 对应 index 即触发注册(不再有 `tools/index.ts` 的 `import '../appcmd'` 副作用)。两者互不相干,各管各的注册表
 批 B:依赖 main 子系统 —— 仅 `executeCommand`(LLM 看到名为 `shell`)。`manageProcess` 已下线
 批 C:已下线(mcp / agent / skill → `app` shell facade,详见 `appcmd/builtins/app/`)
-批 D:已下线(schedule → `app` shell facade;feature flag 守卫挪到 `appcmd/builtins/app/index.ts`)
-批 E:已下线(spawn / spawn-many → `app subagent` shell facade;feature flag 守卫挪到 `appcmd/builtins/app/index.ts`)
+批 D:已下线(schedule → `app` shell facade；命令始终在 `appcmd/builtins/app/index.ts` 注册)
+批 E:已下线(spawn / spawn-many → `app subagent` shell facade；feature flag 守卫位于 `appcmd/builtins/app/index.ts`)
 批 F:已下线为子命令(`download` 顶层工具 → `web download`,见批 G)。下载内核搬到 `appcmd/builtins/web/kernel/download.ts`,CLI 在 `appcmd/builtins/web/download.ts`;`web` 域**已升为顶层一等工具 `web`**(`pi/tools/web.ts`)。`read_office_file` 一并下线 —— office 现在是 `read` 工具的内部 backend,通过 `read/backends/office.ts::loadImpl()` 推迟加载 `impl/readOfficeFile.ts`(独立 lazy chunk 输出,bundle 体积不变)
 
 注册顺序对 LLM 看到的工具列表顺序没有语义,但保持稳定有助于 prompt cache 命中率;

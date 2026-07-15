@@ -18,6 +18,26 @@ function err(error: unknown): { success: false; error: string } {
   return { success: false, error: error instanceof Error ? error.message : String(error) };
 }
 
+export async function querySession(agentId: string, sessionId: string) {
+  const profile = await Profiles.get().active();
+  const agent = await profile.getAgent(agentId);
+  if (!agent) return { success: false, error: `Agent not found: ${agentId}` } as const;
+  const session = await agent.getSession(sessionId);
+  if (!session) return { success: false, error: `Session not found: ${sessionId}` } as const;
+  return { success: true, profile, agent, session } as const;
+}
+
+export async function queryJobRun(agentId: string, jobId: string, runId: string) {
+  const profile = await Profiles.get().active();
+  const agent = await profile.getAgent(agentId);
+  if (!agent) return { success: false, error: `Agent not found: ${agentId}` } as const;
+  const job = await agent.getJob(jobId);
+  if (!job) return { success: false, error: `Job not found: ${jobId}` } as const;
+  const run = await job.getRun(runId);
+  if (!run) return { success: false, error: `Run not found: ${runId}` } as const;
+  return { success: true, profile, agent, job, run } as const;
+}
+
 export function registerPersistIpc(ipc: IpcMain): void {
   const handle = renderToMain.bindMain(ipc);
 
@@ -204,29 +224,26 @@ export function registerPersistIpc(ipc: IpcMain): void {
 
   handle.renameSession(async (_e, agentId, sessionId, newTitle) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
-      if (!agent) return { success: false, error: `agent not found: ${agentId}` };
-      const session = await agent.getSession(sessionId);
-      if (!session) return { success: false, error: `session not found: ${sessionId}` };
-      await session.setTitle(newTitle);
+      const query = await querySession(agentId, sessionId);
+      if (!query.success) return query;
+      await query.session.setTitle(newTitle);
       return { success: true };
     } catch (e) { return err(e); }
   });
 
   handle.setSessionStarred(async (_e, agentId, sessionId, starred) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
-      if (!agent) return { success: false, error: `agent not found: ${agentId}` };
-      const session = await agent.getSession(sessionId);
-      if (!session) return { success: false, error: `session not found: ${sessionId}` };
+      const query = await querySession(agentId, sessionId);
+      if (!query.success) return query;
       const now = new Date().toISOString();
       // session.setStar 写 data.json#star → onChange 触发 `sessionIdx.upsert` 同步 starred_at +
       // emit `session:index:updated`。下一行补一次 `starred:updated`，让跨 agent 订阅 starred 列表
       // 的 renderer atom（starred.atom）即时刷新（onChange 路径只发 session:index:updated）。
-      await session.setStar(starred ? { starredAt: now } : undefined);
-      emit('starred:updated', { profileId: profile.id, items: profile.sessionIdx.listStarred() });
+      await query.session.setStar(starred ? { starredAt: now } : undefined);
+      emit('starred:updated', {
+        profileId: query.profile.id,
+        items: query.profile.sessionIdx.listStarred(),
+      });
       return { success: true };
     } catch (e) { return err(e); }
   });
@@ -238,23 +255,43 @@ export function registerPersistIpc(ipc: IpcMain): void {
       // 只有"被删 session 之前确实 star 过"才广播 starred:updated；否则跳过整列广播。
       // `sessionIdx.remove` 自己只 emit `session:index:updated`(op='remove')，无 starred 含义。
       const wasStarred = profile.sessionIdx.findById(sessionId)?.starredAt != null;
-      await agent.deleteSession(sessionId);
+      if (!await agent.deleteSession(sessionId)) {
+        return { success: false, error: `session not found: ${sessionId}` };
+      }
       if (wasStarred) {
         emit('starred:updated', { profileId: profile.id, items: profile.sessionIdx.listStarred() });
       }
       return { success: true };
     } catch (e) { return err(e); }
   });
-
-  handle.getSessionMessages(async (_e, agentId, sessionId) => {
+  handle.deleteScheduleRun(async (_e, agentId, jobId, runId) => {
     try {
       const profile = await Profiles.get().active();
       const agent = await profile.getAgent(agentId);
-      if (!agent) return { success: true, data: null };
-      const session = await agent.getSession(sessionId);
-      if (!session) return { success: true, data: null };
-      const messages = await session.loadMessagesAll();
-      return { success: true, data: { data: session.toDataFile(), messages } };
+      if (!agent) return { success: false, error: `agent not found: ${agentId}` };
+      const job = await agent.getJob(jobId);
+      if (!job) return { success: false, error: `schedule job not found: ${jobId}` };
+      if (!await job.deleteRun(runId)) {
+        return { success: false, error: `schedule run not found: ${runId}` };
+      }
+      return { success: true };
+    } catch (e) { return err(e); }
+  });
+  handle.forkJobRunToSession(async (_e, agentId, jobId, runId) => {
+    try {
+      const query = await queryJobRun(agentId, jobId, runId);
+      if (!query.success) return query;
+      const session = await query.run.forkToSession(query.agent.sessionIdx);
+      return { success: true, data: { sessionId: session.id } };
+    } catch (e) { return err(e); }
+  });
+
+  handle.getSessionMessages(async (_e, agentId, sessionId) => {
+    try {
+      const query = await querySession(agentId, sessionId);
+      if (!query.success) return { success: true, data: null };
+      const messages = await query.session.loadMessagesAll();
+      return { success: true, data: { data: query.session.toDataFile(), messages } };
     } catch (e) { return err(e); }
   });
 

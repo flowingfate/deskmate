@@ -48,9 +48,14 @@ export class Agent {
     if (!persistAgent) {
       throw new Error(`[pi/agent] agent not found in active profile: ${this.id}`);
     }
-    const persistSession =
-      (await persistAgent.getSession(sessionId)) ??
-      (await persistAgent.createSession({ id: sessionId }));
+    const existingSession = await persistAgent.getSession(sessionId);
+
+    // !这里为了防止前端把 job run id 当作普通 session id 继续聊，直接在 pi 层拦截。job run session 必须先 fork 成普通 session 才能继续聊。
+    if (!existingSession && persistAgent.jobRunIdx.findById(sessionId)) {
+      throw new Error('[pi/agent] schedule runs must be converted before continuing');
+    }
+
+    const persistSession = existingSession ?? await persistAgent.createSession({ id: sessionId });
 
     const session = new RegularSession(sessionId, this.profileId, this.id, persistSession);
     this.sessions.set(sessionId, session);

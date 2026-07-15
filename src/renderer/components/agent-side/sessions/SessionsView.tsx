@@ -5,6 +5,7 @@ import { Button } from '@/shadcn/button';
 import ListSearchBox from '@/components/ui/ListSearchBox';
 import { SessionList } from './SessionList';
 import { chatSessionCommands } from '@/states/chatSessionCommands';
+import { newEntityId } from '@shared/persist/id';
 
 interface SessionsViewProps {
   /** Always defined here — `SessionPanel` only mounts this view when a agentId exists. */
@@ -40,9 +41,7 @@ const SessionsView: React.FC<SessionsViewProps> = ({ agentId, currentChatSession
   }, [runChatSessionCommand]);
 
   const handleNewConversation = useCallback(() => {
-    navigate(`/agent/${agentId}`, {
-      state: { intent: 'new-chat', source: 'session-panel' },
-    });
+    navigate(`/agent/${agentId}/${newEntityId('s')}`);
   }, [agentId, navigate]);
 
   return (

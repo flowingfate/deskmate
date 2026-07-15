@@ -30,7 +30,6 @@ function mockListWith(jobId: string): void {
         message: 'm',
         agent_id: 'a',
         enabled: true,
-        status: 'pending',
       },
     ],
   });

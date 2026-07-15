@@ -12,7 +12,7 @@ import { RibbonTip } from './RibbonTip';
 import { useSessionActionTarget } from './useSessionActionTarget';
 
 export default function ChatRibbon(): ReactElement {
-  const { agentId, chatSessionId } = CurrentSessionStatus.use();
+  const { chatSessionId } = CurrentSessionStatus.use();
   const sessionActionTarget = useSessionActionTarget();
   const errorMessage = CurrentSessionError.use();
 
@@ -30,9 +30,7 @@ export default function ChatRibbon(): ReactElement {
           <JumpToLatestItem />
           <ForkSessionItem target={sessionActionTarget} />
           <OpenSessionFolderItem target={sessionActionTarget} />
-          {process.env.NODE_ENV === 'development' && (
-            <DevInfoBadge agentId={agentId} sessionId={chatSessionId} />
-          )}
+          {process.env.NODE_ENV === 'development' && <DevInfoBadge />}
           <ToggleWorkspaceExplorer />
         </div>
       </div>

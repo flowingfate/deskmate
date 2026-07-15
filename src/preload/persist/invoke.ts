@@ -19,6 +19,8 @@ const invoke = renderToMain.provideInvokeForPreload(ipcRenderer, [
   'renameSession',
   'setSessionStarred',
   'deleteSession',
+  'deleteScheduleRun',
+  'forkJobRunToSession',
   'getSessionMessages',
   'getUnreadSummary',
   'updateConfirmationSettings',

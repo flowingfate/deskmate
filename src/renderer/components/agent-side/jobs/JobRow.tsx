@@ -91,7 +91,7 @@ const JobRow: React.FC<JobRowProps> = ({
   const runsLine = runCount === 0
     ? 'No runs yet'
     : `${runCount === 1 ? '1 run' : `${runCount} runs`}${
-        job.lastRunAt ? ` · Last ${formatDateTime(job.lastRunAt)}` : ''
+        job.lastStartedAt ? ` · Last ${formatDateTime(job.lastStartedAt)}` : ''
       }`;
 
   return (
@@ -219,10 +219,10 @@ const JobRow: React.FC<JobRowProps> = ({
             expanded && 'pb-2.5',
           )}
         >
-          {job.lastRunAt && (
+          {job.lastStartedAt && (
             <div className="flex items-baseline gap-1.5 px-1 text-[11px] leading-[14px]">
-              <span className="text-[#9E9E9E] font-medium">Last run</span>
-              <span className="text-[#6C6C70] truncate">{formatDateTime(job.lastRunAt)}</span>
+              <span className="text-[#9E9E9E] font-medium">Last started</span>
+              <span className="text-[#6C6C70] truncate">{formatDateTime(job.lastStartedAt)}</span>
             </div>
           )}
           <div className="flex items-center flex-wrap gap-1">

@@ -6,7 +6,7 @@
  * 已无活调用方；persist 模型下：
  *   - messages.jsonl 是 append-only，从不需要 saveChatSession
  *   - sessionIndex.atom + persistApi.getSession/getSessionMessages 取代了 file 拉取
- *   - session 创建走 startNewSessionFor → pi → Agent.createSession
+ *   - renderer 直接调用 `newEntityId('s')` 分配 session ID；首次发送时由 pi → Agent.createSession 持久化
  *
  * 老 alias 形参在新模型下由 main 端 `Profiles.active()` 隐式取，renderer 不再传。
  */

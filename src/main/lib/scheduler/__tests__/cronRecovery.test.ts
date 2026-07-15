@@ -67,6 +67,7 @@ describe('findMissedCronOccurrence', () => {
     expect(shouldCatchUpMissedOccurrence(missedOccurrence as Date, '2026-03-19T08:20:00.000Z')).toBe(true);
   });
 
+
   it('uses exitedAt as the cold-start baseline after a clean exit', () => {
     expect(
       getColdStartCatchUpBaseline({

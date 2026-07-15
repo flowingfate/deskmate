@@ -12,12 +12,12 @@ export type SessionActionTarget =
       sessionId: string;
     }
   | { kind: 'empty' }
-  | { kind: 'job-run' }
+  | { kind: 'job-run'; agentId: string; jobId: string; sessionId: string }
   | { kind: 'switching' };
 
 export function useSessionActionTarget(): SessionActionTarget {
   const { agentId: routeAgentId, sessionId: routeSessionId } = useParams();
-  const isJobRunRoute = useMatch('/agent/:agentId/job/:jobId/:sessionId') !== null;
+  const jobRunRoute = useMatch('/agent/:agentId/job/:jobId/:sessionId');
   const { agentId: currentAgentId, chatSessionId } = CurrentSessionStatus.use();
   const hasRouteSessionCache = useHasChatSessionCache(routeSessionId ?? null);
   const { messages } = useMessagesWithStream();
@@ -26,9 +26,6 @@ export function useSessionActionTarget(): SessionActionTarget {
     return { kind: 'empty' };
   }
 
-  if (isJobRunRoute) {
-    return { kind: 'job-run' };
-  }
 
   if (
     currentAgentId !== routeAgentId
@@ -36,6 +33,17 @@ export function useSessionActionTarget(): SessionActionTarget {
     || !hasRouteSessionCache
   ) {
     return { kind: 'switching' };
+  }
+
+  if (jobRunRoute) {
+    const routeJobId = jobRunRoute.params.jobId;
+    if (!routeJobId) return { kind: 'switching' };
+    return {
+      kind: 'job-run',
+      agentId: routeAgentId,
+      jobId: routeJobId,
+      sessionId: routeSessionId,
+    };
   }
 
   if (messages.length === 0) {

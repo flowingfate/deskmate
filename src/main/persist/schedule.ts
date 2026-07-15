@@ -13,6 +13,7 @@ import { MONTH_KEY, PERSIST_PATH } from '../../shared/persist/path';
 import { newEntityId } from '../../shared/persist/id';
 import { JobRun } from './session';
 import { getAppRoot } from './lib/root';
+import { emit } from './lib/emit';
 import { PersistBase } from './lib/persistBase';
 import type { JobRunIdx } from './lib/db/jobRunIdx';
 import {
@@ -273,6 +274,27 @@ export class ScheduleJob extends PersistBase {
     // run 已结束，从内存缓存里 evict —— 防止长跑 cron job 堆积。
     this.runs.delete(runId);
     return { runState };
+  }
+
+  /** 删除一条已结束的 run；执行中的 run 仍可能写入，必须拒绝删除。 */
+  public async deleteRun(runId: string): Promise<boolean> {
+    const row = this.jobRunIdx.findById(runId);
+    if (!row || row.jobId !== this.id) return false;
+    if (row.runStatus === 'running') {
+      throw new Error('Cannot delete a running schedule run.');
+    }
+
+    const runDir = `${PERSIST_PATH.jobRunsDir(getAppRoot(), this.profileId, this.agentId, this.id)}/${row.month}/${runId}`;
+    await removeDirIfExists(runDir);
+    this.jobRunIdx.remove(runId);
+    this.runs.delete(runId);
+    emit('schedule:run:removed', {
+      profileId: this.profileId,
+      agentId: this.agentId,
+      jobId: this.id,
+      sessionId: runId,
+    });
+    return true;
   }
 
   /**

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-14 (IPC 契约的持久化 schema 统一从 shared/persist/types 导入) -->
+<!-- Last verified: 2026-07-15 (chatSession 支持 schedule-run 专用下载与 session 根目录查询；persist 保持细粒度 run remove event) -->
 # IPC 框架（`src/shared/ipc/`）
 
 > 基于 TypeScript 泛型 + Proxy 的框架，从单一共享定义文件出发，在 Electron 的三个层（main / preload / renderer）之间强制实现类型安全、编译期检查的 IPC。

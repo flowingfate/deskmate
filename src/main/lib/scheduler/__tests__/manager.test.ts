@@ -4,11 +4,10 @@ vi.mock('node-cron', async () => ({
   schedule: vi.fn(() => ({
     stop: vi.fn(),
   })),
+  validate: vi.fn(() => true),
 }));
 
-
-// persist 重构 step5 PR3+PR4：CRUD + executeJob 全走 persist。
-// 这里 mock Profiles 顶层 + JobRun + sessionCompletion，避免真触盘/真跑 LLM。
+// persist 调用与 JobRun 都使用桩，避免真触盘/真跑 LLM。
 const persistFindJobMock = vi.fn(async (_jobId: string): Promise<unknown> => undefined);
 const persistListJobsFlatMock = vi.fn(async (_filter?: { agentId?: string }) => [] as unknown[]);
 const persistGetAgentMock = vi.fn(async (_agentId: string): Promise<unknown> => undefined);
@@ -18,13 +17,6 @@ const fakePersistProfile = {
   listJobsFlat: persistListJobsFlatMock,
   getAgent: persistGetAgentMock,
 };
-vi.mock('@main/persist', async () => ({
-  Profiles: {
-    get: () => ({
-      active: vi.fn(async () => fakePersistProfile),
-    }),
-  },
-}));
 
 // JobRun 是 turn loop —— 测试里不真跑模型，默认 success。
 const jobRunMock = vi.fn(async () => ({ messageCount: 1 }));
@@ -57,12 +49,11 @@ function setupSchedulableJob(opts: {
   cron?: string;
   runAt?: string;
   enabled?: boolean;
-  lastRunAt?: string; // 投到 toSchedulerJob → SchedulerJob.lastRunAt（cold-start lastRunAt skip 用）
+  lastStartedAt?: string;
 }) {
-  // lastRunAt 通过 toSchedulerJob 从 runState.startedAt 投出来；用 completed 状态确保
-  // lastRunAt 是 startedAt（status='completed' 时 startedAt + finishedAt 都会暴露）。
-  const runState: { status: string; startedAt?: string; finishedAt?: string; error?: string } = opts.lastRunAt
-    ? { status: 'completed', startedAt: opts.lastRunAt, finishedAt: opts.lastRunAt }
+  // `lastStartedAt` is projected directly from runState.startedAt.
+  const runState: { status: string; startedAt?: string; finishedAt?: string; error?: string } = opts.lastStartedAt
+    ? { status: 'completed', startedAt: opts.lastStartedAt, finishedAt: opts.lastStartedAt }
     : { status: 'pending' };
   const file = opts.cron
     ? { version: 1 as const, id: opts.id, agentId: opts.agentId, name: opts.id, message: 'hi', enabled: opts.enabled ?? true, createdAt: 'x', updatedAt: 'y', scheduleType: 'cron' as const, cron: opts.cron }
@@ -105,7 +96,7 @@ describe('SchedulerManager cold-start catch-up', () => {
 
   afterEach(async () => {
     try {
-      const { schedulerManager } = await import('../SchedulerManager');
+      const { schedulerManager } = await import('../manager');
       await schedulerManager.dispose('manual-debug');
     } catch {
       // Ignore cleanup failures in tests that never loaded the module.
@@ -115,7 +106,7 @@ describe('SchedulerManager cold-start catch-up', () => {
   });
 
   it('returns a manual run chatSessionId only after the scheduled session is ready', async () => {
-    const { schedulerManager } = await import('../SchedulerManager');
+    const { schedulerManager } = await import('../manager');
 
     const { fakeJob, fakeAgent, startRunMock } = setupSchedulableJob({
       id: 'job-manual-1',
@@ -127,7 +118,7 @@ describe('SchedulerManager cold-start catch-up', () => {
     // startRun 解 resolve 后 onReady 即触发；这里立即返回，验证调用链通畅。
     startRunMock.mockResolvedValue({ id: 'run-manual-1', title: 'r' } as never);
 
-    await schedulerManager.initialize('alice');
+    await schedulerManager.initialize(fakePersistProfile);
 
     const result = await schedulerManager.runJobNow('job-manual-1');
 
@@ -153,7 +144,6 @@ describe('SchedulerManager cold-start catch-up', () => {
       enabled: true,
       agentId: 'agent-1',
       message: 'hello',
-      status: 'pending' as const,
     };
 
     const runtimeMeta = new Map<string, CronWatchdogTaskRuntimeMeta>([
@@ -199,8 +189,7 @@ describe('SchedulerManager cold-start catch-up', () => {
       enabled: true,
       agentId: 'agent-1',
       message: 'hello',
-      status: 'pending' as const,
-      lastRunAt: '2026-04-07T03:02:30.000Z',
+      lastStartedAt: '2026-04-07T03:02:30.000Z',
     };
 
     const runtimeMeta = new Map<string, CronWatchdogTaskRuntimeMeta>([
@@ -242,8 +231,7 @@ describe('SchedulerManager cold-start catch-up', () => {
       enabled: true,
       agentId: 'agent-1',
       message: 'hello',
-      status: 'pending' as const,
-      lastRunAt: '2026-04-07T03:01:30.000Z',
+      lastStartedAt: '2026-04-07T03:01:30.000Z',
     };
     const runtimeMeta = new Map<string, CronWatchdogTaskRuntimeMeta>([
       [
@@ -331,7 +319,6 @@ describe('SchedulerManager cold-start catch-up', () => {
       enabled: false,
       agentId: 'agent-1',
       message: 'hello',
-      status: 'pending' as const,
     }));
 
     await runCronWatchdog({
@@ -380,7 +367,6 @@ describe('SchedulerManager cold-start catch-up', () => {
       enabled: true,
       agentId: 'agent-1',
       message: 'hello',
-      status: 'pending' as const,
     };
     const executeJob = vi.fn(async () => undefined);
     const getJob = vi.fn(async (jobId: string) => {
@@ -405,6 +391,7 @@ describe('SchedulerManager cold-start catch-up', () => {
     expect(executeJob).toHaveBeenCalledTimes(1);
     expect(executeJob).toHaveBeenCalledWith(successfulJob);
   });
+
 });
 
 describe('SchedulerManager resume-catchup dedup', () => {
@@ -416,7 +403,7 @@ describe('SchedulerManager resume-catchup dedup', () => {
 
   afterEach(async () => {
     try {
-      const { schedulerManager } = await import('../SchedulerManager');
+      const { schedulerManager } = await import('../manager');
       await schedulerManager.dispose('manual-debug');
     } catch {
       // Ignore cleanup failures
@@ -433,13 +420,13 @@ describe('SchedulerManager resume-catchup dedup', () => {
       id: 'sched_job1',
       agentId: 'agent-1',
       cron: '0 22 * * *',
-      lastRunAt: '2026-05-10T22:00:00.450Z',
+      lastStartedAt: '2026-05-10T22:00:00.450Z',
     });
     persistListJobsFlatMock.mockResolvedValue([{ agent: fakeAgent, job: fakeJob, entry: {} } as never]);
     persistFindJobMock.mockResolvedValue({ agent: fakeAgent, job: fakeJob } as never);
 
-    const { schedulerManager } = await import('../SchedulerManager');
-    await schedulerManager.initialize('alice');
+    const { schedulerManager } = await import('../manager');
+    await schedulerManager.initialize(fakePersistProfile);
 
     await schedulerManager.handleSystemResume(
       Date.parse('2026-05-09T08:26:27.338Z'),
@@ -457,13 +444,13 @@ describe('SchedulerManager resume-catchup dedup', () => {
       id: 'sched_job2',
       agentId: 'agent-1',
       cron: '0 * * * *',
-      lastRunAt: '2026-05-09T08:00:00.000Z',
+      lastStartedAt: '2026-05-09T08:00:00.000Z',
     });
     persistListJobsFlatMock.mockResolvedValue([{ agent: fakeAgent, job: fakeJob, entry: {} } as never]);
     persistFindJobMock.mockResolvedValue({ agent: fakeAgent, job: fakeJob } as never);
 
-    const { schedulerManager } = await import('../SchedulerManager');
-    await schedulerManager.initialize('alice');
+    const { schedulerManager } = await import('../manager');
+    await schedulerManager.initialize(fakePersistProfile);
 
     // Clear any calls from cold-start-catchup during initialize
     startRunMock.mockClear();
@@ -486,7 +473,7 @@ describe('SchedulerManager toggleJobsByAgent', () => {
 
   afterEach(async () => {
     try {
-      const { schedulerManager } = await import('../SchedulerManager');
+      const { schedulerManager } = await import('../manager');
       await schedulerManager.dispose('manual-debug');
     } catch {
       // Ignore cleanup failures
@@ -533,8 +520,8 @@ describe('SchedulerManager toggleJobsByAgent', () => {
       return found ? { agent: {} as never, job: found as never } : undefined;
     });
 
-    const { schedulerManager } = await import('../SchedulerManager');
-    await schedulerManager.initialize('alice');
+    const { schedulerManager } = await import('../manager');
+    await schedulerManager.initialize(fakePersistProfile);
 
     const count = await schedulerManager.toggleJobsByAgent('agent-x', false);
 
@@ -575,8 +562,8 @@ describe('SchedulerManager toggleJobsByAgent', () => {
       return found ? { agent: {} as never, job: found as never } : undefined;
     });
 
-    const { schedulerManager } = await import('../SchedulerManager');
-    await schedulerManager.initialize('alice');
+    const { schedulerManager } = await import('../manager');
+    await schedulerManager.initialize(fakePersistProfile);
 
     const count = await schedulerManager.toggleJobsByAgent('agent-x', true);
 
@@ -584,5 +571,65 @@ describe('SchedulerManager toggleJobsByAgent', () => {
     expect(j1.applyUpdate).toHaveBeenCalledWith({ enabled: true });
     expect(j3.applyUpdate).toHaveBeenCalledWith({ enabled: true });
     expect(j2.applyUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('SchedulerManager profile switch re-init', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.resetAllMocks();
+  });
+
+  afterEach(async () => {
+    try {
+      const { schedulerManager } = await import('../manager');
+      await schedulerManager.dispose('manual-debug');
+    } catch {
+      // Ignore cleanup failures
+    }
+    vi.useRealTimers();
+  });
+
+  // 构造一个持有单个 cron job + schedulerState 桩的 fake profile。
+  function makeProfileWithCronJob(profileId: string, jobId: string) {
+    const file = {
+      version: 1 as const, id: jobId, agentId: 'agent-1', name: jobId, message: 'hi',
+      enabled: true, createdAt: 'x', updatedAt: 'y', scheduleType: 'cron' as const, cron: '0 * * * *',
+    };
+    const job = { id: jobId, toFile: () => file, config: { enabled: true, runState: { status: 'pending' as const } } };
+    const markDeactivated = vi.fn(async () => undefined);
+    const markActivated = vi.fn(async () => undefined);
+    const profile = {
+      id: profileId,
+      listJobsFlat: vi.fn(async () => [{ agent: {}, job, entry: {} }]),
+      findJob: vi.fn(async (id: string) => (id === jobId ? { agent: {}, job } : undefined)),
+      getAgent: vi.fn(async () => ({ id: 'agent-1' })),
+      schedulerState: {
+        load: vi.fn(async () => undefined),
+        getBaseline: vi.fn(() => ({ isActive: false })),
+        getPending: vi.fn(() => ({})),
+        markActivated,
+        markDeactivated,
+        dequeueCatchUp: vi.fn(async () => undefined),
+        enqueueCatchUp: vi.fn(async () => undefined),
+      },
+    };
+    return { profile, markDeactivated, jobId };
+  }
+
+  it('switches profiles by deactivating the previous profile and replacing active tasks', async () => {
+    const a = makeProfileWithCronJob('p_alice', 'job-a');
+    const b = makeProfileWithCronJob('p_bob', 'job-b');
+    const { schedulerManager } = await import('../manager');
+
+    await schedulerManager.initialize(a.profile);
+    expect(schedulerManager.getRuntimeDiagnostics().activeJobIds).toEqual(['job-a']);
+
+    await schedulerManager.switch(b.profile, a.profile);
+
+    expect(a.markDeactivated).toHaveBeenCalledTimes(1);
+    const diag = schedulerManager.getRuntimeDiagnostics();
+    expect(diag.profileId).toBe('p_bob');
+    expect(diag.activeJobIds).toEqual(['job-b']);
   });
 });

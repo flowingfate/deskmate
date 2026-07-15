@@ -21,7 +21,7 @@ function getOpenFolderLabel(target: SessionActionTarget, isOpening: boolean): st
     case 'empty':
       return 'No session folder to open';
     case 'job-run':
-      return 'Job run folders cannot be opened';
+      return 'Open job run folder';
     case 'switching':
       return 'Session is still opening';
   }
@@ -30,16 +30,17 @@ function getOpenFolderLabel(target: SessionActionTarget, isOpening: boolean): st
 export function OpenSessionFolderItem({ target }: OpenSessionFolderItemProps): ReactElement {
   const [isOpening, setIsOpening] = useState(false);
   const toast = useToast();
-  const isDisabled = target.kind !== 'regular' || isOpening;
+  const isDisabled = target.kind === 'empty' || target.kind === 'switching' || isOpening;
   const label = getOpenFolderLabel(target, isOpening);
 
   async function handleOpenFolder(): Promise<void> {
-    if (target.kind !== 'regular' || isOpening) return;
+    if ((target.kind !== 'regular' && target.kind !== 'job-run') || isOpening) return;
 
-    const { agentId, sessionId } = target;
     setIsOpening(true);
     try {
-      const pathResult = await chatSessionApi.getFilePath(agentId, sessionId);
+      const pathResult = target.kind === 'regular'
+        ? await chatSessionApi.getFilePath(target.agentId, target.sessionId)
+        : await chatSessionApi.getScheduleRunFilePath(target.agentId, target.jobId, target.sessionId);
       if (!pathResult.success) {
         toast.showError(pathResult.error);
         return;

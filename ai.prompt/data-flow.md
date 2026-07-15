@@ -1,6 +1,6 @@
 # 数据流
 
-<!-- Last verified: 2026-07-02 -->
+<!-- Last verified: 2026-07-15 -->
 
 参考：`src/shared/ipc/base.ts`、`src/main/pi/`、`src/main/persist/`、`src/main/lib/mcpRuntime/mcpClientManager.ts`
 
@@ -101,7 +101,7 @@ Renderer 触发写操作（如 agentOps.updateAgent）
   → useXxx() hook 通过 useSyncExternalStore 触发组件重渲染
 ```
 
-### 12 条细粒度通道
+### 13 条细粒度通道
 
 | 通道 | payload | 写入触发点 |
 |---|---|---|
@@ -115,6 +115,7 @@ Renderer 触发写操作（如 agentOps.updateAgent）
 | `persist:schedule:updated` | `{profileId, agentId, jobId, job}` | `Agent.upsertJob()` |
 | `persist:schedule:removed` | `{profileId, agentId, jobId}` | `Agent.deleteJob()` |
 | `persist:schedule:run:updated` | `{profileId, agentId, jobId, sessionId, status}` | `ScheduleJob.startRun/finishRun` |
+| `persist:schedule:run:removed` | `{profileId, agentId, jobId, sessionId}` | `ScheduleJob.deleteRun()` |
 | `persist:settings:updated` | `{profileId, settings}` | `Profile.settings` 写盘 |
 | `persist:starred:updated` | `{profileId, items}` | `Starred.doPersist()` |
 
@@ -144,7 +145,7 @@ mcpRuntime.atom         ← 包 mcpClientCacheManager（runtime 状态不归 per
 
 无独立 atom：messages 仍由 `agentSessionCacheManager` 通过 streaming chunk 维持（D5 跳过）。
 
-scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 sessionIndex.atom 物理分开（schedule_run 形态字段差异大，强行同表只会污染语义）。订阅 `persist:schedule:run:updated` / `persist:schedule:removed` 触发整 agent 重 fetch（payload 字段不全，不做增量 upsert）。
+scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 sessionIndex.atom 物理分开（schedule_run 形态字段差异大，强行同表只会污染语义）。订阅 `persist:schedule:run:updated` / `persist:schedule:run:removed` / `persist:schedule:removed` 触发整 agent 重 fetch（payload 字段不全，不做增量 upsert）。
 
 详见 [ai.prompt/persist.md §6](persist.md)（IPC 协议）。
 

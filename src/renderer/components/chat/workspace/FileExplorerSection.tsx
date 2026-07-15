@@ -27,7 +27,7 @@ interface FileExplorerSectionProps {
   revealRequest?: { path: string; nonce: number } | null;
   onRevealHandled?: () => void;
   onMenuToggle?: (buttonElement: HTMLElement, menuActions: WorkspaceMenuActions) => void;
-  /** 系统托管目录：空 state 与菜单中隐藏手动添加 / 粘贴动作 */
+  /** 只读目录：允许浏览 / 打开 / 复制路径，禁止拖入、添加、粘贴和删除。 */
   readOnly?: boolean;
   /** 目录为空时展示的自定义提示 */
   emptyMessage?: string;
@@ -147,6 +147,7 @@ const FileExplorerSection: React.FC<FileExplorerSectionProps> = ({
               <FileTreeExplorer
                 nodes={fileTreeWithRoot}
                 workspacePath={workspacePath}
+                readOnly={readOnly}
                 onFileClick={handleFileClick}
                 onLoadChildren={handleLoadChildren}
               />

@@ -391,9 +391,9 @@ export class Agent extends PersistBase {
     return session;
   }
 
-  public async deleteSession(id: string): Promise<void> {
+  public async deleteSession(id: string): Promise<boolean> {
     const session = await this.getSession(id);
-    if (!session) return;
+    if (!session) return false;
     // 先摘 DB 行，再删盘：中断态最多剩孤儿目录（rebuild 可清），不会出现 "DB 列出但
     // data.json 已不存在" 的死引用。SessionIdx.remove 内部 emit `session:index:updated`(op='remove')。
     // session.deleteFromDisk() 内部把实例标记 deleted，之后任何 persist 都会被 afterPersist
@@ -401,6 +401,7 @@ export class Agent extends PersistBase {
     this.sessionIdx.remove(id);
     await session.deleteFromDisk();
     this.sessions.delete(id);
+    return true;
   }
 
   /**

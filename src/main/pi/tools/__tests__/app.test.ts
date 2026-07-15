@@ -2,7 +2,7 @@
  * `app` LocalTool 单测 —— 验证 cmdline → AppCommand 路由的全部分支。
  *
  * 这些测试**依赖**单例 `appCommands` 已注册真实命令(由 `appcmd/builtins/app`
- * 的副作用完成,无 feature flag 的 `mcp` / `agent` / `skill` 恒在)。
+ * 的副作用完成；`mcp` / `agent` / `skill` / `schedule` 恒在)。
  *
  * 测点:
  *   - 空 cmdline / `--help` / `-h` → 顶层帮助

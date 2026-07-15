@@ -20,7 +20,8 @@
     "paths": {
       "@shared/*": ["./src/shared/*"],
       "@renderer/*": ["./src/renderer/*"],
-      "@/*": ["./src/renderer/*"]
+      "@/*": ["./src/renderer/*"],
+      "@ladle/react": ["./src/renderer/story/ladle.d.ts"]
     }
   },
   "include": [

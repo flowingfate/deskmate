@@ -10,11 +10,6 @@
  *   - 被 mock 的真实模块:5 个 schedule kernel 文件(全部使用 schedulerManager
  *     的薄包装)。这样 subcommand 测试只验"argv 解析 + flag 校验 + kernel
  *     调用契约 + 输出格式",**不**复测 schedulerManager 本身的行为。
- *   - feature flag:实际启动期 `scheduleCommand` 由 `deskmateFeatureScheduler`
- *     守卫;但测试环境强制把它注册进 appCommands 以便测试(下面 import
- *     `@main/pi/appcmd` 触发 register;dev profile 该 flag 默认开)。
- *     若 flag 默认 false 会破测,需要在 fixture 里 register 一次 ——
- *     现实是默认 true(参见 `featureFlagDefinitions.ts`),故无需 override。
  */
 
 import { vi } from 'vitest';
@@ -60,17 +55,10 @@ vi.mock('@main/pi/appcmd/builtins/app/schedule/kernel/runJobNow', () => ({
 // 被测对象 —— 必须在 vi.mock 之后再 import
 // ---------------------------------------------------------------------------
 import { dispatchAppCommand, formatAppCmdContent } from '@main/pi/appcmd/dispatcher';
-// side-effect import:把 helloCommand / mcpCommand / agentCommand / skillCommand 等灌进
-// 单例 appCommands。scheduleCommand 由 `deskmateFeatureScheduler` 守卫;
-// 测试环境下 featureFlagManager 未 initialize → 默认所有 flag 都是 false。
-// 故下面**幂等** register —— production 已 register 走 has() 短路;
-// 测试环境(flag=false 未 register)走真正 register。
-import { appCommands } from '@main/pi/appcmd/builtins/app';
+// Side-effect import registers all app commands, including schedule.
+import '@main/pi/appcmd/builtins/app';
 import { scheduleCommand } from '@main/pi/appcmd/builtins/app/schedule';
 
-if (!appCommands.has('schedule')) {
-  appCommands.register(scheduleCommand);
-}
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   return {

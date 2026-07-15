@@ -14,7 +14,7 @@
  * `signal` 仅形状对齐。
  */
 
-import { schedulerManager } from '@main/lib/scheduler/SchedulerManager';
+import { schedulerManager } from '@main/lib/scheduler';
 
 export interface DeleteJobArgs {
   job_id: string;

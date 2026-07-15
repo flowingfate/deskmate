@@ -1,7 +1,6 @@
 import { ipcMain } from 'electron';
 import { renderToMain } from '@shared/ipc/scheduler';
-import { Profiles } from '@main/persist';
-import { schedulerManager } from './SchedulerManager';
+import { schedulerManager } from './manager';
 
 let isRegistered = false;
 
@@ -74,25 +73,6 @@ export const registerSchedulerIPC = (): void => {
     }
   });
 
-  handle.getJobSessions(async (_event, jobId) => {
-    try {
-      // step5 PR4：直接走 persist 列 job 历史 run。lightweight summary（不开 messages.jsonl）。
-      const profile = await Profiles.get().active();
-      const hit = await profile.findJob(jobId);
-      if (!hit) {
-        return { success: false, error: 'Job not found' };
-      }
-      const runs = await hit.job.listRunsOnDisk();
-      const data = runs.map((r) => ({
-        chatSession_id: r.id,
-        title: r.title || r.id,
-        last_updated: r.finishedAt ?? r.startedAt,
-      }));
-      return { success: true, data };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  });
 
   isRegistered = true;
 };

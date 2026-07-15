@@ -14,17 +14,15 @@ import InteractiveRequestCard from './interactive/RequestCard';
 import InteractiveSearchCard from './interactive/SearchCard';
 import { ZeroState } from './zero';
 import ChatRibbon from './ribbon';
+import { JobRunComposer, JobRunEmptyContent } from './JobRunChat';
 
 interface ChatViewContentProps {
   // ChatContainer props
   isSessionSwitching?: boolean;
-
   // Chat status support
   agentId?: string;
   chatStatus?: ChatStatus;
-
-
-  isReadOnly?: boolean;
+  kind: 'regular' | 'job';
 }
 
 function WithInteractive(props: {
@@ -58,11 +56,12 @@ function ChatWorkspaceSideOverlay() {
   );
 }
 
+
 const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
   isSessionSwitching = false,
   agentId,
   chatStatus,
-  isReadOnly
+  kind,
 }) => {
   const { messages, streamingMessageId } = useMessagesWithStream();
   const [editingMessageState, editMessageActions] = editMessageAtom.use();
@@ -86,6 +85,7 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
       );
     }
     if (messages.length === 0) {
+      if (kind === 'job') return <JobRunEmptyContent />;
       return <ZeroState />;
     }
     return (
@@ -96,7 +96,7 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
         chatSessionId={currentChatSessionId || undefined}
         chatStatus={chatStatus}
         editingMessage={editingMessageState}
-        canEditUserMessage={!(isReadOnly || isSessionSwitching || (chatStatus && chatStatus !== 'idle'))}
+        canEditUserMessage={!(kind === 'job' || isSessionSwitching || (chatStatus && chatStatus !== 'idle'))}
       />
     );
   }
@@ -110,14 +110,17 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
         </div>
         <WithInteractive>
           <ChatRibbon />
-          <ComposeInput
-            onSendMessage={sendUserMessage}
-            chatStatus={chatStatus}
-            enableContextMenu
-            chatSessionId={currentChatSessionId}
-            isReadOnly={isReadOnly}
-            isInputLocked={!!editingMessageState || isSessionSwitching}
-          />
+          {kind === 'job'  ? (
+            <JobRunComposer />
+          ) : (
+            <ComposeInput
+              onSendMessage={sendUserMessage}
+              chatStatus={chatStatus}
+              enableContextMenu
+              chatSessionId={currentChatSessionId}
+              isInputLocked={!!editingMessageState || isSessionSwitching}
+            />
+          )}
         </WithInteractive>
         <ChatFilePreviewOverlay />
       </div>

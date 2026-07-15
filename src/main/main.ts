@@ -47,7 +47,7 @@ import { safeConsole, exitSafeLog } from './lib/utilities/safeConsole';
 import { getDebugInfoEntries } from './lib/utilities/debugInfoEntries';
 import { buildDebugInfoManifest } from './lib/utilities/debugInfoManifest';
 import { createRedactor, isTextFile, redactFileContent } from './lib/utilities/redact';
-import { featureFlagManager, isFeatureEnabled } from './lib/featureFlags';
+import { featureFlagManager } from './lib/featureFlags';
 import { PRELOAD_PATH } from './lib/buildPaths';
 
 import { appCacheManager } from './lib/appCache';
@@ -55,7 +55,7 @@ import { restoreBounds, trackBounds } from './startup/windowState';
 import { Profiles } from './persist/profiles';
 import { setUpIPC } from './startup/ipc';
 import { startEvalMode } from './startup/evalMode';
-import { schedulerManager } from "./lib/scheduler/SchedulerManager";
+import { schedulerManager } from './lib/scheduler';
 import { mcpClientManager } from "./lib/mcpRuntime"
 import { registerMediaProtocol } from './lib/media/mediaProtocol';
 import { getAppDataPath, getLogsDir, getProfileDirectoryPath } from "@main/persist/lib/path";
@@ -114,7 +114,6 @@ class ElectronApp {
   private lastSuspendAt: number | null = null;
 
   private logSchedulerLifecycleState(event: string, extra?: Record<string, unknown>): void {
-    if (!isFeatureEnabled('deskmateFeatureScheduler')) return;
 
     Promise.resolve()
       .then(() => {
@@ -310,7 +309,7 @@ class ElectronApp {
         logger.warn({ msg: '[PowerMonitor] Windows resume detected. If startup or profile initialization was pending before suspend, review the preceding 1-2 minutes of logs for unresolved IPC/fetch operations and consider power policy / connected-standby interference.', mod: 'main:powerMonitor', arch: process.arch, suspendedForMs });
       }
 
-      if (isFeatureEnabled('deskmateFeatureScheduler') && suspendedAt && suspendedForMs && suspendedForMs > 0) {
+      if (suspendedAt && suspendedForMs && suspendedForMs > 0) {
         Promise.resolve()
           .then(() => schedulerManager.handleSystemResume(suspendedAt, resumedAt))
           .catch((schedulerError) => {
@@ -358,7 +357,7 @@ class ElectronApp {
       registerMediaProtocol();
 
       const crashStatus = crashCaptureManager.getStatus();
-      log.info({ msg: 'scheduler.lifecycle.startup-recovery-context', mod: 'main:onReady', previousSessionId: crashStatus.recoveredCrash?.previousSessionId ?? null, currentSessionId: crashStatus.currentSessionId, recoveredCrashDetected: crashStatus.hasRecoveredCrash, alias: Profiles.get().activeProfileId || null, schedulerWillInit: isFeatureEnabled('deskmateFeatureScheduler') });
+      log.info({ msg: 'scheduler.lifecycle.startup-recovery-context', mod: 'main:onReady', previousSessionId: crashStatus.recoveredCrash?.previousSessionId ?? null, currentSessionId: crashStatus.currentSessionId, recoveredCrashDetected: crashStatus.hasRecoveredCrash, alias: Profiles.get().activeProfileId || null });
       this.registerPowerMonitorLogging();
 
       // 🚀 Highest priority: warm up AppCacheManager (read app.json / migrate runtimeConfig.json)
@@ -460,16 +459,14 @@ class ElectronApp {
       exitSafeLog('Added final exit log');
 
       // Phase 0.5: stop all scheduled tasks
-      if (isFeatureEnabled('deskmateFeatureScheduler')) {
-        exitSafeLog('Phase 0.5: Stopping scheduled cron tasks');
-        try {
-          log.info({ msg: 'scheduler.lifecycle.shutdown-sequence', mod: 'main:onBeforeQuit', stage: 'before-dispose', reason: 'app-quit', schedulerState: schedulerManager.getRuntimeDiagnostics() });
-          await schedulerManager.dispose('app-quit');
-          log.info({ msg: 'scheduler.lifecycle.shutdown-sequence', mod: 'main:onBeforeQuit', stage: 'after-dispose', reason: 'app-quit', schedulerState: schedulerManager.getRuntimeDiagnostics() });
-          exitSafeLog('SchedulerManager disposed successfully');
-        } catch (schedulerError) {
-          log.warn({ msg: 'scheduler.lifecycle.shutdown-sequence', mod: 'main:onBeforeQuit', stage: 'dispose-failed', reason: 'app-quit', err: schedulerError });
-        }
+      exitSafeLog('Phase 0.5: Stopping scheduled cron tasks');
+      try {
+        log.info({ msg: 'scheduler.lifecycle.shutdown-sequence', mod: 'main:onBeforeQuit', stage: 'before-dispose', reason: 'app-quit', schedulerState: schedulerManager.getRuntimeDiagnostics() });
+        await schedulerManager.dispose('app-quit');
+        log.info({ msg: 'scheduler.lifecycle.shutdown-sequence', mod: 'main:onBeforeQuit', stage: 'after-dispose', reason: 'app-quit', schedulerState: schedulerManager.getRuntimeDiagnostics() });
+        exitSafeLog('SchedulerManager disposed successfully');
+      } catch (schedulerError) {
+        log.warn({ msg: 'scheduler.lifecycle.shutdown-sequence', mod: 'main:onBeforeQuit', stage: 'dispose-failed', reason: 'app-quit', err: schedulerError });
       }
 
       // Phase 1: Clean up MCP clients and child processes

@@ -8,10 +8,10 @@
  *
  * 注:老 `RunScheduleToolResult` 声明了 `messages_count`,但 `schedulerManager
  * .runJobNow` **从不**返回该字段 —— 是死字段,这里**不**搬。LLM 真需要
- * 已执行轮次走 `schedule list` 看 `last_run_at`。
+ * 已执行轮次走 `schedule list` 看 `last_started_at`。
  */
 
-import { schedulerManager } from '@main/lib/scheduler/SchedulerManager';
+import { schedulerManager } from '@main/lib/scheduler';
 
 export interface RunJobNowArgs {
   job_id: string;

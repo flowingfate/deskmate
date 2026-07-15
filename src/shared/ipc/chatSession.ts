@@ -11,8 +11,16 @@ type RenderToMain = {
     call: [agentId: string, sessionId: string, title: string];
     return: IpcResult<{ filePath: string; fileName: string }>;
   };
+  downloadScheduleRun: {
+    call: [agentId: string, jobId: string, runId: string, title: string];
+    return: IpcResult<{ filePath: string; fileName: string }>;
+  };
   getFilePath: {
     call: [agentId: string, sessionId: string];
+    return: IpcResult<{ filePath: string }>;
+  };
+  getScheduleRunFilePath: {
+    call: [agentId: string, jobId: string, runId: string];
     return: IpcResult<{ filePath: string }>;
   };
 };

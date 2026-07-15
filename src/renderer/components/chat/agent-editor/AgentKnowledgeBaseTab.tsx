@@ -771,7 +771,7 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
       }
 
       if (result?.failCount && result.failCount > 0) {
-        logger.error({ msg: "Some deletions failed:", data: result.results?.filter((r: any) => !r.success) });
+        logger.error({ msg: "Some deletions failed:", data: result.results?.filter((item) => !item.success) });
       }
     } catch (error) {
       logger.error({ msg: "Error clearing folder:", err: error });
@@ -787,13 +787,13 @@ const AgentKnowledgeBaseTab: React.FC<TabComponentProps> = ({
     e.preventDefault();
 
     // Dispatch to AgentLayout's FileTreeNodeContextMenu via custom event
-    const node = {
+    const node: FileTreeNode = {
       name: item.name,
       path: item.path,
       type: item.isDirectory ? 'directory' : 'file',
     };
     fileTreeNodeMenuActions.open(e.clientX, e.clientY, node, workspacePath);
-  }, [workspacePath]);
+  }, [fileTreeNodeMenuActions, workspacePath]);
 
   // Get empty state message
   const getEmptyStateMessage = useCallback(() => {

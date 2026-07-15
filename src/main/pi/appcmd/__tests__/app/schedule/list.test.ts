@@ -35,7 +35,7 @@ describe('schedule list', () => {
     expect(args.agent_id).toBe('a_abc');
   });
 
-  it('happy path human 输出:一行一 schedule,含 type/enabled/status + trigger', async () => {
+  it('happy path human 输出:一行一 schedule,含 type/enabled/trigger/last-started', async () => {
     scheduleMocks.listJobsInternal.mockResolvedValue({
       success: true,
       schedules: [
@@ -48,8 +48,7 @@ describe('schedule list', () => {
           message: 'm',
           agent_id: 'a_test',
           enabled: true,
-          status: 'pending',
-          last_run_at: '2026-03-09T06:00:00Z',
+          last_started_at: '2026-03-09T06:00:00Z',
         },
         {
           job_id: 'j_b',
@@ -60,7 +59,6 @@ describe('schedule list', () => {
           message: 'm',
           agent_id: 'a_test',
           enabled: false,
-          status: 'completed',
         },
       ],
     });
@@ -69,11 +67,11 @@ describe('schedule list', () => {
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain('Found 2 schedule(s):');
     expect(r.stdout).toContain('j_a  morning');
-    expect(r.stdout).toContain('[cron/on/pending]');
+    expect(r.stdout).toContain('[cron/on]');
     expect(r.stdout).toContain('cron=0 6 * * *');
     expect(r.stdout).toContain('last=2026-03-09T06:00:00Z');
     expect(r.stdout).toContain('j_b  reminder');
-    expect(r.stdout).toContain('[once/off/completed]');
+    expect(r.stdout).toContain('[once/off]');
     expect(r.stdout).toContain('at=2026-03-10T08:00:00+08:00');
     expect(r.stdout).toContain('last=-');
   });
@@ -91,7 +89,6 @@ describe('schedule list', () => {
           message: 'm',
           agent_id: 'a_test',
           enabled: true,
-          status: 'pending',
         },
       ],
     });

@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { useAgentUnreadSummaryMap } from '@/lib/chat/useAgentUnreadSummary';
-import { ensureAgentSessionsLoaded } from '@/states/sessionIndex.atom';
+import { newEntityId } from '@shared/persist/id';
 import { useAgents } from '@/states/agents.atom';
 import { getProfileId } from '@/states/profile.atom';
 import { SidebarAgentItem } from './SidebarAgentItem';
@@ -27,20 +27,8 @@ export const SidebarTop: React.FC = () => {
   const isAgentRoute = location.pathname.startsWith('/agent');
   const isCreationRoute = location.pathname.startsWith('/agent/creation');
 
-  const handleAgentClick = useCallback(async (agentId: string) => {
-    // 冷启动后首次点击：sessionIndex atom 未 hydrate，必须 await 拉一次；
-    // 否则同步读会返回空 → 错跳 new-chat 而非该 agent 已有的最新 session。
-    // const sessions = await ensureAgentSessionsLoaded(agentId);
-    // const latest = sessions[0];
-    // if (latest) {
-    //   navigate(`/agent/${agentId}/${latest.id}`, {
-    //     state: { source: 'sidebar' },
-    //   });
-    //   return;
-    // }
-    navigate(`/agent/${agentId}`, {
-      state: { intent: 'new-chat', source: 'sidebar' },
-    });
+  const handleAgentClick = useCallback((agentId: string) => {
+    navigate(`/agent/${agentId}/${newEntityId('s')}`);
   }, [navigate]);
 
   const handleNewAgent = () => {

@@ -53,7 +53,7 @@
     "src/main/lib/startupUpdate/startupUpdateService.ts",
     "src/renderer/lib/userData/profileDataManager.ts",
     "src/main/lib/officeParser/NativeOfficeExtractor.ts",
-    "src/main/lib/scheduler/SchedulerManager.ts",
+    "src/main/lib/scheduler/manager.ts",
     "tests/e2e/fixtures/mockedApp.ts",
     "src/renderer/components/chat/agent-area/AgentList.tsx",
     "src/renderer/components/chat/agent-area/AddFromAgentLibraryViewContent.tsx",

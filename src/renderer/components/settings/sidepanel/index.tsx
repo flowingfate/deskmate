@@ -28,7 +28,6 @@ const SettingsSidepanel: React.FC = () => {
   // Sub-Agent feature controlled by feature flag
   const subAgentEnabled = useFeatureFlag('deskmateFeatureSubAgent');
 
-  const screenshotEnabled = useFeatureFlag('deskmateFeatureScreenshot');
 
   const { width } = LeftNavSizeAtom.useData();
 
@@ -118,15 +117,13 @@ const SettingsSidepanel: React.FC = () => {
           ariaLabel="Runtime Environment"
         />
 
-        {screenshotEnabled && (
-          <NavItem
-            icon={<Camera size={18} />}
-            label="Screenshot"
-            isActive={activeView === 'screenshot'}
-            onClick={() => navigate('/settings/screenshot')}
-            ariaLabel="Screenshot Settings"
-          />
-        )}
+        <NavItem
+          icon={<Camera size={18} />}
+          label="Screenshot"
+          isActive={activeView === 'screenshot'}
+          onClick={() => navigate('/settings/screenshot')}
+          ariaLabel="Screenshot Settings"
+        />
 
         <NavItem
           icon={<Archive size={16} />}
