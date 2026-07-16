@@ -1,0 +1,126 @@
+# Step 11 — 新 `subagent` 工具卡片、运行状态、取消与 Audit IPC
+
+> 状态：待执行
+> 前置：Step 6 store、Step 7 result、Step 9 manager/tool complete
+> 下游：Step 12 Messages Dialog、Step 13 cleanup、Step 14 tests
+> 本步交付 reload-safe 的核心运行可视化，不强制展示完整 transcript。
+
+## 1. 为什么先做卡片再决定 Dialog
+
+卡片需要的状态与 Dialog需要的完整 messages体量不同。先完成正式 result、live state、cancel和metadata查询，可以验证详情入口是否能在不重构整个消息渲染管线的前提下追加；这也是 Step 12是否实施的判断依据。
+
+## 2. 开始前 review
+
+1. 阅读 chat tool renderer registry、app/web/shell renderer模式和旧 app/subagent卡片；
+2. 从 Step 9获取真实 tool command grammar、tool result JSON、manager state/cancel API；
+3. 从 Step 6获取 parent-scoped subrun query API；
+4. 设计 shared IPC，确认 preload四层协变；
+5. 组件不得超过500行；单/多任务共享纯展示和hook，不复制两套状态逻辑；
+6. 不启动应用/浏览器，用户负责可视行为验证。
+
+## 3. IPC namespace
+
+新增独立 `subAgent` run namespace或命名更明确的 `subagentRun`（实现前结合旧 channel冲突决定，并更新所有文档）：
+
+Main → Renderer：
+
+- `stateUpdate(SubAgentRuntimeState)`。
+
+Renderer → Main：
+
+- `cancelRun(parentAgentId,parentSessionId,subrunId)`；
+- `getRunData(parentAgentId,parentSessionId,subrunId)`。
+
+Step 12再决定是否暴露 `getRunMessages`；本 step不让 card预取 transcript。
+
+安全：
+
+- handler按 active profile和parent ownership解析；
+- `001` 必须与 parent identity组合；
+- unknown/terminal cancel明确返回；
+- 不允许renderer传绝对路径。
+
+按 shared/main/preload/renderer标准四层接入，旧 SubAgent CRUD IPC不复用。
+
+## 4. 顶层 tool renderer
+
+新增 `tool/renderers/subagent/` 并在顶层 registry注册 tool name `subagent`：
+
+- parse `run` / `run-many`；
+- command parser只服务展示，不作为业务安全解析；
+- correlationId匹配 parent tool call；
+- live state按 parent identity + subrunId更新；
+- final response到达后以 tool result JSON为事实源，取消live subscription或忽略过时event。
+
+不再经 `renderers/app/subagent`。
+
+## 5. 单任务卡片
+
+显示：
+
+- target Agent name/avatar/description（可从 result/state带稳定 display snapshot，或通过 agents atom join；选择后记录事实源）；
+- subrun ID，如 `#001`；
+- pending/running/completed/partial/blocked/failed/cancelled；
+- turn/maxTurns、duration；
+- 最近 tool/step和有限 streaming snippet；
+- formal content/reason/error/warnings；
+- deliverables URI卡片/链接；
+- running时 Cancel按钮。
+
+状态用文字+icon，不只颜色。Cancel有loading、disabled和error feedback。
+
+## 6. 并行卡片
+
+- 每个 request独立 row/card，以 subrunId为key；
+- 一个失败不改变其它状态；
+- 总览显示完成计数；
+- final results顺序与请求顺序保持，不能按完成时间乱序；
+- 单个 cancel只作用目标 run；
+- state event丢失时 final JSON仍可渲染。
+
+## 7. Reload与持久化事实源
+
+- 历史父消息中的 final tool result可完整重建终态卡片；
+- stale running subrun由 Step 6/9收敛 interrupted，metadata query可显示；
+- live progress不要求跨app restart恢复每个delta；
+- card不依赖旧 runtimeStates内存才能显示final；
+- 无 data记录时显示可恢复错误，不无限loading。
+
+## 8. 详情入口预留
+
+本 step在 card上可以先放“View details”入口，只有在 Step 12确定实施时启用：
+
+- 如果没有 messages API，可隐藏或disabled并给清楚说明；
+- 不交付点击无响应的placeholder；
+- Step 11 review时评估复用现有 dialog/message renderer成本。
+
+## 9. 不做
+
+- 不实现完整 messages Dialog（Step 12）；
+- 不改 Agent配置 UI；
+- 不做 E2E/browser/manual smoke；
+- 不新增/运行新单测；
+- 不复用旧 CRUD IPC。
+
+## 10. 静态验证
+
+- typecheck/build/impact；
+- IPC whitelist/handler/binding编译闭合；
+- renderer registry只有顶层 subagent新入口；
+- component行数检查；
+- 搜索 state key 不单独使用 `subrunId`。
+
+## 11. 下游交接与 Step 12 go/no-go材料
+
+Progress记录：IPC名/方法、result parser、card组件结构、metadata query、detail入口现状。并在 Step 12开头写实际评估：
+
+- 可否复用 MarkdownView/ToolDetail而不改render-items pipeline；
+- Dialog预计新增/修改文件；
+- 是否需要新context/atom；
+- 是否超过500行或造成大范围状态改造。
+
+更新 unit-test.md runtime UI/IPC候选。
+
+## 12. Review 门禁
+
+用户review核心卡片后，明确选择 Step 12 `in-progress` 或 `deferred`。不能由执行agent自行默默跳过或擅自扩大。
