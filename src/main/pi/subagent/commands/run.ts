@@ -4,7 +4,7 @@ import type { AppCommand, AppCmdContext } from '../../appcmd/types';
 import type {
   SubAgentRunContext,
   SubAgentRunRequest,
-} from '@shared/types/subAgentRunTypes';
+} from '@shared/persist/types';
 
 import { normalizeSubAgentRunRequest } from '../types';
 import {

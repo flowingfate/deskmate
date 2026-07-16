@@ -2,7 +2,7 @@ import {
   type SubAgentRunContext,
   type SubAgentRunPolicy,
   type SubAgentRunRequest,
-} from '@shared/types/subAgentRunTypes';
+} from '@shared/persist/types';
 
 const MILLISECONDS_PER_TURN = 60_000;
 

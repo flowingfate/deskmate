@@ -154,7 +154,7 @@ Step 3 实际落地 API（2026-07-16，尚未生产注册）：
 - 并发多个 `subagent` tool calls 必须通过 per-parent-session allocator lock 获得不重复、按 reservation 顺序递增的编号。
 - 当前每父 session 最多 20 次委派，因此正常范围只到 `020`；仍实现 `001..999` 的完整校验。超过 `999` 明确拒绝，不复用旧编号。
 - 目录名和对外 `subrunId` 使用同一个三位字符串，不再另造 run ULID。
-- shared helper 固定为 `isSubrunId` / `parseSubrunId` / `formatSubrunId`，定义于 `src/shared/types/subAgentRunTypes.ts`；`SubrunId` 是非 branded 的语义别名。
+- `SubrunId` 及 `isSubrunId` / `parseSubrunId` / `formatSubrunId` 是 persist contract，定义于 `src/shared/persist/types/subrun.ts`；`SubrunId` 是非 branded 的语义别名。
 
 ### 2.7 Delegate Execution Context 与资源归属
 
@@ -180,7 +180,7 @@ interface DelegateExecutionContext {
 
 ### 2.8 委派请求和上下文
 
-`SubAgentRunRequest`（`src/shared/types/subAgentRunTypes.ts`）包含：
+`SubAgentRunRequest`（`src/shared/persist/types/subrun.ts`）包含：
 
 - `delegateAgentId: string`；
 - `task: string`；
@@ -256,6 +256,8 @@ agents/{parentAgentId}/sessions/{YYYYMM}/{parentSessionId}/
 - transcript 持久化用于 review、调试和后续 UI；
 - app crash 后遗留 running subrun 收敛为 interrupted/failed，不自动续跑；
 - 父 session 删除/归档时自然携带 subruns。
+- `SubrunId`、request/result/usage/context/policy 与 `SubrunDataFile` 都是落盘 contract，定义于 `src/shared/persist/types/subrun.ts` 并经其唯一入口导出；`shared/types/subAgentRunTypes.ts` 只保留不落盘的 runtime state/step。main `Subrun` store 是唯一 fs owner，`Session.createSubrun/getSubrun/listSubruns` 以 parent scope 暴露它。`Subrun` 直接实现 Pi 的最小 `PersistSessionLike`，用临时 per-`subruns/` lock 完成 scan → atomic mkdir reservation → initial data write；load 不自动改变 stale running，Step 9 负责唯一 recovery。
+- Step 6 用户 review 已确认该类型归属：任何会写入磁盘的 Subrun 类型必须留在 `shared/persist/types`；不得将其移回 runtime shared types。
 
 Renderer 基线必须能渲染委派工具卡片和正式结果。消息详情 Dialog 是独立 Step：
 

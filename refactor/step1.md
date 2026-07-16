@@ -33,17 +33,16 @@
 
 ## 4. 具体实现
 
-### 4.1 Shared runtime types
+### 4.1 Shared persisted/run-time types
 
-新建或选择一个符合仓库 shared 类型组织的文件，例如 `src/shared/types/subAgentRunTypes.ts`。最终名称在实现前对现有命名检查后固定，内容包括：
+所有需要写入 subrun `data.json` 的类型定义于 `src/shared/persist/types/subrun.ts`：
 
 - `SubrunId = string` 的运行时 validator/constructor；不使用 branded cast；
-- `SubAgentRunContext`：`{ kind:'isolated' } | { kind:'parent_summary'; summary:string }`；
-- `SubAgentRunPolicy`：maxTurns、timeoutMs；
-- `SubAgentRunRequest`：delegateAgentId、task、expectedOutput、context、policy；
-- `SubAgentRunUsage`：turns、durationMs、可得到的 token usage；
+- `SubAgentRunContext`、`SubAgentRunPolicy`、`SubAgentRunRequest`、`SubAgentRunUsage`；
 - `SubAgentRunResult` 五态 union；
-- `SubAgentRunStep` 与 `SubAgentRuntimeState`，供 Step 9 manager 和 Step 11 renderer/IPC 共用。
+- `SubrunDataFile` pending/running/terminal union。
+
+`src/shared/types/subAgentRunTypes.ts` 只定义不落盘的 `SubAgentRunStep` 与 `SubAgentRuntimeState`，并从 persist contract 导入其 identity/result 类型。
 
 约束：
 
@@ -121,7 +120,7 @@
 
 ## 10. 2026-07-16 实际实现
 
-- shared 文件：`src/shared/types/subAgentRunTypes.ts`，按仓库惯例由 `@shared/types/subAgentRunTypes` 直接导入（`src/shared/types/` 无 barrel）；
+- persisted shared 文件：`src/shared/persist/types/subrun.ts`，经 `@shared/persist/types` 唯一入口导入；runtime event 文件：`src/shared/types/subAgentRunTypes.ts`；
 - main 私有文件：`src/main/pi/subagent/types.ts`；未向 `src/main/pi/index.ts` 提前导出；
 - ID API：`isSubrunId`、`parseSubrunId`、`formatSubrunId`，合法范围 `001..999`；
 - 唯一保留的归一化入口是 `normalizeSubAgentRunRequest`，因为它集中承载必填文本、context 默认值和 policy default/clamp；policy 常量为 `SUB_AGENT_RUN_POLICY_LIMITS`；

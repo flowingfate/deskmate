@@ -11,7 +11,7 @@
 
 ## 2. 已具备输入
 
-从 Step 1 获取：target 字段固定为 `SubAgentRunRequest.delegateAgentId: string`；shared result/state 分别为 `SubAgentRunResult` / `SubAgentRuntimeState`；state 的 parent identity 固定为 `profileId + parentAgentId + parentSessionId + subrunId`。运行类型直接从 `@shared/types/subAgentRunTypes` 导入。Step 1 已由用户 review 通过并置为 `complete`。
+从 Step 1 获取：target 字段固定为 `SubAgentRunRequest.delegateAgentId: string`；persisted request/result/ID 从 `@shared/persist/types` 导入，未落盘 runtime state 从 `@shared/types/subAgentRunTypes` 导入；state 的 parent identity 固定为 `profileId + parentAgentId + parentSessionId + subrunId`。Step 1 已由用户 review 通过并置为 `complete`。
 
 ## 3. 开始前 review
 

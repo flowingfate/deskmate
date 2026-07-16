@@ -92,6 +92,13 @@
 - [ ] P1 subrun 不产生 files 目录、不写 regular/job SQL index。
 - [ ] P1 regular parent 与 job-run parent 路径正确。
 
+### Step 6 实际补充 — 2026-07-16
+- 实际 contract：所有会写入 `data.json` 的 `SubrunId`、request/result/usage/context/policy、`SubrunDataFile` 均位于 `shared/persist/types/subrun.ts`；该文件通过 `@shared/persist/types` 导出。未落盘的 `SubAgentRunStep` / `SubAgentRuntimeState` 留在 `shared/types/subAgentRunTypes.ts`。data union 以 pending/running/五类 terminal 命名 interface 表示；nested `session` 直接满足 `PersistSessionLike` 的 title/updatedAt/contextState/turn。
+- 新增候选：`getSubrun` 区分 invalid ID、missing、empty-reservation `incomplete` 与 parent identity 不匹配 `corrupt`；`start` 仅 pending 可进入 running，`finish` 仅 running 可接受自身 ID/delegate 一致的 result。
+- 删除/改写候选：不让 load 自动把 stale running 改为 failed；Step 9 的唯一 bootstrap/query recovery 入口测试该收敛。
+- 最高风险：allocator 必须覆盖同一 parent 的并发 `Session` 实例；目录 reservation 成功而 data write 失败时 ID 绝不复用。
+- 需要用户在 Step 14 前决定：无。
+
 ## Step 7 候选：正式提交
 
 - [ ] P0 submit_result 只在 delegated catalog 可见。

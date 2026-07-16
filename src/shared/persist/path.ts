@@ -34,6 +34,12 @@ export const PERSIST_PATH = {
   /** session 私有文件 sandbox（用户/LLM 在该 session 中生成或上传的文件）。 */
   sessionFiles:    (root: string, p: string, a: string, ym: string, s: string) =>
                      `${PERSIST_PATH.sessionDir(root, p, a, ym, s)}/files`,
+  subrunsDir:      (sessionDir: string) => `${sessionDir}/subruns`,
+  subrunDir:       (subrunsDir: string, subrunId: string) => `${subrunsDir}/${subrunId}`,
+  subrunData:      (subrunsDir: string, subrunId: string) =>
+                     `${PERSIST_PATH.subrunDir(subrunsDir, subrunId)}/data.json`,
+  subrunMessages:  (subrunsDir: string, subrunId: string) =>
+                     `${PERSIST_PATH.subrunDir(subrunsDir, subrunId)}/messages.jsonl`,
 
   // schedules
   schedulesDir:    (root: string, p: string, a: string) => `${PERSIST_PATH.agentDir(root, p, a)}/schedules`,

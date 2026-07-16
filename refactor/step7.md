@@ -29,6 +29,8 @@ Session 的停止条件、max-turn fallback、持久化 terminal state 和 rende
 
 Step 5 已具备：delegate-only context 只决定 catalog visibility 与能力边界；submit route 的具体承载留到本 step。
 
+Step 6 实际输入：controller/reducer 形成的正式 result 由 Step 8 交给 `Subrun.finish(result)`；该 store 只接受 running subrun 且检查 result 的 subrunId/delegateAgentId，故本 step 不得绕过它直接改 data.json，也不得把未校验的模型字段透传为 terminal result。
+
 ## 4. Submit schema
 
 模型可提交：

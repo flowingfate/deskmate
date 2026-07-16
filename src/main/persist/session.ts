@@ -15,6 +15,8 @@ import type {
   StarMark,
   Message,
   ToolResult,
+  SubAgentRunRequest,
+  SubrunId,
 } from '../../shared/persist/types';
 import { MONTH_KEY, PERSIST_PATH } from '../../shared/persist/path';
 import { newEntityId } from '../../shared/persist/id';
@@ -24,6 +26,12 @@ import { PersistBase } from './lib/persistBase';
 import type { JobRunIdx } from './lib/db/jobRunIdx';
 import type { SessionIdx } from './lib/db/sessionIdx';
 import { dehydrate, rehydrate } from './messageWire';
+import {
+  Subrun,
+  type CreateSubrunResult,
+  type GetSubrunResult,
+  type ListSubrunsResult,
+} from './subrun';
 import * as fsp from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import {
@@ -172,6 +180,36 @@ export abstract class Session extends PersistBase {
   /** 当前 contextState。同 title，避免外部直接读 `session.config.contextState`。 */
   public get contextState(): ContextState {
     return this.config.contextState;
+  }
+
+  /** 在当前 parent session 下创建 hidden subrun；不写 session index 或 emit。 */
+  public async createSubrun(request: SubAgentRunRequest): Promise<CreateSubrunResult> {
+    return Subrun.create({
+      profileId: this.profileId,
+      parentAgentId: this.agentId,
+      parentSessionId: this.id,
+      subrunsDir: PERSIST_PATH.subrunsDir(this.sessionDir()),
+    }, request);
+  }
+
+  /** 只在当前 parent session 下查询 subrun，禁止裸 subrunId 全局查找。 */
+  public async getSubrun(subrunId: SubrunId): Promise<GetSubrunResult> {
+    return Subrun.load({
+      profileId: this.profileId,
+      parentAgentId: this.agentId,
+      parentSessionId: this.id,
+      subrunsDir: PERSIST_PATH.subrunsDir(this.sessionDir()),
+    }, subrunId);
+  }
+
+  /** 读取当前 parent session 的 persisted subrun metadata，不加载 transcript。 */
+  public async listSubruns(): Promise<ListSubrunsResult> {
+    return Subrun.list({
+      profileId: this.profileId,
+      parentAgentId: this.agentId,
+      parentSessionId: this.id,
+      subrunsDir: PERSIST_PATH.subrunsDir(this.sessionDir()),
+    });
   }
 
   /**

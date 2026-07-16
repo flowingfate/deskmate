@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 5：delegate-only context 已接入能力边界) -->
+<!-- Last verified: 2026-07-16 (Step 6：Subrun persist store 已为未来 delegated session 就绪) -->
 # pi 模块 — Chat 引擎（pi-ai 底座）
 
 > Deskmate 的 chat orchestrator，基于 `@earendil-works/pi-ai` 适配多 provider。
@@ -15,7 +15,7 @@
 | `session/` | turn loop 单一权威。RegularSession/JobRun 保持既有无 scope 行为；未来 delegated session 在最外层建立 delegate context | 中 |
 | `tool.ts` | **catalog + 执行**两段同住一文件。delegate context 存在时仅过滤交互式 `ask` LocalTool；Step 9 加入真实 `subagent` 对象禁止嵌套。其它工具与 MCP OAuth 保持普通能力；`web research` 与已知 shell device-auth 在各自执行边界拒绝 | 中 |
 | `tools/` | **本地工具子系统** —— `LocalTool` registry + `ToolContext` + `lazy(spec, loader)` + 所有具体工具文件。delegate capability 在 scope 存在时于执行点收紧 | 见子目录 |
-| `subagent/` | **建设中**的 Agent 委派运行时边界。已有 shared run contract、未注册 cmdline facade 与 delegate-only capability boundary；manager/session/persist 仍未接线，旧 `lib/subAgent` 仍是生产路径 | 中 |
+| `subagent/` | **建设中**的 Agent 委派运行时边界。已有 shared run contract、parent-scoped subrun persist store、未注册 cmdline facade 与 delegate-only capability boundary；manager/session 仍未接线，旧 `lib/subAgent` 仍是生产路径 | 中 |
 | `auth.ts` | PiAuthManager:OAuth + apiKey 存取 + expires-based refresh + inflight dedup | 中 |
 | `compression.ts` | 压缩决策(usage = pi.usage.totalTokens,含 output,与 badge 同口径)+ 内置 compressWithFullMode 调用 | 小 |
 | `mcp.ts` | external MCP 工具薄包装:`listAllMcpTools()`(给 catalog 列举外部工具)/ `executeMcpToolOnServer(serverName, toolName, args, signal)`(server-scoped 执行,**不再**有按裸 toolName 查全局 map 的路径) | 小 |

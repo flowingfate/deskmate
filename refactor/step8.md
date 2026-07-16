@@ -33,6 +33,8 @@ Step 4 已具备输入：`agentId/sessionId` 始终表示 parent session identit
 
 Step 5 已具备输入（delegate-only）：`SubAgentSession` 在真正执行 delegate 的最外层使用 `runWithDelegateExecution({ delegateId: delegateAgentId }, () => run())`。正常 session 不创建 scope；ToolContext 仍承载 parent identity。catalog 仅隐藏 `ask` 与 Step 9 加入的真实 `subagent` 对象；`web research`、已知 shell device-auth 在执行边界拒绝，MCP OAuth 与其余能力保持普通行为。Step 7 会交付 submit_result private route，Step 8 不预设其 API。
 
+Step 6 实际输入：parent `Session.createSubrun(request)` 返回 `{ kind:'created', subrun } | { kind:'exhausted' }`；`getSubrun` 明确返回 found/missing/invalid/incomplete/corrupt，`listSubruns` 返回 persisted Subrun 与 incomplete/corrupt IDs。`Subrun` 自身已满足 `PersistSessionLike`，并提供 `start()`（仅 pending）与 `finish(result)`（仅 running 且检查 subrun/delegate identity）；Step 8 只调用这些真实接口，不再创建 adapter 或直接写 data/messages 路径。
+
 ## 4. BaseSession 最小抽象
 
 目标不是做万能框架，而是抽出真实第三种 session形态需要的差异：

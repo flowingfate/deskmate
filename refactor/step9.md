@@ -35,6 +35,13 @@
 - manager 不从 eventSender 推断角色，也不包装第二个 scope。MCP/Auth、tools、router 在 scope 有值时自行分支。
 - 旧 ToolContext/AppCmdContext mode union 仅是旧 runtime bridge；production root 切换并证明旧 backend orphan 后，必须随旧源码整体删除其 consumer/bridge。
 
+### Step 6 已具备输入（2026-07-16）
+
+- manager 从 parent `Session.createSubrun(normalizedRequest)` 获得 `{ kind:'created', subrun } | { kind:'exhausted' }`；不得自行扫目录或分配 ID。
+- `listSubruns()` 是跨 restart 的 persisted reservation count 来源，且返回 incomplete/corrupt IDs；总数门控只计已 reservation 的合法目录，异常目录不被静默重用。
+- `getSubrun(subrunId)` 始终受 parent Session scope 限定；pending/running load 不自动改写。Step 9 必须成为 stale running → interrupted failed 的唯一 recovery writer。
+- `Subrun` 直接是 Step 8 的 `PersistSessionLike`；session 正常完成先 flush transcript，再通过 `finish(result)` 原子更新 terminal data。
+
 ## 3. `src/main/pi/subagent/manager.ts`
 
 Manager 负责 orchestration，不复制 session逻辑：

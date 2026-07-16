@@ -1,10 +1,11 @@
 import type { AppCmdContext } from '../../appcmd/types';
 import type {
+  SkillTier,
   SubAgentRunRequest,
   SubAgentRunResult,
-} from '@shared/types/subAgentRunTypes';
+  ThinkingLevel,
+} from '@shared/persist/types';
 import type { Tracer } from '@shared/log/trace';
-import type { SkillTier, ThinkingLevel } from '@shared/persist/types';
 
 export interface SubAgentCommandScope {
   profileId: string;

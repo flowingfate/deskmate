@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 5 complete，等待用户另行开始 Step 6**
-- 当前门禁：delegate-only scope 改造已获用户 review 通过；未进入 Step 6
-- 业务步骤：5 / 13 complete；Step 6 为 `pending`
-- 测试步骤：Step 14 尚未开始；Step 5 未新增或运行单测
-- 生产代码变更：normal execution 保持无 scope；delegate-only context 与 capability boundary 已实现；新 subagent facade 仍未注册，旧 `app subagent` 仍是生产入口
+- 总体阶段：**Step 6 complete，等待用户另行开始 Step 7**
+- 当前门禁：Subrun persist/store 与所有落盘类型归属已获用户 review 通过；未进入 Step 7
+- 业务步骤：6 / 13 complete；Step 7 为 `pending`
+- 测试步骤：Step 14 尚未开始；Step 6 未新增或运行单测
+- 生产代码变更：Subrun store 与其持久化 contract 已落盘但未连接 manager/session；新 subagent facade 未注册，旧 `app subagent` 仍是生产入口
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -34,12 +34,12 @@
 
 | Step | 计划 | 状态 | 读取的上游产物 | 向下游交付的稳定产物 |
 |---:|---|---|---|---|
-| 1 | [目标契约与 Pi/Subagent 边界](step1.md) | complete | `context.md` | `src/shared/types/subAgentRunTypes.ts`；`src/main/pi/subagent/types.ts`；模块依赖规则 |
+| 1 | [目标契约与 Pi/Subagent 边界](step1.md) | complete | `context.md` | `src/shared/persist/types/subrun.ts`（persisted contract）；`src/shared/types/subAgentRunTypes.ts`（runtime state/step）；`src/main/pi/subagent/types.ts`；模块依赖规则 |
 | 2 | [Agent description/delegates 持久化](step2.md) | complete | Step 1 AgentId/contract | 可落盘的 Agent graph、ID resolver、IPC patch |
 | 3 | [独立顶层 subagent cmdline facade](step3.md) | complete | Step 1 request grammar | 未注册的新 facade/registry/run parser，供 Step 9 接 manager |
 | 4 | [执行 Agent 与 Session owner 分离](step4.md) | complete | Step 1 execution scope | parent `agentId/sessionId` context；legacy mode union；delegate-only context 由 Step 5 追加 |
 | 5 | [Delegate Execution Context 与能力边界](step5.md) | complete | Steps 2–4 | `DelegateExecutionContext`、delegate-only capability checks |
-| 6 | [三位序号 Subrun 持久化](step6.md) | pending | Steps 1,2,4 | `001..999` allocator、data/messages store、persist adapter |
+| 6 | [三位序号 Subrun 持久化](step6.md) | awaiting-review | Steps 1,2,4 | `001..999` allocator、parent-owned data/messages store、`PersistSessionLike` adapter、persisted type contract |
 | 7 | [submit_result 与正式结果状态机](step7.md) | pending | Steps 1,5 | delegated-only submit route、terminal result reducer |
 | 8 | [BaseSession 驱动的新 SubagentSession](step8.md) | pending | Steps 2,4,5,6,7 | 可执行单个 persisted delegated run 的 session |
 | 9 | [Manager、顶层工具接线与主进程 cutover](step9.md) | pending | Steps 3,6,8 | production `subagent` tool、limits/cancel/state；旧 app command 下线 |
@@ -241,6 +241,25 @@
 - `ask` 是当前唯一 LocalTool 黑名单对象；真实 `subagent` 对象仍等 Step 9 创建后加入。相关 context、Steps 5/8/9、模块文档和测试候选已同步改写。
 
 
+### 2026-07-16 — Step 6 启动与持久化计划复核
+
+- 当前 `shared/persist/types` 被约束为不依赖 `shared/types`，因此新的 `SubrunDataFile` 放在既有 `shared/types/subAgentRunTypes.ts`：它可复用 `ContextState` 与 shared run request/result，且不反向污染 persist schema 层。
+- 新 store 定为 `src/main/persist/subrun.ts` 的 `Subrun`，不继承现有 `Session`：后者的 data union、SQLite/index 与普通 session emit 契约均不适用；`Subrun` 直接实现 Step 8 所需的 `PersistSessionLike` 最小消息/配置契约。
+- `Session` 仅新增 parent-owned `createSubrun/getSubrun/listSubruns`；allocator lock 以 parent `subruns/` 绝对路径为临时全局 key，在 reservation 完成后释放，兼容同一 parent 的多个内存 Session 实例而不留永久 map。
+- `get` 对非法 ID、缺失目录、空 reservation 明确区分；load 不自动续跑或改写 running，Step 9 将作为唯一 crash recovery 事实入口。
+- 该复核没有改变下游 public contract；Steps 7–12 保持有效。
+
+### 2026-07-16 — Step 6 持久化类型归属修正
+
+- 用户明确规则：任何定义后需要写入磁盘的数据类型，必须定义于 `src/shared/persist/types`。
+- 自查结论：`SubrunDataFile` 及其嵌套 `SubrunId`、request/result/usage/context/policy 当前在 `shared/types/subAgentRunTypes.ts`，已违反该规则。
+- 修正计划：把上述 persisted contract 完整移至新的 `shared/persist/types/subrun.ts` 并从其唯一入口导出；`shared/types/subAgentRunTypes.ts` 只保留未落盘的 step/runtime state，改为依赖 persisted contract。所有代码和下游文档同步到新 source，不留 re-export alias。
+- 受影响下游：Steps 1、2、3、6–12、14 的类型路径改为需要回写；进入 Step 7 前必须完成迁移并重新静态验证。
+
+### 2026-07-16 — Step 6 用户 review 通过
+
+- 用户确认所有会写入磁盘的 Subrun 类型均应位于 `src/shared/persist/types`；已完成的 `shared/persist/types/subrun.ts` 归属、runtime-state 分离与静态验证获通过。
+- Step 6 状态切为 `complete`；Step 7 仍为 `pending`，只能由用户另行开始。
 ## 执行记录
 
 ### 2026-07-16 — Step 1 — complete
@@ -304,5 +323,18 @@
 - 验证：相关 LSP diagnostics 无 error；初版、review 修复、LocalTool 黑名单及 interaction-only capability 调整后均完成 `check:impact`、`npm run typecheck`、`npm run build`（仅既有 renderer chunk-size warning）。按 Step 5 政策未新增/运行单测、未启动应用或做 E2E。
 - 下游：Steps 6–9/14 已改为 delegate-only contract；Step 8 是唯一 scope root，Step 7 不再依赖预建 extension seam。
 - 用户 review 结果：通过；Step 5 complete，等待用户另行开始 Step 6。
+
+### 2026-07-16 — Step 6 — awaiting-review
+- Plan review 变化：初版把 `SubrunDataFile` 与 nested persisted types 放在 `shared/types`，违反用户后续明确的持久化类型归属规则；本次修正后所有会写入 `data.json` 的类型均移至 `shared/persist/types/subrun.ts`，`shared/types/subAgentRunTypes.ts` 仅保留 runtime state/step。store 仍固定为独立 `src/main/persist/subrun.ts::Subrun`，不继承普通 `Session`。
+- 实际输出/API：`SubrunDataFile` 的 pending/running/五类 terminal named-interface union；`Session.createSubrun/getSubrun/listSubruns`；`Subrun.create/load/list/start/finish`，以及直接实现的 `PersistSessionLike` 消息/配置接口。
+- allocator：以 parent `subruns/` absolute path 为临时 single-flight key，扫描合法 `001..999`、原子 mkdir reservation、随后原子写初始 data；空 reservation 不复用；invalid directory 记录 warning；`999` 返回显式 exhausted。
+- 查询与状态：`get` 显式区分 invalid ID、missing、incomplete、corrupt、found；`start` 仅允许 pending，`finish` 仅允许 running 且拒绝 mismatched subrun/delegate result；load 不自动续跑或改写 stale running，Step 9 是唯一 recovery 入口。
+- 持久化边界：subrun 只落 `data.json`/`messages.jsonl`，无 files、无 SQLite/index、无普通 session IPC emit；parent 删除/归档自然携带目录。
+- 修改生产文件：`src/shared/persist/types/{subrun,index}.ts`、`src/shared/types/subAgentRunTypes.ts`、`src/shared/persist/path.ts`、`src/main/persist/{subrun,session,index}.ts`、`src/main/pi/subagent/{types,commands/{types,run}}.ts`。
+- 静态验证：`npm run check:impact -- <10 个生产文件>`、迁移后的 `npm run typecheck`、`npm run build` 均通过；build 仅报告既有 renderer chunk-size warning。LSP diagnostics 对新 persist type、runtime type、Subrun store 与 command type 均无问题。
+- 未做的运行验证：按重构政策未新增/运行单测，未启动应用、未做 smoke/E2E。
+- 文档交接：已更新 persist/Pi/subagent/主架构文档、`context.md`、`unit-test.md`、Step 1/2/6/7/8/9/11/12；所有 persisted type import 已切至 `@shared/persist/types`，Step 8/9 计划保留实际 store API。
+- 用户 review 待确认：三位序号不复用、empty reservation 处理、data union 与 Step 9 stale-running recovery 边界。
+- 用户 review 结果：通过；Step 6 complete，等待用户另行开始 Step 7。
 
 每个后续 step 完成后继续追加同结构记录。

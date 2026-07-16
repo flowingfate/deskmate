@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-16 (local:// session owner 与 executor identity 分离) -->
+<!-- Last verified: 2026-07-16 (Step 6：parent-scoped Subrun store 已落盘，尚未接 manager/session) -->
 
 ## 1. 范围
 
@@ -25,9 +25,9 @@
 | 一等公民 | **Agent**(`a_{ulid}`)。`Chat` / `ChatConfig` / `ChatAgent` / `chats[]` 已消失 |
 | profile 目录命名 | `p_{ulid}`,alias 仅展示;登录/登出只翻 `kind: guest \| signed_in` 标记 |
 | Agent 配置载体 | `AGENT.md`(front-matter + body 即 system prompt),与 sub-agent 对齐 |
-| Session 物理位置 | `agents/{a}/sessions/{YYYYMM}/{s}/`;schedule run 隔离到 `agents/{a}/schedules/{j}/runs/{ym}/{s}/` |
-| Session 内容 | `data.json`(元数据 + `contextState` 压缩栈 + `turn.status` resume flag)+ `messages.jsonl`(append-only,3 种 line:`PersistedUserMessage` / `PersistedAssistantMessage` / `PersistedToolResponse`)+ 可选 `files/`(session 私有 sandbox) |
-| Session 索引 | `profiles/{p}/index.db`:SQLite,`regular_sessions` + `job_runs` 两张表(**派生缓存**,可由扫盘 `data.json` 重建) |
+| Session 物理位置 | `agents/{a}/sessions/{YYYYMM}/{s}/`;schedule run 隔离到 `agents/{a}/schedules/{j}/runs/{ym}/{s}/`;每个 parent session 都可含 `subruns/{001..999}/` |
+| Session 内容 | `data.json`(元数据 + `contextState` 压缩栈 + `turn.status` resume flag)+ `messages.jsonl`(append-only,3 种 line:`PersistedUserMessage` / `PersistedAssistantMessage` / `PersistedToolResponse`)+ 可选 `files/`(session 私有 sandbox)；subrun 另有自身 `data.json`/`messages.jsonl`，绝不建 files |
+| Session 索引 | `profiles/{p}/index.db`:SQLite,`regular_sessions` + `job_runs` 两张表(**派生缓存**,可由扫盘 `data.json` 重建)；subrun 从不入表 |
 | Starred 真值 | `regular_sessions.starred_at` 列;schedule_run 不可 star |
 | Schedule run 继续对话 | 已结束 run 只能派生新的 regular session：复制消息 / sandbox / contextState，重置 run 元数据；原 run 和 `job_runs` 行保留 |
 | ID 体系 | ULID(Crockford Base32,26 字符)+ 类型前缀,如 `s_01KT0JY38BMDCCDA2W3X3YDMCV`。深路径在 Windows 260 字符上限留余量 |
@@ -65,7 +65,10 @@
         │       │   └── {YYYYMM}/{s_ulid}/         # 月份桶仅作物理布局(inode/备份/迁移分批友好)
         │       │       ├── data.json              # 源真值
         │       │       ├── messages.jsonl         # append-only
-        │       │       └── files/                 # session 私有 sandbox(按需创建)
+        │       │       ├── files/                 # session 私有 sandbox(按需创建)
+        │       │       └── subruns/001/            # hidden delegated run
+        │       │           ├── data.json           # request + lifecycle/result
+        │       │           └── messages.jsonl      # hidden transcript
         │       └── schedules/
         │           ├── jobs.json
         │           └── {j_ulid}/
@@ -107,7 +110,7 @@ Profiles.get().active()        → Profile
 
 每层 store 自管 `persist()`;子实体懒加载 + 单实例 Map 缓存(`Profile.agents` / `Agent.sessions` / `Agent.jobs` / `ScheduleJob.runs`)。
 
-`Session` 是抽象基类(messages.jsonl I/O + files sandbox + 节流 persist + 元数据 mutate);消息写入接口分三招:`appendDomainMessage(m: Message)` 写 user / assistant 行,`appendToolResponse(toolCallId, result)` 写 `tool_res` 行,`rewriteMessages(messages: Message[])` 整段重写 jsonl(`dehydrate` 序列化,emit `session:messages:rewritten`)。读取走 `loadDomainMessages()` 折回 Domain `{ messages, orphanResponses }`。`RegularSession` 与 `JobRun` 是子类,路径树各自实现,永不共用同一容器。要分支判断用 `instanceof`。
+`Session` 是抽象基类(messages.jsonl I/O + files sandbox + 节流 persist + 元数据 mutate)，也只作为 parent owner 暴露 `createSubrun/getSubrun/listSubruns`；这些 API 始终以当前 Session 实例限定三位 ID，Subrun 本身不注册为 Session。主会话消息接口分三招:`appendDomainMessage(m: Message)` 写 user / assistant 行,`appendToolResponse(toolCallId, result)` 写 `tool_res` 行,`rewriteMessages(messages: Message[])` 整段重写 jsonl(`dehydrate` 序列化,emit `session:messages:rewritten`)。读取走 `loadDomainMessages()` 折回 Domain `{ messages, orphanResponses }`。`RegularSession` 与 `JobRun` 是子类,路径树各自实现,永不共用同一容器。要分支判断用 `instanceof`。
 
 `Agent.getSession(id)` / `ScheduleJob.getRun(id)` 走 PK 查 SQLite index,**无月份目录扫描**。
 

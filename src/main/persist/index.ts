@@ -19,6 +19,12 @@ export { Profile } from './profile';
 export type { ResolvedAgentDelegates } from './profile';
 export { Agent } from './agent';
 export { Session, RegularSession, JobRun } from './session';
+export { Subrun } from './subrun';
+export type {
+  CreateSubrunResult,
+  GetSubrunResult,
+  ListSubrunsResult,
+} from './subrun';
 export { ScheduleJob, ScheduleRegistry } from './schedule';
 export { LegacyAuth, PiAuth } from './auth';
 export { AgentKnowledge } from './knowledge';

@@ -17,7 +17,7 @@ Sub-Agent transcript已经持久化。工具卡片提供详情入口，点击后
 
 同时满足：
 
-- Step 6 store已有独立 load messages API；
+- Step 6 store 可经 parent `Session.getSubrun(subrunId)` 的 found 分支调用 `Subrun.loadDomainMessages()`，不需要独立 files/session list API；
 - 新增一个类型化 IPC即可取数据；
 - 可用现有 Dialog、MarkdownView和小型只读tool展示组合；
 - 不需要修改全局 chat render-items manager；
