@@ -12,22 +12,22 @@ Session 的停止条件、max-turn fallback、持久化 terminal state 和 rende
 ## 2. 开始前 review
 
 1. 读取 Step 1 实际 result union；
-2. 读取 Step 5 ToolCatalog route 扩展方式；
-3. 阅读 executeToolCall/LocalTool registry，选择不会让普通 catalog看到 submit_result 的方案；
-4. 结果与 deliverables 规则只从 Step 1 正式 union、Step 5 policy 和当前 ToolResult 契约推导，不读取旧提取/follow-up 实现；
+2. 确认 Step 5 没有预建 runtime route；
+3. 阅读 executeToolCall/LocalTool registry，在本 step实现普通 catalog 不可见的最小私有 submit route；
+4. result deliverable URI 只从 Step 1 contract 和 parent-local ownership 推导，不复制 Step 5 capability checks；
 5. impact 计划修改的 ToolCatalog/ToolContext/`pi/subagent` 文件，并确认清单不含旧 Sub-Agent 路径。
 
 ## 3. Tool 可见性设计
 
 `submit_result`：
 
-- spec/handler 归 `src/main/pi/subagent/submitResult.ts`；
 - 不注册进全局 LocalTool registry，否则普通 Agent 默认全开会看到；
-- 通过 Step 5 提供的 runtime-only/inline route 追加到 reduced catalog；
-- execute dispatcher 使用通用 runtime route机制，避免硬编码一串具体 tool name；
+- 本 step在真实 submit_result handler 出现时实现最小 catalog-private route；
+- 不注册进全局 LocalTool registry，普通 Agent catalog 不可见；
+- 不得复活 Step 5 的 replacement/guard API 或提前泛化 catalog；
 - handler 通过显式 execution context callback 提交，不回读 manager singleton。
 
-若 ToolCatalog 当前无法承载 inline handler，本 step可以做最小通用 route 扩展，但必须保持普通 local/MCP routing 不变。
+Step 5 已具备：delegate-only context 只决定 catalog visibility 与能力边界；submit route 的具体承载留到本 step。
 
 ## 4. Submit schema
 

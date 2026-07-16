@@ -1,130 +1,77 @@
-# Step 5 — 建立委派能力 Policy 与 Reduced ToolCatalog
+# Step 5 — 建立 Delegate Execution Context 与能力边界
 
-> 状态：待执行
-> 前置：Step 1 `SubAgentRunRequest`/`SubAgentRuntimeState`、Step 2 graph resolver、Step 3 顶层工具名称、Step 4 ownership context
-> 下游：Steps 7、8、9、14
-> 本步只构建新路径专用 policy/catalog seam，尚无新 SubAgentSession，也不改变旧 runtime 行为。
+> 状态：complete（delegate-only scope、静态验证、文档已完成，用户 review 通过）
+> 前置：Step 1 run contract、Step 2 Agent graph、Step 3 command seam、Step 4 parent/session context
+> 下游：Steps 6、7、8、9、14
+> 本步只建立 delegate-only AsyncLocalStorage 和在真实能力边界的判断。不改变 normal execution 的上下文模型，不预建 submit_result route。
 
-## 1. 为什么在 session 前做
+## 1. 决策
 
-能力削减是安全边界，不应由 session prompt 临时决定。先完成 catalog、参数和 router policy，Step 8 的新 session 才能从第一天只拿到合法能力，而不是先 unrestricted 再补 denylist。
+正常 Agent execution **没有** delegate context：`getDelegateExecution()` 返回 undefined。未来 `SubAgentSession` 真正运行 delegate 时，最外层唯一调用：
 
-## 2. 开始前 review
-
-1. 枚举实际顶层 LocalTools；预计为 read/write/find/search/ask/shell/app/web，Step 9 后再加 subagent；
-2. 枚举 app/web 当前所有 commands 和 subcommands；
-3. 阅读 ToolCatalog route、executeToolCall、appcmd router/dispatcher、MCP execute path、人机交互入口；
-4. 搜索未来新增 command 的注册模式，确认“未分类默认 deny”能落在集中位置；
-5. 运行 impact 并读 tool-system、pi/tools、MCP 文档；
-6. 不打开或修改旧 Sub-Agent 源码/测试；能力契约只来自本计划、普通 Agent 配置和当前通用工具实现。
-
-Step 2 已具备输入：`Profile.resolveDelegates(parentId): Promise<ResolvedAgentDelegates | null>`；null 表示 parent record/AGENT.md 缺失，调用方必须显式处理。非 null 时 available 按配置顺序，self/dangling/archived 位于 unavailable。Policy/授权不得直接读 `agent.config.delegates`、按 name fallback，或把 null 当空授权列表。
-
-Step 4 已具备输入（2026-07-16）：四类 context 使用 `mode:'agent' | 'delegate'` discriminated union；`agentId + sessionId` 永远定位父 session，delegate 分支必填 `delegateId`。local 按 `agentId`，knowledge/skill 按 execution Agent。旧 runtime 仍有一个临时 delegate-mode bridge，因此本 step 禁止仅凭 `ctx.mode` 在全局 dispatcher 中自动启用新 policy；新 policy 必须由新 catalog/executor 显式注入。
-
-## 3. Policy 模型
-
-在 `src/main/pi/subagent/policy.ts` 定义只由新生产路径消费的 policy，避免把判断散落到普通 command 或旧 runtime：
-
-- 顶层 LocalTool capability；
-- app/web command/subcommand capability；
-- internal URI/path constraints；
-- MCP interaction constraints。
-
-Policy 应尽量是纯数据 + 纯判定函数：
-
-```text
-allow | deny(reason, recoveryHint)
+```ts
+runWithDelegateExecution({ delegateId }, () => session.run())
 ```
 
-新 command 未声明时默认 deny。错误必须告诉模型允许替代方案，不能 silent no-op。
+`AsyncLocalStorage` 只存 delegate ID。parent profile/agent/session 继续来自现有 ToolContext / ResolveContext，不重复塞入 store。
 
-## 4. Reduced catalog
+禁止在 RegularSession、JobRun、executeToolCall、InternalUrlRouter 建 normal scope 或 fallback scope；禁止 `enterWith()`、全局 mutable flag、eventSender 或 IPC 角色推断。
 
-`src/main/pi/subagent/catalog.ts` 根据 executor Agent 自身配置构建：
+## 2. Scope 契约
 
-- local tools 从其 `tools` selection 获取；
-- MCP 从其 `mcpServers` selection 获取；
-- 强制移除 `ask`、`shell`、`subagent`；
-- Step 7 再追加 delegated-only submit_result；
-- 不继承 parent tools/MCP；
-- Agent 配置无法突破系统 deny；
-- catalog build 失败返回明确 run failure，不用空 catalog 静默继续。
+新文件 `src/main/lib/delegateExecutionScope.ts`：
 
-不要读取或扩写旧 `buildToolCatalogForSubAgent(cfg, disallowTools)`；新入口只接普通 Agent runtime config，并使用独立命名/API。
+```ts
+interface DelegateExecutionContext {
+  readonly delegateId: string;
+}
+```
 
-## 5. Local tool 参数边界
+- `runWithDelegateExecution(context, action)`：仅 Step 8 delegated run root 使用；
+- `getDelegateExecution()`：其它能力边界读取；undefined = existing normal path；
+- 不导出 agent scope、require helper、executionAgentId helper 或其它角色抽象。
 
-集中 policy 在执行前检查，并依赖 Step 4 owner context：
+## 3. 能力边界
 
-### read
+在 `getDelegateExecution()` 有值时：
 
-允许：
+- ToolCatalog 按 LocalTool 对象黑名单过滤；当前只隐藏交互式 `ask`。`subagent` 尚未构造，Step 9 注册真实对象时再加入黑名单以禁止嵌套；
+- read/write/find/search、shell、download 与其它 app/web 子命令保持普通 Agent 行为；Local 仍用 parent context，Knowledge/Skill 用 `delegateId ?? ctx.agentId`；
+- `web research` 拒绝；已知 shell device-auth 命令在启动前拒绝，不能创建 human-loop 卡片；
+- MCP Auth 保持普通全局 consent/client-id/browser 流程；
+- 无 delegate context 时，所有上述能力保持 Step 5 前的正常行为。
 
-- `local://...`（parent session）；
-- `knowledge://...`（executor）；
-- executor 已绑定的 `skill://...`。
+## 4. Catalog
 
-拒绝绝对路径、相对 OS 路径、其它未授权 scheme。
+本步不创建 runtime-only route、inline ToolRoute 或 `withTool()`。Step 7 在真实 `submit_result` handler 出现时，再在其步骤内实现满足“普通 catalog 不可见”的最小私有 route。
 
-### write
+删除当前的 agent/delegate general scope、RegularSession/JobRun wrappers、dispatcher/router scope fallback，以及提前增加的 inline route API。
 
-只允许 `local://...`。拒绝 knowledge/skill/absolute/path traversal。
+## 5. 不做
 
-### find/search
-
-root 只允许 local/knowledge；若 search 的实现必须接受绝对 resolved path，policy 应在 resolve 前校验原始 URI并携带授权 scope，不能让模型直接传任意绝对路径。
-
-## 6. `app` router policy
-
-顶层 `app` 保留，但子命令分级：
-
-- allow：time；Agent/MCP/Skill/Schedule 明确只读 list/status/search；
-- deny：agent add/update/remove/set-primary/delegation edits；mcp add/update/remove/connect/disconnect/reconnect；skill install/uninstall/bind/unbind；schedule create/update/remove/run；
-- 新 reduced app router/policy table 将旧 `app subagent` 视为不存在；即使 Step 9 前旧全局 registry 仍注册，也不修改旧 command 来配合；
-- help 只描述 delegated run 可用子命令，避免引导模型反复撞禁止路径。
-
-分类表归 `pi/subagent`，未知 command 默认 deny。不要给旧 command 添加 metadata，也不要在旧 kernel 内增加 delegate-mode 分支。
-
-## 7. `web` policy
-
-- allow search/fetch/download；
-- deny research，因为它依赖 human confirmation/window；
-- download destination 必须是 parent local；
-- 未知新 web command default deny。
-
-## 8. MCP policy
-
-- executor 自身已选 MCP tool可执行；
-- 调用若触发 OAuth setup、device auth、elicitation、human approval，委派模式立即失败；
-- 不允许 MCP config/connection 管理命令；
-- policy scope 随 ToolContext 传入，不靠 eventSender=null 推断。
-
-## 9. 现有路径必须保持
-
-RegularSession/JobRun 与旧 Sub-Agent runtime 的 catalog、dispatcher 和 app/web 行为均不因本 step 改变。新 policy 只有新 reduced catalog/executor 显式持有时才生效，不能把 `mode === 'delegate'` 当全局开关。
-
-## 10. 不做
-
-- 不实现 submit_result；
-- 不写 subrun store/session/manager；
+- 不实现 session/manager/store；
 - 不注册顶层 subagent；
-- 不改 UI；
-- 不新增/运行新单测；
-- 不修改或运行旧 Sub-Agent 源码/测试；
-- 不做实际安全攻击或 E2E 测试。
+- 不修改旧 `lib/subAgent`、旧 app command、旧 persist/UI；
+- 不迁移或读取旧 sub-agents 数据；
+- 不新增/运行单测、不开应用、不做 E2E。
 
-## 11. 静态验证与交接
+## 6. 验证与交接
 
-- typecheck/build/impact；
-- 静态枚举确认所有当前 app/web commands 已分类；
-- 搜索确认新 policy 不 import 旧 `lib/subAgent`；
-- 修改文件清单搜索确认不包含旧 `lib/subAgent`、旧 `appcmd/.../subagent`、旧 persist/UI 路径；
-- 更新 `unit-test.md` 的 P0 matrix；
-- 在 progress 记录 policy API、metadata shape、catalog builder signature。
+- LSP diagnostics、impact、typecheck、build；
+- normal execution 不创建 scope，RegularSession/JobRun 回到原始行为；
+- 搜索无 scope fallback、agent scope、inline route 或提前 submit extension；
+- 更新 context、progress、unit-test、Steps 6–9、14 与模块文档；
+- Step 8 必须建立唯一 delegate scope root；Step 7 不再依赖预建 extension seam。
 
-Step 7 依赖 catalog 的“可追加 runtime-only tool”能力；Step 8 依赖完整 reduced catalog；Step 9 依赖 subagent 顶层工具在 nested catalog 中必被移除。任一 API 变化必须更新这些 steps。
+## 7. 实际交付（2026-07-16）
 
-## 12. Review 门禁
+- 新建 `src/main/lib/delegateExecutionScope.ts`，只含 `delegateId`、`runWithDelegateExecution`、`getDelegateExecution`、`isDelegatedExecution`。
+- 删除 normal scope、RegularSession/JobRun wrapper、executeToolCall/InternalUrlRouter fallback、inline ToolRoute 与提前 submit route API。
+- Local 保持既有 parent ToolContext；Knowledge/Skill 在 delegate context 存在时取 delegateId。
+- catalog 只排除 `ask`；read/write/find/search、shell、app/web、download 与 MCP Auth 回到普通行为。`web research` 与已知 shell device-auth 命令在执行边界拒绝。
+- 删除上一轮 `agentExecutionScope.ts` general scope；未修改旧 backend/app command/persist/UI。
+- 更新 context、Steps 4/6/7/8/9、unit-test 与模块架构文档。
 
-停止等待用户 review。若用户决定开放 shell 或更多 app writes，必须先重新讨论硬边界并改 context，不能仅改一行 allowlist。
+## 8. Review 门禁
+
+用户 review 已通过；Step 6 仅在用户另行开始后执行。

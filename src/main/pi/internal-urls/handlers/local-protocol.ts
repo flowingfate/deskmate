@@ -31,9 +31,6 @@ export class LocalProtocolHandler extends SandboxProtocolHandler {
     const profile = await Profile.getOrLoad(ctx.profileId);
     const agent = await profile.getAgent(ctx.agentId);
     if (!agent) throw new Error(`Agent not found: ${ctx.agentId}`);
-    // findSessionAcrossKinds 同时覆盖 RegularSession 与 JobRun(调度任务的 turn loop
-    // 注入的 ToolContext.sessionId 是 JobRun id)。两条物理布局各自独立，filesDir()
-    // 由具体子类返回正确路径,handler 自身保持纯路径解析。
     const session = await agent.findSessionAcrossKinds(ctx.sessionId);
     if (!session) throw new Error(`Session not found: ${ctx.sessionId}`);
     return session.filesDir();

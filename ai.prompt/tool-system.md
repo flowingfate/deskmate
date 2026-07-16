@@ -40,7 +40,7 @@ PI 之所以好用,根本原因有两条:
 | `shell` | 执行**真** shell 命令,跑 `git` / `npm` / `python` / 任意外部 CLI | ✅ |
 | `app` | shell 风格调用**应用内**能力 —— 自解释、渐进披露 | ✅ |
 
-> **现状**:顶层 LLM-visible 工具数仍为 **8**(`read` / `write` / `find` / `search` / `shell` / `ask` / `app` / `web`)。Step 3 已准备第 9 个 `subagent` facade，但它要求注入真实 runner，且在 Step 9 前不进入 `tools/index.ts`。`app` / `web` / 未来 `subagent` 共用 `makeRouterCommand` + `makeCommandFacade`；`edit` 尚未独立，`download` 已并入 `web download`。
+> **现状**：普通 Agent 顶层工具仍为 **8**（`read/write/find/search/shell/ask/app/web`）；Step 3 准备第 9 个未注册 `subagent` facade。未来 delegated run 建立 delegate context 后，catalog 只排除交互式 `ask`；Step 9 注册真实 `subagent` 对象时加入同一黑名单。其它工具保持普通能力，只有 `web research` 与已知 shell device-auth 在执行边界拒绝。
 
 确立 "read-only 域" 的设计纪律(后续若有同形态命令直接照搬)
 
@@ -122,13 +122,7 @@ interface AppCommand {
 
 ### 5.2 AppCmdContext
 
-```ts
-type AppCmdContext =
-  | { mode: 'agent'; agentId: string; sessionId: string; /* common fields */ }
-  | { mode: 'delegate'; agentId: string; sessionId: string; delegateId: string; /* common fields */ };
-```
-
-`agentId/sessionId` 固定表示 parent session；delegate mode 的 `delegateId` 表示 execution Agent。dispatcher 显式保留 discriminant，旧 `app subagent` 直接按 mode 拒绝递归，不再维护 `isSubAgent`。
+AppCmdContext 保持 parent identity。normal execution 没有 delegate context；delegated run 仅拒绝会接管当前会话用户操作的 `web research`，其余 app/web 命令、下载与 MCP OAuth 保持普通行为。
 
 ### 5.3 dispatcher 输出合成规则
 

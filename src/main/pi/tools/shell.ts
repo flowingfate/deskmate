@@ -40,6 +40,7 @@ import { buildCommandLine as buildCommandLineShared } from '@main/lib/background
 import { terminalManager } from '@main/lib/terminal'
 import type { TerminalConfigBase } from '@main/lib/terminal/types'
 import { CancellationError } from '@main/lib/utilities/errors';
+import { isDelegatedExecution } from '@main/lib/delegateExecutionScope';
 import { resolveCwdUri, resolveUriTokens } from './util/resolveUriTokens';
 
 import { jsonSchema } from './schema';
@@ -230,6 +231,9 @@ async function runShell(
       : undefined;
     const resolvedCwd = await resolveCwdUri(args.cwd, ctx);
     const commandLine = buildCommandLineShared(normalizedCommand, resolvedArgs);
+    if (isDelegatedExecution() && findInteractiveAuthFamily(commandLine)) {
+      throw new Error('Interactive device authentication is unavailable in delegated runs.');
+    }
 
     const dangerousPattern = DANGEROUS_PATTERNS.find((pattern) => pattern.test(commandLine));
     if (dangerousPattern) {

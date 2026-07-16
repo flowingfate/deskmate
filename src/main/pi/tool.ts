@@ -22,11 +22,23 @@ import type { Tool as PiTool } from '@earendil-works/pi-ai';
 import { log } from '@main/log';
 import { Tracer } from '@shared/log/trace';
 import type { ToolResultImage } from '@shared/persist/types'
+import { isDelegatedExecution } from '@main/lib/delegateExecutionScope';
 
 import type { AgentConfig } from './utils/config';
 import { executeMcpToolOnServer, listAllMcpTools } from './mcp';
+import { ask } from './tools/ask';
 import { tools as localTools, ensureToolsRegistered } from './tools/registry';
 import type { LocalTool, ToolContext } from './tools/types';
+
+const DELEGATED_DISABLED_TOOLS = new Set<LocalTool>([ask]);
+
+/** pi 流式层已解析后的 toolCall 入参。 */
+export interface ToolCallInput {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
 
 // ─── catalog ────────────────────────────────────────────────────────────────
 
@@ -103,7 +115,10 @@ export async function buildToolCatalogForAgent(agentCfg: AgentConfig): Promise<T
   const routes = new Map<string, ToolRoute>();
   const specs: PiTool[] = [];
 
-  const selectedLocal = pickLocalSubset(agentCfg.tools);
+  let selectedLocal = pickLocalSubset(agentCfg.tools);
+  if (isDelegatedExecution()) {
+    selectedLocal = selectedLocal.filter((tool) => !DELEGATED_DISABLED_TOOLS.has(tool));
+  }
   for (const tool of selectedLocal) {
     routes.set(tool.spec.name, { kind: 'local', toolName: tool.spec.name });
     specs.push(tool.spec);
@@ -161,9 +176,10 @@ export async function buildToolCatalogForSubAgent(
  * 语义,所以这里值得提一个共享 helper。
  */
 function pickLocalSubset(selection: string[] | undefined): LocalTool[] {
-  if (!selection || selection.length === 0) return localTools.list();
-  const wanted = new Set(selection);
-  return localTools.list().filter((t) => wanted.has(t.spec.name));
+  const wanted = selection && selection.length > 0 ? new Set(selection) : null;
+  return wanted
+    ? localTools.list().filter((tool) => wanted.has(tool.spec.name))
+    : localTools.list();
 }
 
 /**
@@ -196,7 +212,9 @@ async function appendMcpTools(
     const llmToolName = `${t.serverName}/${t.name}`;
     const prev = routes.get(llmToolName);
     if (prev) {
-      const prevDesc = prev.kind === 'local' ? 'local' : `mcp[${prev.serverName}/${prev.toolName}]`;
+      const prevDesc = prev.kind === 'mcp'
+        ? `mcp[${prev.serverName}/${prev.toolName}]`
+        : prev.kind;
       throw new Error(
         `[toolCatalog] duplicate LLM tool name "${llmToolName}": already from ${prevDesc}, also exposed by mcp[${t.serverName}/${t.name}]`,
       );
@@ -212,12 +230,6 @@ async function appendMcpTools(
 
 // ─── execution ──────────────────────────────────────────────────────────────
 
-/** pi 流式层已解析后的 toolCall 入参 */
-export interface ToolCallInput {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
 
 export interface ToolCallResult {
   toolCallId: string;
@@ -245,18 +257,16 @@ export async function executeToolCall(
 ): Promise<ToolCallResult> {
   log.info(ctx.tracer.fields({
     msg: 'tool start',
-    argsBytes: typeof call.arguments === 'object' ? JSON.stringify(call.arguments).length : 0,
+    argsBytes: JSON.stringify(call.arguments).length,
   }));
 
   const route = catalog.getRoute(call.name);
   const toolName = route?.toolName ?? call.name;
 
   try {
-    if (!route) {
-      throw new Error(`Tool not in catalog: ${call.name}`);
-    }
+    if (!route) throw new Error(`Tool not in catalog: ${call.name}`);
 
-    const args = call.arguments ?? {};
+    const args = call.arguments;
     let rawContent: string;
     let images: ToolResultImage[] | undefined;
     let deliverables: readonly string[] | undefined;
@@ -267,9 +277,12 @@ export async function executeToolCall(
       images = result.images;
       deliverables = result.deliverables;
     } else {
-      // route.kind === 'mcp':server-scoped 执行,显式给定 serverName,避免
-      // mcpClientManager 全局 toolToServerMap 的同名冲突歧义。
-      rawContent = await executeMcpToolOnServer(route.serverName, route.toolName, args, ctx.signal);
+      rawContent = await executeMcpToolOnServer(
+        route.serverName,
+        route.toolName,
+        args,
+        ctx.signal,
+      );
     }
 
     log.info(ctx.tracer.fields({
@@ -277,17 +290,24 @@ export async function executeToolCall(
       isError: false,
       contentBytes: rawContent.length,
     }, 'self'));
-    return { toolCallId: call.id, toolName, content: rawContent, isError: false, ...(images ? { images } : {}), ...(deliverables && deliverables.length > 0 ? { deliverables } : {}) };
-  } catch (e) {
+    return {
+      toolCallId: call.id,
+      toolName,
+      content: rawContent,
+      isError: false,
+      ...(images ? { images } : {}),
+      ...(deliverables && deliverables.length > 0 ? { deliverables } : {}),
+    };
+  } catch (error) {
     log.warn(ctx.tracer.fields({
       msg: 'tool failed',
       isError: true,
-      err: e,
+      err: error,
     }, 'self'));
     return {
       toolCallId: call.id,
       toolName,
-      content: e instanceof Error ? e.message : String(e),
+      content: error instanceof Error ? error.message : String(error),
       isError: true,
     };
   }

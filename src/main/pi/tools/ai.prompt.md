@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (ToolContext 改为 agent/delegate mode union) -->
+<!-- Last verified: 2026-07-16 (Step 5：delegate-only context 驱动 delegated capability) -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -47,35 +47,28 @@ type ToolContext =
   | { mode: 'delegate'; agentId: string; sessionId: string; delegateId: string; /* common fields */ };
 ```
 
-- `agentId/sessionId` 始终定位 parent session。
-- `executorId(ctx)`：agent mode 返回 agentId；delegate mode 返回必填 delegateId。Knowledge/Skill 使用它，Local 始终使用 agentId。
-- `mode` 取代旧 `isSubAgent`；冻结的旧 `app subagent` 在 Step 9 前临时借 delegate mode 拒绝递归，该 bridge 不属于新 runtime 契约。
-- RegularSession/JobRun 与 debug/media/attachment 边界使用 agent mode；Step 8 新 runtime 使用真实 delegate ID。
+- 正常 execution 没有 delegate context，继续用 ToolContext 的 parent identity。
+- 只有 delegated run 外层的 `DelegateExecutionContext` 影响 capability；Local 始终用 context parent identity，Knowledge/Skill 使用 `delegateId ?? ctx.agentId`。
+- RegularSession/JobRun、executeToolCall 与 InternalUrlRouter 不建立或补充 scope；Step 8 是唯一 scope root。
 - `getParentContextSummary` 是新 `subagent run --with-parent-summary` 的正式 seam；旧配置读取不进入 ToolContext。
 
 ### per-turn ToolCatalog(`pi/tool.ts` 的 catalog 段)
 
 ```ts
 class ToolCatalog {
-  readonly specs: PiTool[];         // 公开只读,喂 pi.streamSimple({ tools })
-  // routes 私有 —— 消费方走方法,不直接摸 Map
-  getRoute(llmName): ToolRoute | undefined;          // 执行 dispatch
-  resolveIdentity(llmName): { name; mcp };           // 限定名 → 自然名+mcp
-  static empty(): ToolCatalog;                       // 无工具 / 构建失败
+  readonly specs: PiTool[];
+  getRoute(llmName): ToolRoute | undefined;
+  resolveIdentity(llmName): { name; mcp };
+  static empty(): ToolCatalog;
 }
 type ToolRoute =
   | { kind: 'local'; toolName: string }
   | { kind: 'mcp'; serverName: string; toolName: string };
 ```
 
-- `buildToolCatalogForAgent(cfg)` / `buildToolCatalogForSubAgent(cfg, mcpSelections)`:
-  agent 顶层 `tools?: string[]` 与 `mcp_servers` 独立合并；本地 tool 原名暴露，
-  MCP tool 用 `serverName/toolName` 注册给 LLM，`getRoute` 保存原始 server / tool 名。
-- 只有完整 LLM 限定名冲突才构 catalog 时立即抛；**不**按 `/` 反解。
-- `pi/tool.ts::executeToolCall(call, catalog, ctx)` 用 `catalog.getRoute(name)` 取 route，按 `route.kind` 分发:
-  - `'local'` → `tools.execute(route.toolName, args, ctx)`(本地 registry)。
-  - `'mcp'` → `executeMcpToolOnServer(serverName, toolName, args, ctx.signal)`
-    (server-scoped 执行,不再按裸 toolName 查全局 `toolToServerMap`)。
+- delegate context 下 `buildToolCatalogForAgent` 在现有 Agent selection 基础上只排除交互式 `ask` LocalTool；Step 9 注册真实 `subagent` 对象时把它加入同一黑名单以禁止嵌套。其它 LocalTool 保持普通语义。
+- `web research` 与已知 shell device-auth 在各自执行边界拒绝；MCP OAuth 保持普通全局交互流。Step 7 出现真实 `submit_result` handler 时再增加其最小私有 route；本步不预建 inline route。
+- `executeToolCall` 对 local/MCP route 分发；MCP Auth 不读取 delegate context。
 
 ### lazy / 重模块推迟加载
 
@@ -141,11 +134,7 @@ async function loadImpl() {
 
 ## 注意事项
 
-- **handler 不允许回读任何全局 / 静态字段获取"当前执行上下文"。** 一律走
-  `ctx` 参数;新代码出现这种回读 = bug。
-- **registry 重名 throw,不静默覆盖。** 模块加载期 register 时若名字冲突,
-  立即抛 —— 与 catalog 构建时的"local∩mcp 同名冲突"一致,杜绝隐式覆盖。
-- **当前旧 spawn 命令仍是生产路径。** `appcmd/builtins/app/subagent/` 只作 Step 9 cutover 前的旧实现；新代码不得 import 其 manager/kernel。新 facade 通过必填 runner 避免 no-op，并在 Step 9 前保持未注册。
+- **handler 的 delegated capability 来自 delegate context。** normal execution 没有 scope；Local 继续使用 ctx parent identity。
 - **schema literal 的 typing 约束**:`jsonSchema({...})` 走 discriminated
   union by `type`。`type: 'object'` 节点必须写 `properties`(可空 `{}`),
   `required` 元素被 `keyof properties` 校验,拼错字段名直接编译报错。

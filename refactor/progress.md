@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 4 complete，等待另行开始 Step 5**
-- 当前门禁：Step 4 已通过用户 review；Step 5 尚未开始
-- 业务步骤：4 / 13 complete
-- 测试步骤：Step 14 尚未开始；Step 4 未新增测试文件
-- 生产代码变更：Tool/Internal URL/AppCmd context 已使用 agent/delegate mode union；新 `subagent` facade 仍未注册，旧 `app subagent` 仍是生产入口
+- 总体阶段：**Step 5 complete，等待用户另行开始 Step 6**
+- 当前门禁：delegate-only scope 改造已获用户 review 通过；未进入 Step 6
+- 业务步骤：5 / 13 complete；Step 6 为 `pending`
+- 测试步骤：Step 14 尚未开始；Step 5 未新增或运行单测
+- 生产代码变更：normal execution 保持无 scope；delegate-only context 与 capability boundary 已实现；新 subagent facade 仍未注册，旧 `app subagent` 仍是生产入口
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -37,8 +37,8 @@
 | 1 | [目标契约与 Pi/Subagent 边界](step1.md) | complete | `context.md` | `src/shared/types/subAgentRunTypes.ts`；`src/main/pi/subagent/types.ts`；模块依赖规则 |
 | 2 | [Agent description/delegates 持久化](step2.md) | complete | Step 1 AgentId/contract | 可落盘的 Agent graph、ID resolver、IPC patch |
 | 3 | [独立顶层 subagent cmdline facade](step3.md) | complete | Step 1 request grammar | 未注册的新 facade/registry/run parser，供 Step 9 接 manager |
-| 4 | [执行 Agent 与 Session owner 分离](step4.md) | complete | Step 1 execution scope | mode discriminated union；parent `agentId/sessionId`；delegate 分支强制 `delegateId` |
-| 5 | [委派能力 policy 与 reduced catalog](step5.md) | pending | Steps 2–4 | 硬 allow/deny policy、可构建 delegated catalog |
+| 4 | [执行 Agent 与 Session owner 分离](step4.md) | complete | Step 1 execution scope | parent `agentId/sessionId` context；legacy mode union；delegate-only context 由 Step 5 追加 |
+| 5 | [Delegate Execution Context 与能力边界](step5.md) | complete | Steps 2–4 | `DelegateExecutionContext`、delegate-only capability checks |
 | 6 | [三位序号 Subrun 持久化](step6.md) | pending | Steps 1,2,4 | `001..999` allocator、data/messages store、persist adapter |
 | 7 | [submit_result 与正式结果状态机](step7.md) | pending | Steps 1,5 | delegated-only submit route、terminal result reducer |
 | 8 | [BaseSession 驱动的新 SubagentSession](step8.md) | pending | Steps 2,4,5,6,7 | 可执行单个 persisted delegated run 的 session |
@@ -207,6 +207,40 @@
 - Step 10/11 在旧 UI/CRUD/persist/renderer引用归零后各自整体删除对应源码；Step 13负责最终残留证明和清除。
 - 用户磁盘上的旧 `sub-agents/` 数据仍然不读、不迁移、不删除；“删除旧源码”与“删除旧数据”严格分离。
 
+### 2026-07-16 — Step 5 启动与 policy review
+
+- 用户确认 Step 4 完成并要求开始 Step 5，Step 4 状态保持 `complete`。
+- 当前实际 LocalTools 为 read/write/find/search/ask/app/web/shell；app 域为 Agent/MCP/Skill/Schedule/Time + 旧 feature-gated subagent，web 域为 search/research/fetch/download。
+- 计划无需改变安全边界，但按现有 ToolCatalog/MCP auth 结构确定落地方式：catalog-inline route 承载 per-catalog tool/guard，MCP 用 per-call AsyncLocalStorage scope，禁止用全局 mutable flag 或 `eventSender` 推断。
+- 新 catalog 显式从 executor Agent selection 与系统 allowlist 取交集；修复了“selection 过滤成空后触发普通 catalog 空数组=全开”的设计陷阱，使用 `selectLocalTools([])` 表达 MCP-only/empty-local。
+
+### 2026-07-16 — Step 5 scope redesign
+
+- 用户否决 Step 5 的 reduced catalog + inline guard + 独立受限 registry 方案，认为其复杂度不可接受。
+- 新决策：统一 `AsyncLocalStorage` execution scope。主 Agent 的 regular/job execution 与未来 delegated SubAgentSession 均在入口建立 scope；后续能力只通过 `getStore()` 获取运行角色和 parent/executor identity，不再把 `mode/delegateId` 当权限判断来源。
+- 为避免现有旧 runtime 编译/行为被本 step继续维护，Step 4 union 暂保留为冻结 legacy ingress seed；新/通用能力在 Step 5 后只消费 scope。Step 9 删除旧 runtime 时再物理删除该 bridge/union consumer。
+- Step 5 原有 policy/catalog 文件及 ToolCatalog `selectLocalTools/replaceTool/withoutMcpInteraction` 已判定为失效中间态，必须整体删除；`withTool()` 保留为 Step 7 delegated-only submit_result 的最小 runtime route。
+- Steps 6–9、14 已同步改写为 scope contract；没有新增数据迁移或旧 runtime 兼容目标。
+### 2026-07-16 — Step 5 delegate-only scope redesign
+
+- 用户明确：正常 Agent execution 没有 delegate context，`getStore()` 应为 undefined；只有 subagent tool 真正执行 delegated Agent 时，才在外层 `run()` delegate context。
+- 回退 Step 5 对 RegularSession/JobRun、executeToolCall、InternalUrlRouter 的 scope root/fallback 改动；它们继续用既有 context 表达 parent session。
+- scope 只携带 `delegateId`；delegate 存在时 Knowledge/Skill 使用它，否则仍使用现有 `ctx.agentId`。Local 永远使用现有 parent context，不读 scope。
+- 删除 Step 5 提前增加的 inline `ToolRoute`/`withTool`；Step 7 在真实 submit_result 输入出现时再实现最小私有 route，不预建 extension seam。
+- Steps 6–9、14 已按 delegate-only context 重写；scope 文件重命名为 `delegateExecutionScope.ts`。
+### 2026-07-16 — Step 5 LocalTool blacklist review
+
+- 用户要求 delegated catalog 从 LocalTool 对象黑名单而非名称白名单过滤；当前黑名单仅包含已构造的 `ask`、`shell` 对象。
+- `subagent` 仍是 runner-required factory，当前不能伪造或提前注册对象；Step 9 创建真实对象后再把该对象加入黑名单，继续禁止嵌套委派。
+- 该选择使其它新 LocalTool 默认可见；相关 context、Step 5/9、模块文档与 Step 14 测试候选已同步改写。
+### 2026-07-16 — Step 5 interaction-only capability review
+
+- 用户确认委派 Agent 的默认能力应与普通 Agent 一致；只禁止 `ask`、嵌套 `subagent`，以及依赖当前会话 human-loop 的 `web research`、已知 shell device-auth。
+- MCP OAuth 的 consent/client-id/browser UI 是全局应用流程，不依赖 parent/delegate identity；不再受 delegate context 限制。
+- 删除 URI、shell、download、app/web allowlist 等委派限制；Local 继续用 parent context，Knowledge/Skill 继续用 delegateId。
+- `ask` 是当前唯一 LocalTool 黑名单对象；真实 `subagent` 对象仍等 Step 9 创建后加入。相关 context、Steps 5/8/9、模块文档和测试候选已同步改写。
+
+
 ## 执行记录
 
 ### 2026-07-16 — Step 1 — complete
@@ -258,5 +292,17 @@
 - 未做：未新增测试文件，未启动应用，未做 browser/manual file-write/E2E。
 - 文档交接：已更新 `context.md`、Steps 4/9、`unit-test.md` 与相关模块文档；Step 9 有显式 bridge/guard 清理门禁。
 - 用户 review 结果：通过；Step 4 complete，等待另行开始 Step 5。
+
+### 2026-07-16 — Step 5 — complete（delegate-only context）
+- 用户否决 normal agent scope、Regular/Job wrapper、scope fallback 和提前 inline route；最终只保留 delegated run 外层 AsyncLocalStorage。
+- 实际输出/API：`DelegateExecutionContext { delegateId }`、`runWithDelegateExecution`、`getDelegateExecution`、`isDelegatedExecution`。normal execution 不创建 store。
+- identity：Local 始终使用现有 parent ToolContext/ResolveContext；Knowledge/Skill 使用 `getDelegateExecution()?.delegateId ?? ctx.agentId`。不重复 parent profile/agent/session 到 scope。
+- capability：delegate context 存在时 catalog 只排除 `ask`；Step 9 加入真实 `subagent` 对象。read/write/find/search、shell、download、app/web 非交互命令与 MCP OAuth 均保持普通行为；`web research` 与已知 shell device-auth 在执行边界拒绝。Local 仍用 parent identity，Knowledge/Skill 使用 delegateId。
+- submit：删除 ToolCatalog inline route/withTool；Step 7 在真实 handler 出现时再实现最小 private route，普通 catalog 必须不可见。
+- 修改生产文件：`lib/delegateExecutionScope.ts`、pi tool/tools/appcmd/Internal URL/MCP Auth；回退 session scope 改动，删除上一轮 general scope/提前 route 代码。
+- review 修复：delegated 强制刷新先标记 access token 过期，再只走 `runRefreshOnly`；随后用户决定 MCP OAuth 直接复用普通全局交互流，已删除 delegate-only auth 分支。catalog 黑名单当前仅 `ask`；旧 `buildToolCatalogForSubAgent` 保持原有 selection 语义。
+- 验证：相关 LSP diagnostics 无 error；初版、review 修复、LocalTool 黑名单及 interaction-only capability 调整后均完成 `check:impact`、`npm run typecheck`、`npm run build`（仅既有 renderer chunk-size warning）。按 Step 5 政策未新增/运行单测、未启动应用或做 E2E。
+- 下游：Steps 6–9/14 已改为 delegate-only contract；Step 8 是唯一 scope root，Step 7 不再依赖预建 extension seam。
+- 用户 review 结果：通过；Step 5 complete，等待用户另行开始 Step 6。
 
 每个后续 step 完成后继续追加同结构记录。

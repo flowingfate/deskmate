@@ -156,31 +156,27 @@ Step 3 实际落地 API（2026-07-16，尚未生产注册）：
 - 目录名和对外 `subrunId` 使用同一个三位字符串，不再另造 run ULID。
 - shared helper 固定为 `isSubrunId` / `parseSubrunId` / `formatSubrunId`，定义于 `src/shared/types/subAgentRunTypes.ts`；`SubrunId` 是非 branded 的语义别名。
 
-### 2.7 执行身份与资源归属
+### 2.7 Delegate Execution Context 与资源归属
 
-一个委派运行有 session identity 与 execution identity：
+`src/main/lib/delegateExecutionScope.ts` 是**仅限委派运行**的 AsyncLocalStorage：
 
-- `agentId`：父 session 所属的 Agent；
-- `sessionId`：父 regular session 或 job run；
-- `mode: 'agent' | 'delegate'`：运行角色 discriminant；
-- delegate 分支必填 `delegateId`，表示实际执行 Agent，决定 model、prompt、Tools、MCP、Skills、Knowledge。
+```ts
+interface DelegateExecutionContext {
+  delegateId: string;
+}
+```
+
+- 正常 Agent execution 不建立 store，`getDelegateExecution()` 返回 undefined。
+- 未来 `SubAgentSession` 在真正执行 delegated Agent 的最外层以 `runWithDelegateExecution({ delegateId }, action)` 包住整个 run；不在 RegularSession、JobRun、工具 dispatcher 或 Internal URL router 建 scope/fallback。
+- scope 只表达“当前正在执行 delegated Agent”及其 delegate ID，不重复 parent profile/agent/session identity；这些继续来自现有 ToolContext/ResolveContext。
 
 资源规则：
 
-- `local://` → 父 session files；
-- `knowledge://` → executor Agent 的 Knowledge；
-- `skill://` → executor Agent 自己绑定的 Skills；
-- 不默认暴露父 Agent Knowledge；
-- subrun 不建独立 files 目录。
+- `local://` → 现有 parent `agentId/sessionId` files，永远不看 scope；
+- `knowledge://` / `skill://` → `getDelegateExecution()?.delegateId ?? ctx.agentId`；
+- 不默认暴露父 Agent Knowledge；subrun 不建独立 files 目录。
 
-Step 4 最终落地 API（2026-07-16，review 修订后）：
-
-- `ToolContext`、`ResolveContext`、`WriteContext`、`AppCmdContext` 采用同一 discriminated union：agent 分支只有 `mode:'agent' + agentId + sessionId`；delegate 分支额外必填 `delegateId`。
-- `agentId` 是 session 所属 Agent；LocalProtocolHandler 直接用它取得 `Agent.findSessionAcrossKinds(sessionId)`。
-- Knowledge/Skill 使用 execution Agent：agent mode 为 `agentId`，delegate mode 为 `delegateId`；不允许缺 delegateId 的隐式 delegated 状态。
-- `toResolveContext` / `toWriteContext` / AppCommand dispatcher 全部保留 discriminant；`getParentContextSummary` 是新 `subagent run --with-parent-summary` 的正式 seam，旧 Sub-Agent 配置读取不进入通用 context。
-- renderer-facing internal-url/media/attachment/debug 边界全部使用 `mode:'agent'`。
-- 旧 `lib/subAgent/SubAgentSession` 的 `delegateId=agentId` 只是 Step 9 前防递归的唯一临时 bridge，不属于新 runtime 契约，也不产生旧 runtime 测试候选；Step 9 必须随旧入口删除。
+新/通用能力在需要差异时只读取 `getDelegateExecution()`：有值是 delegated run，无值是原有正常路径。禁止 agent scope、scope fallback、`enterWith()`、全局 mutable flag、eventSender 或 IPC 角色推断。
 
 ### 2.8 委派请求和上下文
 
@@ -227,17 +223,19 @@ main 私有唯一归一化入口是 `normalizeSubAgentRunRequest`：文本 trim 
 
 ### 2.10 能力硬边界
 
-被委派 Agent：
+被委派 Agent 的能力边界只在 `getDelegateExecution()` 有值时于真实执行点收紧：
 
-- catalog 不含 `subagent`、`ask`、`shell`；
-- `write` 仅允许父 `local://`；
-- `read/find/search` 仅允许父 local、自身 knowledge、已绑定 skill；
-- `app` 只允许明确的只读子命令；Agent/MCP/Skill/Schedule 长期状态写入拒绝；
-- `web search/fetch/download` 可用，research/human-loop 拒绝；download 只能写父 local；
-- 自身已授权的 MCP tools 原则可用，但 human-loop/auth/elicitation 拒绝；
-- prompt 规则只是说明，catalog/router/dispatcher 才是安全边界。
+- ToolCatalog 按 LocalTool 对象黑名单过滤；当前黑名单只含交互式 `ask`。`subagent` 尚未构造；Step 9 注册真实对象时必须把该对象加入黑名单，保留禁止嵌套。
+- `read`、`write`、`find`、`search`、`shell`、download 及 app/web 的非交互子命令与普通 Agent 行为一致；Local 仍用 parent context，Knowledge/Skill 仍用 delegate ID。
+- `web research` 在 delegated run 拒绝；已知 shell device-auth 命令在启动前拒绝，不能创建当前委派会话的 human-loop 卡片。
+- MCP OAuth 使用同一全局 consent/client-id/browser flow，不因 delegate context 降级；自身已授权的 MCP tools 与普通 Agent 同行为。
+- 无 delegate context 时，普通 Agent 路径保持既有行为。
 
-`shell` 暂不开放：cwd 限制不等于 OS sandbox。以后若设计出跨平台硬隔离，再单独立项。
+Step 5 实际目标 API（delegate-only redesign）：
+
+- scope API 只有 `DelegateExecutionContext`、`runWithDelegateExecution`、`getDelegateExecution`、`isDelegatedExecution`；normal execution 不建 store。
+- ToolCatalog 仅在 delegate context 下按 LocalTool 对象黑名单过滤；Step 7 真实实现 submit_result 时再创建最小私有 route。
+- 新 LocalTool 默认可见；Step 9 注册真实 `subagent` 对象时加入黑名单。只有 `web research` 与已知 shell device-auth 命令在执行边界读取 delegate context 并拒绝；MCP Auth 不读取它。
 
 ### 2.11 持久化和详情 UI
 
@@ -330,9 +328,9 @@ Renderer 基线必须能渲染委派工具卡片和正式结果。消息详情 D
 | 模块 | 目标职责 |
 |---|---|
 | `src/main/pi/subagent/types.ts` | main 私有运行类型与 request normalization |
+| `src/main/lib/delegateExecutionScope.ts` | 仅限委派 run 的 AsyncLocalStorage `delegateId`；normal execution 没有 store |
+| `src/main/pi/tool.ts` | delegate-aware catalog；Step 7 再按需添加 submit route |
 | `src/main/pi/subagent/prompt.ts` | delegated operating prompt / context boundary |
-| `src/main/pi/subagent/catalog.ts` | reduced catalog + submit tool |
-| `src/main/pi/subagent/policy.ts` | local/app/web/MCP capability policy |
 | `src/main/pi/subagent/subrunStore.ts` | 三位 ID allocator + hidden transcript/data adapter |
 | `src/main/pi/subagent/submitResult.ts` | explicit result submission |
 | `src/main/pi/subagent/session.ts` | BaseSession-based delegated run |

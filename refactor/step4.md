@@ -1,9 +1,9 @@
 # Step 4 — 分离执行 Agent 与父 Session 资源所有权
 
-> 状态：complete；用户已确认最终 mode union、旧代码隔离与后续并行替换门禁
+> 状态：complete；Step 5 新增 delegate-only context，保留本 step 的 parent context 语义
 > 前置：Step 1 execution identity 命名已确定
 > 下游：Steps 5、6、8、9
-> 目标是修正上下文模型，不启用新 runtime。
+> 目标是修正 parent session context，不启用新 runtime。Step 5 只在 delegate run 外层额外提供 delegateId。
 
 ## 1. 问题
 
@@ -22,30 +22,25 @@
 4. 运行 impact 并读工具、Pi、persist 文档；
 5. 旧 SubAgentSession 只为编译可做最小字段补齐，不借此重构旧逻辑、不测试旧模块。
 
-## 3. 目标语义
+## 3. Parent context 语义
 
 ToolContext：
 
 - `agentId`：`sessionId` 所属的 Agent，保持普通会话原语义；
 - `sessionId`：regular session 或 job run；
-- `mode: 'agent'`：普通 Agent 在自己的 session 中执行；
-- `mode: 'delegate'` + `delegateId`：由普通 Agent 委派给另一个 Agent 执行。
+- `mode: 'agent'`：普通 Agent；
+- `mode: 'delegate'` + `delegateId`：冻结旧 Sub-Agent ingress。
 
-普通 Regular/Job：`{ mode: 'agent', agentId, sessionId }`。
-
-新 Sub-Agent run：`{ mode: 'delegate', agentId: parentAgentId, sessionId: parentSessionId, delegateId }`。
+Step 5 不替换 normal context：normal execution 继续从此 union 获得 parent identity。未来 delegate run 通过独立 `DelegateExecutionContext` 只覆盖 Knowledge/Skill 的 execution Agent 选择。
 
 ## 4. Internal URL 规则
 
-`ResolveContext` / `WriteContext` 同步采用相同的 mode union：
+`ResolveContext` / `WriteContext` 保持 mode union：
 
-- LocalProtocolHandler 始终用 `agentId` 找 session；
-- KnowledgeProtocolHandler 在 delegate mode 使用 `delegateId`，否则使用 `agentId`；
-- SkillProtocolHandler 同样按 execution Agent 检查 bindings；
+- LocalProtocolHandler 继续用 context parent identity 查 session；
+- KnowledgeProtocolHandler / SkillProtocolHandler 只在 delegate context 存在时改用其 delegateId；
 - `toResolveContext/toWriteContext` 显式保留 discriminant 与 delegateId；
-- delegate mode 缺 delegateId 是编译错误，不做 optional fallback。
-
-这一步只解决 ownership，不在 handler 内加入 delegated allowlist；URI/absolute path policy 属于 Step 5。
+- 不存在 router scope fallback。
 
 ## 5. Tool/AppCommand context 协变
 

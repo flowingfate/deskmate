@@ -10,8 +10,8 @@
  * 1. **scheme 表能力,不表存储位置** —— `skill://foo` 在 LLM 视角是"找名为 foo 的
  *    skill",handler 负责把它映射到 `${userData}/profiles/{pid}/skills/foo/SKILL.md`。
  *    Profile / Agent 路径**绝不**出现在 LLM 看到的字符串中。
- * 2. **handler 不持状态** —— 所有 per-session / per-profile 状态由 caller 通过
- *    {@link ResolveContext} 注入。handler 实例进程级单例,跟 `ToolContext` 不耦合。
+ * 2. **handler 不持状态** —— parent/profile/session identity 从 ResolveContext 注入；
+ *    delegate execution 存在时，Knowledge/Skill 再按独立 delegate context 选择执行 Agent。
  */
 import type { AgentExecution, DelegateExecution, ToolContext } from '../tools/types';
 
@@ -189,8 +189,7 @@ export class ResourceNotFoundError extends Error {
 /**
  * Convert {@link ToolContext} → {@link ResolveContext}。
  *
- * 显式收窄,**不**直接 spread —— ToolContext 加新字段时强制看一眼是否要让 handler
- * 看见。
+ * parent identity 始终由该 context 传递；不建立或补充 delegate scope。
  */
 export function toResolveContext(ctx: ToolContext): ResolveContext {
   if (ctx.mode === 'delegate') {
@@ -215,8 +214,7 @@ export function toResolveContext(ctx: ToolContext): ResolveContext {
 /**
  * Convert {@link ToolContext} → {@link WriteContext}。
  *
- * 字段与 {@link toResolveContext} 完全相同;两个独立函数让"读 / 写"路径在
- * call site 处一眼可辨,handler 实现也不用做形态判断。
+ * 与 {@link toResolveContext} 同形，读写 call site 保持独立，避免混淆。
  */
 export function toWriteContext(ctx: ToolContext): WriteContext {
   if (ctx.mode === 'delegate') {

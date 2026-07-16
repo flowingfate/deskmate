@@ -28,11 +28,12 @@
 - run parser 已输出 normalized request；`--with-parent-summary` 会通过 AppCmdContext callback 获取 summary，manager 不再重复解析 CLI 或生成 summary。
 - facade 当前未从 `tools/index.ts` import/register；本 step 必须在 manager adapter 可用后调用 `createSubagentTool(adapter)` 原子注册。
 
-### Step 4 已具备输入（2026-07-16）
+### Step 4/5 已具备输入
 
-- manager/tool scope 的 parent Agent/session 直接对应 `ToolContext.agentId/sessionId`。
-- delegate mode 的 execution Agent 是 `delegateId`；local 使用 parent `agentId`，knowledge/skill 使用 delegate。两分支由 mode 完整区分。
-- Step 9 adapter 显式组装 `parentAgentId = agentId`；授权 target 必须等于 delegate 分支的 `delegateId`。
+- parent Agent/session 固定为 `agentId/sessionId`；manager 把它传给 SubAgentSession，不复制到 delegate context。
+- Step 5 delegate context 只在 SubAgentSession run root 建立，只有 `delegateId`；normal execution 没有 store。
+- manager 不从 eventSender 推断角色，也不包装第二个 scope。MCP/Auth、tools、router 在 scope 有值时自行分支。
+- 旧 ToolContext/AppCmdContext mode union 仅是旧 runtime bridge；production root 切换并证明旧 backend orphan 后，必须随旧源码整体删除其 consumer/bridge。
 
 ## 3. `src/main/pi/subagent/manager.ts`
 
@@ -80,7 +81,7 @@ max total 20以已经 reservation 的 subrun count为准，跨 app restart仍一
 - 与 app/web并列；
 - spec description列出 commands synopsis；
 - 普通 Agent catalog是否可见仍受其 tools selection规则，但若 parent想委派且未启用 subagent，应有清楚配置/UI表现；具体默认可见语义在本 step review时对齐现有 tools白名单；
-- SubAgentSession reduced catalog强制移除，不受 target tools selection影响。
+- SubAgentSession 的 delegate scope 按 LocalTool 对象黑名单过滤；注册前把真实 `createSubagentTool(adapter)` 返回对象加入黑名单，禁止嵌套委派。除 `web research` 与已知 shell device-auth 外，其余工具与子命令保持普通能力；MCP OAuth 保持全局交互流。它不依赖 general agent scope 或 catalog replacement API。
 
 更新 tool-system文档的顶层工具数和分工。
 
@@ -89,9 +90,8 @@ max total 20以已经 reservation 的 subrun count为准，跨 app restart仍一
 - 从 `appCommands` production registry删除旧 command 的 import/registration，并从 app help/synopsis移除；
 - parent prompt示例全部改 `subagent("run ...")`，所有生产调用改走新 manager；
 - 搜索证明 `src/main/lib/subAgent/` 与 `src/main/pi/appcmd/builtins/app/subagent/` 已无生产引用；
-- 证明不可达后整体删除上述旧 backend 目录及其旧测试，包括临时 `delegateId=agentId` bridge 和旧 recursion guard；禁止先逐文件修改它们；
-- 通用 `ToolContext` / `AppCmdContext` 只保留新 `run --with-parent-summary` 所需 getter，不恢复旧配置 callback；
-- 不留 alias、转发 shim或 archive 副本。仍被 Step 10 UI/persist 使用的旧 CRUD 数据层不在本步修改，等其引用归零再整体删除。
+- 证明不可达后整体删除上述旧 backend 目录及其旧测试，以及 Step 4 mode/delegate bridge、旧 recursion guard；禁止先逐文件修改它们；
+- 通用 ToolContext / AppCmdContext 删除不再有调用方的 identity 字段，只保留技术依赖与新 `run --with-parent-summary` getter；不留 alias、转发 shim或 archive 副本。仍被 Step 10 UI/persist 使用的旧 CRUD 数据层不在本步修改，等其引用归零再整体删除。
 
 ## 7. Parent prompt 与 context callback
 

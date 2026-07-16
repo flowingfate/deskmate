@@ -18,6 +18,7 @@
  * 设计文档:[`ai.prompt/tool-system.md`](../../../ai.prompt/tool-system.md)
  */
 
+import { isDelegatedExecution } from '@main/lib/delegateExecutionScope';
 import type { AppCommandRegistry } from './registry';
 import type { AppCommand, AppCmdContext } from './types';
 
@@ -30,6 +31,31 @@ interface RouterSpec {
   readonly registry: AppCommandRegistry;
   /** 可选的领域规则，追加到自动生成的命令表后。 */
   readonly helpFooter?: string;
+}
+
+const DELEGATED_WEB_BLOCKED_COMMANDS = new Set(['research']);
+
+function visibleCommands(name: string, registry: AppCommandRegistry): AppCommand[] {
+  const commands = registry.list();
+  if (!isDelegatedExecution() || name !== 'web') return commands;
+  return commands.filter((command) => !DELEGATED_WEB_BLOCKED_COMMANDS.has(command.name));
+}
+
+function rejectDelegatedCommand(name: string, argv: readonly string[], ctx: AppCmdContext): boolean {
+  const [command] = argv;
+  if (
+    !isDelegatedExecution() ||
+    name !== 'web' ||
+    !command ||
+    command === '--help' ||
+    command === '-h' ||
+    !DELEGATED_WEB_BLOCKED_COMMANDS.has(command)
+  ) {
+    return false;
+  }
+  ctx.printErr(`web ${command} requires user interaction and is unavailable in delegated runs.\n`);
+  ctx.setExitCode(1);
+  return true;
 }
 
 /**
@@ -51,7 +77,7 @@ function buildRegistryHelp(
   registry: AppCommandRegistry,
   helpFooter?: string,
 ): string {
-  const cmds = registry.list();
+  const cmds = visibleCommands(name, registry);
   if (cmds.length === 0) {
     return `${name}: no commands registered.\n`;
   }
@@ -75,7 +101,7 @@ function buildRegistryHelp(
  * —— dev hot-reload / 测试隔离期会重新注册,缓存可能让刚注册的命令缺席。
  */
 function buildRegistryDescription(name: string, registry: AppCommandRegistry): string {
-  const cmds = registry.list();
+  const cmds = visibleCommands(name, registry);
   if (cmds.length === 0) {
     return (
       `Run a "${name}" command using a shell-style cmdline. ` +
@@ -114,6 +140,7 @@ export function makeRouterCommand(spec: RouterSpec): AppCommand {
         return;
       }
 
+      if (rejectDelegatedCommand(name, argv, ctx)) return;
       const [sub, ...rest] = argv;
       const cmd = registry.get(sub);
       if (!cmd) {

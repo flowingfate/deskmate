@@ -67,29 +67,20 @@
 - 最高风险：Step 9 adapter 绕过 resolver、describe 泄漏 cold 敏感字段，或 run 共享 admission/allocator 无法承受并发 tool calls。
 - 需要用户在 Step 14 前决定：是否保留 help 文案关键句断言；默认不做整段 snapshot。
 
-## Step 4 候选：资源 ownership
+## Step 4/5 候选：Delegate Execution Context 与能力边界
 
-- [ ] P0 `{mode:'delegate', agentId:A, sessionId:S, delegateId:B}` 时 local 命中 A/S，knowledge/skill 命中 B。
-- [ ] P0 B 无法通过 knowledge URI 读取 A knowledge。
-- [ ] P0 `{mode:'agent', agentId:A, sessionId:S}` 的 regular/job 行为不回归。
-- [ ] P1 ToolContext → ResolveContext/WriteContext/AppCmdContext 转换保留 mode、delegateId、signal。
+- [ ] P0 normal execution 没有 delegate store，既有 catalog/app/web/MCP 行为不变。
+- [ ] P0 `runWithDelegateExecution({ delegateId })` 跨 await/parallel tool calls 保持 delegateId，不污染同时运行的 normal execution。
+- [ ] P0 delegated catalog 不含黑名单中的 `ask` 对象；Step 9 注册真实 `subagent` 对象后，同一测试证明它也不可见。
+- [ ] P0 delegated read/write/find/search、shell、download 与非交互 app/web 子命令保持普通 Agent 行为；Knowledge/Skill 仍使用 delegateId，Local 始终使用 parent ToolContext。
+- [ ] P0 delegated `web research` 与已知 shell device-auth 命令在创建 human-loop 前拒绝；其它 shell 命令可执行。
+- [ ] P0 delegated MCP OAuth 可走全局 consent/client-id/browser 流程，与普通 Agent 同行为。
 
-### Step 4 实际补充 — 2026-07-16
-- 实际 contract：四类 context 使用相同 discriminated union；delegate 分支必有 `delegateId`，agent 分支没有该字段；`isSubAgent` 被 mode 取代。
-- 新增候选：agent/delegate 两分支转换矩阵；local 始终按 `agentId`，knowledge/skill 按 execution Agent。旧 runtime 临时 bridge 不进入 Step 14 测试范围。
-- 删除/改写候选：删除 `sessionAgentId` 与“缺 owner fallback”候选；不存在 optional `subagent?: string` 状态。
-- 最高风险：任何 delegated capability 仍直接把 `agentId` 当 executor，会泄漏父 Agent Knowledge/Skills；集中 execution identity 判定必须覆盖 handler/policy/catalog。
+### Delegate-only redesign 实际补充 — 2026-07-16
+- normal Agent 不创建 AsyncLocalStorage context；只有 Step 8 SubAgentSession 外层建立 `{ delegateId }`。
+- 删除候选：不测试 agent scope、normal scope root、scope fallback、`withTool` 或提前 inline route；Step 7 再按真实 submit_result 输入设计最小私有 route。
+- 最高风险：normal path 意外获得 delegate context，或 Local 误用 delegateId。
 - 需要用户在 Step 14 前决定：无。
-
-## Step 5 候选：能力 policy
-
-- [ ] P0 delegated catalog 永远不含 subagent/ask/shell，即使 Agent tools 显式选择。
-- [ ] P0 write 只允许 local；absolute/knowledge/skill 拒绝。
-- [ ] P0 read/find/search 只允许 local/own knowledge/bound skill。
-- [ ] P0 app Agent/MCP/Skill/Schedule 写命令拒绝，只读命令允许。
-- [ ] P0 web research 拒绝，search/fetch/download 允许且 download 目标只能 local。
-- [ ] P0 MCP human-loop/auth/elicitation 拒绝。
-- [ ] P1 未分类的新 command 默认 deny。
 
 ## Step 6 候选：三位 subrun store
 

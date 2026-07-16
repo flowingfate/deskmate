@@ -32,7 +32,7 @@ import { PERSIST_PATH } from '@shared/persist/path';
 import { boundSkillNames } from '@shared/types/profileTypes';
 import { getAppRoot } from '@main/persist/lib/root';
 import { Profile } from '@main/persist/profile';
-import { executorId } from '../../tools/types';
+import { getDelegateExecution } from '@main/lib/delegateExecutionScope';
 import {
   ResourceNotFoundError,
   type InternalResource,
@@ -83,8 +83,9 @@ export class SkillProtocolHandler implements ProtocolHandler {
   }
 
   private async assertSkillEnabled(name: string, ctx: ResolveContext): Promise<void> {
+    const delegate = getDelegateExecution();
     const profile = await Profile.getOrLoad(ctx.profileId);
-    const agent = await profile.getAgent(executorId(ctx));
+    const agent = await profile.getAgent(delegate?.delegateId ?? ctx.agentId);
     if (!agent || !boundSkillNames(agent.config.skills).includes(name)) {
       throw new ResourceNotFoundError(
         `Skill "${name}" is not enabled for the current agent.`,
