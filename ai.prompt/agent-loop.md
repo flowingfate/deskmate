@@ -1,6 +1,6 @@
 # Agent Loop（pi chat 引擎）
 
-<!-- Last verified: 2026-07-14 (Domain / auth / thinking schema 统一至 shared/persist/types/) -->
+<!-- Last verified: 2026-07-16 (Step 8：单个 delegated SubAgentSession 接入 BaseSession loop，尚未生产注册) -->
 
 ## 1. 范围
 
@@ -47,22 +47,24 @@ BaseSession (abstract)                  src/main/pi/session/base.ts
   ├─ persistSession: PersistSessionLike 持久化最小依赖面(可换内存实现)
   │
   ├─ runTurnLoop()                      ← 核心 turn loop,详见 §4
+  ├─ prepareRunEnvironment()            ← 默认 regular/job config；delegated session 覆盖执行 Agent/prompt/catalog/maxTurns
   ├─ abstract streamOneRound()          ← 子类决定推不推流 / 推到哪
   ├─ abstract handleToolCalls()         ← 子类决定发不发 tool_result chunk
   └─ abstract failTurn / onTurnComplete / onTurnCancelled / onTurnFinally / onCompressionApplied
 
-  ├── RegularSession extends BaseSession                  L469
+  ├── RegularSession extends BaseSession
   │     ├─ activeStream: Stream<StreamingChunk>           UI 推流通道
   │     ├─ activeEventSender: Electron.WebContents        builtin tool 反查窗口
-  │     ├─ status: ChatStatus                             IDLE / SENDING / COMPRESSING / ...
-  │     ├─ startStream / retryStream / editUserMessage    3 个 UI 入口
-  │     ├─ stopStream                                     仅 abort,不 close stream
-  │     └─ streamOneRound 推 content / tool_call / tool_result / status_changed / complete
+  │     └─ startStream / retryStream / editUserMessage
   │
-  └── JobRun extends BaseSession                          L850
-        ├─ run(userMessage)                               scheduler 唯一入口
-        ├─ streamOneRound drain 所有 delta 静默,只取 final
-        └─ handleToolCalls 用 eventSender=null,human-loop 工具自动返 cancel
+  ├── JobRun extends BaseSession
+  │     ├─ run(userMessage)                               scheduler 唯一入口
+  │     └─ streamOneRound drain 所有 delta 静默
+  │
+  └── SubAgentSession extends BaseSession                 pi/subagent/session.ts
+        ├─ 仅运行一个 pending Subrun；scope 内执行 delegate config/catalog
+        ├─ submit_result / missing-submit → formal terminal result
+        └─ 以 `{ onStep?, onResult? }` 向未来 manager 输出有限进度
 ```
 
 **`PersistSessionLike`**(`session/base.ts`)是 pi 拥有的最小契约,不是 persist 暴露的细节:`config.{title,updatedAt,contextState,turn}` + `loadDomainMessages / appendDomainMessage / appendToolResponse / rewriteMessages / flushMessages / persist`。`appendDomainMessage` 写 user / assistant 行,`appendToolResponse` 单独追加 `tool_res` 行(对应 `PersistedToolResponse`),`rewriteMessages` 用于 edit / retry 整段重写。默认实现是 `@main/persist` 的 `Session` 类(落盘);eval / 测试可以注入内存实现,pi 不感知差异。
@@ -71,7 +73,7 @@ BaseSession (abstract)                  src/main/pi/session/base.ts
 
 ## 4. Turn Loop
 
-`BaseSession.runTurnLoop()` —— 一次 user message 触发的完整循环,RegularSession / JobRun 共用。封装在 `try/finally` 内,任何路径(配置失败、SDK throw、cancel、子类钩子抛错)都过 `onTurnFinally`。
+`BaseSession.runTurnLoop()` —— 一次 user message 触发的完整循环，RegularSession / JobRun / SubAgentSession 复用。封装在 `try/finally` 内，任何路径（配置失败、SDK throw、cancel、子类钩子抛错）都过 `onTurnFinally`。
 
 ```
 runTurnLoop()                                                 session/base.ts
@@ -79,12 +81,10 @@ runTurnLoop()                                                 session/base.ts
   ├─ 起 turnTracer = sessionTracer.derive().bind({ mod: 'chat.turn' })
   │
   ├─ 一次性准备
-  │   readAgentRuntimeConfig(profileId, agentId)    ← agentCfg + parsedModel + modelConfig
-  │   buildSystemPrompt(...)                         ← identity + knowledge + skills + subAgents + global
-  │   listToolsForAgent(agentCfg) → toPiTools()      ← MCP tool → pi.Tool(Unsafe schema)
-  │   resolveModel(parsedModel)                      ← GHC 走 ghcToPiModel;其它走 pi.getModel
+  │   prepareRunEnvironment()                            ← 默认读取 config/model/prompt/catalog/30 turns
+  │                                                        ← delegated session 覆盖执行 Agent、私有 submit catalog、request maxTurns
   │
-  ├─ for iter in 0..MAX_TURN_ITERATIONS (= 30):
+  ├─ for iter in 0..environment.maxTurns:
   │     │
   │     ├─ doCompress() ─────────────────────────────────────────────────┐
   │     │   checkAndCompress(...)                                        │
@@ -129,14 +129,13 @@ runTurnLoop()                                                 session/base.ts
   │     ├─ if signal.aborted → throw CancellationError
   │     └─ handleToolCalls(toolCalls, signal, turnTracer)
   │           Promise.all([ executeToolCall(...) ])      ← 并行
-  │           for each result:
-  │             - 把 ToolResult 折回 assistantMsg.tool_calls[i].response  (内存)
-  │             - appendToolResponse(call.id, result)        ← 写 PersistedToolResponse 行
-  │             - stream.send tool_result chunk
   │
-  ├─ try 正常 break: onTurnComplete()  → setStatus(IDLE) + close + persistMetadata
-  ├─ catch CancellationError: onTurnCancelled() → setStatus(IDLE) + persistMetadata + close
-  ├─ catch other:        failTurn(err)        → 记 errorMessage + setStatus(IDLE) + close
+  │     BaseSession 不读取 submit_result、不能在 tool batch 后提前 break，也不注入 follow-up user message。
+  │     SubAgentSession 在本次完整 loop 返回后才检查 controller，必要时 append user reminder 并再启动一个完整 loop。
+  │
+  ├─ try 正常 break: onTurnComplete({ iterations, stopReason })
+  ├─ catch CancellationError: onTurnCancelled()
+  ├─ catch other:        failTurn(err)
   └─ finally: onTurnFinally() + log 'turn done|cancelled|failed'
 ```
 

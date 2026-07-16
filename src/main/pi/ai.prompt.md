@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 7：delegated-only submit_result 已作为普通 catalog local route 落盘) -->
+<!-- Last verified: 2026-07-16 (Step 8：BaseSession 新增 delegated run seams，单个 SubAgentSession 已落盘) -->
 # pi 模块 — Chat 引擎（pi-ai 底座）
 
 > Deskmate 的 chat orchestrator，基于 `@earendil-works/pi-ai` 适配多 provider。
@@ -11,11 +11,11 @@
 |------|------|------|
 | `index.ts` | **pi 子树唯一外部入口**。`src/main/pi/` 之外只能从 `@main/pi` 导入；使用显式 named export，只暴露仓库中真实存在的外部消费面。子树内部仍按依赖方向直接引用具体模块，避免 barrel 自引用；工具注册仍由 `ensureToolsRegistered()` 动态触发，根入口不得静态导入 `tools/index.ts` | 小 |
 | `agent.ts` | Agent 注册表 + getOrCreateSession | 小 |
-| `prompt.ts` | system prompt 拼装(identity + knowledge + skills + sub-agents + global) | 小 |
-| `session/` | turn loop 单一权威。RegularSession/JobRun 保持既有无 scope 行为；未来 delegated session 在最外层建立 delegate context | 中 |
+| `prompt.ts` | 通用 system prompt 拼装(identity + knowledge + skills + global)，默认绝不含委派指导；未来需要 delegation 的 BaseSession 子类在通用 prompt 后显式追加新 Agent graph guidance | 小 |
+| `session/` | turn loop 单一权威。RegularSession/JobRun 保持既有无 scope 行为；SubAgentSession 仅通过 additive run environment、iteration 与 completion seams 复用它，并在外层把多个完整 user turn 编排为 delegated run | 中 |
 | `tool.ts` | **catalog + 执行**两段同住一文件。catalog local route 直接持有 `LocalTool` snapshot，经统一 helper 执行；delegate context 存在时仅过滤交互式 `ask` LocalTool，单次 delegated catalog 可附未注册 `submit_result`。Step 9 加入真实 `subagent` 对象禁止嵌套；其它工具与 MCP OAuth 保持普通能力；`web research` 与已知 shell device-auth 在各自执行边界拒绝 | 中 |
 | `tools/` | **本地工具子系统** —— `LocalTool` registry + `ToolContext` + `lazy(spec, loader)` + 所有具体工具文件。delegate capability 在 scope 存在时于执行点收紧 | 见子目录 |
-| `subagent/` | **建设中**的 Agent 委派运行时边界。已有 shared run contract、parent-scoped subrun persist store、delegated-only `submit_result`/formal reducer、未注册 cmdline facade 与 capability boundary；manager/session 仍未接线，旧 `lib/subAgent` 仍是生产路径 | 中 |
+| `subagent/` | **建设中**的 Agent 委派运行时边界。已有 single-run `SubAgentSession`、shared contract、parent-scoped store、delegated-only submit/result、未注册 cmdline facade 与 capability boundary；manager 与 production registration 仍待 Step 9，旧 `lib/subAgent` 仍是生产路径 | 中 |
 | `auth.ts` | PiAuthManager:OAuth + apiKey 存取 + expires-based refresh + inflight dedup | 中 |
 | `compression.ts` | 压缩决策(usage = pi.usage.totalTokens,含 output,与 badge 同口径)+ 内置 compressWithFullMode 调用 | 小 |
 | `mcp.ts` | external MCP 工具薄包装:`listAllMcpTools()`(给 catalog 列举外部工具)/ `executeMcpToolOnServer(serverName, toolName, args, signal)`(server-scoped 执行,**不再**有按裸 toolName 查全局 map 的路径) | 小 |
@@ -84,7 +84,7 @@ agent → session → prompt / tool / mcp / compression → utils/internal
 - `compression.ts` 内 `COMPRESSION_THRESHOLD = 0.85`
 
 ### 改 turn loop
-- `session/base.ts` 是单一权威(turn loop 全在 `BaseSession`);务必维持 stop / overflow / error 分支语义;新增形态在 `BaseSession` 上扩子类(`session/regular.ts` / `session/job.ts`),不要回到老的两条平行 turn loop
+- `session/base.ts` 是单一权威(turn loop 全在 `BaseSession`)；新增形态只能以真实受保护 seam 覆盖 run environment/iteration/completion，不能复制 loop、在 loop 内截断 submit，或给 Regular/Job 加 role 分支。`SubAgentSession` 是唯一允许建立 delegate scope 的 session，并在 loop 外编排 follow-up user turn。
 
 ### 后台 utility 新增 LLM 调用
 - 用 `utilityCompletion.runUtilityCompletion({ modelKey, profileId, ... })`(`utils/utilityCompletion.ts`)

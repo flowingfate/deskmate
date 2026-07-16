@@ -178,6 +178,20 @@ interface DelegateExecutionContext {
 
 新/通用能力在需要差异时只读取 `getDelegateExecution()`：有值是 delegated run，无值是原有正常路径。禁止 agent scope、scope fallback、`enterWith()`、全局 mutable flag、eventSender 或 IPC 角色推断。
 
+### 2.7.1 Step 8 单 run session 实际契约（2026-07-16）
+
+- `SubAgentSession({ subrun, signal, parentTracer?, callbacks? })` 只消费 pending `Subrun` 已落盘 data；不接收第二份 parent/delegate/request，避免身份与 request 双事实源。
+- `run()` 的可预期非启动结果为 `{ kind:'not_pending', status }`；成功收敛为 `{ kind:'result', result }`。terminal persistence 失败是 I/O 错误，向上抛出且不会返回内存结果。
+- session 最外层建立 delegate scope；执行 Agent runtime config、通用 prompt 和 catalog 归 delegate，`ToolContext` 仍持 parent identity + delegateId。通用 prompt 不包含委派指导，SubAgentSession 不追加该部分。
+- `BaseSession` 只新增通用 protected run-environment/iteration/completion seams。Regular/Job 不加角色分支；submit/missing-submit 语义完全在 SubAgentSession 的 loop 外编排：每次 BaseSession 调用都是完整 ReAct user turn，外层结束后才被动读取 controller，必要时 append reminder 并开始下一 turn。`maxTurns` 跨这些 turn 累计，不依赖 `toPiContext` options。
+- 终态顺序：assistant/tool transcript flush → formal result build → running metadata/context persist → terminal `Subrun.finish` → `onResult` / return。manager 仍负责授权、admission、timer、abort ownership 和 runtime state。
+- parent abort 覆盖 BaseSession abortor 创建前的 startup window：SubAgentSession 在启动前、mark-turn metadata persist 后，以及每个完整 ReAct turn 前后收敛 cancelled；进入 loop 后 listener 直接 abort BaseSession controller。不得让已取消 run 发起首个 LLM 请求。
+
+### 2.7.2 未来 delegated follow-up 边界（待独立设计）
+
+- 当前 Subrun persisted union 是 `pending → running → terminal`，`Subrun.start()` 仅接受 pending、`finish()` 仅接受 running；Step 8 的 session 因此是 one-shot terminal delivery，不具备 terminal 后续聊 API。
+- 主 Agent 后续追问同一 delegate 不能通过重开 terminal Subrun 实现，否则会破坏 formal result、finishedAt 与 reload-safe audit 事实。未来需明确选择“长寿命 delegated conversation + 多次 delivery records”或“新的 continuation Subrun + 明确 history/reference link”，在独立 step review 后再变更 persisted contract。
+
 ### 2.8 委派请求和上下文
 
 `SubAgentRunRequest`（`src/shared/persist/types/subrun.ts`）包含：

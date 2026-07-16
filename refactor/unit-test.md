@@ -126,6 +126,16 @@
 - [ ] P0 parent summary 作为不可信 reference boundary 注入。
 - [ ] P1 RegularSession/JobRun 既有 turn loop 行为不被新增 hooks 改变。
 
+### Step 8 实际补充 — 2026-07-16
+- 实际 contract：SubAgentSession 从 pending Subrun data 唯一派生 parent/delegate/request，在 delegate scope 内使用 delegate runtime config/catalog/prompt；`ask` 不在 catalog、`submit_result` 只在该 session snapshot 内。
+- 新增候选：pending 以外的 `run()` 返回 explicit `not_pending`；submit_result 不会提前终止当前 ReAct loop，只有该完整 loop 自然结束后才 formalize；无 submit 时外层仅 append/flush 一条 reminder user message，再执行完整第二 turn，transcript 保持 user → assistant → user → assistant；总 maxTurns 跨两 turn 累计，耗尽后按 `result_not_submitted` partial/failed 收敛；parent abort/stream abort → cancelled，runtime error → failed。
+- 新增候选：每轮 assistant/tool transcript 先 flush，terminal `Subrun.finish` 成功后才 resolve result；finish I/O 失败不得返回 completed；回调只收到 bounded text snippet、tool step 与 terminal formal result。
+- 新增候选：BaseSession default environment 和 Regular/Job 既有 30-turn/stop 行为不因 delegated seams 改变。
+- 最高风险：manager 重复拼 prompt/result、把 parent identity 替换为 delegate identity，或在 terminal persist 前向父 tool call 返回成功。
+- 需要用户在 Step 14 前决定：无。
+- 新增候选：parent abort 落在 `Subrun.start()` 与 BaseSession abortor 创建之间、mark-turn persist 后、首条 transcript append 后时，均先收敛 cancelled 且不进入首次 LLM stream。
+- 后续独立设计候选（不纳入当前 Step 14）：terminal Subrun 不可被 reopen；若引入 delegated follow-up，必须验证每次 delivery 与 conversation lifetime 的 persisted state 不混淆。
+
 ## Step 9 候选：Manager 与生产工具
 
 - [ ] P0 parent delegates 未授权/self/dangling/archived target 全部明确拒绝。

@@ -28,7 +28,7 @@ import type { ThinkingLevel } from '@shared/persist/types'
 
 import { CancellationError } from '@main/lib/utilities/errors';
 
-import { readAgentRuntimeConfig } from '../utils/config';
+import { readAgentRuntimeConfig, type AgentConfig } from '../utils/config';
 import { resolveCredentials, getModelInfo } from '../model';
 import { buildSystemPrompt } from '../prompt';
 import { toPiContext, fromPiAssistantMessage } from '../utils/messageBridge';
@@ -92,6 +92,21 @@ export interface StreamOneRoundArgs {
    * pi-ai 完成，deskmate 不在内部做翻译。
    */
   thinkingLevel?: ThinkingLevel;
+}
+
+/** 单次 turn loop 在开始 LLM 循环前确定的不可变运行环境。 */
+export interface RunEnvironment {
+  agentCfg: AgentConfig;
+  baseModel: PiModel<PiApi>;
+  systemPrompt: string;
+  catalog: ToolCatalog;
+  maxTurns: number;
+}
+
+
+export interface TurnCompletion {
+  iterations: number;
+  stopReason: string | undefined;
 }
 
 /**
@@ -204,29 +219,8 @@ export abstract class BaseSession {
     let turnError: Error | null = null;
 
     try {
-      const cfg = await readAgentRuntimeConfig(this.profileId, this.agentId);
-      if (!cfg.ok) throw new Error(cfg.error);
-      const { agent: agentCfg, parsedModel } = cfg;
-
-      // 一次解析 pi.Model + capability —— supportsTools 决定要不要拉 MCP 工具。
-      const resolved = await getModelInfo(parsedModel);
-      if (!resolved) {
-        throw new Error(`[pi/session] Model "${agentCfg.model}" not found; please reselect`);
-      }
-      const baseModel = resolved.model;
-
-      const systemPrompt = await buildSystemPrompt({
-        agentCfg,
-        profileId: this.profileId,
-        agentId: this.agentId,
-        sessionId: this.id,
-      });
-      // Catalog 在第一次循环里构建一次,后续 iteration 复用 —— turn 内 MCP
-      // server 增删的可见性留给下一次 turn。compressed 估算和 stream 调用
-      // 共用同一份 specs,保证"LLM 看到的"与"我们估算的"一致。
-      const catalog: ToolCatalog = resolved.capabilities.tools
-        ? await buildToolCatalogForAgent(agentCfg)
-        : ToolCatalog.empty();
+      const environment = await this.prepareRunEnvironment();
+      const { agentCfg, baseModel, systemPrompt, catalog, maxTurns } = environment;
       const piTools = catalog.specs;
       const contextWindow = baseModel.contextWindow || 128_000;
 
@@ -258,8 +252,9 @@ export abstract class BaseSession {
         return result;
       };
 
-      for (let iter = 0; iter < MAX_TURN_ITERATIONS; iter++) {
+      for (let iter = 0; iter < maxTurns; iter++) {
         iters = iter + 1;
+        this.onTurnStarted(iters);
         if (signal.aborted) throw new CancellationError('Turn cancelled');
 
         const compressionResult = await doCompress();
@@ -334,17 +329,16 @@ export abstract class BaseSession {
           },
         };
 
+        const toolCalls = final.content.filter((c) => c.type === 'toolCall');
+
         // 仅当 pi 明确告知 toolUse 时继续；模型只输出 toolCall 但 stopReason
         // 非 'toolUse' 视作终止。
-        if (final.stopReason !== 'toolUse') break;
-
-        const toolCalls = final.content.filter((c): c is Extract<typeof c, { type: 'toolCall' }> => c.type === 'toolCall');
-        if (toolCalls.length === 0) break;
+        if (final.stopReason !== 'toolUse' || toolCalls.length === 0) break;
         if (signal.aborted) throw new CancellationError('Cancelled before tool execution');
         await this.handleToolCalls(toolCalls, signal, turnTracer, catalog);
       }
 
-      await this.onTurnComplete();
+      await this.onTurnComplete({ iterations: iters, stopReason: lastStopReason });
     } catch (err) {
       if (err instanceof CancellationError) {
         turnOutcome = 'cancelled';
@@ -381,7 +375,7 @@ export abstract class BaseSession {
   ): Promise<void>;
 
   /** turn 正常跑完（所有迭代 break / aborted partial 落盘后）。 */
-  protected abstract onTurnComplete(): Promise<void>;
+  protected abstract onTurnComplete(completion: TurnCompletion): Promise<void>;
   /**
    * turn 抛 CancellationError 后的收尾。**默认收敛掉错误**——base 调完即 `return`，
    * runTurnLoop 整体 resolve。需要把 cancel 抛回上层（如 scheduler）的子类，在
@@ -400,6 +394,26 @@ export abstract class BaseSession {
   protected abstract onCompressionApplied(): Promise<void>;
   /** compression 即将启动（用于推 COMPRESSING_CONTEXT status）。默认 no-op。 */
   protected onWillCompress(): void {}
+
+  /** 默认环境保持 RegularSession / JobRun 的既有 config、prompt、catalog 与 30-turn 语义。 */
+  protected async prepareRunEnvironment(): Promise<RunEnvironment> {
+    const { profileId, agentId, id } = this;
+    const cfg = await readAgentRuntimeConfig(profileId, agentId);
+    if (!cfg.ok) throw new Error(cfg.error);
+    const { agent: agentCfg, parsedModel } = cfg;
+    const resolved = await getModelInfo(parsedModel);
+    if (!resolved) {
+      throw new Error(`[pi/session] Model "${agentCfg.model}" not found; please reselect`);
+    }
+    const { model: baseModel, capabilities: cap } = resolved;
+    const systemPrompt = await buildSystemPrompt({ agentCfg, profileId, agentId, sessionId: id });
+    const catalog = cap.tools ? await buildToolCatalogForAgent(agentCfg) : ToolCatalog.empty();
+    return { agentCfg, baseModel, systemPrompt, catalog, maxTurns: MAX_TURN_ITERATIONS };
+  }
+
+  /** 每个真实 iteration 恰调用一次；overflow retry 仍属于同一 iteration。 */
+  protected onTurnStarted(_iteration: number): void {}
+
 
   // ─── helpers / persistence ──────────────────────────────────────────────
   /**

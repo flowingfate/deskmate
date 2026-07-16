@@ -42,6 +42,13 @@
 - `getSubrun(subrunId)` 始终受 parent Session scope 限定；pending/running load 不自动改写。Step 9 必须成为 stale running → interrupted failed 的唯一 recovery writer。
 - `Subrun` 直接是 Step 8 的 `PersistSessionLike`；session 正常完成先 flush transcript，再通过 `finish(result)` 原子更新 terminal data。
 
+### Step 8 实际输入（2026-07-16）
+
+- `SubAgentSession` 构造只需 `{ subrun, signal, parentTracer?, callbacks? }`，parent/delegate/request 均从 Subrun data 唯一读取；`run()` 返回 `{ kind:'result', result } | { kind:'not_pending', status }`。
+- manager 对 newly created pending run 把 `not_pending` 视为明确 internal rejection；它必须等 `run()` resolve 后才从 result 读取 terminal state，不能预先合成 completed。
+- session 在 scope 内加载 delegate config/prompt/catalog，controller/missing-submit/formal builder 已内聚。manager 不复制这些语义，只提供 callbacks 的 bounded-state sink。
+- prompt 边界：`buildSystemPrompt()` 已完全通用化，不读取 legacy/new sub-agent config，也不输出 delegation guidance。Step 9 在新顶层 `subagent` 真正生产注册时，才由需要委派能力的 parent BaseSession 子类在通用 prompt 后显式追加基于 `Profile.resolveDelegates(parentId)` 的新 Agent graph guidance；SubAgentSession 永不追加。
+
 ## 3. `src/main/pi/subagent/manager.ts`
 
 Manager 负责 orchestration，不复制 session逻辑：

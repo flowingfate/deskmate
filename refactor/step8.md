@@ -1,6 +1,6 @@
 # Step 8 — 在 `src/main/pi/subagent` 实现 BaseSession 驱动的单个 SubAgentSession
 
-> 状态：待执行
+> 状态：已完成（用户 review 通过）
 > 前置：Steps 2、4、5、6、7 complete
 > 下游：Step 9 manager/production tool、Step 11 renderer、Step 14 tests
 > 本步只交付“执行一个 run”的能力，不处理全局并发和生产注册。
@@ -37,47 +37,39 @@ Step 6 实际输入：parent `Session.createSubrun(request)` 返回 `{ kind:'cre
 
 ## 4. BaseSession 最小抽象
 
-目标不是做万能框架，而是抽出真实第三种 session形态需要的差异：
+当前 hard-coded 点是 runtime config、model、system prompt、catalog、固定 30 turns 与无上下文的 completion hook。`ToolContext` factory 已在 Regular/Job 子类；SubAgentSession 也将只在自己的 `handleToolCalls` 构造，不能搬进 Base。
 
-- load execution Agent runtime config；
-- build system prompt；
-- build ToolCatalog；
-- max iterations；
-- create ToolContext；
-- after round/tool batch 判断 formal submit；
-- terminal persistence hooks。
+本步只增加实际第三种 session 需要的 protected seams：
 
-可采用一个 protected `prepareRunEnvironment()` 返回稳定 bundle，或少量窄 hooks。选择标准：
+- `prepareRunEnvironment()`：默认保留现有 config/model/prompt/catalog/30-turn 构建；SubAgentSession 只替换执行 Agent、delegate prompt、delegated catalog 和剩余 request maxTurns；
+- `onTurnStarted(iteration)`：供单 run 报告真实 iteration；SubAgentSession 自己累计跨 user turn 的总数，overflow retry 不重复计数；
+- completion hook 接收实际 iteration 和 stopReason，Regular/Job 仍可忽略新增参数。
 
-- Regular/Job 的主流程仍直读；
-- 不重复 overflow/compression/tool response loop；
-- 不让 BaseSession依赖 `SubAgentRunRequest`；
-- 不为未来 speculative session预留抽象。
+`BaseSession` 不依赖 `SubAgentRunRequest`、submit 类型或委派语义。它只执行一个标准 user turn 的完整 ReAct loop，绝不因 submit、缺 submit 或 tool batch 提前停止。此为 additive extraction，不需要大幅重写或修改旧 caller。
 
 ## 5. 新 `SubAgentSession`
 
 构造输入：
 
-- profileId；
-- parentAgentId/sessionId；
-- delegateAgentId；
-- Step 6 subrun store；
-- normalized request；
-- abort signal/controller ownership seam；
-- tracer/state callbacks（窄接口）。
+- pending `Subrun`（从其已落盘 data 派生 profile、parent identity、delegate 与 normalized request）；
+- parent `AbortSignal`；
+- 可选 parent tracer；
+- 窄回调 `{ onStep?, onResult? }`，分别发送 `SubAgentRunStep` 和 terminal formal result。
+
+`run()` 只对 `pending` Subrun 启动；非 pending 返回显式 `{ kind:'not_pending', status }`。terminal persistence I/O 失败仍上抛，绝不把内存 completed 返回给 manager。
 
 执行：
 
 1. 从普通 Agent store加载 delegate config；
 2. 使用 delegate model/thinking/system prompt；
-3. system prompt追加固定运行角色规则、task、expectedOutput、context boundary；
-4. 首条 user message写入 subrun transcript；
+3. delegate 原通用系统 prompt 提供 identity/knowledge/skills/global 基础，再追加固定 delegated role、task、expected output、untrusted parent summary 和 submit requirement；通用 prompt 不读取或展示任何 legacy/new delegates；
+4. 首条 user message 写入 subrun transcript；
 5. 在 delegate scope 内构建 delegate Agent 的普通 catalog，并以 `withSubmitResult(createSubmitResultTool(controller))` 追加唯一私有 submit route；
-6. ToolContext 继续传 parent `agentId/sessionId`；Local 从 context 解析，Knowledge/Skill 从 `getDelegateExecution()?.delegateId ?? ctx.agentId` 解析；
-7. 复用 BaseSession compression/overflow/tool response；
-8. controller 首次提交后停止；无提交时使用 `decideMissingSubmit()` 的一次 reminder / partial / failed 决策，并以 `buildFormalResult()` 注入可信 metadata；
-9. terminal result写 Step 6 data.json 后返回；
-10. 任意错误确保 turn/status收敛且 transcript flush。
+6. ToolContext 传 parent `agentId/sessionId` 与 `mode:'delegate'`/delegateId；Local 从 parent context 解析，Knowledge/Skill 从 delegate scope 解析；
+7. 每个 user turn 原样复用 BaseSession compression、overflow、assistant/tool response 与消息 flush；`streamOneRound` 直接 drain pi events，且仅将有限文本 tail 发给 `onStep`；
+8. 整个 ReAct user turn 自然结束后，外层才被动读取 controller：已 submit 则 formalize/finish；未 submit 且尚可继续时 append/flush 一条真实 reminder user message，再启动完整的下一 user turn；已提醒、无 tools 或总 maxTurns 耗尽时才按 partial/failed 收敛。`maxTurns` 是整个 Subrun 的总 iteration 预算，follow-up turn 仅使用剩余预算；
+9. abort/stream-aborted 形成 cancelled，非取消异常形成 failed；两者均先 flush transcript，再调用 `Subrun.finish(result)`；
+10. 成功与缺 submit 的 terminal path 同样先 flush transcript、再 builder、再 `finish(result)`、最后才回调/返回。
 
 ## 6. Prompt 规则
 

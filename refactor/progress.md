@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 7 complete，等待用户另行开始 Step 8**
-- 当前门禁：Step 7 submit_result/state-machine 与 local route 统一设计已获用户 review 通过；未进入 Step 8
-- 业务步骤：7 / 13 complete；Step 8 为 `pending`
-- 测试步骤：Step 14 尚未开始；Step 7 未新增或运行单测
-- 生产代码变更：新 submit tool 仍只存在于 delegated catalog snapshot，未注册到全局 registry；新 subagent facade 仍未注册，旧 `app subagent` 仍是生产入口
+- 总体阶段：**Step 8 complete，等待用户另行开始 Step 9**
+- 当前门禁：Step 8 BaseSession 驱动的 delegated session 已获用户 review 通过；未进入 Step 9 manager、生产注册或旧路径切换
+- 业务步骤：8 / 13 complete；Step 9 为 `pending`
+- 测试步骤：Step 14 尚未开始；Step 8 未新增或运行单测
+- 生产代码变更：新 submit tool 与新 subagent facade 仍未生产注册；旧 `app subagent` 仍是生产入口，等待 Step 9 原子 cutover
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -41,7 +41,7 @@
 | 5 | [Delegate Execution Context 与能力边界](step5.md) | complete | Steps 2–4 | `DelegateExecutionContext`、delegate-only capability checks |
 | 6 | [三位序号 Subrun 持久化](step6.md) | complete | Steps 1,2,4 | `001..999` allocator、parent-owned data/messages store、`PersistSessionLike` adapter、persisted type contract |
 | 7 | [submit_result 与正式结果状态机](step7.md) | complete | Steps 1,5,6 | delegated-only ordinary local submit route、一次性 controller、formal result reducer、missing-submit decision |
-| 8 | [BaseSession 驱动的新 SubagentSession](step8.md) | pending | Steps 2,4,5,6,7 | 可执行单个 persisted delegated run 的 session |
+| 8 | [BaseSession 驱动的新 SubagentSession](step8.md) | complete | Steps 2,4,5,6,7 | 单个 persisted delegated run 的 session；用户 review 通过 |
 | 9 | [Manager、顶层工具接线与主进程 cutover](step9.md) | pending | Steps 3,6,8 | production `subagent` tool、limits/cancel/state；旧 app command 下线 |
 | 10 | [Agent Delegation 配置 UI](step10.md) | pending | Step 2 | description/delegates UI；独立 Sub-Agent 管理入口下线 |
 | 11 | [委派运行卡片与 audit/cancel IPC](step11.md) | pending | Steps 6,7,9 | reload-safe card、live state、single cancel、run metadata query |
@@ -284,6 +284,14 @@
 - 用户确认 dedicated `submit_result` tool、普通 local route 直持 `LocalTool`、`resolveIdentity()` route miss 展示性 fallback，以及删除无生产调用的 `ToolsRegistry.execute()`；Step 7 状态切为 `complete`。
 - Step 8 仍为 `pending`，只能由用户另行开始。
 
+### 2026-07-16 — Step 8 启动与 BaseSession 复核
+
+- 已完整复核 `BaseSession`、RegularSession、JobRun、persist `Subrun`、submit reducer、tool catalog、message bridge 与 Pi/session 文档；未读取或修改旧 Sub-Agent runtime/test。
+- 当前 BaseSession 的硬编码点为 config/model/prompt/catalog、30-turn cap、per-round context、tool-batch continuation 与无上下文 completion；实际只需 additive `prepareRunEnvironment`、iteration、assistant transient-reminder、tool-batch stop 和 completion metadata seams。Regular/Job 维持原流程，不增加 delegate mode 分支。
+- `toPiContext(..., { transientReminder })` 已是现成的非落盘入口；Step 8 以它实现一次 fixed reminder，而不是写入伪 user message。
+- delegated prompt 将复用普通 `buildSystemPrompt` 的 identity/knowledge/skills/global 逻辑，通过新增默认开启的 `includeConfiguredSubAgents` 参数排除 legacy configured subAgents，再追加 run contract；不复制 skill format。
+- 下游 Step 9/11 的稳定输入预定为 `SubAgentSession` 的 pending-start outcome、terminal formal result 与 `{ onStep?, onResult? }` 窄回调；manager 保持唯一的授权、timeout、并发和取消 owner。
+
 ## 执行记录
 
 ### 2026-07-16 — Step 1 — complete
@@ -372,5 +380,55 @@
 - 文档交接：更新 `context.md`、Step 7/8、`unit-test.md`、pi/subagent、pi/tools、pi 与主架构文档；Step 8 已绑定实际 route/controller/builder/fallback API。
 - review cleanup：保留 `resolveIdentity()` 对未知 route 的展示性 fallback；删除无生产调用的 `ToolsRegistry.execute`，既有 registry tests 改为覆盖 `executeLocalTool` 的异常、取消与 context 透传。
 - 用户 review 待确认：普通 local route 直持 tool object 的统一方向、submit schema、local deliverable policy、一次 reminder 后的 `result_not_submitted` 收敛语义。
+
+### 2026-07-16 — Step 8 — awaiting-review
+- Plan review 变化：完整复核 BaseSession/RegularSession/JobRun、Subrun、submit reducer、catalog/message bridge 后，未需大幅重写 BaseSession。只抽取 additive `prepareRunEnvironment`、iteration、assistant follow-up、tool-batch stop 与 completion metadata seams；Regular/Job 无 mode 分支、无需协变修改。
+- 实际输出/API：新增 `pi/subagent/prompt.ts::buildDelegatedSystemPrompt` 与 `pi/subagent/session.ts::SubAgentSession`。构造仅接收 `{ subrun, signal, parentTracer?, callbacks? }`，从 persisted Subrun data 唯一派生 parent/delegate/request；`run()` 返回 `{ kind:'result', result } | { kind:'not_pending', status }`。
+- execution：run 外层建立 delegate scope，加载 delegate config/model/thinking/catalog，普通 catalog snapshot 仅附私有 `submit_result`；ToolContext 保持 parent `agentId/sessionId` + `delegateId`。prompt 复用普通 identity/knowledge/skills/global，新增默认开启的 `includeConfiguredSubAgents` 参数以排除 legacy list，parent summary 只作不可信参考。
+- loop/result：delegate request maxTurns 覆盖默认 30；stream callback 产生 bounded text/tool steps，收集 usage 与 deliverables。submit 后停止；无 submit 通过既有 `decideMissingSubmit` 只 append/flush 一条真实 reminder user message 后继续，后续收敛 partial/failed，保证 transcript 不出现连续 assistant。assistant/tool flush、formal build、metadata persist、`Subrun.finish`、callback/return 按该顺序执行；abort/stream-aborted 是 cancelled，运行异常是 failed。
+- 修改生产文件：`src/main/pi/session/base.ts`、`src/main/pi/prompt.ts`、`src/main/pi/subagent/{prompt,session}.ts`。未修改旧 `lib/subAgent`、旧 app command、persist store、renderer 或全局 tools registry；搜索确认新 session/prompt 无旧 runtime import。
+- 静态验证：最终 LSP diagnostics 对四个生产文件均无 error；`npm run check:impact -- src/main/pi/session/base.ts src/main/pi/prompt.ts src/main/pi/subagent/prompt.ts src/main/pi/subagent/session.ts` 通过（direct dependents 仅 session index/job/regular）；`npm run typecheck` 与 `npm run build` 通过。build 仅有既有 renderer chunk-size warning；npm 同时报既有 `.npmrc` unknown config warnings。
+- 未做的运行验证：按重构政策未新增/运行单测，未启动应用、未做 smoke/E2E。
+- 文档交接：更新 Pi/subagent/agent-loop/main architecture、`context.md`、Step 8/9 和 `unit-test.md`；Step 9 已改为消费实际 session outcome/callback seam。
+- 用户 review 待确认：BaseSession 五个 minimal seams、session 从 Subrun data 单一派生 identity/request、一次 reminder/terminal 顺序、`not_pending` explicit outcome 与 Step 9 manager 边界。
+
+### 2026-07-16 — Step 8 abort race 修复
+- review 期间发现：parent signal 若在 `Subrun.start()` 后、BaseSession 创建 internal abortor 前触发，旧 listener 只能记录 `parentAborted`，可能仍进入首次 LLM stream。
+- 修复：`SubAgentSession.run()` 在 mark-turn metadata persist 与首条 user transcript append 两个 await 边界后检查已记录 abort，命中时直接按 cancelled formal result flush/persist/finish/return；进入 BaseSession loop 后继续由同一 listener abort internal controller。
+- 验证：LSP diagnostics 无 error；`npm run check:impact -- src/main/pi/subagent/session.ts`、`npm run typecheck && npm run build` 均通过。build 仅有既有 renderer chunk-size warning；未按 Step 8 政策新增/运行单测或启动应用。
+
+### 2026-07-16 — Step 8 persisted missing-submit reminder review
+
+- 用户否决 `toPiContext(..., { transientReminder })` 在新 BaseSession 路径的使用：它不落盘，会让 delegated transcript 出现连续 assistant，缺少真实 follow-up user message。
+- 修复：删除 BaseSession 的 reminder state、第四参数传递及 overflow retry option；`afterAssistantMessage()` 改为返回 continue boolean。SubAgentSession 得到一次 reminder 后直接 `appendUserMessage(createUserMessage(...))` 并 flush，BaseSession 随即在同一 loop 继续下一 iteration。
+- 新路径不使用 `transientReminder`；旧 `messageBridge` option 与旧 runtime 保持不动，等待 Step 9/13 旧路径整体删除。
+- 验证：LSP diagnostics 对 `base.ts` / `subagent/session.ts` 无 error；确认新路径仅以三参数调用 `toPiContext`，无 `transientReminder` 引用；`npm run check:impact -- src/main/pi/session/base.ts src/main/pi/subagent/session.ts`、`npm run typecheck`、`npm run build` 均通过。build 仅有既有 renderer chunk-size warning；未新增/运行单测、未启动应用或做 E2E。
+
+### 2026-07-16 — Step 8 natural ReAct turn review
+
+- 用户确认 Subrun 的首要不变量是完整、可继续的合法会话；否决 `afterAssistantMessage` 与 `shouldStopAfterToolCalls` 对 BaseSession loop 的提交/缺提交控制。
+- 修复：删除 BaseSession 的这两个 hooks 及其 context types。BaseSession 恢复为标准 ReAct user-turn loop，不读取 submit controller、不在 tool batch 后提前 break、也不注入 reminder。
+- SubAgentSession 把 missing-submit 判断上移到外层：一次完整 loop 返回后才检查 controller；未提交时 append/flush 真实 reminder user message，再启动完整第二 turn；已提交则在自然结束后 formalize。request `maxTurns` 改为跨所有 outer turns 的总 iteration 预算。
+- 验证：LSP diagnostics 对 `base.ts` / `subagent/session.ts` 无 error；搜索确认 submit controller 与 missing-submit reducer 只留在 SubAgentSession，BaseSession 无 `afterAssistantMessage` / `shouldStopAfterToolCalls`；`npm run check:impact -- src/main/pi/session/base.ts src/main/pi/subagent/session.ts`、`npm run typecheck`、`npm run build` 均通过。build 仅有既有 renderer chunk-size warning；未新增/运行单测、未启动应用或做 E2E。
+
+### 2026-07-16 — Step 8 会话延续与取消密度 review
+
+- 现状核对：当前 session 只支持单次 terminal delivery，不能满足未来“主 Agent 向已完成 delegate 追加追问”。原因是 persisted Subrun state machine 只允许 pending → running → terminal；直接 reopen 会破坏 result/finishedAt/audit contract。该能力记录为未来独立 persisted design，不在 Step 8 伪造续聊 API。
+- missing-submit 兜底已显式限定为最多两个完整 BaseSession user turns：初始 task turn，至多一条 reminder follow-up turn。第二次决策由 `reminderSent` 强制 terminal，非无限循环。
+- 取消检查收敛为 `finishIfAborted()`，只放在启动、turn metadata 写后，以及完整 ReAct turn 前后；删除 reminder decision 中的重复检查，不再按每个 await 机械重复。
+- 验证：LSP diagnostics 对 `subagent/session.ts` 无 error；`npm run check:impact -- src/main/pi/subagent/session.ts`、`npm run typecheck`、`npm run build` 通过。build 仅有既有 renderer chunk-size warning；未新增/运行单测、未启动应用或做 E2E。
+
+### 2026-07-16 — Step 8 通用 prompt 解耦 review
+
+- 用户否决通过 `includeConfiguredSubAgents` 配置开关从通用 prompt 隐藏旧 Sub-Agent 指导；该开关把已废弃 legacy 行为泄漏到所有调用者。
+- 修复：删除 `buildSystemPrompt` 的开关、旧 `buildSubAgents` 查询及 `promptTemplates` 中旧 `app subagent spawn/spawn-many` guidance。默认通用 prompt 只包含 identity/knowledge/skills/global。
+- 后续策略：Step 9 生产注册新顶层 `subagent` 时，只有需要委派能力的 parent BaseSession 子类才能在通用 prompt 后显式追加基于新 Agent graph 的 guidance；SubAgentSession 不追加。
+- 验证：LSP diagnostics 对 `pi/prompt.ts`、`pi/utils/promptTemplates.ts`、`pi/subagent/prompt.ts` 无 error；搜索无 `subAgentsBlock` / `SubAgentItem` / `includeConfiguredSubAgents` / legacy spawn guidance；`npm run check:impact -- src/main/pi/prompt.ts src/main/pi/utils/promptTemplates.ts src/main/pi/subagent/prompt.ts`、`npm run typecheck`、`npm run build` 通过。build 仅有既有 renderer chunk-size warning；未新增/运行单测、未启动应用或做 E2E。
+
+### 2026-07-16 — Step 8 用户 review 通过
+
+- 用户确认 Step 8 完结：BaseSession 保持完整自然 ReAct user turn；SubAgentSession 在 loop 外完成一次 missing-submit follow-up、总 turn budget、terminal result 与取消编排。
+- 通用 prompt 已与 legacy/new delegation guidance 完全解耦；Step 9 才在需要委派能力的 parent session 子类中按新 Agent graph 显式追加。
+- Step 8 状态切为 `complete`；Step 9 仍为 `pending`，只能由用户另行开始。
 
 每个后续 step 完成后继续追加同结构记录。
