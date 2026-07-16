@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 10 complete**
-- 当前门禁：Step 10 已获用户 review 通过；Step 11 前置已满足但仍为 pending，须由用户另行开始
-- 业务步骤：Step 9、Step 10 均为 `complete`
-- 测试步骤：Step 14 尚未开始；Step 10 未新增或运行单测
-- 生产代码变更：description/delegates 编辑器已接线；旧 CRUD/persist/IPC/renderer 已下线，旧磁盘数据未触碰
+- 总体阶段：**Step 11 complete**
+- 当前门禁：用户已 review 通过 Step 11；Step 12 仍为 pending，等待用户明确选择 `in-progress` 或 `deferred`
+- 业务步骤：Step 9、Step 10、Step 11 均为 `complete`
+- 测试步骤：Step 14 尚未开始；Step 11 新增独立 Story，未新增或运行单测
+- 生产代码变更：新 subagentRun IPC、live state bridge、顶层 subagent run 卡片、单 run cancel 与 renderer-owned indigo/Bot chip 已接线；Story 完整覆盖 renderer visual branches
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -44,7 +44,7 @@
 | 8 | [BaseSession 驱动的新 SubagentSession](step8.md) | complete | Steps 2,4,5,6,7 | 单个 persisted delegated run 的 session；用户 review 通过 |
 | 9 | [Manager、顶层工具接线与主进程 cutover](step9.md) | complete | Steps 3,6,8 | production `subagent` tool、limits/cancel/state；旧 app command/backend 下线 |
 | 10 | [Agent Delegation 配置 UI](step10.md) | complete | Step 2 | description/delegates UI；独立 Sub-Agent 管理入口下线 |
-| 11 | [委派运行卡片与 audit/cancel IPC](step11.md) | pending | Steps 6,7,9 | reload-safe card、live state、single cancel、run metadata query |
+| 11 | [委派运行卡片与 audit/cancel IPC](step11.md) | complete | Steps 6,7,9 | reload-safe card、live state、single cancel、run metadata query、完整 renderer Story matrix |
 | 12 | [可选 Messages Dialog](step12.md) | pending | Step 11 review | 可实现则交付 Dialog；否则交付 verified deferred design 并标 deferred |
 | 13 | [证明新路径唯一并删除残留旧源码](step13.md) | pending | Steps 9–12 | 新路径唯一生效；残留旧源码/测试删除；全局文档更新 |
 | 14 | [统一编写单元测试](step14.md) | pending | Steps 1–13 + `unit-test.md` | 用户确认后的新单测与测试执行记录；仍无 E2E |
@@ -518,3 +518,24 @@
 ### 2026-07-16 — Step 10 用户 review 通过
 - 用户确认 Step 10 完成；Delegation UI 拆分、dirty/save-all 闭包、路由和旧配置路径删除均获通过。
 - Step 11 的前置已满足，但保持 `pending`，仅在用户另行开始后执行。
+
+### 2026-07-16 — Step 11 — awaiting-review
+- 实际输出/API：新增 `src/shared/ipc/subagentRun.ts` 的 `getRunData`、`cancelRun` 与 `stateUpdate`；`src/main/startup/ipc/subagent-run.ts` 以 active Profile → parent Agent → parent Session → Subrun 链解析，metadata query 不读取 messages，cancel 明确区分 terminal/not-active/lookup failure。preload 与 renderer client 完整接线。
+- live state：`SubAgentManager.subscribeStateUpdates()` 让 IPC 覆盖所有 profile-bound manager；renderer cache 只保留 pending/running，并以 profileId + parent Agent/session + correlationId 关联，已知 result 后再核对 subrunId。final tool JSON 与 persisted data 是 terminal/reload 事实，不依赖 live cache。
+- renderer：新顶层 `subagent` renderer 用 Zod 只做展示投影；run result 显示 Agent identity、#ID、文字+icon status、turn/duration、step/snippet、formal content/reason/error/warnings/deliverables 与单取消。list/describe 为只读结果，rejected 不伪造 ID；没有 messages API，故不放 View details placeholder。组件拆分后最大为 258 行。
+- 静态验证：相关 LSP diagnostics 无 error；`npm run check:impact -- <12 个代码文件>`、`npm run typecheck`、`npm run build` 均通过。build 仅有既有 renderer chunk-size warning；npm 有既有 `.npmrc` unknown-config warnings。
+- 未做：遵循 Steps 1–13 政策，未新增/运行单测，未启动应用、未做 browser/smoke/E2E 或人工 UI 验证。
+- Step 12 go/no-go：现有 `MarkdownView` 已直接复用于 formal result，`ToolDetailView` 不需改；完整 hidden transcript 仍无 API。Dialog 至少需新增 messages IPC、懒加载/错误状态和只读 message list，改动跨 main/preload/renderer且仍须用户决定，当前不实施。
+- Story 补充：新增 `src/renderer/story/tools/` 下 5 组 Ladle stories，覆盖 `AnimatedHeight`、`ToolChip`、`ToolDetailView` 的 app/shell/web/write/subagent renderer、`ToolCallsSection` 和 Subagent run final/live/cancel。mock Electron bridge 仅在 story helper，采用 lazy import 保证 production component 无 mock 分支。
+- Story 验证：`npm run ladle:build` 通过，生成 5.40 MiB 静态预览；随后 `npm run typecheck` 与 `npm run build` 均通过。build 仅有既有 renderer chunk-size warning；npm 有既有 `.npmrc` unknown-config warnings。
+- Story 浏览器修复：用户在 `subagent-run-card/formal-result` 实测发现 `undefined.invoke`。已用 browser 复现；根因为 `GeneratedFileCards → agentSessionCacheManager` 的 transitive bridge 依赖漏 mock。仅补齐 `story/tools/mockElectron.ts` 的 agentChat/research/log/human-loop mock，未改生产组件；live fixture 改用相对时间避免异常 duration。
+- 浏览器复验：7 个 `Chat / Tools` story route 均无 page error；formal result、五个 renderer gallery、ToolCallsSection、running card 与 Cancel mock 均可渲染。最终 `npm run typecheck`、`npm run ladle:build`、`npm run build` 均通过；build 仅有既有 renderer chunk-size warning，npm 有既有 `.npmrc` unknown-config warnings。
+- Subagent chip 补充：用户指出 Subagent card story 未见 tool chip。formal/live stories 现同时渲染真实 `ToolCallsSection` + builtin registry，初始展示 `subagent` chip，点击进入真实 input/output detail；下方保留独立 result card。为修复 check-mixed-imports，Story demo 只直接静态导入具体 production module，外层 story 只 lazy import demo，不混用 `@/components/chat/tool` barrel。浏览器复验无 page error，chip 点击后 detail 正常；`npm run typecheck`、`npm run ladle:build` 通过。
+- Subagent chip 样式：`ToolChip` 以稳定顶层 name 识别 subagent，不增加 prop；使用 indigo surface、Bot 图标、delegated-agent tooltip 与专用 aria label，MCP 保持 violet。浏览器确认初始/选中样式与 detail 交互正常；`npm run typecheck`、`npm run ladle:build`、`npm run build` 通过。build 仅有既有 renderer chunk-size warning，npm 有既有 `.npmrc` unknown-config warnings。
+- Subagent chip 归属修正：用户指出通用 `ToolChip` 不应有 subagent 分支。已恢复其 MCP-only特化；定制 UI 全部归 `subagentRenderer.Chip` override，class 直接内联 DOM。浏览器确认 indigo/Bot chip 仍正常；`npm run typecheck`、`npm run ladle:build`、`npm run build` 通过。build 仅有既有 renderer chunk-size warning，npm 有既有 `.npmrc` unknown-config warnings。
+- Subagent Story matrix：用户要求不止两个 demo。已扩展为 11 个独立 Ladle route：custom chip 的 completed/executing/failed/interrupted、pending、running/cancel、completed/partial/blocked/failed/cancelled、rejected、list/describe read-only、unknown fallback。正式 terminal/rejected/read-only/fallback 都经真实 `ToolDetailView + subagentRenderer` 渲染。浏览器逐一加载 11 个 route 无 page error；`npm run typecheck`、`npm run ladle:build`、`npm run build` 通过。build 仅有既有 renderer chunk-size warning，npm 有既有 `.npmrc` unknown-config warnings。
+- Subagent chip tooltip：按用户反馈将静态 tooltip 改为有用信息。`subagentRenderer.Chip` 现在展示 `Delegated Agent` + 当前 cmdline（无 cmd 时说明委派能力）；浏览器 hover 显示完整 run command。`npm run typecheck`、`npm run ladle:build`、`npm run build` 通过。build 仅有既有 renderer chunk-size warning，npm 有既有 `.npmrc` unknown-config warnings。
+
+### 2026-07-16 — Step 11 用户 review 通过
+- 用户确认 Step 11 完成：委派运行卡片、audit/cancel IPC、renderer-owned Subagent chip、完整 Ladle renderer Story matrix 均获通过。
+- Step 11 状态切为 `complete`；Step 12 保持 `pending`，须由用户另行选择实施或 deferred。

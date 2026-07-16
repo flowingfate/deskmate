@@ -61,6 +61,7 @@ interface RejectedAdmission {
 /** 委派运行的唯一授权、reservation、timeout、cancellation 与 live-state owner。 */
 export class SubAgentManager {
   private static readonly managers = new WeakMap<Profile, SubAgentManager>();
+  private static readonly stateUpdateListeners = new Set<SubAgentRuntimeStateListener>();
 
   public static forProfile(profile: Profile): SubAgentManager {
     const existing = SubAgentManager.managers.get(profile);
@@ -69,6 +70,11 @@ export class SubAgentManager {
     const manager = new SubAgentManager(profile);
     SubAgentManager.managers.set(profile, manager);
     return manager;
+  }
+
+  public static subscribeStateUpdates(listener: SubAgentRuntimeStateListener): () => void {
+    SubAgentManager.stateUpdateListeners.add(listener);
+    return () => SubAgentManager.stateUpdateListeners.delete(listener);
   }
 
   private readonly activeRuns = new Map<string, Map<SubrunId, ActiveRun>>();
@@ -362,7 +368,15 @@ export class SubAgentManager {
   }
 
   private publish(state: SubAgentRuntimeState): void {
-    for (const listener of this.stateListeners) {
+    SubAgentManager.notifyStateListeners(this.stateListeners, state);
+    SubAgentManager.notifyStateListeners(SubAgentManager.stateUpdateListeners, state);
+  }
+
+  private static notifyStateListeners(
+    listeners: ReadonlySet<SubAgentRuntimeStateListener>,
+    state: SubAgentRuntimeState,
+  ): void {
+    for (const listener of listeners) {
       try {
         listener(state);
       } catch (error) {

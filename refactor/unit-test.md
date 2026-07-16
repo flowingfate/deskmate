@@ -178,6 +178,14 @@
 - [ ] P1 completed/partial/blocked/failed/cancelled 均映射正确 label/content。
 - [ ] P1 audit query 返回 data，不自动拉 messages。
 
+### Step 11 实际补充 — 2026-07-16
+- 实际 contract：`subagentRun` IPC 的 `getRunData` 只返回 parent-owned `SubrunDataFile`；`cancelRun` 先完成 ownership lookup，再显式返回 cancel_requested / terminal / not_active 或 lookup failure。main state bridge 订阅所有 profile-bound manager，renderer 只缓存 live pending/running state。
+- 新增候选：state event 必须同时匹配 `profileId + parentAgentId + parentSessionId + correlationId`，拿到 result 后再匹配 `subrunId`；相同 `001` 不得跨 parent/profile 污染。terminal state event 不应成为 reload display 事实。
+- 新增候选：run tool result 先于/晚于 audit query 到达都保留 formal result；list/describe 和 rejected 不订阅/伪造 subrun；audit failure 显示恢复性提示，不触发 messages 读取。
+- 删除/改写候选：无 messages Dialog、View details placeholder 或浏览器 E2E 候选。
+- 最高风险：只订阅初始 active Profile 会在 profile switch 后丢失 live event；以 subrunId 或 correlationId 单独匹配会污染并行/跨父会话卡片。
+- 需要用户在 Step 14 前决定：无。
+
 ## Step 12 候选：Messages Dialog（仅实施时）
 
 - [ ] P1 打开时 lazy fetch messages，关闭前不请求。

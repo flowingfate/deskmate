@@ -24,6 +24,7 @@ import invokeUpdate from './update/invoke';
 import invokeAttachment from './attachment/invoke';
 import invokeInternalUrls from './internalUrls/invoke';
 import invokeResearch from './research/invoke';
+import invokeSubagentRun from './subagentRun/invoke';
 
 // Define the API that will be exposed to the renderer process
 export interface ElectronAPI {
@@ -93,6 +94,13 @@ export interface ElectronAPI {
 
   // ChatSession APIs (file operations + store events)
   chatSession: {
+    invoke: InvokeFn;
+    on: OnOff;
+    off: OnOff;
+  };
+
+  // Delegated Subrun audit and live-state IPC
+  subagentRun: {
     invoke: InvokeFn;
     on: OnOff;
     off: OnOff;
@@ -255,6 +263,7 @@ export const electronAPI: ElectronAPI = {
     on: ipcOn,
     off: ipcOff,
   },
+  subagentRun: { invoke: invokeSubagentRun, on: ipcOn, off: ipcOff },
   // Window management
   window: {
     invoke: invokeWindow,

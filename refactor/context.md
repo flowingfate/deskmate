@@ -292,6 +292,16 @@ Renderer 基线必须能渲染委派工具卡片和正式结果。消息详情 D
 - 如果需要大规模改动 message render pipeline，则只保留经过代码现状校验的详细后续方案，不阻塞核心重构；
 - 是否实施由 Step 11 review 后的用户决定，不能擅自扩大。
 
+Step 11 实际落地（2026-07-16）：
+
+- 新 `subagentRun` IPC 以完整 parent identity 查询/取消；`getRunData` 只返回 parent-owned `SubrunDataFile`，明确区分 parent 缺失、invalid/missing/incomplete/corrupt 与 I/O error，绝不读取 transcript；`cancelRun` 先解析同一 ownership chain，再区分 terminal 与 non-active。
+- `SubAgentManager.subscribeStateUpdates()` 是 main IPC 的唯一 process-level bridge，可接住所有现有及后续 profile-bound manager；renderer 仅缓存 live pending/running event，按 profile + parent Agent/session + correlationId（得到 ID 后再核对 subrunId）关联单张卡片，terminal/reload 仍以 tool result 和 persisted data 为事实源。
+- 顶层 `subagent` renderer 的运行卡片显示 Agent identity、`#001`、状态、turn/duration、最新 step、formal result、warning 和 deliverable；取消有 loading/error feedback。Step 12 前无 messages API，故没有无效的详情入口。
+- `src/renderer/story/tools/` 为当前全部 chat tool 可视组件提供独立 Ladle stories；IPC 依赖由该目录的 lazy-loaded Electron mock 隔离，生产组件与 runtime contract 均未为 Story 增加分支。
+- Story mock 已覆盖 subagent card 的传递依赖（persist、agentChat、research、workspace/fs/skills、renderer log 与 human-loop global）；浏览器中每个 `Chat / Tools` story 均能独立渲染，mock 仍只存在 Story 目录。
+- Subagent Story 场景矩阵覆盖 custom chip 的 completed/executing/execution-failed/interrupted、pending/running、completed/partial/blocked/failed/cancelled、rejected、list/describe 的 read-only output，以及未知 JSON fallback；正式结果均经真实 `ToolDetailView + subagentRenderer` slot 渲染。
+- 用户已于 2026-07-16 review 通过 Step 11；此处的 card/IPC/Story matrix 是 Step 12 的稳定输入，Step 12 是否实施 Dialog 仍须用户显式决定。
+
 ## 3. 动态规划更新机制（强制）
 
 用户会在每个 step review 后给出新意见。任何意见都可能使后续规划失效，因此计划不是一次性冻结文档。

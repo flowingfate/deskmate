@@ -26,6 +26,7 @@ import handleUpdateIPC from './update';
 import handleAttachmentIPC from './attachment';
 import handleInternalUrlsIPC from './internal-urls';
 import handleResearchIPC from './research';
+import { registerSubagentRunIpc } from './subagent-run';
 import { RuntimeManager } from '../../lib/runtime/RuntimeManager';
 import { registerRuntimeIpcHandlers } from '@main/lib/runtime/ipc';
 import { createTerminalRuntimeBridge } from '@main/lib/runtime/terminalBridge';
@@ -56,6 +57,7 @@ export function setUpIPC(ctx: Context) {
   handleResearchIPC();
   handleDoctorIPC(ctx);
   handleFeatureFlagsIPC();
+  registerSubagentRunIpc(ipcMain);
   const runtimeManager = RuntimeManager.getInstance();
   // 反转 terminal → runtime 依赖：把 runtime 能力注入下层 terminal 桥。
   setTerminalRuntimeBridge(createTerminalRuntimeBridge(runtimeManager));

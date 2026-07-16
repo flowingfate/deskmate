@@ -1,6 +1,6 @@
 # 数据流
 
-<!-- Last verified: 2026-07-16 -->
+<!-- Last verified: 2026-07-16 (Step 11：subagentRun runtime state/audit IPC 已接入) -->
 
 参考：`src/shared/ipc/base.ts`、`src/main/pi/`、`src/main/persist/`、`src/main/lib/mcpRuntime/mcpClientManager.ts`
 
@@ -44,7 +44,7 @@ src/renderer/components/...       ← 业务代码通过 `import { xxxApi } from
 
 ### 命名空间一览
 
-共 30+ 个命名空间，覆盖所有 IPC 通道：app、window、auth、signin、featureFlags、misc（folder/debug）、profile、agentChat、chatSession、models、llm、fs、workspace、mcp/mcpAuth、navigate、skills、builtinTools、subAgent、runtime、sync、update、logViewer（dev-only）。
+共 30+ 个命名空间，覆盖所有 IPC 通道：app、window、auth、signin、featureFlags、misc（folder/debug）、profile、agentChat、chatSession、models、llm、fs、workspace、mcp/mcpAuth、navigate、skills、builtinTools、subagentRun、runtime、sync、update、logViewer（dev-only）。
 
 **例外**：`log:write` 是 renderer → main 的**单向** `send`，不走类型化框架（每条日志加 invoke round-trip 太重）；见下文「日志流」。
 
@@ -171,6 +171,7 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 3. manager 以完整 parent identity 短锁完成 stale recovery、总数/并行 gate、三位 subrun reservation 与 active registration。
 4. `SubAgentSession` 在 delegate scope 内使用执行 Agent 的 config/catalog/prompt，持久化 hidden transcript，并以 `submit_result` 收敛正式结果。
 5. manager timeout/parent cancel 直接 abort 实际 run；终态 `Subrun data` 与 parent tool result 是 reload 事实源。
+6. `subagentRun` IPC 将所有 profile-bound manager 的 live state 推到对应卡片；`getRunData` 只读 parent-owned metadata，`cancelRun` 只取消完整 parent identity 下的单一 active run。renderer live cache 不参与 reload terminal 事实。
 
 ---
 

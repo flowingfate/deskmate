@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 10：Delegation 编辑器与旧 Sub-Agent 配置路径切换) -->
+<!-- Last verified: 2026-07-16 (Step 11：顶层 subagent run 卡片、live state、cancel 与独立 tool stories 已接入) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -29,16 +29,17 @@
 | `message/AttachmentList.tsx` | 用户消息附件列表（图片 / 文件 / Office / 其它）；sandbox 大图(`local://`+fileRef / opaque)经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) 构造 `media://` URL 由 `<img loading=lazy>` 字节直供（不读 base64），小图内联 dataURL；点击图片走 `ImageViewerAtom.open`（`ui/OverlayImageViewer`），点击文件走 `useOpenFilePreview()`（就近作用域路由，聊天页 inline 预览） | ~215 LOC |
 | `message/CopyButton.tsx` | 复制到剪贴板按钮；`text` 支持字符串或惰性 getter | ~60 LOC |
 | `tool/ToolCallsSection.tsx` | 工具调用章节;两套视图共享同一外壳 + CSS transition(220ms): **collapsed** 紧凑 600px 卡片(chip 行 + 单选 detail);**expanded** (view all) 贴边浅灰条 max-h 60vh 内滚,所有工具纵向列出(每张白卡片复用 `ToolDetailView`)。水平 inset 模式:`!px-0` 这层豁免 `.chat-message-flow-reverse > *` 的默认 `--chat-pad-x` padding,由本组件正向控制 margin(collapsed 推内容对齐其他消息)或 padding(expanded bg 撑满 wrapper + 内 padding 拉回对齐) — **不用负 margin breakout**,bg 天然占满 chat 全宽;高度切换由 `AnimatedHeight` 平滑过渡,避免 column-reverse 上方兄弟闪动。`selectedId` 切 mode 时保留 | ~350 LOC |
-| `tool/ToolChip.tsx` | 单个工具胶囊；状态点 executing(琥珀脉动) / failed(红实心) / completed(无点)；选中态深色填充；MCP 工具额外以 Plug 图标与低饱和紫色表面标识,并在 hover 时经 shadcn `Tooltip` 展示 `MCP · {serverName}`(Provider 由 `ToolCallsSection` 顶层挂载);接收 `label` props 由 ToolCallsSection 计算（renderer 的 `chipLabel` 覆盖优先） | ~115 LOC |
+| `tool/ToolChip.tsx` | 通用工具胶囊；状态点 executing(琥珀脉动) / failed(红实心) / completed(无点)；选中态深色填充。MCP 用低饱和 violet 表面 + tooltip 标识 server；其它顶层工具若需定制，必须由自己的 `ToolRenderer.Chip` override 承担，不向通用 chip 增加 tool-specific 分支 | ~115 LOC |
 | `tool/ToolDetailView.tsx` | 唯一的两段式详情容器(input/output)；按 slot 优先级（粗 InputBlock/OutputSuccessBlock/OutputExecutingBlock > 细 inputArgsText/outputResultText > 默认）注入 renderer 覆盖。一个 renderer 一旦提供粗粒度 block,就**完全接管**该 slot,不会再回到细粒度 —— 多层兜底由 renderer 自己内部完成(典型例子:`renderers/app/`)。`verticallyUnbounded?: boolean` prop:默认 false → 默认 pre 限高 220px + 内滚(单 detail 展开);true → pre 不限高,由调用方外层统一滚动(view-all 模式由 `ToolCallsSection` 的 ExpandedView 传入,避免嵌套滚动条) | ~165 LOC |
 | `tool/types.ts` | `ToolCallExecutionStatus`、`ToolRenderer`（slot-only,无 id/match）、`ToolSlotProps` / `ToolChipSlotProps` / `ToolOutputSuccessSlotProps`，复导出 shared 的 ShellToolArgs/Result、WriteToolArgs/Result | ~85 LOC |
 | `tool/toolRendererRegistry.ts` | `Map<toolName, ToolRenderer>`：`registerToolRenderer(toolName, renderer)` / `resolveToolRenderer(toolName)`；一个工具一个坑，O(1) 查询，幂等去重 | ~40 LOC |
-| `tool/registerBuiltins.ts` | 集中注册三个内置 renderer（`app` / `shell` / `write`）。子命令分派由各 renderer 自己负责，不在本表 | ~25 LOC |
+| `tool/registerBuiltins.ts` | 集中注册五个内置 renderer（`app` / `shell` / `write` / `web` / `subagent`）。子命令分派由各 renderer 自己负责，不在本表 | ~30 LOC |
 | `tool/index.ts` | barrel；import 副作用触发 `registerBuiltinToolRenderers()`；导出 ToolCallsSection / ToolDetailView / registry helpers | ~25 LOC |
 | `tool/renderers/shell/index.tsx` | `shellRenderer` —— `chipLabel` (`shell: <cmd>`) + `InputBlock`（终端 prompt+command）+ `OutputSuccessBlock`（stdout/stderr/exit 终端块） | ~110 LOC |
 | `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，图片走 `ImageViewerAtom.open`、其余走 `useOpenFilePreview()`） | ~110 LOC |
 | `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；不再持有已删除 `app subagent` 特化渲染，所有子命令走稳定的通用 cmdline/result fallback | ~45 LOC |
 | `tool/renderers/app/cmdline.ts` | App 命令展示工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
+| `tool/renderers/subagent/{parse,RunCard,RunResultDetails,index}.tsx` | 顶层 `subagent` renderer：只做 `{ outcome }` 展示解析；单 run 卡片关联 live state，查询 metadata、显示 formal result 并发起单次 cancel。list/describe 只读展示，不取 transcript | ~440 LOC |
 | `agent-editor/AgentDelegationTab.tsx` | 普通 Agent delegates 选择器：hot `agents.atom` 候选、cold delegates、dangling 可移除行，以及 Agent 创建/设置导航 | ~205 LOC |
 | `message/MermaidDiagram.tsx` | 延迟加载的 Mermaid 图表渲染器，支持全屏 | — |
 | `message/ImageGallery.tsx` | `<IMAGE_REGISTRY>` 分段解析 + `ImageGalleryNew` 渲染；图 src 经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) `toImageDisplaySrc` 同步解析（`local://`/`knowledge://`→media://、远程 http(s) 原样），**不再** `fetch`+base64 缓存 | — |
@@ -153,6 +154,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 |------|---------------|------|
 | 修改 markdown 渲染（代码块、链接、表格、Mermaid） | `message/MarkdownView.tsx` — `markdownComponents` 对象 | 全部消息（assistant / user）共享同一渲染器，一处修改全局生效 |
 | 添加新的工具调用展示 | 顶层工具：新建 `tool/renderers/<tool>/index.tsx`（export `<tool>Renderer: ToolRenderer`）+ `tool/registerBuiltins.ts` 加一行 `registerToolRenderer('<tool>', <tool>Renderer)`。子命令域（如 `app mcp`）：新建 `tool/renderers/app/<sub>/`（export 子 renderer + `resolve<Sub>Renderer(tokens)` 路由），在 `tool/renderers/app/index.tsx` 的 `pickSubRenderer` 加一行委派 | 三个点位 chip / input / output 每个可细（label / argsText / resultText）或粗（Chip / InputBlock / OutputSuccessBlock）二选一覆盖；output 额外允许 OutputExecutingBlock。**注意**：粗粒度 block 一旦提供就完全接管该 slot，多层兜底由 renderer 自己内部承担 |
+| 修改委派 run 卡片 / IPC | `tool/renderers/subagent/`、`renderer/ipc/subagentRun.ts`、`shared/ipc/subagentRun.ts`、main/preload bridge | live event 必须匹配 profile + parent Agent/session + correlationId，已知结果后再核对 subrunId；terminal/reload 以 tool result 和 audit data 为事实 |
 | 区分 MCP 工具调用 | `shared/persist/types/message.ts` 的 `ToolCall.mcp` 是 Domain / 历史真值，值为 MCP server 名称；`session/regular.ts` 从本轮 catalog 投影，`streamingTypes.ts` / `session-manager.ts` 保持流式首帧一致；`ToolChip.tsx` 用字段是否存在展示 Plug + 紫色变体,并把 server 名称放进 hover tooltip | 旧历史无 `mcp`，按本地工具样式兼容 |
 | 添加新的渲染项类型 | `lib/chat/render-items-manager.ts`（`ChatRenderItem` 联合类型 + `computeRenderItems` + `isSameRenderItem`） + `ChatRenderItem.tsx`（`ChatRenderItemComponent` 分发） | derived 字段一并加入 `MessageDerived` + `reuseUnchangedItems` 复用判定 |
 | 修改主聊天输入行为 | `chat-input/ComposeInput.tsx` + `ribbon/ErrorBar.tsx` | 涉及发送、取消生成、模型选择和会话错误展示 |
@@ -199,6 +201,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 8. 在流式生成中向上滚动，确认不会被拉回底部；向下滚到底部后流式应自动跟随。
 9. 打开 ContextBadge，确认累计 token 消耗等于当前 assistant 消息的 `usage` 之和；完成一轮流式回复后应立即更新，无需切换会话。
 10. 打开 job run：确认输入区显示只读提示、user message 无编辑入口、ribbon 无 Retry；切回 sessions 后 URL 是 `/agent/:agentId`，不会复用 run ID。
+11. 无法启动完整聊天流程时，运行 `npm run ladle` 打开 `Chat / Tools` stories：覆盖高度动画、chip、detail、calls section、五个 renderer 与 subagent running/final card；bridge mock 只在 `story/tools/`，不修改生产组件。
 
 ## 注意事项
 

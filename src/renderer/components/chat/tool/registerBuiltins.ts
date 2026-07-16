@@ -12,6 +12,7 @@ import { appRenderer } from './renderers/app';
 import { shellRenderer } from './renderers/shell';
 import { writeRenderer } from './renderers/write';
 import { webRenderer } from './renderers/web';
+import { subagentRenderer } from './renderers/subagent';
 
 let registered = false;
 
@@ -23,4 +24,5 @@ export function registerBuiltinToolRenderers(): void {
   registerToolRenderer('shell', shellRenderer);
   registerToolRenderer('write', writeRenderer);
   registerToolRenderer('web', webRenderer);
+  registerToolRenderer('subagent', subagentRenderer);
 }
