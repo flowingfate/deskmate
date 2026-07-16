@@ -57,7 +57,7 @@ Step 12再决定是否暴露 `getRunMessages`；本 step不让 card预取 transc
 - run result.status 映射 completed/partial/blocked/failed/cancelled；任意 `kind: 'rejected'` 显示调用拒绝且不伪造 subrunId；
 - correlationId匹配各自 parent tool call；run live state按 parent identity + subrunId更新；final response到达后以各 tool result JSON为事实源。
 
-注册新顶层 renderer 后，从生产 registry删除旧 renderer import；确认不可达后整体删除旧 `renderers/app/subagent` 源码，不修改其内部实现。
+旧 `renderers/app/subagent` 已由 Step 10 随其 CRUD IPC 一并删除；本 step只注册新的顶层 `subagent` renderer。
 
 ## 5. 单任务卡片
 

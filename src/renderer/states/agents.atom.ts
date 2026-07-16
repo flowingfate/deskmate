@@ -13,7 +13,7 @@
  * 写操作走 persist invoke 通道（persistApi.patchAgentFront / archiveAgent / ...），
  * main 端落盘后会通过 agent:updated 广播回来，本 atom 自动更新；不导出 change。
  *
- * **cold 字段（systemPrompt / mcpServers / skills / subAgents / knowledge /
+ * **cold 字段（systemPrompt / mcpServers / skills / delegates / knowledge /
  *   thinkingLevel）不在这里**，去 `agentDetail.atom` 拿。设计动机：详见
  *   `REFACTOR-LAZY-AGENT.md` 与 `ai.prompt/persist.md §7` 的 "AgentRecord ↔ AGENT.md
  *   同步契约"。

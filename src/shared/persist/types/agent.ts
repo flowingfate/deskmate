@@ -54,7 +54,6 @@ export interface AgentMarkdownFront {
   tools?: string[];
   mcpServers?: AgentMcpServer[];
   skills?: SkillBindings;
-  subAgents?: string[];
   /** 可委派的普通 Agent ID；允许保留暂不可用的 dangling ID。 */
   delegates?: string[];
   zero?: AgentZeroState;
@@ -68,7 +67,7 @@ export interface AgentMarkdownFile {
 /** `Agent.patchFront` 与 IPC 共用的 front-matter patch。 */
 export type AgentFrontPatch =
   & Partial<Pick<AgentRecord, 'name' | 'description' | 'version' | 'model' | 'emoji' | 'avatar' | 'locked'>>
-  & Partial<Pick<AgentDetail, 'tools' | 'mcpServers' | 'skills' | 'subAgents' | 'delegates' | 'zero'>>
+  & Partial<Pick<AgentDetail, 'tools' | 'mcpServers' | 'skills' | 'delegates' | 'zero'>>
   & { thinkingLevel?: ThinkingLevel | null };
 
 /** `agent:create` IPC 入参。 */
@@ -98,7 +97,6 @@ export interface AgentDetail {
   tools?: string[];
   mcpServers?: AgentMcpServer[];
   skills?: SkillBindings;
-  subAgents?: string[];
   /** 按配置顺序保存的普通 Agent ID；dangling ID 不会在此层丢失。 */
   delegates?: string[];
   zero?: AgentZeroState;

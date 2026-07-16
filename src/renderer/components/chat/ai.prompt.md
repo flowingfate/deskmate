@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-15 (JobRunChat 将已结束的 schedule run 派生为 regular continuation) -->
+<!-- Last verified: 2026-07-16 (Step 10：Delegation 编辑器与旧 Sub-Agent 配置路径切换) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -37,9 +37,9 @@
 | `tool/index.ts` | barrel；import 副作用触发 `registerBuiltinToolRenderers()`；导出 ToolCallsSection / ToolDetailView / registry helpers | ~25 LOC |
 | `tool/renderers/shell/index.tsx` | `shellRenderer` —— `chipLabel` (`shell: <cmd>`) + `InputBlock`（终端 prompt+command）+ `OutputSuccessBlock`（stdout/stderr/exit 终端块） | ~110 LOC |
 | `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，图片走 `ImageViewerAtom.open`、其余走 `useOpenFilePreview()`） | ~110 LOC |
-| `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；内部 `pickSubRenderer` 调子命令路由（subagent → spawn / spawn-many；未来 mcp / skill / web ...）；不命中时给出朴素兜底（chip = `app:<sub>`，input = cmd 字符串，output = result 文本） | ~95 LOC |
-| `tool/renderers/app/cmdline.ts` | App 子命令分派的 cmdline 工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
-| `tool/renderers/app/subagent/` | `app subagent spawn` / `spawn-many` 子命令的 renderer 实现包：`index.ts`（路由 spawn/spawn-many）+ `parse.ts`（cmdline 字段抽取）+ `helpers.tsx`（共享 timer / progress bar / steps list）+ `spawn.tsx`（单 task 三 slot）+ `spawnMany.tsx`（并行 task 三 slot）。订阅 `subAgent:stateUpdate` IPC 渲染实时进度 | — |
+| `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；不再持有已删除 `app subagent` 特化渲染，所有子命令走稳定的通用 cmdline/result fallback | ~45 LOC |
+| `tool/renderers/app/cmdline.ts` | App 命令展示工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
+| `agent-editor/AgentDelegationTab.tsx` | 普通 Agent delegates 选择器：hot `agents.atom` 候选、cold delegates、dangling 可移除行，以及 Agent 创建/设置导航 | ~205 LOC |
 | `message/MermaidDiagram.tsx` | 延迟加载的 Mermaid 图表渲染器，支持全屏 | — |
 | `message/ImageGallery.tsx` | `<IMAGE_REGISTRY>` 分段解析 + `ImageGalleryNew` 渲染；图 src 经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) `toImageDisplaySrc` 同步解析（`local://`/`knowledge://`→media://、远程 http(s) 原样），**不再** `fetch`+base64 缓存 | — |
 | `interactive/RequestCard.tsx` | 时间线原生渲染器，用于待处理的 `approval`、`choice` 和 `form` 交互；Tailwind className 直接内联，无独立样式模块 | — |
@@ -57,8 +57,8 @@
 | `chat-side.atom.ts` | `WorkspaceExplorerAtom`（右侧工作区侧栏可见性 + reveal）的 atom；`effectiveToggle` 打开侧栏时顺带 `ChatFilePreviewAtom.cancel()`。文件预览状态已迁到 `filePreview/filePreview.atom.ts` | — |
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
-| `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（基本信息、上下文增强、知识库、MCP 服务器、技能、子 agent、系统提示词） | — |
-| `agent-area/AgentEditingView.tsx` | Agent 设置页外壳：顶栏（返回 / agent 头像 / Save All + 未保存计数）、左侧 `AgentSettingsNav`、按 activeTab 渲染对应 Tab；管理跨 Tab 的 pending changes 缓存与统一保存 | ~770 LOC |
+| `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（Basic 的 description、Delegation、上下文增强、知识库、MCP 服务器、技能、系统提示词） | — |
+| `agent-area/AgentEditingView.tsx` + `useAgentEditorState.ts` + `AgentEditorTabs.tsx` | 设置页外壳、跨 tab dirty/save-all 状态和 tab 分发；三者分离以保持组件文件小于 500 行 | — |
 | `agent-editor/AgentSettingsNav.tsx` | 设置页左侧导航；数据驱动的 `NAV_ITEMS`（key/label/Lucide 图标），每项带未保存改动小圆点。**新增 Tab 时在此加一项** | 小 |
 | `agent-editor/AgentPresetsTab.tsx` + `PresetEditorDialog.tsx` | 「Quick Prompts」标签页：编辑聊天空态的预设提示词（增删改）。**已接持久化** —— 读写走 `zero/presetPrompts.ts`，落 AGENT.md front-matter `zero.preset_prompts`（cold 字段，`agentDetail.atom` 后端），与 `zero/index.tsx` 空态经 `agent:updated` 事件实时同步。CRUD 即时生效，不进 Save All 管线。新建/编辑走 `PresetEditorDialog`（含图标选择器），删除走 `AlertDialog` 二次确认 | 中 |
 | `zero/index.tsx` + `zero/PresetPromptCard.tsx` | 聊天空态：渲染预设提示词卡片。点击卡片**不发送**，而是把 `prompt` 写入 `composeTextAtom`（ComposeInput 草稿真值）填入输入框；输入框已有内容时弹 `AlertDialog` 确认覆盖。插图区为占位待填 | 中 |
@@ -160,7 +160,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 修改两种输入共享的附件/截图逻辑 | `chat-input/shared/useFileHandling.ts` + `chat-input/Attachments.tsx`(atom) | 同时影响 compose 和 inline edit,两边都要回归。物化推迟到发送:新增 attach 路径(自定义来源等)只需把原始 `File` 交给 `attachmentManager.addXxx`,`createMessage` 发送时统一走 `copyFileToSandbox` 落盘;**切勿在 attach 阶段调 `copyFileToSandbox`**,否则又会未发送先落盘 |
 | 修改用户消息附件展示 | `message/AttachmentList.tsx` | image / file / office / others 共用 |
 | 更改 approval / choice / form 交互 | `interactive/RequestCard.tsx`、`ChatRenderItem.tsx`、`agentSessionCacheManager.ts` | 待处理请求经 `render-items-manager` 进入渲染流水线，由 `ChatRenderItemComponent` 分发 |
-| 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`entries/main.routes.tsx` 中的路由、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS`、`agent-area/AgentEditingView.tsx` 的 Tab 渲染分支 | 遵循现有标签页外壳模式 |
+| 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`agent-area/useAgentEditorState.ts` 的 route/cache/save-all、`agent-area/AgentEditorTabs.tsx` 的分发、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS` | 遵循现有标签页外壳模式 |
 | 修改滚动行为 | `useChatAutoScroll.ts` hook（由 `ChatContainer.tsx` 消费） | 始终验证基于 `chatSessionId` 的重置；流式跟随由 `streamingMessageTextLength` effect 驱动 |
 | 修改 regular / job-run capability | `ChatView.tsx` + `ChatViewContent.tsx` + `ribbon/index.tsx` | job-run 的写入限制由 UI 实现；不支持取消 |
 
@@ -171,7 +171,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 新渲染项类型 | `lib/chat/render-items-manager.ts`（类型联合 + `computeRenderItems` + `isSameRenderItem` + `getChatRenderItemStableKey`）+ `ChatRenderItem.tsx`（分发） |
 | 聊天输入中的新附件类型 | `chat-input/shared/useFileHandling.ts` + `contentUtils.ts`(`ContentPartFactory`)+ `@shared/types/chatTypes`(`UnifiedContentPart`)+ shared constants 中的 `FILE_ATTACHMENT_LIMITS` + `message/AttachmentList.tsx`(渲染分支)+ [`src/main/lib/attachment/`](../../../main/lib/attachment/ai.prompt.md)(若新来源需要新的 main 端 attach 入口) |
 | 新交互式请求控件类型 | `interactive/RequestCard.tsx` 或专用卡片 + `@shared/types/interactiveRequestTypes` + `agentSessionCacheManager.ts` + `ChatViewContent.tsx` 分发 |
-| 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `entries/main.routes.tsx`（嵌套路由）+ `agent-editor/AgentSettingsNav.tsx`（`NAV_ITEMS`）+ `agent-area/AgentEditingView.tsx`（Tab 渲染分支） |
+| 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `agent-area/useAgentEditorState.ts`（路由/cache/save）+ `agent-area/AgentEditorTabs.tsx`（分发）+ `agent-editor/AgentSettingsNav.tsx`（`NAV_ITEMS`） |
 | 会话滚动/布局变更 | `ChatContainer.tsx`(容器几何已 Tailwind 化) + `styles/biz/_chat.scss`(scrollbar/inset/data-mode/`:has()` 等无法 Tailwind 化的规则,原 `ChatContainer.scss` 已删,曾暂存于 `globals.css` 尾部,现归入 biz 层) — 始终验证基于 `chatSessionId` 的重置，而非基于 `agentId` |
 | Markdown 渲染变更 | `message/MarkdownView.tsx` + `message/MarkdownView.scss`（全局生效） |
 | 发送门控逻辑 | `chat-input/ComposeInput.tsx` + `chat-input/EditInlineInput.tsx`（显式 `chatStatus === 'idle'` 守卫）+ 渲染进程发送入口点缓存状态重新检查 |

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 6：parent-scoped Subrun store 已落盘) -->
+<!-- Last verified: 2026-07-16 (Step 10：旧 Sub-Agent 配置 store/IPC/schema 已移除) -->
 
 # Persist 模块（新布局 store 层）
 
@@ -16,11 +16,11 @@
 | `subrun.ts` | `Subrun`：parent `subruns/001..999/` 的 data/message store；per-parent allocation lock、directory reservation、pending → running → terminal union、`PersistSessionLike` 最小消息/配置实现；不进 SQLite、普通 Session emit 或 files sandbox | large |
 | `schedule.ts` | `ScheduleJob` + `ScheduleRegistry`:once/cron job + run 状态机;Step 9 起 run 路径走 `jobRunIdx` | medium |
 | `archive.ts` | agent 软删/恢复/purge/gc | small |
-| `mcp.ts` / `skills.ts` / `subAgents.ts` / `models.ts` | 共享注册表 CRUD | small |
+| `mcp.ts` / `skills.ts` / `models.ts` | profile 级共享注册表 CRUD | small |
 | `knowledge.ts` | agent knowledge/ 目录生命周期 | tiny |
 | `auth.ts` | `LegacyAuth` / `PiAuth`：auth.json / auth.pi.json | small |
 | `ipc.ts` | `querySession` / `queryJobRun` 沿 ownership chain 统一解析 active profile → agent → session / job run，并由 persist 与 chat-session IPC 复用；`registerPersistIpc()` 注册 persist handlers | small |
-| `storageOverview.ts` | 「本地数据透明」聚合器:只读递归统计。**以 agent 为组**（`AgentStorageGroup`：会话/定时/知识/config 四子项，config 用减法兜底守恒）+ profile 级共享分类（`StorageCategory`：skills/subAgents/mcp/models/搜索索引/归档/profileConfig）。`computeStorageOverview` + reveal 边界校验 `resolveRevealTarget`。`/settings/persist` 页数据源 | small |
+| `storageOverview.ts` | 「本地数据透明」聚合器:只读递归统计。**以 agent 为组**（`AgentStorageGroup`：会话/定时/知识/config 四子项，config 用减法兜底守恒）+ profile 级共享分类（`StorageCategory`：skills/mcp/models/搜索索引/归档/profileConfig）。`computeStorageOverview` + reveal 边界校验 `resolveRevealTarget`。`/settings/persist` 页数据源 | small |
 | `lib/atomic.ts` | tmp→rename 原子写 + 增量 helpers | small |
 | `lib/emit.ts` | `emit()` —— persist → renderer 广播入口（mainWindow 不存在时 no-op） | tiny |
 | `lib/root.ts` | `getAppRoot()` + `setRootForTesting()` | tiny |
@@ -53,11 +53,11 @@ Profiles.get().active()          → Profile
 - **任何修改源真值的写路径必须同步重写索引**（写顺序见 [ai.prompt/persist.md §2 不变量 #4](../../../ai.prompt/persist.md)）。DB 损坏可由 `SessionIdx.rebuildFromDisk()` + `JobRunIdx.rebuildFromDisk()` 从所有 `data.json` 完全恢复
 
 ### Bootstrap 顺序（详见 [ai.prompt/persist.md §5](../../../ai.prompt/persist.md)）
-`Profiles.get().bootstrap()` 跑：profilesIndex ensure → resolveActive → load mcp/skills/subAgents/models → `ProfileDb.open` + 决定是否 rebuild（**wasCreated=true** 即升级 / migrate / 拷贝 profile 目录的场景，盘上可能已有 sessions 但 DB 是空表 → 自动 `rebuildFromDisk` 两表；否则 integrity_check 失败时走删盘 → 重 open → rebuild）→ `reconcileAgents`（agents.json items ↔ agents/ 目录双向对账，缺目录的 item 剔除并清空 primaryAgentId 命中）。每步异常都汇集到 `warnings`，不让单步失败拖累整体启动。**幂等**：重复调用直接 no-op 返回（用 `bootstrapped` flag）。
+`Profiles.get().bootstrap()` 跑：profilesIndex ensure → resolveActive → load mcp/skills/models → `ProfileDb.open` + 决定是否 rebuild（**wasCreated=true** 即升级 / migrate / 拷贝 profile 目录的场景，盘上可能已有 sessions 但 DB 是空表 → 自动 `rebuildFromDisk` 两表；否则 integrity_check 失败时走删盘 → 重 open → rebuild）→ `reconcileAgents`（agents.json items ↔ agents/ 目录双向对账，缺目录的 item 剔除并清空 primaryAgentId 命中）。每步异常都汇集到 `warnings`，不让单步失败拖累整体启动。**幂等**：重复调用直接 no-op 返回（用 `bootstrapped` flag）。
 
 ### 同步 vs 异步访问 active profile
 - `Profiles.get().active(): Promise<Profile>` —— 常规路径，bootstrap 后从 cache 直接返。
-- `Profiles.get().activeSync(): Profile` —— 仅供登录关键路径上的 sync getter 用（如 skill / subAgent 等同步 lookup）。bootstrap 未完成时直接抛错，防止误吞 null。`switch()` 后 cache 自动更新。
+- `Profiles.get().activeSync(): Profile` —— 仅供登录关键路径上的 sync getter（如 skill）用。bootstrap 未完成时直接抛错，防止误吞 null。`switch()` 后 cache 自动更新。
 
 ### Session 物理位置
 `Session` 是抽象基类(messages.jsonl I/O + files sandbox + 节流 persist + 元数据 mutate)，路径树由子类各自实现：
@@ -105,7 +105,7 @@ Profiles.get().active()          → Profile
 
 ## Gotchas
 
-- ⚠️ `name` 不是主键。`agents.json` 允许重名；所有引用走 `a_{ulid}` id。重命名 agent 时 id 不变。**例外**：sub_agents / skills 沿用 name 作 id（Claude Code 兼容性）。
+- ⚠️ `name` 不是主键。`agents.json` 允许重名；所有引用走 `a_{ulid}` id。重命名 agent 时 id 不变；skills 沿用 name 作 id。
 - ⚠️ Agent 委派关系只存普通 Agent ID，patch 原样落盘。授权与 prompt 必须调用 `Profile.resolveDelegates(parentId)`，不得按 name 查找或绕过 resolver；resolver 只读父 AGENT.md，再 join active `AgentRecord`，解析时 trim/去空/稳定去重，self/dangling/archived 进入 unavailable。parent record/AGENT.md 缺失通过返回 `null` 显式表达，不抛业务异常。
 - ⚠️ Subrun 的三位 ID 只在 parent Session 下有意义。`Session.createSubrun/getSubrun/listSubruns` 是唯一 owner API；allocator 以 parent `subruns/` path 锁串行扫描、原子 mkdir reservation 与初始 data 写入。空 reservation 返回 `incomplete`，不复用；`999` 返回 `exhausted`；running crash record 不自动续跑或改写，等待 Step 9 的唯一 recovery 入口。
 - ⚠️ Session 删除必须按形态走 owner：`Agent.deleteSession(id)` 只删 RegularSession；`ScheduleJob.deleteRun(id)` 只删已结束的单条 JobRun（running 会拒绝，避免与执行写盘竞态）；`Agent.deleteJob(id)` 才整 job 级联删除。它们分别同步源目录、SQLite 行并 emit 对应 remove 事件。**不要**直接 `session.deleteFromDisk()`。

@@ -19,7 +19,6 @@ import invokeWorkspace from './workspace/invoke';
 import { invokeMcp, invokeMcpAuth } from './mcp/invoke';
 import { invokeSkills } from './skill/invoke';
 import invokeTools from './tools/invoke';
-import { invokeSubAgent } from './subAgent/invoke';
 import invokeRuntime from './runtime/invoke';
 import invokeUpdate from './update/invoke';
 import invokeAttachment from './attachment/invoke';
@@ -82,12 +81,6 @@ export interface ElectronAPI {
     invoke: InvokeFn;
   };
 
-  // Sub-Agent APIs (typed IPC)
-  subAgent: {
-    invoke: InvokeFn;
-    on: OnOff;
-    off: OnOff;
-  };
 
 
 
@@ -254,11 +247,6 @@ export const electronAPI: ElectronAPI = {
   },
   skills: {
     invoke: invokeSkills,
-  },
-  subAgent: {
-    invoke: invokeSubAgent,
-    on: ipcOn,
-    off: ipcOff,
   },
 
   agentChat: { invoke: invokeAgentChat, on: ipcOn, off: ipcOff },

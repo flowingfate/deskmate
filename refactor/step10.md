@@ -1,6 +1,6 @@
 # Step 10 — 将 Agent 编辑器切换为 Delegation 配置 UI
 
-> 状态：待执行
+> 状态：已完成
 > 前置：Step 2 Agent graph complete；Step 9 已 complete，确保 UI 文案对应真实工具
 > 下游：Step 13 入口收口、Step 14 renderer data tests
 > 本步只改配置管理，不改运行卡片。
@@ -20,13 +20,21 @@
 
 Step 2 已具备输入：`AgentFrontPatch` 字段为 `description` / `delegates`；`CreateAgentInput` 可直接带 `description`；`AgentRecord.description` 是 hot 数据；`AgentDetail.delegates` 是 cold 数据。现有 `AgentPersona` compat bridge 已映射两字段，本 step 不得另造 snake_case `delegate_agents` alias。
 
+### 本次实现边界复核（2026-07-16）
+
+- 当前 `AgentEditingView.tsx` 为 693 行，已超过渲染器硬限制；先按现有职责拆出 editor state hook 与 tab content，再接入 Delegation，不能继续堆叠。
+- 旧 `/settings/sub-agents` 已无保留价值；当前 router 的 catch-all 会自然回到 `/agent`，不额外保留 redirect route 或数据 alias。
+- 旧配置的完整移除包括 `subAgents` AGENT.md 字段、旧 profile snapshot、旧 CRUD IPC/preload/renderer atom、旧 store/Markdown serializer/path、旧 storage overview 分类与仅服务它的 feature flag。删除后不会读取或处理磁盘既有 `sub-agents/` 目录。
+- 旧 `app subagent` renderer 依赖同一条已删除的 CRUD IPC，且其命令 backend 已在 Step 9 下线；本 step 同步删除这个不可达展示子树，只保留 `app` 的通用 fallback。新 `subagent` 运行卡片仍由 Step 11 实现。
+- 当前 main 持久化层未定义 description 长度上限；Delegation/Basic UI 不得自行收紧输入，避免制造客户端独有持久化契约。
+
 ## 3. Basic description
 
 在 `AgentBasicTab` 增加：
 
 - visible label；
 - helper文本说明用于 Agent介绍与委派选择；
-- maxlength与 main validation一致；
+- 不设客户端独有 maxlength：main 当前没有 description 长度上限。
 - inline error；
 - dirty tracker/save-all；
 - locked/readOnly语义明确。

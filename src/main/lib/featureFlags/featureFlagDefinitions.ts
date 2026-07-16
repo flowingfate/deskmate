@@ -31,12 +31,6 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagConfig[] = [
   },
 
 
-  // ============== Sub-Agent ==============
-  {
-    name: 'deskmateFeatureSubAgent',
-    description: 'Sub-Agent system — spawn tools, settings UI, system prompt injection',
-    defaultValue: (ctx) => ctx.isDev,
-  },
 ];
 
 /**

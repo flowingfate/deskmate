@@ -90,7 +90,6 @@ async function freshModules() {
   return {
     Mcp:        (await import('../mcp')).Mcp,
     Skills:     (await import('../skills')).Skills,
-    SubAgents:  (await import('../subAgents')).SubAgents,
     Models:     (await import('../models')).Models,
     AgentKnowledge: (await import('../knowledge')).AgentKnowledge,
   };
@@ -153,30 +152,6 @@ describe('Skills', () => {
   });
 });
 
-describe('SubAgents', () => {
-  it('upsert + writeMarkdown + reload', async () => {
-    const { SubAgents } = await freshModules();
-    const subs = new SubAgents(PID);
-    await subs.upsert({ id: 'researcher', name: 'researcher', version: '1.0.0' });
-    await subs.writeMarkdown('researcher', '---\nname: researcher\n---\nbody\n');
-
-    const fresh = await freshModules();
-    const reloaded = new fresh.SubAgents(PID);
-    await reloaded.load();
-    expect(reloaded.items).toHaveLength(1);
-    expect(await reloaded.readMarkdown('researcher')).toBe('---\nname: researcher\n---\nbody\n');
-  });
-
-  it('remove deletes the sub-agent directory', async () => {
-    const { SubAgents } = await freshModules();
-    const subs = new SubAgents(PID);
-    await subs.upsert({ id: 'r', name: 'r', version: '1.0.0' });
-    await subs.writeMarkdown('r', 'x');
-    await subs.remove('r');
-    expect(subs.items).toHaveLength(0);
-    expect(await subs.readMarkdown('r')).toBeUndefined();
-  });
-});
 
 describe('Models', () => {
   it('set + get + reload scans models dir', async () => {

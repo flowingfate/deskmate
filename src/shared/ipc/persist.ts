@@ -25,7 +25,6 @@ import type {
   SkillRecord,
   StarredSessionEntry,
   WebSearchSettings,
-  SubAgentConfig,
   ChatHistoryItem,
 } from '../persist/types';
 
@@ -47,7 +46,6 @@ export interface PersistSnapshot {
   agents: AgentRecord[];
   /** 当前 profile 的 primary agent id；缺席表示未设置。 */
   primaryAgentId?: string;
-  subAgents: SubAgentConfig[];
   skills: SkillRecord[];
   mcp: McpServerRecord[];
   starred: StarredSessionEntry[];
@@ -65,7 +63,6 @@ export interface StorageCategory {
   /** 稳定 key（i18n / 测试断言用），不展示。 */
   key:
     | 'skills'
-    | 'subAgents'
     | 'mcp'
     | 'models'
     | 'searchIndex'
@@ -137,7 +134,6 @@ export interface StorageOverview {
     conversations: number;
     scheduledRuns: number;
     skills: number;
-    subAgents: number;
     mcpServers: number;
     archivedAgents: number;
   };
@@ -180,7 +176,7 @@ type RenderToMain = {
   /** 列出归档 agent。 */
   listArchivedAgents: { call: []; return: PersistResult<ArchivedAgentEntry[]> };
   /**
-   * 懒读单个 agent 的 cold 字段（systemPrompt + thinkingLevel + tools + mcpServers + skills + subAgents + delegates + zero）。
+   * 懒读单个 agent 的 cold 字段（systemPrompt + thinkingLevel + tools + mcpServers + skills + delegates + zero）。
    * 从 AGENT.md 解析，按 agentId 单读，不读其它 agent。agent 不存在返 null。
    * 列表层字段（name / description / version / emoji / avatar / model）已在 AgentRecord 中，不重复返回。
    */
@@ -219,9 +215,9 @@ export type MainToRender = {
   'profile:switched':
     { profileId: string; previous: string };
 
-  /** 共享注册表（顶层 agent registry / sub-agent / skill / mcp）改动。kind='agents' 时附 primaryAgentId。 */
+  /** 共享注册表（顶层 agent registry / skill / mcp）改动。kind='agents' 时附 primaryAgentId。 */
   'agent:registry:updated':
-    { profileId: string; kind: 'agents' | 'subAgents' | 'skills' | 'mcp'; items: unknown[]; primaryAgentId?: string };
+    { profileId: string; kind: 'agents' | 'skills' | 'mcp'; items: unknown[]; primaryAgentId?: string };
 
   /**
    * 某个 agent 的 AGENT.md 改动（front + body）。同时下发：

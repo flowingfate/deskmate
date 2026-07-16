@@ -5,7 +5,6 @@
  */
 export type FeatureFlagName =
   | 'deskmateUseGit'                    // Git integration feature
-  | 'deskmateFeatureSubAgent'           // Sub-Agent system
 
   // Add more feature flags here...
   ;

@@ -91,7 +91,7 @@ tools/subagent facade → LocalTool registry → parent RegularSession/JobRun
 - policy 默认 `maxTurns=25`；未显式给 timeout 时按每 turn 60 秒推导，最大 60 分钟。显式 `maxTurns` 最大 clamp 为 100，timeout 最大 clamp 为 60 分钟。
 - 不为未来文件创建空壳、no-op 或 fake manager。
 - `run` JSON 输出为 `{ outcome }`；顶层与 subcommand help 均提示通过同一 response 多次调用实现并行，manager 的共享 admission/allocator 必须并发安全。
-- `list` 只消费 resolver hot records；`describe` 才按需读取一个 authorized AgentDetail，避免列表 fan-out，也避免泄漏 systemPrompt/delegates/subAgents/zero。
+- `list` 只消费 resolver hot records；`describe` 才按需读取一个 authorized AgentDetail，避免列表 fan-out，也避免泄漏 systemPrompt/delegates/zero。
 - normal Agent 不创建 AsyncLocalStorage context；只有 SubAgentSession 建立 `{ delegateId }`。
 - scope 不跨 IPC/worker/child process；所有授权判断必须在主进程 delegate run 链路内完成。
 - `SubAgentSession` 不读取 parent history；`parent_summary` 只以明确“不可信参考”提示包入 delegated prompt。manager 才拥有 timer、cancel、state 与 recovery。

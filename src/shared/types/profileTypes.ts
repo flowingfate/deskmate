@@ -11,8 +11,6 @@ import type {
   McpServerConfig,
   SkillBindings,
   SkillTier,
-  SubAgentConfig,
-  SubAgentIndex,
   ThinkingLevel,
 } from '../persist/types';
 
@@ -82,68 +80,6 @@ export interface AgentSkillSnapshot {
 }
 
 
-/**
- * Sub-agent task execution result
- * Returned by SubAgentManager.spawnSubAgent(), contains complete task execution information
- */
-export interface SubAgentTaskResult {
-  subAgentName: string;
-  taskId: string;
-  success: boolean;
-  result?: string;
-  error?: string;
-  turnCount: number;
-  durationMs: number;
-}
-
-/**
- * Sub-agent execution step
- * Records each step of operation during sub-agent runtime (tool calls or text output)
- * Used for real-time UI progress display and future persistence
- */
-export interface SubAgentStep {
-  /** Step type: tool execution started / tool execution completed / tool execution failed / text output / turn started / LLM streaming text (open union type for future extensibility) */
-  type: 'tool_start' | 'tool_done' | 'tool_error' | 'text' | 'turn_start' | 'llm_streaming' | string;
-  /** Tool call ID (used for in-place replacement matching from tool_start -> tool_done/tool_error) */
-  toolCallId?: string;
-  /** Tool name (only for tool_* types) */
-  toolName?: string;
-  /** Human-readable summary of tool arguments (<=200 characters) */
-  toolArgsSummary?: string;
-  /** Current turn (1-based, indicates the turn being executed) */
-  turn: number;
-  /** Step timestamp (ms) */
-  timestamp: number;
-  /** Tool execution duration (only present for tool_done / tool_error, ms) */
-  durationMs?: number;
-  /** Tool result length (only present for tool_done, character count) */
-  toolResultLength?: number;
-  /** Text snippet (only for text type, truncated to <=2 lines) */
-  textSnippet?: string;
-}
-
-/**
- * Sub-agent runtime state
- * Used to track sub-agent execution progress, pushed to Renderer via IPC for display
- */
-export interface SubAgentRuntimeState {
-  taskId: string;
-  subAgentName: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-  startTime: number;
-  endTime?: number;
-  currentTurn: number;
-  /** Correlated with parent toolCall.id, used for precise Renderer matching (resolves parallel same-name sub-agent conflicts) */
-  correlationId?: string;
-  /** Sub-agent max turns (from config, used for UI progress bar display) */
-  maxTurns: number;
-  /** Execution steps list (bounded, keeps at most 30 entries, FIFO eviction) */
-  steps: SubAgentStep[];
-  /** Most recent LLM text output snippet (<=4 lines, <=500 characters, for UI thinking process display) */
-  lastTextSnippet?: string;
-  /** Current LLM streaming text being generated (updated in real-time, cleared after turn ends) */
-  streamingText?: string;
-}
 
 
 
@@ -238,8 +174,6 @@ export interface AgentPersona {
   thinkingLevel?: ThinkingLevel | null;
   /** Skill 启用档位映射（第一/二/三档）；语义同 `AgentMarkdownFrontBase.skills`。 */
   skills?: SkillBindings;
-  /** Sub-agent name list referenced by the Agent */
-  sub_agents?: string[];
   /** 可委派的普通 Agent ID；保留 dangling ID 供 UI 显示 unavailable。 */
   delegates?: string[];
 }
@@ -286,12 +220,6 @@ export interface Profile {
   primaryAgent?: string;
   /** MCP server configuration */
   mcp_servers: McpServerConfig[];
-  /**
-   * Sub-Agent lightweight index (after file-based refactoring)
-   * Full configuration is stored in agents/{name}/AGENT.md files,
-   * only name/version are kept here for ProfileCacheManager notification.
-   */
-  sub_agents?: SubAgentIndex[];
   /** Confirmation dialog preferences */
   confirmationSettings?: ConfirmationSettings;
 }
@@ -304,31 +232,7 @@ export interface Profile {
 /** Default model ID — consistent with GhcModelsManager.getDefaultModel() */
 const DEFAULT_MODEL_ID = 'claude-sonnet-4.6';
 
-/**
- * Default sub-agent configuration
- */
-export const DEFAULT_SUB_AGENT_CONFIG: Partial<SubAgentConfig> = {
-  context_access: 'isolated',
-  maxTurns: 25,
-  model: 'inherit',
-  mcpServers: [],
-  skills: [],
-  tools: [],
-  disallowTools: [],
-  knowledgeBase: '',
-  inherit_mcp_servers: true,
-  inherit_skills: true,
-  inherit_knowledge_base: true,
-};
 
-/**
- * Sub-agent resource limit constants
- */
-export const SUB_AGENT_LIMITS = {
-  MAX_PARALLEL_TASKS: 5,
-  MAX_SPAWNS_PER_SESSION: 20,
-  DEFAULT_MAX_TURNS: 25,
-} as const;
 
 /**
  * Default Agent persona configuration

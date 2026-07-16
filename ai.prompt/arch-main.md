@@ -1,6 +1,6 @@
 # DESKMATE AI Studio — 主进程架构
 
-<!-- Last verified: 2026-07-16 (Step 9：production subagent manager/top-level tool 已切换) -->
+<!-- Last verified: 2026-07-16 (Step 10：旧 Sub-Agent 配置持久化与 CRUD IPC 已移除) -->
 ## 1. 范围
 
 本文档覆盖**主进程**（`src/main/`）和**预加载脚本**（`src/preload/`）。渲染进程架构见 [arch-render.md](arch-render.md)。
@@ -101,7 +101,7 @@
 ~/.deskmate/
 ├── app.json, device-id, state/, cache/             # 顶层应用数据
 ├── profiles/                                        # 用户态数据全集 —— 完整 schema 详见 persist.md §3
-│   └── p_{ulid}/                                    #   settings/auth/index.db/agents/{sessions,schedules}/sub-agents/skills/mcp/models/archive
+│   └── p_{ulid}/                                    #   settings/auth/index.db/agents/{sessions,schedules}/skills/mcp/models/archive
 ├── env/                                             # 运行时地盘（bun/uv/Python 装机产物，删了能整个重装）
 │   ├── bin/                                         # 真 bun/uv/uvx + python/uvx/bunx shim
 │   │   └── node-shims/                             # node/npm/npx shim（仅 MCP 前插；shell 走系统）
@@ -135,7 +135,7 @@
 
 ## 8. 关键技术决策（主进程）
 
-**单例模式**：大多数主进程管理器（auth、profile cache、MCP、runtime、update、feature flags、screenshot、terminal、skills、sub-agents 等）遵循 `private static instance` + `getInstance()` 模式。新增长期服务时默认使用此模式。
+**单例模式**：大多数主进程管理器（auth、profile cache、MCP、runtime、update、feature flags、screenshot、terminal、skills 等）遵循 `private static instance` + `getInstance()` 模式。`SubAgentManager` 是例外：它通过 `forProfile(profile)` 绑定 Profile 并由 WeakMap 缓存。新增长期服务时默认使用此模式。
 
 **非致命错误策略**：每个子系统都用 try/catch 包裹并记录日志。一个失败的组件永远不会崩溃整个应用 — 对于 feature flags、原生模块尤其重要。
 

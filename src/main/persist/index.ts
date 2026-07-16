@@ -30,7 +30,6 @@ export { LegacyAuth, PiAuth } from './auth';
 export { AgentKnowledge } from './knowledge';
 export { Mcp } from './mcp';
 export { Skills } from './skills';
-export { SubAgents } from './subAgents';
 export { Models } from './models';
 // Starred 类已删除（Step 9）—— starred 真值是 `regular_sessions.starred_at` 列，
 // 入口走 `RegularSession.setStar(star)`（写 data.json → onChange → `SessionIdx.upsert` 同步本列）

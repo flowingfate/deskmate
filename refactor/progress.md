@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 9 complete**
-- 当前门禁：Step 9 已获用户 review 通过；Step 10 已具备前置，但尚未开始
-- 业务步骤：Step 9 为 `complete`；Step 10 为 `pending`
-- 测试步骤：Step 14 尚未开始；Step 9 未新增或运行单测
-- 生产代码变更：顶层 `subagent` 已注册，旧 `app subagent` 与 `lib/subAgent` backend/测试已删除；旧 CRUD/persist/IPC/renderer 等待 Step 10/11/13
+- 总体阶段：**Step 10 complete**
+- 当前门禁：Step 10 已获用户 review 通过；Step 11 前置已满足但仍为 pending，须由用户另行开始
+- 业务步骤：Step 9、Step 10 均为 `complete`
+- 测试步骤：Step 14 尚未开始；Step 10 未新增或运行单测
+- 生产代码变更：description/delegates 编辑器已接线；旧 CRUD/persist/IPC/renderer 已下线，旧磁盘数据未触碰
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -43,7 +43,7 @@
 | 7 | [submit_result 与正式结果状态机](step7.md) | complete | Steps 1,5,6 | delegated-only ordinary local submit route、一次性 controller、formal result reducer、missing-submit decision |
 | 8 | [BaseSession 驱动的新 SubagentSession](step8.md) | complete | Steps 2,4,5,6,7 | 单个 persisted delegated run 的 session；用户 review 通过 |
 | 9 | [Manager、顶层工具接线与主进程 cutover](step9.md) | complete | Steps 3,6,8 | production `subagent` tool、limits/cancel/state；旧 app command/backend 下线 |
-| 10 | [Agent Delegation 配置 UI](step10.md) | pending | Step 2 | description/delegates UI；独立 Sub-Agent 管理入口下线 |
+| 10 | [Agent Delegation 配置 UI](step10.md) | complete | Step 2 | description/delegates UI；独立 Sub-Agent 管理入口下线 |
 | 11 | [委派运行卡片与 audit/cancel IPC](step11.md) | pending | Steps 6,7,9 | reload-safe card、live state、single cancel、run metadata query |
 | 12 | [可选 Messages Dialog](step12.md) | pending | Step 11 review | 可实现则交付 Dialog；否则交付 verified deferred design 并标 deferred |
 | 13 | [证明新路径唯一并删除残留旧源码](step13.md) | pending | Steps 9–12 | 新路径唯一生效；残留旧源码/测试删除；全局文档更新 |
@@ -505,3 +505,16 @@
 - Step 9 状态切为 `complete`；Step 10/11 前置均已满足，但保持 `pending`，等待用户明确开始。
 
 每个后续 step 完成后继续追加同结构记录。
+
+### 2026-07-16 — Step 10 — awaiting-review
+- 实际输出/API：`AgentBasicTab` 将 `description` 纳入 dirty tracker 与 Save All；新增 `AgentDelegationTab`，候选只读 `agents.atom` hot records，selected IDs 只读 `AgentDetail.delegates`。当前 Agent 从候选排除；dangling ID 以 warning + ID 行展示且可取消选择，恢复后自然回到完整 Agent 行。新 tab route 为 `/agent/:agentId/settings/delegation`。
+- 编辑器结构：将原 693 行 `AgentEditingView` 拆为 103 行 layout、`useAgentEditorState`（route/dirty/save）与 `AgentEditorTabs`（tab dispatch）；新增组件均低于 500 行。Delegation 提供 Create Agent 和按真实 ID 打开的 Agent settings 导航，使用原生 keyboard checkbox 与现有 semantic token/Lucide。
+- 旧路径清理：删除独立 `/settings/sub-agents` route/sidepanel、CRUD UI/atom、CRUD IPC/preload bridge、profile snapshot/store/path/schema、`subAgents` Agent front-matter/detail/compat 字段、storage overview 分类、feature flag、旧 app subagent renderer及专属旧测试。用户磁盘 `sub-agents/` 目录未读取、迁移或删除。
+- 计划级联：Step 11 明确旧 app renderer已在本 step删除，改为只注册新顶层 renderer；Step 13 收敛为最终全仓 reachability proof；`context.md`、`unit-test.md` 与架构/模块文档已同步。
+- 静态验证：workspace LSP diagnostics 无 error；`npm run check:impact -- <26 个实际源文件>` 已复核受影响模块；`npm run typecheck` 通过；`npm run build` 通过（仅既有 renderer chunk-size warning，及 npm `.npmrc` unknown config warnings）。`src/**/*.ts(x)` 搜索旧 `subAgents`/CRUD IPC/feature-flag symbols 无匹配。
+- 未做的运行验证：遵循 Steps 1–13 政策，未新增或运行单测，未启动应用、未做浏览器/smoke/E2E。
+- 用户 review 建议：验证 description 保存；A 选择 B；自身排除；archive/restore 后 dangling 行与恢复；Save All/tab 切换；键盘、暗色与窄窗；旧 `/settings/sub-agents` 访问行为。
+
+### 2026-07-16 — Step 10 用户 review 通过
+- 用户确认 Step 10 完成；Delegation UI 拆分、dirty/save-all 闭包、路由和旧配置路径删除均获通过。
+- Step 11 的前置已满足，但保持 `pending`，仅在用户另行开始后执行。

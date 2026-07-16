@@ -1,4 +1,4 @@
-这里为 electron ipc 通讯的中间环节提供 API 逻辑封装
+<!-- Last verified: 2026-07-16 (Step 10：旧 Sub-Agent CRUD bridge 已删除) -->
 
 当前目录有 2 个入口文件，每个对应一个窗口：
 - `./main.ts`：主窗口

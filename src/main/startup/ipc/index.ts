@@ -9,7 +9,6 @@ import type { Context } from './shared';
 import handleAppIPC from './app';
 import handlePiIPC from './pi';
 import { registerPersistIpc, Profiles } from '../../persist';
-import handleSubAgentIPC from './sub-agent';
 import handleMcpIPC from './mcp';
 import handleSkillIPC from './skill';
 import handleAgentChatIPC from './agent-chat';
@@ -44,7 +43,6 @@ export function setUpIPC(ctx: Context) {
   listenHumanLoop(ipcMain);
   handlePiIPC(ctx);
   registerPersistIpc(ipcMain);
-  handleSubAgentIPC(ctx);
   handleMcpIPC(ctx);
   handleSkillIPC(ctx);
   handleAgentChatIPC(ctx);

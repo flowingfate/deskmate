@@ -206,7 +206,6 @@ describe('Bootstrap end-to-end', () => {
     const profile = await Profiles.get().active();
     expect(profile.mcp.items).toEqual([]);
     expect(profile.skills.items).toEqual([]);
-    expect(profile.subAgents.items).toEqual([]);
     expect(profile.sessionIdx.listStarred()).toEqual([]);
   });
 

@@ -163,6 +163,13 @@
 - [ ] P2 dirty tracking/save-all 在 tab 切换后不丢 delegates。
 - [ ] P2 独立 `/settings/sub-agents` 不再有生产 route。
 
+### Step 10 实际补充 — 2026-07-16
+- 实际 contract：Basic 的 `description` 与 Delegation 的 `delegates` 都通过同一 Save All patch 落到 Agent front matter；Delegation candidates 只读 `agents.atom` hot records，selected IDs 只读 `agentDetail.atom.delegates`。
+- 新增候选：description 的 dirty/save-all round-trip；candidate 自身排除、active target 的名称/description/model/ID 展示、dangling ID 的 warning + 可移除以及恢复后自然变为候选；切 tab 后 delegates cache 不丢失。
+- 删除/改写候选：删除旧 sub-agent CRUD、旧 `/settings/sub-agents`、旧 CRUD IPC/atom/store 与旧 app renderer 的测试候选；仅验证这些旧入口不再属于 production contract，不断言源码文本。
+- 最高风险：候选列表误读 cold detail 造成 N+1 I/O，或保存 delegates 时丢掉 description/其它 pending tab 修改。
+- 需要用户在 Step 14 前决定：无。
+
 ## Step 11 候选：runtime renderer/IPC
 
 - [ ] P0 state event 用 parent identity + subrunId 区分不同 session 的 `001`。

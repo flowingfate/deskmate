@@ -23,7 +23,7 @@
 
 ### Settings shell 边界
 
-`SettingsPage` 只负责侧栏、分隔线、内容容器和无 context 的 `<Outlet />`。子功能自己的 `*View` 必须持有菜单、确认框和最小 UI 状态：MCP、Skills、Sub-agents 均不得通过 Settings shell 传递操作回调、DOM 锚点或临时 `window` 字段。
+`SettingsPage` 只负责侧栏、分隔线、内容容器和无 context 的 `<Outlet />`。子功能自己的 `*View` 必须持有菜单、确认框和最小 UI 状态：MCP、Skills 等均不得通过 Settings shell 传递操作回调、DOM 锚点或临时 `window` 字段。
 
 ---
 
@@ -404,7 +404,6 @@ export const FEATURE_FLAGS = {
 | Tools | `/settings/tools` | — |
 | MCP | `/settings/mcp` | — |
 | Skills | `/settings/skills` | — |
-| Sub-Agents | `/settings/sub-agents` | `deskmateFeatureSubAgent` |
 | Screenshot | `/settings/screenshot` | — |
 | Runtime | `/settings/runtime` | — |
 | Provider | `/settings/provider` | — |

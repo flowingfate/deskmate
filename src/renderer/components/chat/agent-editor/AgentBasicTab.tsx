@@ -12,10 +12,7 @@ const EMPTY_MODEL = '' // Step 9+：不再默认填一个 GHC modelId；让用�
 
 const AgentBasicTab: React.FC<TabComponentProps> = ({
   mode,
-  agentId,
   agentData,
-  onSave,
-  onAgentCreated,
   onDataChange,
   cachedData,
   fieldErrors,
@@ -48,8 +45,9 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
             avatar: agentData.avatar || '',
             role: '',
             model: agentData.model,
+            description: agentData.description ?? '',
           }
-        : { name: '', emoji: '🤖', avatar: '', role: '', model: EMPTY_MODEL },
+        : { name: '', description: '', emoji: '🤖', avatar: '', role: '', model: EMPTY_MODEL },
     [agentData],
   )
 
@@ -62,6 +60,7 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
       avatar: cachedData.avatar !== undefined ? cachedData.avatar : baseline.avatar,
       role: cachedData.role !== undefined ? cachedData.role : baseline.role,
       model: cachedData.model !== undefined ? cachedData.model : baseline.model,
+      description: cachedData.description !== undefined ? cachedData.description : baseline.description,
     }
   }, [cachedData, baseline])
 
@@ -73,11 +72,12 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
     cached,
     equals: (a, b) =>
       a.name === b.name &&
+      a.description === b.description &&
       a.emoji === b.emoji &&
       a.avatar === b.avatar &&
       a.role === b.role &&
       a.model === b.model,
-    fingerprint: (v) => JSON.stringify([v.name, v.emoji, v.avatar, v.role, v.model]),
+    fingerprint: (v) => JSON.stringify([v.name, v.description, v.emoji, v.avatar, v.role, v.model]),
     toPayload: (v) => ({ ...v }),
     onDataChange,
   })
@@ -99,23 +99,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
     })
   }, [agents, agentData?.name, mode])
 
-  // Form validation
-  const validateForm = useCallback(() => {
-    const errors: Record<string, string> = {}
-
-    if (!formData.name.trim()) {
-      errors.name = 'Agent name is required'
-    } else if (checkDuplicateName(formData.name)) {
-      errors.name = 'Agent name already exists'
-    }
-
-    if (!formData.model) {
-      errors.model = 'Model selection is required'
-    }
-
-    setValidationErrors(errors)
-    return Object.keys(errors).length === 0
-  }, [formData, checkDuplicateName])
 
   // Handle input change
   const handleInputChange = useCallback((field: string, value: string) => {
@@ -154,14 +137,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
     handleInputChange('model', modelId)
   }, [handleInputChange])
 
-  // Dynamically determine the current effective mode
-  const getCurrentMode = useCallback(() => {
-    // If in Add mode but Agent is already created, treat it as Update mode
-    if (mode === 'add' && agentData?.id) {
-      return 'update'
-    }
-    return mode
-  }, [mode, agentData?.id])
 
   return (
     <div className="agent-tab">
@@ -212,6 +187,29 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
             <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-md text-[13px] bg-[#FEF3C7] border-l-2 border-status-warning text-amber-800">
               <AlertTriangle size={14} className="shrink-0" />
               <span>{nameWarning}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="mb-4.5">
+          <label htmlFor="agent-description" className="block mb-1.5 text-[13px] font-medium text-content">Description</label>
+          <p className="mb-2 text-[13px] text-content-secondary">
+            Used in this agent&apos;s introduction and when other agents choose delegation targets.
+          </p>
+          <textarea
+            id="agent-description"
+            className={`min-h-24 w-full resize-y rounded-lg border border-black/10 bg-surface-primary px-3 py-2 text-sm text-content transition-all hover:enabled:border-gray-400 focus:outline-none focus:border-content focus:shadow-[0_0_0_1px_#272320] ${fieldErrors?.description ? 'border-status-error' : ''}`}
+            value={formData.description}
+            onChange={(event) => handleInputChange('description', event.target.value)}
+            placeholder="Describe this agent&apos;s expertise..."
+            disabled={readOnly}
+            aria-describedby="agent-description-helper"
+          />
+          <span id="agent-description-helper" className="sr-only">This description helps other agents select a delegation target.</span>
+          {fieldErrors?.description && (
+            <div className="mt-2 flex items-center gap-2 rounded-md border-l-2 border-status-error bg-red-400/10 px-3 py-2 text-[13px] text-red-900" role="alert">
+              <AlertTriangle size={14} className="shrink-0" aria-hidden />
+              <span>{fieldErrors.description}</span>
             </div>
           )}
         </div>

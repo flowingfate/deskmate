@@ -55,7 +55,8 @@ Step 2 实际落地 API（2026-07-16）：
 - 不再提供独立 delegates normalization helper；`Agent.patchFront` 按类型化输入原样保存 delegates，避免为简单数组制造第二层抽象。
 - `Profile.resolveDelegates(parentId): Promise<ResolvedAgentDelegates | null>` 在解析时 trim/去空/稳定去重；parent record/AGENT.md 缺失返回 `null`，self/dangling/archived ID 进入 `unavailableIds`，available 按配置顺序 join active registry。
 - duplicate 复制 description 与 outgoing delegates；archive 不改其它 Agent 的 incoming references。
-- renderer 既有 `AgentPersona` bridge 暂时映射 description/delegates；Step 10 UI 使用 `agents.atom` candidates + `agentDetail.atom.delegates`，不读取旧 subAgents atom。
+- renderer `AgentPersona` bridge 映射 description/delegates；Step 10 UI 使用 `agents.atom` candidates + `agentDetail.atom.delegates`，旧 `subAgents` atom 与配置路径已删除。
+- Step 10 已获用户 review 通过：Delegation route/key、候选与 dangling 数据源、Save All 闭包及旧配置路径删除均为稳定下游输入。
 - 错误契约原则：可预期业务失败必须出现在 TypeScript 返回类型中；普通函数/方法不得通过未声明的 `throw` 表达 not-found、self-reference、invalid-state 等正常分支。
 
 ### 2.2 不做旧数据迁移
@@ -378,7 +379,7 @@ Renderer 基线必须能渲染委派工具卡片和正式结果。消息详情 D
 - shared delegation IPC + preload + renderer binding；
 - Agent editor / agents atom / tool renderer。
 
-旧 `lib/subAgent` 与 `app subagent` backend 已在 Step 9 production cutover 整体删除。旧 persist SubAgents store、独立 CRUD IPC/UI/atom 仍待 Step 10/11/13 在其生产引用归零后分别删除；旧磁盘数据始终不读、不改、不删。
+旧 `lib/subAgent` 与 `app subagent` backend 已在 Step 9 删除；Step 10 已删除旧 persist SubAgents store、独立 CRUD IPC/UI/atom、旧 app renderer 与全部旧配置 contract。旧磁盘数据始终不读、不改、不删。
 
 ## 6. 步骤依赖总图
 

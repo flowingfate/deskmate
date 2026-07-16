@@ -279,7 +279,6 @@ describe('Agent rename via patchFront', () => {
     await agent.patchFront({
       thinkingLevel: 'high',
       skills: { s1: 'live' },
-      subAgents: ['sa1'],
       tools: ['read', 'write'],
       mcpServers: [{ name: 'mcp1', tools: ['t1'] }],
     });
@@ -291,7 +290,6 @@ describe('Agent rename via patchFront', () => {
       tools: ['read', 'write'],
       mcpServers: [{ name: 'mcp1', tools: ['t1'] }],
       skills: { s1: 'live' },
-      subAgents: ['sa1'],
     });
     // 不带 record 字段（避免回归：列表展示 stale 时不该用 detail 兜底）
     expect((d as unknown as Record<string, unknown>).name).toBeUndefined();

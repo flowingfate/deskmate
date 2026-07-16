@@ -11,7 +11,6 @@ import type { ScheduleJob } from './schedule';
 import { LegacyAuth, PiAuth } from './auth';
 import { Mcp } from './mcp';
 import { Skills } from './skills';
-import { SubAgents } from './subAgents';
 import { Models } from './models';
 import { Archive } from './archive';
 import { SchedulerState } from './schedulerState';
@@ -165,7 +164,6 @@ export class Profile {
   // —— profile 级共享资源 ——
   public readonly mcp:        Mcp;
   public readonly skills:     Skills;
-  public readonly subAgents:  SubAgents;
   public readonly models:     Models;
   public readonly archive:    Archive;
   public readonly schedulerState: SchedulerState;
@@ -190,7 +188,6 @@ export class Profile {
     this.piAuth    = new PiAuth(id);
     this.mcp       = new Mcp(id);
     this.skills    = new Skills(id);
-    this.subAgents = new SubAgents(id);
     this.models    = new Models(id);
     this.archive   = new Archive(id);
     this.schedulerState = new SchedulerState(id);
@@ -208,7 +205,6 @@ export class Profile {
         this.piAuth.load(),
         this.mcp.load(),
         this.skills.load(),
-        this.subAgents.load(),
         this.models.load(),
         // archive 当前无需 load
         this.schedulerState.load(),
@@ -252,7 +248,6 @@ export class Profile {
       settings: this.settings.toFile(),
       agents: this.agentRegistry.items,
       primaryAgentId: this.agentRegistry.primaryAgentId,
-      subAgents: await this.subAgents.listConfigs(),
       skills: this.skills.items,
       mcp: this.mcp.items,
       starred: this.sessionIdx.listStarred(),
@@ -412,14 +407,13 @@ export class Profile {
       systemPrompt: src.systemPrompt,
       nowIso: ts,
     });
-    // patchFront 复制其余 front-matter 字段（thinkingLevel/mcpServers/skills/subAgents/delegates）
+    // patchFront 复制其余 front-matter 字段（thinkingLevel/mcpServers/skills/delegates）
     // 写盘在 patchFront 内一并完成；此时 dst 还没进 agentRegistry.items，agentRegistry.syncRecord
     // 会找不到 id 而 no-op，下面 push 仍由 agentRegistry.persist 统一发 registry 事件。
     await dst.patchFront({
       thinkingLevel: src.config.thinkingLevel,
       mcpServers: src.config.mcpServers,
       skills: src.config.skills,
-      subAgents: src.config.subAgents,
       delegates: src.config.delegates,
     });
 

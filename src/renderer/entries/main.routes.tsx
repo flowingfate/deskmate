@@ -16,10 +16,6 @@ import McpView from '../components/mcp/McpView';
 import ToolsView from '../components/tools/ToolsView';
 import AddNewMcpServerView from '../components/mcp/AddNewMcpServerView';
 import SkillsView from '../components/skills/SkillsView';
-import SubAgentsView from '../components/subAgents/SubAgentsView';
-import CreateSubAgentView from '../components/subAgents/CreateSubAgentView';
-import EditSubAgentView from '../components/subAgents/EditSubAgentView';
-import SubAgentsSettingsLayout from '../components/subAgents/SubAgentsSettingsLayout';
 import RuntimeSettingsView from '../components/settings/runtime/RuntimeSettingsView';
 import { navigateEvents } from '@/ipc/navigate';
 import { useSessionCompletionToast } from '../lib/scheduler/useSessionCompletionToast';
@@ -31,8 +27,6 @@ import PersistSettingsView from '../components/settings/persist/PersistSettingsV
 import AgentEditingView from '../components/chat/agent-area/AgentEditingView';
 import AgentCreationView from '../components/chat/agent-area/AgentCreationView';
 import CreateCustomAgentView from '../components/chat/agent-area/CreateCustomAgentView';
-import { useFeatureFlag } from '../lib/featureFlags';
-import type { FeatureFlagName } from '@shared/types/featureFlagTypes';
 import { log } from '@/log';
 import { appApi } from '@/ipc/app';
 import { AppShell } from '@renderer/pages/layout/AppShell';
@@ -51,18 +45,6 @@ const McpConnectionFailureToastListener: React.FC = () => {
   return useMcpConnectionFailureToast();
 };
 
-/**
- * Feature-flag guard for data-router static routes.
- *
- * 数据路由的路由表是静态对象，无法像旧的 `<Routes>` 那样用 `useFeatureFlag`
- * 在构建期条件注册。改为始终注册路由、在元素层用本 guard 做 reactive 门控：
- * flag 关闭时重定向到 "/"，复现旧实现下路由未注册、fall-through 到 `*` 的行为。
- */
-const FeatureGate: React.FC<{ flag: FeatureFlagName; children: React.ReactNode }> = ({ flag, children }) => {
-  const enabled = useFeatureFlag(flag);
-  if (!enabled) return <Navigate to="/" replace />;
-  return <>{children}</>;
-};
 
 /**
  * 根布局路由。
@@ -162,19 +144,6 @@ const routes: RouteObject[] = [
               { path: 'runtime', Component: RuntimeSettingsView },
               { path: 'skills', Component: SkillsView },
               { path: 'tools', Component: ToolsView },
-              {
-                path: 'sub-agents',
-                element: (
-                  <FeatureGate flag="deskmateFeatureSubAgent">
-                    <SubAgentsSettingsLayout />
-                  </FeatureGate>
-                ),
-                children: [
-                  { index: true, Component: SubAgentsView },
-                  { path: 'new', Component: CreateSubAgentView },
-                  { path: 'edit/:subAgentName', Component: EditSubAgentView },
-                ],
-              },
               { path: 'about', Component: AboutAppView },
               { path: 'provider', Component: ProviderList },
               { path: 'archived-agents', Component: ArchivedAgentsView },

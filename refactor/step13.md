@@ -37,20 +37,20 @@
 ## 4. 旧源码删除政策
 
 - 不逐文件修旧签名、补兼容 shim或更新旧测试；
-- `lib/subAgent` 与旧 app command 已由 Step 9 删除；对旧 CRUD IPC/UI/atom、旧 persist SubAgents store分别做 reachability proof，引用归零后整体删除。
+- `lib/subAgent` 与旧 app command 已由 Step 9 删除；Step 10 已删除旧 CRUD IPC/UI/atom、persist SubAgents store、旧 app renderer 和 shared contract。Step 13 只做最终全仓 reachability 证明，不恢复或修补这些路径。
 - 引用归零的子树连同测试和模块文档一起删除，不移动到 `tmp/` 或 archive；
 - 新 `pi/subagent/ai.prompt.md` 明确禁止旧依赖方向；
 - 旧本地 `sub-agents/` 数据目录完全不碰。
 
 ## 5. Shared/persist清理
 
-从生产 contract删除所有旧数据暴露：
+确认生产 contract 不再暴露旧数据：
 
-- PersistSnapshot不再含subAgents；
-- storage overview不再把旧sub-agents作为可管理产品分类；
+- PersistSnapshot不含subAgents；
+- storage overview不把旧sub-agents作为可管理产品分类；
 - production Agent detail只读 delegates，不保留旧 subAgents 字段/alias；
-- old CRUD IPC/channel/type/source均不存在；
-- no migration code/journal/path。
+- old CRUD IPC/channel/type/source仍不存在；
+- 无 migration code/journal/path。
 
 不做破坏性磁盘schema修改；旧字段/文件被忽略。
 

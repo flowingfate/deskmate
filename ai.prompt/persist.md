@@ -74,7 +74,7 @@
         │           └── {j_ulid}/
         │               ├── job.json
         │               └── runs/{YYYYMM}/{s_ulid}/   # 同 sessions 结构(含 files/)
-        ├── sub-agents/  skills/  mcp/  models/    # profile 级共享注册表
+        ├── skills/  mcp/  models/                 # profile 级共享注册表
         └── archive/                               # agent 软删归档
 ```
 
@@ -124,7 +124,7 @@ Profiles.get().active()        → Profile
 2. `profilesIndexStore.resolveActive()` —— 决定 `activeProfileId`,不在 items 中 → fallback `items[0]`
 3. profile.config + settings 装载
 4. **`ProfileDb.open()` + integrity_check** —— 打开 `profiles/{p}/index.db`;不存在则建表 + 写 `_meta.schema_version`
-5. profile.mcp / sub-agents / skills 装载
+5. profile.mcp / skills / models 装载
 6. agent registry 装载 —— **只读 `agents.json`**,不 fan-out 读 N 个 AGENT.md
 7. `agentStore.reconcile()` —— `agents.json#items` ↔ `agents/{id}/` 目录双向对账,缺目录的 item 剔除并清空 `primaryAgentId` 命中
 8. `archiveStore.gc()` —— 保留期外的归档清理
@@ -158,7 +158,7 @@ Profiles.get().active()        → Profile
 | `getUnreadSummary(agentId)` | 未读统计(regular 全量 + schedule_run 窗口),两条 SQL |
 | `updateConfirmationSettings` | confirmation settings 写入 |
 | `updateWebSearchSettings` | webSearch settings 写入(Tavily API key) |
-| `getStorageOverview` | 本地数据透明:**以 agent 为组**统计私有数据(会话/定时/知识/配置 → `AgentStorageGroup`)+ profile 级共享分类(skills/subAgents/mcp/models/搜索索引/归档/设置 → `StorageCategory`)。返回 `StorageOverview`。`/settings/persist` 页用 |
+| `getStorageOverview` | 本地数据透明:**以 agent 为组**统计私有数据(会话/定时/知识/配置 → `AgentStorageGroup`)+ profile 级共享分类(skills/mcp/models/搜索索引/归档/设置 → `StorageCategory`)。返回 `StorageOverview`。`/settings/persist` 页用 |
 | `revealStoragePath(absPath)` | 在系统文件管理器中打开 profile 目录树内的路径(越界拒绝) |
 
 ### 6.2 Main → Renderer(send / on,按域 150ms 防抖)
@@ -166,7 +166,7 @@ Profiles.get().active()        → Profile
 | 通道 | payload 要点 | 触发点 |
 |---|---|---|
 | `profile:switched` | `{ profileId, previous }` | `Profiles.setActive()` |
-| `agent:registry:updated` | `{ profileId, kind, items, primaryAgentId? }`(`kind` 可为 `agents` / `subAgents` / `skills` / `mcp`) | agents.json(含 `primaryAgentId`)/ sub-agents / skills / mcp 写盘 |
+| `agent:registry:updated` | `{ profileId, kind, items, primaryAgentId? }`(`kind` 可为 `agents` / `skills` / `mcp`) | agents.json(含 `primaryAgentId`)/ skills / mcp 写盘 |
 | `agent:updated` | `{ profileId, agentId, record, detail }`（record 含 hot description，detail 含 cold delegates） | `Agent.persist()`（按 agentId 防抖） |
 | `agent:removed` | `{ profileId, agentId }` | `Agent.archive()` |
 | `session:index:updated` | `{ op:'upsert', entry }` 或 `{ op:'remove', id }`(**单条 op**,renderer 按 id 合并) | `SessionIdx.upsert` / `remove` |
@@ -196,7 +196,6 @@ Profiles.get().active()        → Profile
 | `schedules.atom` | `schedule:*` | — |
 | `settings.atom` | `settings:updated` | — |
 | `starred.atom` | `starred:updated` | — |
-| `subAgents.atom` | `agent:registry:updated[kind=subAgents]` | — |
 | `skills.atom` | `agent:registry:updated[kind=skills]` | — |
 | `mcp.atom` | `agent:registry:updated[kind=mcp]` | 同时驱动 `mcpClientCacheManager` 更新 runtime |
 | `mcpRuntime.atom` | 包 `mcpClientCacheManager` | runtime 状态不归 persist |
@@ -213,7 +212,7 @@ AGENT.md 是源真值;`AgentRecord` 是其同名字段的派生缓存。
 | 视图 | 类型 | 字段 | renderer 用法 |
 |---|---|---|---|
 | Hot | `AgentRecord`(`agents.json#items` 行) | `id / name / description? / version / model / emoji? / avatar? / locked? / createdAt / updatedAt` | sidebar / chat header / model selector / delegation picker 直接持 `agents.atom`；description 放 hot 避免候选列表 fan-out 读 AGENT.md | 
-| Cold | `AgentDetail`(AGENT.md 解析) | `agentId / systemPrompt / thinkingLevel? / tools? / mcpServers? / skills? / subAgents? / delegates? / zero?` | agent editor 按 agentId lazy fetch；delegates 保留配置顺序与 dangling ID |
+| Cold | `AgentDetail`(AGENT.md 解析) | `agentId / systemPrompt / thinkingLevel? / tools? / mcpServers? / skills? / delegates? / zero?` | agent editor 按 agentId lazy fetch；delegates 保留配置顺序与 dangling ID |
 
 ### Agent graph resolver
 
@@ -327,7 +326,7 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 
 完整 26 条 Gotchas 见 [src/main/persist/ai.prompt.md `Gotchas`](../src/main/persist/ai.prompt.md#gotchas)。**最容易踩雷的几条**:
 
-- ⚠️ **`name` 不是主键**。`agents.json` 允许重名;所有引用走 `a_{ulid}` id。重命名 agent 时 id 不变。**例外**:sub_agents / skills 沿用 name 作 id(Claude Code 兼容性)。
+- ⚠️ **`name` 不是主键**。`agents.json` 允许重名;所有引用走 `a_{ulid}` id。重命名 agent 时 id 不变；skills 沿用 name 作 id。
 - ⚠️ **messages.jsonl 是 append-only**。常态走 `Session.appendDomainMessage(m)` / `appendToolResponse(id, result)` 进 buffer,`flushMessages` 才落盘;`Session.persist()` 内部会同时 flush。**整段覆盖**走 `rewriteMessages(messages)`(edit / retry / 导入路径),不要单独覆盖写 messages.jsonl。
 - ⚠️ **Session 删除走 `Agent.deleteSession(id)` / `Agent.deleteJob(id)`**,会同时删 dir + SQL 行 + emit 相应 `*:index:updated`(op='remove') / `schedule:removed`。**不要**直接 `session.deleteFromDisk()`。
 - ⚠️ **Agent 软删走 `Profile.archiveAgent(id)`**。写顺序:archive move dir → agents.json 剔除(含 `primaryAgentId` 命中清空)。中途崩溃下次启动 `reconcileAgents()` 自愈。
@@ -350,9 +349,7 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 | 2026-06-03 | shutdown 走父→子的所有权链,emit 独立成 `persist/lib/emit.ts` | trackSession/untrackSession 反向耦合不必要;emit 是横切关注点 |
 | 2026-06-03 | pi.Session 通过构造注入 `persistSession`,不再 lookup | turn loop 热路径零 IO,状态机更简单 |
 | 2026-06-03 | `startNewSessionFor` / `forkChatSession` 走 `Agent.createSession()` / `Agent.copySession()` 单调用 | 解掉"上游 IPC 传外部 sessionId / pi 收到未知 id 硬抛"遗留 |
-| 2026-06-03 | SubAgents 域 schema 用 discriminated union(三字段) | 避免回到 ChatConfig "什么都塞" 反模式 |
 | 2026-06-03 | 删 `agent.workspace`(path/placeholders/types 不留) | 实测无用户主动放文件;"用户托管项目"待后续单独立项 |
-| 2026-06-02 | Q1~Q5 全部关闭(不做存量数据迁移 / RAG 待整体删重做 / workspace 不加回 / schema 升级不预设 / sub_agents 命名不对称维持) | 单用户/早期项目,不为"将来可能要"付前置成本 |
 | 2026-06-01 | Agent class 的 `sessionIndex` / `scheduleRegistry` 必须在 constructor 中赋值,不能用 field initializer | TS field initializer 求值顺序导致 `this.profileId` / `this.id` 在 parameter-property 赋值前被读到 |
 | 2026-06-01 | `lib/root.ts` 用 `require('electron')` 延迟加载 | demo/测试/CLI 在非 Electron 上下文需要 `setRootForTesting()` 覆盖;ES import 会立即解析 module 直接报错 |
 | 2026-06-01 | ULID 取代 UUIDv7 | UUIDv7 在 4 层嵌套下吃到 Windows 260 字符上限;ULID 短 10 字符 |
@@ -380,7 +377,6 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 | `p_/agents/{a}/schedules/jobs.json` | `ScheduleJobsIndexFile` | `ScheduleRegistry.doPersist()` |
 | `p_/agents/{a}/schedules/{j}/job.json` | `ScheduleJobFile` | `ScheduleJobConfig.toFile()` |
 | `p_/agents/{a}/schedules/{j}/runs/.../data.json` | `ScheduleRunSessionDataFile` | `JobRun.toDataFile()` (继承 `SessionDataFileBase`) |
-| `p_/sub-agents/sub-agents.json` | `SubAgentsIndexFile` | `SubAgents.doPersist()` |
 | `p_/skills/skills.json` | `SkillsIndexFile` | `Skills.doPersist()` |
 | `p_/mcp/mcp-servers.json` | `McpServersFile` | `Mcp.doPersist()` |
 | `p_/models/{provider}.json` | `ModelsCacheFile` | `Models.set()` + `GhcModelsManager.saveToFile()` |
@@ -394,7 +390,7 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 
 | 文件 | 原因 |
 |---|---|
-| `p_/agents/{a}/AGENT.md` 的 `version` front-matter 字段 | **不是** schema version,而是 agent 用户态自定义版本(semver 风格,如 `"1.0.0"`)。两个语义同名容易混淆;真要破坏性变更 AGENT.md 结构时,加 `schemaVersion`(数字)与现有 `version`(字符串)并存。`sub-agents/{name}/AGENT.md` 同理。 |
+| `p_/agents/{a}/AGENT.md` 的 `version` front-matter 字段 | **不是** schema version,而是 agent 用户态自定义版本(semver 风格,如 `"1.0.0"`)。两个语义同名容易混淆;真要破坏性变更 AGENT.md 结构时,加 `schemaVersion`(数字)与现有 `version`(字符串)并存。 |
 | `messages.jsonl` | append-only 行式格式,没有"文件头"概念;在每行加 version 浪费空间且与流式追加模型冲突。需要变更行 schema 时,用 `Message` 类型自身的 discriminated union 字段(已有的 `role` / `type` 等)走分支兼容。 |
 | `p_/auth.json` (legacy) | 老 V3 schema(`LegacyAuthFile.version: string`),已冻结只读,无活代码再写。 |
 | `p_/skills/{name}/SKILL.md` | 纯 markdown body,没有结构化 schema(本仓库不解析其内容)。 |

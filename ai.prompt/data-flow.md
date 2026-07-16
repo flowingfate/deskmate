@@ -106,7 +106,7 @@ Renderer 触发写操作（如 agentOps.updateAgent）
 | 通道 | payload | 写入触发点 |
 |---|---|---|
 | `persist:profile:switched` | `{profileId, previous}` | `Profiles.setActive()` |
-| `persist:agent:registry:updated` | `{profileId, kind, items, primaryAgentId?}` | agents.json (含 primaryAgentId) / sub-agents / skills / mcp 注册表写盘 |
+| `persist:agent:registry:updated` | `{profileId, kind, items, primaryAgentId?}` | agents.json (含 primaryAgentId) / skills / mcp 注册表写盘 |
 | `persist:agent:updated` | `{profileId, agentId, record, detail}` | `Agent.persist()`（按 agentId 防抖）；record 含 hot description，detail 含 cold delegates，两层同时下推 |
 | `persist:agent:removed` | `{profileId, agentId}` | `Agent.archive()` |
 | `persist:session:index:updated` | `{profileId, agentId, month, entries}` | `Agent.sessionIndex` 月文件写盘 |
@@ -137,7 +137,6 @@ sessionData.atom        ← session:updated（按 sessionId 按需 hydrate）
 schedules.atom          ← schedule:*
 settings.atom           ← settings:updated
 starred.atom            ← starred:updated
-subAgents.atom          ← agent:registry:updated[kind=subAgents]
 skills.atom             ← agent:registry:updated[kind=skills]
 mcp.atom                ← agent:registry:updated[kind=mcp]（同时驱动 mcpClientCacheManager 更新 runtime）
 mcpRuntime.atom         ← 包 mcpClientCacheManager（runtime 状态不归 persist）
@@ -167,13 +166,11 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 
 ## 子智能体执行流
 
-1. 父智能体的 LLM 请求调用 `spawn_subagent` 或 `spawn_multiple_subagents`(本地工具,在 `pi/tools/spawnSubagents.ts`)
-2. 工具 handler 通过 `ctx.getSubAgentConfig` / `getParentContextSummary` 取上下文 + 校验 ctx 完备 → 转发到 `SubAgentManager`
-3. `SubAgentManager` 校验资源限制（最多 5 个并行、每个 session 最多 20 个），然后创建子智能体实例
-4. `SubAgentChat` 继承父模型，运行一个非流式对话循环（最多 25 轮，30 秒超时）
-5. 子智能体通过 `MCPClientManager` 执行工具；递归生成子智能体被明确禁止
-6. 提取最终结果并返回给父智能体会话
-7. 清理子智能体实例，不做 session 持久化
+1. 父 Agent 的 LLM 请求调用顶层 `subagent` LocalTool，并以同一 response 的多个 call 表达并行。
+2. tool handler 按当前 Profile 取得 `SubAgentManager.forProfile(profile)` 的 command facade；`list` / `describe` 复用 `Profile.resolveDelegates`，`run` 通过同一 resolver 授权。
+3. manager 以完整 parent identity 短锁完成 stale recovery、总数/并行 gate、三位 subrun reservation 与 active registration。
+4. `SubAgentSession` 在 delegate scope 内使用执行 Agent 的 config/catalog/prompt，持久化 hidden transcript，并以 `submit_result` 收敛正式结果。
+5. manager timeout/parent cancel 直接 abort 实际 run；终态 `Subrun data` 与 parent tool result 是 reload 事实源。
 
 ---
 

@@ -55,14 +55,11 @@ class AgentConfig {
   public tools?: string[];
   public mcpServers?: AgentMarkdownFront['mcpServers'];
   public skills?: SkillBindings;
-  public subAgents?: string[];
   public delegates?: string[];
   /** 聊天空态预设提示词;见 `AgentMarkdownFrontBase.zero`。 */
   public zero?: AgentZeroState;
   /** 受保护标记;见 `AgentMarkdownFrontBase.locked`。 */
   public locked?: boolean;
-
-
 
   /** 用 raw front-matter 一次性覆盖所有字段。 */
   public assign(fm: AgentMarkdownFront): void {
@@ -76,7 +73,6 @@ class AgentConfig {
     this.tools = fm.tools;
     this.mcpServers = fm.mcpServers;
     this.skills = fm.skills;
-    this.subAgents = fm.subAgents;
     this.delegates = fm.delegates;
     this.zero = fm.zero;
     this.locked = fm.locked;
@@ -97,7 +93,6 @@ class AgentConfig {
     if (this.tools !== undefined)           opt.tools = this.tools;
     if (this.mcpServers !== undefined)      opt.mcpServers = this.mcpServers;
     if (this.skills !== undefined) opt.skills = this.skills;
-    if (this.subAgents !== undefined)       opt.subAgents = this.subAgents;
     if (this.delegates !== undefined)       opt.delegates = this.delegates;
     if (this.zero !== undefined)            opt.zero = this.zero;
     if (this.locked !== undefined)          opt.locked = this.locked;
@@ -242,7 +237,6 @@ export class Agent extends PersistBase {
       tools: c.tools,
       mcpServers: c.mcpServers,
       skills: c.skills,
-      subAgents: c.subAgents,
       delegates: c.delegates,
       zero: c.zero,
     };
@@ -305,7 +299,6 @@ export class Agent extends PersistBase {
     if (partial.tools !== undefined)           c.tools = partial.tools;
     if (partial.mcpServers !== undefined)      c.mcpServers = partial.mcpServers;
     if (partial.skills !== undefined)          c.skills = partial.skills;
-    if (partial.subAgents !== undefined)       c.subAgents = partial.subAgents;
     if (partial.delegates !== undefined)       c.delegates = partial.delegates;
     if (partial.zero !== undefined)            c.zero = partial.zero;
     if (partial.locked !== undefined)          c.locked = partial.locked;

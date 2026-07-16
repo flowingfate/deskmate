@@ -9,7 +9,6 @@ import {
   Database,
   MessagesSquare,
   SlidersHorizontal,
-  Users,
 } from 'lucide-react'
 import type { AgentStoragePart, StorageCategory } from '@shared/ipc/persist'
 
@@ -32,7 +31,6 @@ export const PART_META: Record<AgentStoragePart['key'], { Icon: LucideIcon; colo
 /** profile 级共享分类 key → 图标 + 颜色。 */
 export const SHARED_META: Record<StorageCategory['key'], { Icon: LucideIcon; color: string }> = {
   skills: { Icon: BookMarked, color: '#f59e0b' },
-  subAgents: { Icon: Users, color: '#14b8a6' },
   mcp: { Icon: Cable, color: '#ec4899' },
   models: { Icon: Boxes, color: '#a855f7' },
   searchIndex: { Icon: Database, color: '#64748b' },

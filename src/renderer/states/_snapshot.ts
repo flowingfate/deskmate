@@ -1,9 +1,9 @@
 /**
  * Renderer 端 persist snapshot 共享 hydrate 合流。
  *
- * 背景：`profile/agents/subAgents/skills/mcp/starred/settings` 7 个 atom 都需要从
+ * 背景：`profile/agents/skills/mcp/starred/settings` 6 个 atom 都需要从
  *   `persistApi.getSnapshot()` 一次拉到的完整快照里取自己那块。模块加载副作用与
- *   `profile:switched` 事件都会触发各 atom 各自 invoke 一次 —— 7 次 IPC + 7 份
+ *   `profile:switched` 事件都会触发各 atom 各自 invoke 一次 —— 6 次 IPC + 6 份
  *   完整 snapshot 序列化拷贝。同 tick fan-out 没有任何业务必要，可以合并。
  *
  * 合流策略：

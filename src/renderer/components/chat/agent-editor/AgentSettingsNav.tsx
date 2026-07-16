@@ -1,5 +1,5 @@
 import React from 'react'
-import { User, BookOpen, Cable, Wrench, BookMarked, Bot, FileText, Sparkles, Loader2, Save, type LucideIcon } from 'lucide-react'
+import { User, BookOpen, Cable, Wrench, BookMarked, Network, FileText, Sparkles, Loader2, Save, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utilities/utils'
 import { Button } from '@/shadcn/button'
 import { Badge } from '@/shadcn/badge'
@@ -9,8 +9,6 @@ interface NavItem {
   key: AgentEditorTabName
   label: string
   icon: LucideIcon
-  /** 仅当 feature flag 开启时显示 */
-  flagged?: boolean
 }
 
 // 数据驱动的 tab 元数据 —— 图标复用各 tab 自身使用的 Lucide 图标，保持视觉一致。
@@ -20,7 +18,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { key: 'mcp', label: 'MCP Servers', icon: Cable },
   { key: 'tools', label: 'Tools', icon: Wrench },
   { key: 'skills', label: 'Skills', icon: BookMarked },
-  { key: 'sub_agents', label: 'Sub-Agents', icon: Bot, flagged: true },
+  { key: 'delegation', label: 'Delegation', icon: Network },
   { key: 'prompt', label: 'System Prompt', icon: FileText },
   { key: 'presets', label: 'Quick Prompts', icon: Sparkles },
 ]
@@ -28,7 +26,6 @@ const NAV_ITEMS: readonly NavItem[] = [
 interface AgentSettingsNavProps {
   activeTab: AgentEditorTabName
   pendingChanges: Record<AgentEditorTabName, boolean>
-  subAgentEnabled: boolean
   onSwitch: (tab: AgentEditorTabName) => void
   onSaveAll: () => void
   isLoading: boolean
@@ -45,7 +42,6 @@ interface AgentSettingsNavProps {
 const AgentSettingsNav: React.FC<AgentSettingsNavProps> = ({
   activeTab,
   pendingChanges,
-  subAgentEnabled,
   onSwitch,
   onSaveAll,
   isLoading,
@@ -55,7 +51,7 @@ const AgentSettingsNav: React.FC<AgentSettingsNavProps> = ({
   return (
     <div className="w-47 min-w-47 shrink-0 px-2 py-2.5 border-r border-black/7 flex flex-col gap-2 overflow-y-hidden">
       <nav className="flex-1 flex flex-col gap-0.5 overflow-y-auto box-border" aria-label="Agent settings sections">
-        {NAV_ITEMS.filter(item => !item.flagged || subAgentEnabled).map(({ key, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ key, label, icon: Icon }) => {
           const isActive = activeTab === key
           return (
             <Button

@@ -10,13 +10,11 @@ import {
   Info,
   ShieldCheck,
   Terminal,
-  Bot,
   Wrench,
 } from 'lucide-react';
 import { ScrollArea } from '@/shadcn/scroll-area';
 import NavItem from './NavItem';
 import { APP_NAME, BRAND_CONFIG } from '@shared/constants/branding';
-import { useFeatureFlag } from '../../../lib/featureFlags';
 import { LeftNavSizeAtom } from '@renderer/states/left-nav.atom';
 import { BACKDROP } from './backdrop';
 import { resolveSettingsBackFallbackPath } from '@renderer/lib/navigation/settingsBackFallback';
@@ -24,9 +22,6 @@ import { resolveSettingsBackFallbackPath } from '@renderer/lib/navigation/settin
 const SettingsSidepanel: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-
-  // Sub-Agent feature controlled by feature flag
-  const subAgentEnabled = useFeatureFlag('deskmateFeatureSubAgent');
 
 
   const { width } = LeftNavSizeAtom.useData();
@@ -37,7 +32,6 @@ const SettingsSidepanel: React.FC = () => {
     if (path.includes('/settings/mcp')) return 'mcp';
     if (path.includes('/settings/tools')) return 'tools';
     if (path.includes('/settings/skills')) return 'skills';
-    if (path.includes('/settings/sub-agents')) return 'sub-agents';
     if (path.includes('/settings/screenshot')) return 'screenshot';
     if (path.includes('/settings/about')) return 'about';
     if (path.includes('/settings/provider')) return 'provider';
@@ -99,15 +93,6 @@ const SettingsSidepanel: React.FC = () => {
           ariaLabel="Skills Management"
         />
 
-        {subAgentEnabled && (
-          <NavItem
-            icon={<Bot size={16} />}
-            label="Sub-Agents"
-            isActive={activeView === 'sub-agents'}
-            onClick={() => navigate('/settings/sub-agents')}
-            ariaLabel="Sub-Agent Management"
-          />
-        )}
 
         <NavItem
           icon={<Terminal size={16} />}

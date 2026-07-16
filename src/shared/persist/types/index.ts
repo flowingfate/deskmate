@@ -12,6 +12,5 @@ export * from './resource';
 export * from './schedule';
 export * from './session';
 export * from './settings';
-export * from './subAgent';
 export * from './subrun';
 export * from './thinking';

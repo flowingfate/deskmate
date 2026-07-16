@@ -52,8 +52,6 @@ export const PERSIST_PATH = {
                      `${PERSIST_PATH.jobDir(root, p, a, j)}/runs`,
 
   // profile 级共享
-  subAgentsDir:    (root: string, p: string) => `${PERSIST_PATH.profileDir(root, p)}/sub-agents`,
-  subAgentsIndex:  (root: string, p: string) => `${PERSIST_PATH.subAgentsDir(root, p)}/sub-agents.json`,
   skillsDir:       (root: string, p: string) => `${PERSIST_PATH.profileDir(root, p)}/skills`,
   skillsIndex:     (root: string, p: string) => `${PERSIST_PATH.skillsDir(root, p)}/skills.json`,
   mcpDir:          (root: string, p: string) => `${PERSIST_PATH.profileDir(root, p)}/mcp`,

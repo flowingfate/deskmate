@@ -1,53 +1,38 @@
-import type { AgentMcpServer, SkillBindings } from '@shared/persist/types';
-export type { AgentMcpServer };
+import type { AgentMcpServer, SkillBindings } from '@shared/persist/types'
+export type { AgentMcpServer }
 
 export interface AgentConfig {
   id: string
   name: string
+  description?: string
   emoji: string
-  avatar?: string // Agent avatar URL
+  avatar?: string
   role: string
   model: string
-  workspace?: string // Agent working directory path
-  version?: string // Agent version number
-  mcpServers: AgentMcpServer[] // MCP server config array
+  workspace?: string
+  version?: string
+  mcpServers: AgentMcpServer[]
   /** 本地工具白名单。缺席/空 ⇒ 全开;非空 ⇒ 仅列表内。与 mcpServers 独立。 */
   tools?: string[]
   systemPrompt: string
-  skills?: SkillBindings // Skill 启用档位映射（live/lazy，缺席=禁用）
-  subAgents?: string[] // List of Sub-Agent names used by this Agent
-  locked?: boolean // 受保护标记:true ⇒ 身份/系统提示词不可改、不可删
+  skills?: SkillBindings
+  /** 可委派的普通 Agent ID；允许保留暂不可用的 dangling ID。 */
+  delegates?: string[]
+  locked?: boolean
   createdAt: Date
   updatedAt: Date
 }
 
-export type AgentEditorTabName = 'basic' | 'knowledge' | 'mcp' | 'tools' | 'skills' | 'sub_agents' | 'prompt' | 'presets'
+export type AgentEditorTabName = 'basic' | 'knowledge' | 'mcp' | 'tools' | 'skills' | 'delegation' | 'prompt' | 'presets'
 
 export interface TabComponentProps {
   mode: 'add' | 'update'
   agentId?: string
   agentData?: AgentConfig
-  onSave: (data: Partial<AgentConfig>) => Promise<AgentConfig> // Returns the fully updated AgentConfig
-  onAgentCreated?: (agentId: string) => void // Callback after Basic Tab creation succeeds in Add mode
-  onDataChange?: (tabName: AgentEditorTabName, data: Partial<AgentConfig>, hasChanges: boolean) => void // Change tracking callback
-  cachedData?: Partial<AgentConfig> | null // Cached modified data, used to preserve changes when switching tabs
-  fieldErrors?: Record<string, string> // Field-level error messages
-  readOnly?: boolean // Read-only mode
-}
-
-export interface TabState {
-  activeTab: AgentEditorTabName
-  tabsEnabled: {
-    basic: boolean
-    knowledge: boolean
-    mcp: boolean
-    tools: boolean
-    skills: boolean
-    sub_agents: boolean
-    prompt: boolean
-    presets: boolean
-  }
-  agentCreated: boolean // Flag indicating whether the agent has been created in Add mode
+  onDataChange?: (tabName: AgentEditorTabName, data: Partial<AgentConfig>, hasChanges: boolean) => void
+  cachedData?: Partial<AgentConfig> | null
+  fieldErrors?: Record<string, string>
+  readOnly?: boolean
 }
 
 export interface EmojiPickerProps {
@@ -62,5 +47,5 @@ export interface MarkdownEditorProps {
   onChange: (value: string) => void
   showPreview: boolean
   onTogglePreview: () => void
-  readOnly?: boolean // Read-only mode, prevents editing content
+  readOnly?: boolean
 }
