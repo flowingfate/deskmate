@@ -1,7 +1,6 @@
 import type { AppCmdContext } from '../../appcmd/types';
 import type {
   SkillTier,
-  SubAgentRunRequest,
   SubAgentRunResult,
   ThinkingLevel,
 } from '@shared/persist/types';
@@ -86,17 +85,6 @@ export type SubAgentDescribeDelegateOutcome =
   | SubAgentDescribeDelegateResultOutcome
   | SubAgentCommandRejectedOutcome;
 
-export interface SubAgentCommandRunner {
-  run(
-    scope: SubAgentCommandScope,
-    request: SubAgentRunRequest,
-  ): Promise<SubAgentCommandOutcome>;
-  listDelegates(scope: SubAgentCommandScope): Promise<SubAgentListDelegatesOutcome>;
-  describeDelegate(
-    scope: SubAgentCommandScope,
-    delegateAgentId: string,
-  ): Promise<SubAgentDescribeDelegateOutcome>;
-}
 
 export function toSubAgentCommandScope(ctx: AppCmdContext): SubAgentCommandScope {
   return {

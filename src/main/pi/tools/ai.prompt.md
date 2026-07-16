@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 7：所有 catalog local route 统一直持 LocalTool，支持未注册 delegated submit_result) -->
+<!-- Last verified: 2026-07-16 (Step 9：顶层 subagent 已注册，并按 Profile 解析 manager 后执行) -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -10,13 +10,13 @@
 |------|------|------|
 | `types.ts` | `LocalTool` / `ToolContext` / `ToolResult` / `LazyHandlerLoader` 契约 | 小 |
 | `registry.ts` | `ToolsRegistry` 类 + 模块级单例 `tools` 的注册/查询；`executeLocalTool(tool,args,ctx)` 是 catalog local route 共用的取消/异常收敛边界；`ensureToolsRegistered()` 触发首次注册 | 小 |
-| `index.ts` | 启动期把所有工具 register 进 `tools`;无侧效仅副作用;按“批”分组。当前生产仍将旧 subagent 域注册为 `app subagent ...`；新 `tools/subagent.ts` 在 Step 3 已实现但明确未注册，Step 9 才与新 manager 原子切换。mcp / agent / skill / schedule 已下线为 `app <domain> ...`；`web` 是与 `app` 同级的一等工具 | 小 |
+| `index.ts` | 启动期把所有工具 register 进 `tools`;按“批”分组。`subagent` 与 app/web 同为顶层 facade；handler 按当前 `Profile` 取得其 cached command facade，首次创建时绑定 manager，同一 LocalTool 对象加入 delegated catalog 黑名单以禁止嵌套 | 小 |
 | `lazy.ts` | `lazy(spec, loader)` 工厂:spec 立刻可见(LLM 列表/IPC `getAll` 不阻塞),handler 首调时 `await loader()` 动态 import 真实实现。并发首调共享同一 inflight promise | 小 |
 | `schema.ts` | `jsonSchema(literal)`:把 plain JSON Schema 字面量装成 pi-ai `TSchema`(pi-ai provider 全部按裸 JSON Schema 读 `tool.parameters`)。spec 模块加载期同步构造,无法 dynamic-import typebox | 小 |
 | `impl/` | 重模块的实现仓库 —— 目前仅剩 `readOfficeFile.ts`(被 `read/backends/office.ts` 通过 `await import('../../impl/readOfficeFile')` 推迟到首调,与旧 `lazy(...)` wrapper 同语义、同性能、同 chunk-split 行为)| ~660 LOC |
-| `app.ts` | `app = makeCommandFacade(makeRouterCommand({ name:'app', registry: appCommands }))` —— 应用内能力总入口。`appCommands`(mcp / agent / skill / ...)在 `appcmd/builtins/app/`,**与 `web` 逐字对等**,仅注册表不同。facade 与 router 工厂都在 `appcmd/`(`_facade.ts` / `makeRouterCommand.ts`)| 极小 |
-| `web.ts` | `web = makeCommandFacade(makeRouterCommand({ name:'web', registry: webCommands }))` —— Web 抓取/搜索的一等工具(`web("search ...")`),**与 `app` 逐字对等**,仅注册表不同(`webCommands` 在 `appcmd/builtins/web/`)。不进 `appCommands`,`app web ...` 已废弃 | 极小 |
-| `subagent.ts` | `createSubagentTool(runner)`：复用 command facade/router 的顶层工具构造 seam；runner 必填，当前未被 `tools/index.ts` import/register | 极小 |
+| `app.ts` | 显式定义 `app` LocalTool：schema/description/handler 与 `appCommands` router 并列可读；handler 复用 `executeCommandFacade(appCommand, ...)` | 极小 |
+| `web.ts` | 显式定义 `web` LocalTool：schema/description/handler 与 `webCommands` router 并列可读；handler 复用 `executeCommandFacade(webCommand, ...)`。不进 `appCommands`,`app web ...` 已废弃 | 极小 |
+| `subagent.ts` | 根据显式 ToolContext profile 取 active `Profile`，以 `WeakMap<Profile, AppCommand>` 缓存并复用 command facade；其绑定 `SubAgentManager.forProfile(profile)`，不持有全局 manager | 小 |
 | `*.ts`(具体工具) | 每个工具一个文件:`spec` literal + `handler(args, ctx)`。所有工具都是 native inline 形态(无 wrapper / 无桥接) | 各 ~10–600 LOC |
 
 ## 架构
@@ -68,7 +68,7 @@ type ToolRoute =
 ```
 
 - catalog local route 直接持有已选中的 `LocalTool` snapshot；`executeToolCall` 通过 registry 共用的执行 helper 调用它，避免“catalog 列举一份、registry 再按名称查一份”的第二个事实源。
-- delegate context 下 `buildToolCatalogForAgent` 在现有 Agent selection 基础上只排除交互式 `ask` LocalTool；Step 9 注册真实 `subagent` 对象时把它加入同一黑名单以禁止嵌套。其它 LocalTool 保持普通语义。
+- delegate context 下 `buildToolCatalogForAgent` 在现有 Agent selection 基础上排除交互式 `ask` 与已注册的 `subagent` LocalTool 对象；其它 LocalTool 保持普通语义。
 - `submit_result` 由 Step 7 的 `SubmitResultController` 创建，`ToolCatalog.withSubmitResult()` 仅克隆一个 delegated run 的 snapshot 并追加普通 local route；普通构建路径和全局 `ToolsRegistry` 均不会看到它。禁止把该特例泛化回 replacement/guard API。
 - `web research` 与已知 shell device-auth 在各自执行边界拒绝；MCP OAuth 保持普通全局交互流。`executeToolCall` 只对 local/MCP route 分发；MCP Auth 不读取 delegate context。
 
@@ -114,11 +114,11 @@ async function loadImpl() {
 
 ```
 批 A:纯本地轻量(`read` / `write` / `find` / `search` / `ask`)。`read` 是统一读入口 —— 取代了 `read_file` / `read_office_file`,内部按"scheme/extension"两级分发到 `read/backends/{filesystem,internal-url,office,image,html}.ts`(office backend 自带 lazy import,首调时才解析 mammoth/jszip/pdfreader;html backend `read/backends/html.ts` + `htmlReader.ts` 接管 `.html`/`.htm`,走 `?mode=...` query 轴,结构化阅读不 dump 原始 HTML)。`present_deliverables` 已下线 —— LLM 在最终消息文字里直接提到产出 URI,renderer 端通过 `extractFilePathsFromText` 抽取路径渲染卡片。
-批 G:shell facade。当前生产注册 `app` 与 `web` 两个对等 router facade；Step 3 另提供未注册的 `createSubagentTool(runner)`，其 registry/commands 位于 `pi/subagent/commands`，Step 9 只有在 manager runner 可用时才加入本批
+批 G:router facade。生产注册 `app`、`web` 与 `subagent` 三个顶层 router facade；`subagent` 的 registry/commands 位于 `pi/subagent/commands`，handler 每次按显式 profile 解析 profile-bound manager。
 批 B:依赖 main 子系统 —— 仅 `executeCommand`(LLM 看到名为 `shell`)。`manageProcess` 已下线
 批 C:已下线(mcp / agent / skill → `app` shell facade,详见 `appcmd/builtins/app/`)
 批 D:已下线(schedule → `app` shell facade；命令始终在 `appcmd/builtins/app/index.ts` 注册)
-批 E:已下线(spawn / spawn-many → `app subagent` shell facade；feature flag 守卫位于 `appcmd/builtins/app/index.ts`)
+批 E:已下线(旧 `app subagent spawn/spawn-many` backend 已整体删除；新委派走顶层 `subagent list|describe|run`)
 批 F:已下线为子命令(`download` 顶层工具 → `web download`,见批 G)。下载内核搬到 `appcmd/builtins/web/kernel/download.ts`,CLI 在 `appcmd/builtins/web/download.ts`;`web` 域**已升为顶层一等工具 `web`**(`pi/tools/web.ts`)。`read_office_file` 一并下线 —— office 现在是 `read` 工具的内部 backend,通过 `read/backends/office.ts::loadImpl()` 推迟加载 `impl/readOfficeFile.ts`(独立 lazy chunk 输出,bundle 体积不变)
 
 注册顺序对 LLM 看到的工具列表顺序没有语义,但保持稳定有助于 prompt cache 命中率;
@@ -131,7 +131,7 @@ async function loadImpl() {
 | 新增纯本地工具(无 ctx 依赖) | 新建 `pi/tools/<name>.ts`(spec + handler);`index.ts` 加 register | spec 用 `jsonSchema({ ... })`;args interface 在文件内声明 + handler 入口 cast |
 | 新增需要 ctx 的工具 | 同上;handler 直接读 `ctx.chunkStream / ctx.callId / ctx.eventSender / ctx.tracer / ctx.signal` | `ctx.chunkStream` null 走早返;**不要**回到任何静态字段 |
 | 新增重依赖工具 | 用 `lazy(spec, () => import('./impl/<name>').then((m) => m.handler))`;impl 文件放 `pi/tools/impl/` | spec 必须模块加载期就有,**不能**进 loader 内 |
-| 新增 Agent 委派入口 | 新路径使用 `pi/subagent/commands/` + `tools/subagent.ts`，runner 必须显式注入；Step 9 与 manager 一次注册 | 不扩写旧 `appcmd/builtins/app/subagent/`，不注册无 runner 的空壳工具 |
+| 新增 Agent 委派入口 | 新路径使用 `pi/subagent/commands/` + `tools/subagent.ts`；handler 按 `ToolContext.profileId` 取得 Profile，并复用其 command facade（首次才用 `SubAgentManager.forProfile(profile)` 创建） | 不扩写 app command；同一 `LocalTool` 对象必须加入 delegated catalog 黑名单 |
 | 改 tool spec / description | 直接改 `pi/tools/<name>.ts`,无需碰别处 | LLM cache 会被打穿,刻意 stable |
 
 ## 注意事项
@@ -163,7 +163,7 @@ async function loadImpl() {
 
 - 被依赖:[Chat 引擎(pi)](../ai.prompt.md) —— `pi/tool.ts` / `pi/session/`
   per-turn 构建 catalog 后透传 ctx 到 `executeToolCall`。
-- 被依赖:[新 Agent 委派运行时](../subagent/ai.prompt.md) —— `commands/` 复用 facade/router/flags，`tools/subagent.ts` 提供未注册 construction seam；旧 `lib/subAgent` 仍是 Step 9 前生产路径。
+- 被依赖:[新 Agent 委派运行时](../subagent/ai.prompt.md) —— `commands/` 复用 facade/router/flags，`tools/index.ts` 注入 manager 后注册顶层 `subagent`。
 - 依赖:[MCP Runtime](../../lib/mcpRuntime/ai.prompt.md) —— external MCP 工具的
   连接生命周期与执行入口 `executeToolOnServer(serverName, ...)`。本子系统
   **不**依赖 MCPClientManager 的任何"内置"分支。

@@ -1,34 +1,49 @@
 /**
  * `app` LocalTool —— "应用内能力" 的统一 shell 入口。
  *
- * LLM 视角下,Deskmate 的所有应用能力(MCP 管理、agent 管理、schedule、
- * skill ...)都通过这一个工具调用。args 是一行 shell-style 字符串,宿主解析、
- * 路由到具体成员命令执行。
- *
- * **与 `web` 工具完全对等**(见 `web.ts`):两者都是
- * `makeCommandFacade(makeRouterCommand({ name, synopsis, registry }))`。
- * 唯一区别是各自路由的注册表 —— `app` 路由全局 `appCommands`(mcp / agent /
- * skill / ...),`web` 路由 `webCommands`(search / image / fetch / download)。
- * 路由 / help / 描述索引的逻辑是**同一份**(`makeRouterCommand`),不再有第二套
- * 手写 handler。
- *
- * **为什么是单工具 + 字符串 cmdline,不是 N 个 typed 工具**:
- *   - LLM 已经被训练过 shell 范式(npm/git/docker/kubectl 千万次曝光),
- *     传字符串 cmdline 激活的是它最强的那部分能力。
- *   - 工具列表行数 = O(1),与应用能力数无关,prompt cache 命中率高。
- *   - 渐进披露由 `<cmd> --help` 自然完成,无须 LLM 学习新协议。
- *
- * 设计文档:[`ai.prompt/tool-system.md`](../../../../ai.prompt/tool-system.md)
+ * LLM 通过单个 cmdline 进入 appCommands registry；路由、help 和命令索引由
+ * makeRouterCommand 保持唯一实现，LocalTool 的 schema 与调用边界则在此可见。
  */
-
-import { makeCommandFacade } from '../appcmd/_facade';
-import { makeRouterCommand } from '../appcmd/makeRouterCommand';
 import { appCommands } from '../appcmd/builtins/app';
+import { executeCommandFacade } from '../appcmd/executeCommandFacade';
+import { makeRouterCommand } from '../appcmd/makeRouterCommand';
+import { jsonSchema } from './schema';
+import type { LocalTool } from './types';
 
-export const app = makeCommandFacade(
-  makeRouterCommand({
-    name: 'app',
-    synopsis: 'Run any in-app command (mcp / agent / skill / schedule / ...)',
-    registry: appCommands,
-  }),
-);
+interface AppArgs {
+  cmd: string;
+}
+
+const AppParams = jsonSchema({
+  type: 'object',
+  properties: {
+    cmd: {
+      type: 'string',
+      description:
+        'Shell-style command line for the "app" tool. ' +
+        'Run "--help", or call with empty cmdline, to see usage and the available first-token list. ' +
+        'Add --json for structured output when supported, --dry-run / --yes for destructive ops. ' +
+        'Example: app("...")',
+    },
+  },
+  required: ['cmd'],
+});
+
+const appCommand = makeRouterCommand({
+  name: 'app',
+  synopsis: 'Run any in-app command (mcp / agent / skill / schedule / ...)',
+  registry: appCommands,
+});
+
+export const app: LocalTool<typeof AppParams> = {
+  spec: {
+    name: appCommand.name,
+    get description() {
+      return appCommand.toolDescription ? appCommand.toolDescription() : appCommand.synopsis;
+    },
+    parameters: AppParams,
+  },
+  async handler(args, ctx) {
+    return executeCommandFacade(appCommand, (args as AppArgs).cmd, ctx);
+  },
+};

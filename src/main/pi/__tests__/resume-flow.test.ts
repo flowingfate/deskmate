@@ -108,10 +108,8 @@ describe('BaseSession.restore + planResume wiring', () => {
     });
 
     const session = new RegularSession('s1', 'p1', 'agent1', persist);
-    // restoreTask 是 protected,通过等待 status 就绪的 public 入口间接 await。
-    // 这里直接读 session.messages 触发 microtask flush 不够;借用 isReady-like
-    // 的 getContextHistory 它内部 `await this.restoreTask`。
-    await session.getContextHistory();
+    // restoreTask 是 protected,通过等待公开 summary getter 确保 restore 完成。
+    await session.getContextSummary();
 
     expect(session.pendingResume).toEqual({
       kind: 'runMissingTools',
@@ -127,7 +125,7 @@ describe('BaseSession.restore + planResume wiring', () => {
     });
 
     const session = new RegularSession('s2', 'p1', 'agent1', persist);
-    await session.getContextHistory();
+    await session.getContextSummary();
 
     expect(session.pendingResume).toEqual({ kind: 'startTurn' });
   });
@@ -142,7 +140,7 @@ describe('BaseSession.restore + planResume wiring', () => {
     });
 
     const session = new RegularSession('s3', 'p1', 'agent1', persist);
-    await session.getContextHistory();
+    await session.getContextSummary();
 
     expect(session.pendingResume).toEqual({ kind: 'continueLoop' });
   });
@@ -157,7 +155,7 @@ describe('BaseSession.restore + planResume wiring', () => {
     });
 
     const session = new RegularSession('s4', 'p1', 'agent1', persist);
-    await session.getContextHistory();
+    await session.getContextSummary();
 
     expect(session.pendingResume).toEqual({ kind: 'markIdle' });
   });
@@ -169,7 +167,7 @@ describe('BaseSession.restore + planResume wiring', () => {
     });
 
     const session = new RegularSession('s5', 'p1', 'agent1', persist);
-    await session.getContextHistory();
+    await session.getContextSummary();
 
     expect(session.pendingResume).toEqual({ kind: 'markIdle' });
   });
@@ -192,7 +190,7 @@ describe('BaseSession.restore + planResume wiring', () => {
     });
 
     const session = new RegularSession('s6', 'p1', 'agent1', persist);
-    await session.getContextHistory();
+    await session.getContextSummary();
 
     expect(session.pendingResume).toEqual({
       kind: 'markTerminal',
@@ -216,7 +214,7 @@ describe('BaseSession.restore + planResume wiring', () => {
     };
 
     const session = new RegularSession('s7', 'p1', 'agent1', persist);
-    await session.getContextHistory();
+    await session.getContextSummary();
 
     expect(session.contextState.lastTokenUsage?.tokenCount).toBe(1234);
   });

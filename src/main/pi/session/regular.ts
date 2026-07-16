@@ -18,10 +18,13 @@ import { ChatStatus } from '@shared/types/agentChatTypes';
 import Stream from '@shared/stream-iterator';
 
 import { log } from '@main/log';
+import { Profiles } from '@main/persist';
 import { Tracer } from '@shared/log/trace';
 
 import { deriveToolTracer, executeToolCall, ToolCatalog } from '../tool';
 import type { ToolContext } from '../tools/types';
+import { buildDelegationPrompt } from '../subagent/prompt';
+import { SubAgentManager } from '../subagent/manager';
 import { classifyError } from '../utils/errors';
 import {
   BaseSession,
@@ -101,6 +104,14 @@ export class RegularSession extends BaseSession {
   }
 
   async stopStream(): Promise<void> {
+    const profile = await Profiles.get().active();
+    if (profile.id === this.profileId) {
+      SubAgentManager.forProfile(profile).cancelByParentSession({
+        profileId: this.profileId,
+        parentAgentId: this.agentId,
+        parentSessionId: this.id,
+      });
+    }
     // 只 abort。turn loop 自然走到 stopReason='aborted' 分支 → setStatus(IDLE)
     // → 推 status_changed → 自行 close stream。在这里 close stream 会让 status
     // chunk 发不出去，UI 按钮卡在"取消"形态。
@@ -117,6 +128,18 @@ export class RegularSession extends BaseSession {
     this.activeStream = stream;
     this.activeEventSender = eventSender;
     await this.runTurnLoop();
+  }
+
+  protected override async prepareRunEnvironment(): Promise<import('./base').RunEnvironment> {
+    const environment = await super.prepareRunEnvironment();
+    if (!environment.catalog.specs.some((tool) => tool.name === 'subagent')) return environment;
+
+    const delegationPrompt = await buildDelegationPrompt({
+      profileId: this.profileId,
+      parentAgentId: this.agentId,
+    });
+    if (!delegationPrompt) return environment;
+    return { ...environment, systemPrompt: `${environment.systemPrompt}\n\n---\n\n${delegationPrompt}` };
   }
 
   protected async streamOneRound(args: StreamOneRoundArgs): Promise<PiAssistantMessage> {

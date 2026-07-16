@@ -131,19 +131,22 @@ subagent("run <agent-id> --task \"...\" --expect \"...\"")
 
 - `src/main/pi/tools/subagent.ts` 只是与 `app.ts` / `web.ts` 对等的薄 facade；
 - registry、commands 和业务 kernel 归 `src/main/pi/subagent/commands/`；
-- 可复用 `appcmd/makeRouterCommand.ts`、`_facade.ts`、flags/tokenizer 等通用基础设施；
+- 可复用 `appcmd/makeRouterCommand.ts`、`executeCommandFacade.ts`、flags/tokenizer 等通用基础设施；顶层 LocalTool 的 schema、description 与 handler 保持在各自工具文件中；
 - 不把新业务重新塞进 `appcmd/builtins/app/`；
 - 被委派 Agent 的 catalog 完全移除 `subagent` 顶层工具，从结构上禁止嵌套。
 
-Step 3 实际落地 API（2026-07-16，尚未生产注册）：
+Step 3 实际落地 API（2026-07-16）：
 
-- `createSubAgentCommand(runner)` 构建注册 `list` / `describe` / `run` 的独立 registry/router；`createSubagentTool(runner)` 再包为 `LocalTool`。
-- `SubAgentCommandRunner` 固定三个方法：`listDelegates(scope)`、`describeDelegate(scope, id)`、`run(scope, request)`；scope 包含 profile、parent Agent/session、signal、tracer、correlationId。所有正常业务拒绝都返回显式 `kind: 'rejected'`。
-- `list` 返回 resolver 配置顺序的 available hot summaries（ID/name/description/model）与 `unavailableIds`；parent 配置缺失返回 rejected。
-- `describe` 只接受 resolver available ID，再按需读取一个 target detail；返回 thinking/local-tools/MCP/Skills 的安全投影，明确排除 system prompt、delegates、legacy subAgents、zero state。
-- `run` flags 固定为 `--task`、`--expect`、`--with-parent-summary`、`--max-turns`、`--timeout-seconds`、`--help/-h`；不支持 `--json`、name key、旧 share-context/full-history 语法。
-- 不提供 `run-many`：并行委派由同一 assistant response 中的多个 `subagent` tool calls 表达；三个命令都固定输出 `{ outcome }`。
-- `makeRouterCommand.helpFooter` 让顶层 help 追加命令选择、Agent ID、两层 limits 与并行多调用提示；app/web 行为不变。
+- `createSubAgentCommand(manager)` 构建注册 `list` / `describe` / `run` 的独立 registry/router；顶层 facade 不持有全局 runner，而是在每次 tool handler 调用时，从显式 `ToolContext.profileId` 对应的 active `Profile` 取回其 WeakMap-cached command facade（首次以 `SubAgentManager.forProfile(profile)` 创建）。
+- command scope 包含 profile、parent Agent/session、signal、tracer、correlationId；manager 方法直接返回既有显式 `result | rejected` outcomes。
+- `list` 返回 resolver 配置顺序的 available hot summaries（ID/name/description/model）与 `unavailableIds`；`describe` 只接受 available ID，再按需读取一个 target detail，排除 system prompt、delegates、legacy subAgents、zero state。
+- `run` flags 固定为 `--task`、`--expect`、`--with-parent-summary`、`--max-turns`、`--timeout-seconds`、`--help/-h`；不支持 `--json`、name key、旧 share-context/full-history 或 run-many。旧 `app subagent` 和 `lib/subAgent` backend/测试已整体删除。被委派 catalog 通过同一 LocalTool 对象 blacklist 排除 `subagent`。
+
+### 2.5.1 Step 9 production manager（2026-07-16）
+
+- `SubAgentManager.forProfile(profile)` 返回每个 Profile 唯一的 WeakMap-bound command runner 与 lifecycle owner；调用方先在 tool/IPC 边界选择 Profile，manager 不再重复比较传入 `profileId`，内部 map key 因而只需 parent Agent/session。每个 parent identity 以短锁串行 `listSubruns → stale-running recovery → total gate → createSubrun → active registration`，max parallel=5、persisted reservation max total=20。
+- `cancelRun` / `cancelByParentSession` / `getRuntimeState` 都要求完整 parent identity；runtime state 只作该 Profile 的有界进程内 live snapshot，terminal/reload 事实从 Subrun data 派生。无 active entry 的 stale `running` 写成 interrupted failed。已中止 parent signal 在 listener 绑定前也会 abort 实际 session controller。
+- RegularSession/JobRun 仅在实际 catalog 含 `subagent` 时于通用 prompt 后追加 Agent graph guidance；RegularSession stop 会通过所属 Profile 的 manager 取消同 parent 的 active runs。SubAgentSession 不获得 delegation guidance。
 
 ### 2.6 Subrun 三位序号
 
@@ -248,7 +251,7 @@ Step 7 用户 review（2026-07-16）已确认：`submit_result` 是 dedicated to
 
 被委派 Agent 的能力边界只在 `getDelegateExecution()` 有值时于真实执行点收紧：
 
-- ToolCatalog 按 LocalTool 对象黑名单过滤；当前黑名单只含交互式 `ask`。`subagent` 尚未构造；Step 9 注册真实对象时必须把该对象加入黑名单，保留禁止嵌套。
+- ToolCatalog 按 LocalTool 对象黑名单过滤；黑名单包含交互式 `ask` 与已注册的真实 `subagent` 对象，禁止嵌套委派。
 - `read`、`write`、`find`、`search`、`shell`、download 及 app/web 的非交互子命令与普通 Agent 行为一致；Local 仍用 parent context，Knowledge/Skill 仍用 delegate ID。
 - `web research` 在 delegated run 拒绝；已知 shell device-auth 命令在启动前拒绝，不能创建当前委派会话的 human-loop 卡片。
 - MCP OAuth 使用同一全局 consent/client-id/browser flow，不因 delegate context 降级；自身已授权的 MCP tools 与普通 Agent 同行为。
@@ -375,9 +378,7 @@ Renderer 基线必须能渲染委派工具卡片和正式结果。消息详情 D
 - shared delegation IPC + preload + renderer binding；
 - Agent editor / agents atom / tool renderer。
 
-### 5.3 旧代码删除边界
-
-旧 `lib/subAgent`、persist SubAgents store、`app subagent`、独立 CRUD UI 不属于新生产依赖。未来 step 只删除其生产引用；当一个旧子树引用归零后，在同一步整体删除该子树及测试，不再修改其内部实现。Step 4 的临时 bridge 随 Step 9 删除旧 backend 源码自然消失。
+旧 `lib/subAgent` 与 `app subagent` backend 已在 Step 9 production cutover 整体删除。旧 persist SubAgents store、独立 CRUD IPC/UI/atom 仍待 Step 10/11/13 在其生产引用归零后分别删除；旧磁盘数据始终不读、不改、不删。
 
 ## 6. 步骤依赖总图
 

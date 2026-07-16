@@ -3,11 +3,11 @@
  * `AppCommand`:cmdline 的**第一个 token 当作命令名**,从该注册表里查出对应
  * 成员命令并转交执行。
  *
- * 这是 `app` 与 `web` **完全对等**的根:两者都是
- * `makeCommandFacade(makeRouterCommand({ name, synopsis, registry }))` ——
- *   - `app` 的 registry = 全局 `appCommands`(成员:mcp / agent / skill / ...)
- *   - `web` 的 registry = `webCommands`(成员:search / image / fetch / download)
- * 路由 / 顶层 help / 工具描述索引的逻辑只有这一份,差异仅在「注册表里装了谁」。
+ * 这是 `app` 与 `web` 完全对等的根：两个顶层 LocalTool 都显式持有
+ * `makeRouterCommand({ name, synopsis, registry })` 的结果：
+ *   - `app`: registry = 全局 `appCommands`(成员:mcp / agent / skill / ...)
+ *   - `web`: registry = `webCommands`(成员:search / image / fetch / download)
+ * 路由 / 顶层 help / 工具描述索引的逻辑只有这一份，差异仅在「注册表里装了谁」。
  *
  * 顶层入口「松散」纪律(与设计文档 §4 一致):空 cmdline / `--help` / `-h` /
  * 未知命令 一律降级到顶层 help,**不**附 exit code —— 顶层「教 LLM 怎么用」,

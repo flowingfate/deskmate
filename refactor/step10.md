@@ -1,7 +1,7 @@
 # Step 10 — 将 Agent 编辑器切换为 Delegation 配置 UI
 
 > 状态：待执行
-> 前置：Step 2 Agent graph complete；执行顺序上等待 Step 9 review，确保 UI 文案对应真实工具
+> 前置：Step 2 Agent graph complete；Step 9 已 complete，确保 UI 文案对应真实工具
 > 下游：Step 13 入口收口、Step 14 renderer data tests
 > 本步只改配置管理，不改运行卡片。
 

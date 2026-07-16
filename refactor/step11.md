@@ -11,11 +11,13 @@
 
 ## 2. 开始前 review
 
-1. 阅读 chat tool renderer registry和当前 app/web/shell renderer模式；不打开旧 app/subagent卡片或旧测试作为模板；
+1. 阅读 chat tool renderer registry和当前 app/web/shell renderer模式；旧 app/subagent 卡片已删除，不能作为模板；
 2. 从 Step 9 获取最终 manager state/cancel API，并核对 Step 3 已固定的单调用 `{ outcome }` envelope；
 3. 从 Step 6获取 parent-scoped subrun query API；
 
 Step 6 实际查询链：先按 active profile/parent ownership 取得 `Session`，再调用 `getSubrun(subrunId)`；只有 `found` 才从 `Subrun.toDataFile()` 读取 metadata。`missing`、`invalid_id`、`incomplete`、`corrupt` 必须映射为明确 query error，不能把 `001` 作为全局 key 或直接拼磁盘路径。
+Step 9 实际 manager seam：IPC handler 先按 active profile/parent ownership 取得 `Profile`，再调 `SubAgentManager.forProfile(profile)`；此对象提供 `cancelRun({ profileId,parentAgentId,parentSessionId,subrunId }): boolean`、`cancelByParentSession(parent): number`、`subscribe(listener): unsubscribe`、`getRuntimeState(key): Promise<SubAgentRuntimeState | null>`。active state 的 steps 上限为 50；terminal/reload state 从 Subrun data 派生。handler 不能把 manager 的内存 state 当持久查询来源。
+
 4. 设计 shared IPC，确认 preload四层协变；
 5. 组件不得超过500行；所有 tool call 复用同一单任务卡片，不为并行调用复制 batch 展示逻辑；
 6. 不启动应用/浏览器，用户负责可视行为验证。

@@ -13,7 +13,7 @@
 
 ## 2. 开始前 review
 
-1. 阅读 `ai.prompt/tool-system.md`、`src/main/pi/appcmd/ai.prompt.md`（如存在）、`makeRouterCommand.ts`、`_facade.ts`；
+1. 阅读 `ai.prompt/tool-system.md`、`src/main/pi/appcmd/ai.prompt.md`（如存在）、`makeRouterCommand.ts`、`executeCommandFacade.ts`；
 2. 对比 `tools/app.ts` 与 `tools/web.ts`，只复用稳定通用基础设施；
 3. 只读参考旧 `appcmd/builtins/app/subagent` 的参数痛点，不复制实现或测试；
 4. impact 计划新增的 `pi/subagent/commands` 和 `tools/subagent.ts`；

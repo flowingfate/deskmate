@@ -6,10 +6,8 @@ import {
   printSubAgentCommandOutcome,
   SUBAGENT_HELP_FLAGS,
 } from './_shared';
-import {
-  type SubAgentCommandRunner,
-  toSubAgentCommandScope,
-} from './types';
+import type { SubAgentManager } from '../manager';
+import { toSubAgentCommandScope } from './types';
 
 const HELP = `USAGE
   subagent describe <agent-id>
@@ -28,7 +26,7 @@ OPTIONS
 
 const FLAGS: FlagSpec[] = [...SUBAGENT_HELP_FLAGS];
 
-export function createDescribeCommand(runner: SubAgentCommandRunner): AppCommand {
+export function createDescribeCommand(manager: SubAgentManager): AppCommand {
   return {
     name: 'describe',
     synopsis: 'Describe one allowed delegate Agent and its safe capability summary.',
@@ -51,7 +49,7 @@ export function createDescribeCommand(runner: SubAgentCommandRunner): AppCommand
         return;
       }
 
-      const outcome = await runner.describeDelegate(
+      const outcome = await manager.describeDelegate(
         toSubAgentCommandScope(ctx),
         parsed.positional[0].trim(),
       );

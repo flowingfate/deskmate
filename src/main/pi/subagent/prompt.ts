@@ -1,4 +1,5 @@
-import type { SubAgentRunRequest } from '@shared/persist/types';
+import type { AgentRecord, SubAgentRunRequest } from '@shared/persist/types';
+import { Profiles } from '@main/persist';
 
 import type { AgentConfig } from '../utils/config';
 import { buildSystemPrompt } from '../prompt';
@@ -24,6 +25,36 @@ export async function buildDelegatedSystemPrompt(
 
   const sections = [basePrompt, delegatedRunInstructions(input.request)];
   return sections.filter((section) => section.trim()).join('\n\n---\n\n');
+}
+/** 为可委派的父 Agent 追加稳定的目标清单与顶层命令指引。 */
+export async function buildDelegationPrompt(input: {
+  profileId: string;
+  parentAgentId: string;
+}): Promise<string> {
+  const profile = await Profiles.get().active();
+  if (profile.id !== input.profileId) {
+    throw new Error(`[pi/subagent] profileId mismatch: requested "${input.profileId}" but active is "${profile.id}"`);
+  }
+
+  const delegates = await profile.resolveDelegates(input.parentAgentId);
+  if (!delegates || (delegates.available.length === 0 && delegates.unavailableIds.length === 0)) return '';
+
+  const sections = [
+    '## Delegating to configured Agents',
+    'Use subagent("list") to refresh the allowed Agent IDs, then call subagent("run <agent-id> --task <text> --expect <text>"). Make task and expected output concrete. For independent work, emit multiple subagent tool calls in the same response.',
+  ];
+  if (delegates.available.length > 0) {
+    sections.push(`Allowed Agents:\n${delegates.available.map(formatDelegate).join('\n')}`);
+  }
+  if (delegates.unavailableIds.length > 0) {
+    sections.push(`Unavailable configured Agent IDs (do not call): ${delegates.unavailableIds.map((id) => `\`${id}\``).join(', ')}`);
+  }
+  return sections.join('\n\n');
+}
+
+function formatDelegate(record: AgentRecord): string {
+  const description = record.description?.trim() || 'No description available.';
+  return `- \`${record.id}\` — ${record.name} (${record.model}): ${description}`;
 }
 
 function delegatedRunInstructions(request: SubAgentRunRequest): string {

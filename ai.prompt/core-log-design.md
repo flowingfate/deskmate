@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-08 (revised: TraceContext 跨进程信封 + Tracer.deserialize 接力，修 chat.ipc → chat.turn 断链) -->
+<!-- Last verified: 2026-07-16 (Step 9：delegated run 复用标准 Pi trace，旧 SubAgent trace 已删除) -->
 # 核心链路日志设计 — 聊天 / Agent 回复 端到端 Trace
 
 > 目标：在 **用户发消息 → 主进程编排 → LLM 流式响应 → 工具调用 → 前端渲染收尾** 这条主链路上，
@@ -192,7 +192,7 @@
 | `src/main/pi/session/job.ts` `JobRun.streamOneRound` | 同 RegularSession（job 场景同样要 trace） |
 | `src/main/pi/tool.ts` `executeToolCall` | `ToolContext.tracer: Tracer` → `(ctx.tracer ?? Tracer.noop).derive().bind({mod:'chat.tool', toolName, callId, ...})` 起 chat.tool span;并行 sibling 共享 psid（chat.turn.sid）;ToolContext.tracer 一路传给 handler,sub-agent / 嵌套 LLM 复用同一棵 trace 树 |
 | `src/main/pi/utils/llm-services/contextCompressionLlmSummarizer.ts` | `summarize({tracer?})` 接收主链路 tracer，每个 attempt 起子 span `chat.compress.summary`，psid = chat.compress.sid；缺省 `Tracer.noop` 仍写完整业务 log |
-| `src/main/lib/subAgent/subAgentSession.ts` / `subAgentChat.ts` | sub-agent 一轮内 `chat.subturn` span（psid = 触发 spawn 的 chat.tool sid），复用主 tid；内部 LLM / tool 各自 derive 子 span |
+| `src/main/pi/subagent/session.ts` | delegated run 复用标准 `chat.turn` / `chat.llm` / `chat.tool` span；manager 不另造不连续的 trace 树 |
 
 ### 3.5 持久化（**不需要**）
 

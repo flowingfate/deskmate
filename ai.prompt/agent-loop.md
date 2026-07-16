@@ -1,6 +1,6 @@
 # Agent Loop（pi chat 引擎）
 
-<!-- Last verified: 2026-07-16 (Step 8：单个 delegated SubAgentSession 接入 BaseSession loop，尚未生产注册) -->
+<!-- Last verified: 2026-07-16 (Step 9：production subagent manager/top-level tool 已切换) -->
 
 ## 1. 范围
 
@@ -248,7 +248,7 @@ catch e:
 
 - **handler 显式拿 ctx**：`ToolContext` 用 `mode:'agent' | 'delegate'` 区分执行角色；`agentId/sessionId` 固定 parent session，delegate 分支必填 `delegateId`。其它字段仍显式注入，禁止回读全局执行上下文。
 - **错误不抛,以字符串回填**:assistant/tool 配对必须完整,否则下一轮 LLM 看到孤儿 toolCall 会报 schema 错。
-- **递归保护**：旧 `app subagent` 在 delegate mode 下拒绝再 spawn；`mode` 已取代 `isSubAgent`。
+- **递归保护**：delegate context 下 catalog 结构性移除真实 `subagent` LocalTool；不再存在旧 `app subagent` command guard。
 - **`eventSender=null` 模式**:JobRun(scheduler 静默)走这条;`ask` / 选择 / 表单 类工具自动返回 cancel 默认应答 = "用户拒绝",turn 自然收敛。
 - **`chunkStream=null` 模式**:JobRun / 测试路径无可推流端,工具内 `if (!ctx.chunkStream) return` 早返,跳过 partial-result 推流。
 
@@ -461,9 +461,9 @@ onTurnComplete → IDLE
 
 ---
 
-## 15. 子 Agent
+## 15. Agent 委派
 
-`lib/subAgent/SubAgentManager` + `SubAgentChat` 是当前旧生产路径。旧 SubAgentSession 透传 delegate mode，使 `app subagent` 拒绝递归；其 `delegateId` 暂复用父 `agentId`，只保持旧父资源行为。新普通 Agent 委派运行时由 `pi/subagent` 分步接替。
+生产路径为 `subagent` LocalTool → `SubAgentManager.forProfile(profile)` → parent-scoped persisted `Subrun` → `SubAgentSession`。每个 Profile 绑定唯一 manager；它授权 delegate、持久 reservation/parallel gate、timeout/cancel、stale-running recovery 与有界 runtime state。SubAgentSession 只运行一个 pending Subrun 并写正式结果。父 RegularSession stop 时先取得所属 Profile 的 manager，再按完整 parent identity 取消 active delegated runs。旧 `lib/subAgent` 与 `app subagent` backend 已删除。
 
 ---
 

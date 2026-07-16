@@ -24,8 +24,8 @@ import type { AgentExecution, DelegateExecution } from '../tools/types';
 /**
  * `AppCommand.run` 收到的执行上下文。
  * 设计:`ToolContext` 的精确子集 + stdio helpers。
- *   - `mode/agentId/sessionId/delegateId` 保持同一 discriminated union；冻结的
- *     旧 `app subagent` 在 Step 9 前临时用 delegate mode 拒绝递归。
+ *   - `mode/agentId/sessionId/delegateId` 保持同一 discriminated union；新
+ *     SubAgentSession 以它保留 parent identity，同时由 delegate context 执行能力限制。
  *   - `getParentContextSummary` 服务新 `subagent run --with-parent-summary`；
  *     缺失时由命令返回显式业务错误。
  *   - stdio helpers(`print` / `printErr` / `setExitCode`)让 run 实现像
@@ -79,13 +79,11 @@ export interface AppCommand {
   readonly help: string;
   run(argv: readonly string[], ctx: AppCmdContext): Promise<void>;
   /**
-   * 可选:当本命令被 `makeCommandFacade` 包成**顶层 LocalTool** 时,
-   * 用来生成该工具的 `spec.description`。
+   * 可选:顶层 LocalTool 可直接读取它生成 `spec.description`。
    *
-   * 缺省(成员 / leaf 命令)时,facade 用 `synopsis` 合成一段简短描述。
-   * **router 形态**(由 `makeRouterCommand` 生成,即 `app` / `web` 顶层工具)覆写
-   * 它,把所路由注册表里全部成员命令的 synopsis **内嵌**进描述 —— 这是渐进披露
-   * 的"命令索引"。被路由的成员命令(mcp / search / ...)不实现,自然走默认。
+   * router 形态（由 `makeRouterCommand` 生成，即 `app` / `web` 顶层工具）覆写
+   * 它，把所路由注册表里全部成员命令的 synopsis **内嵌**进描述 —— 这是渐进披露
+   * 的“命令索引”。成员命令(mcp / search / ...)通常不实现。
    */
   toolDescription?(): string;
 }

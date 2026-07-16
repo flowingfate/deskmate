@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 5：router 按 delegate-only context 收紧 commands) -->
+<!-- Last verified: 2026-07-16 (Step 9：顶层 subagent 按 Profile 动态取 manager；独立 tool 已注册) -->
 # pi/appcmd — `app` shell 风格的应用内能力调度
 
 > 主进程**伪 shell** 子系统:LLM 通过单个 `app` LocalTool 调用一行 cmdline
@@ -12,15 +12,15 @@
 
 | 文件 | 职责 | 规模 |
 |------|------|------|
-| `types.ts` | `AppCommand` / `AppCmdContext` / `AppCmdInternalResult` 契约。`AppCommand` 含可选 `toolDescription?()` —— 被 `makeCommandFacade` 包成顶层工具时用来生成 `spec.description`,router(`makeRouterCommand` 产物)覆写它内嵌命令索引,成员命令不实现 | 小 |
+| `types.ts` | `AppCommand` / `AppCmdContext` / `AppCmdInternalResult` 契约。`AppCommand.toolDescription?()` 由顶层 LocalTool 直接读取生成 `spec.description`；router(`makeRouterCommand` 产物)覆写它内嵌命令索引，成员命令通常不实现 | 小 |
 | `registry.ts` | `AppCommandRegistry` 容器**类**(不再持有单例);重名 throw,`list()` 按 name 排序。每个 router 工具拥有自己的实例 —— `appCommands`(`builtins/app/index.ts`)/ `webCommands`(`builtins/web/index.ts`)| 小 |
 | `parseCmdline.ts` | thin wrapper over `vendor/argsTokenizer` —— 收敛 throw 成 `{ ok, error }` envelope | 小 |
 | `flags.ts` | `parseFlags(argv, specs)`:`--foo bar` / `--foo=bar` / `-y` / 重复 array flag / `--` 终止符。**不**做 schema 校验 | 小 |
 | `dispatcher.ts` | `dispatchAppCommand` 构造 `AppCmdContext`(ToolContext 子集 + stdio buffer)+ `formatAppCmdContent` 合成 LLM 可见字符串 | 小 |
-| `makeRouterCommand.ts` | 顶层 router 核心。动态 help/description 枚举成员；delegated execution scope 下仅隐藏并拒绝需要当前会话 human-loop 的 `web research`。`app` / `web` 与未注册新 `subagent` facade 共用 | 小 |
-| `_facade.ts` | `makeCommandFacade(cmd)`：cmdline tokenize → dispatcher → `LocalTool`；`app` / `web` 与未注册的新 `subagent` construction seam 共用 | 小 |
+| `makeRouterCommand.ts` | 顶层 router 核心。动态 help/description 枚举成员；delegated execution scope 下仅隐藏并拒绝需要当前会话 human-loop 的 `web research`。`app` / `web` 显式持有其结果，`subagent` 有独立 commands registry | 小 |
+| `executeCommandFacade.ts` | `executeCommandFacade(command, cmdline, ctx)`：共享 cmdline tokenize → dispatcher → format；顶层工具在各自文件中显式定义 schema、description 与 handler | 小 |
 | `_commonFlags.ts` | 通用 flag 的唯一 spec/helper 来源。命令支持全部语义时 spread `COMMON_FLAGS`；只支持子集时从该数组筛选，禁止重写 `--help/-h` 等 spec | 小 |
-| `builtins/app/index.ts` | `app` 域注册表 `appCommands` + **模块加载期 eager 注册**全部成员(hello / time / mcp / agent / skill / schedule)；仅 subagent 按 flag 决定是否注册。`pi/tools/app.ts` import 本模块即拿到填充好的实例。**与 `builtins/web/index.ts` 逐字对等**,差异仅注册表装了谁 | 小 |
+| `builtins/app/index.ts` | `app` 域注册表 `appCommands` + **模块加载期 eager 注册**全部成员(hello / time / mcp / agent / skill / schedule)。Agent 委派不属于 app 域，`pi/tools/subagent.ts` 作为独立顶层工具注册 | 小 |
 | `builtins/app/time.ts` | 无副作用的 `app time` 命令；返回本客户端的本地 ISO 时间、IANA timezone 和 UTC offset，支持 `--json` | 小 |
 | `builtins/app/hello/` | 骨架示范命令(`say` / `list` / `fail`),覆盖每个契约角;新命令的**活模板** | 小 |
 | `builtins/app/mcp/` | 第一个真实命令:MCP server 管理。9 个 subcommand(install / add / update / remove / connect / disconnect / reconnect / status / search)+ `_shared.ts` 内部 helper + `kernel/` 业务内核子目录(5 个 `*Internal()` 函数 + 类型,只被本目录消费,不外露)| 中 |
@@ -28,7 +28,6 @@
 | `builtins/app/skill/` | 第三个真实命令:Skill 管理。7 个 subcommand(install / uninstall / bind / unbind / list / status / search)+ `_shared.ts` 内部 helper(`validateName` / `normalizeSkillNames` / `resolveDefaultAgentTarget` / `normalizeArrayFlag`)+ `kernel/` 业务内核子目录(7 个 `*Internal()` 函数)。**install / bind 显式分离**:`install` 只下盘,`bind` 只绑 agent,与 `apt install` vs `systemctl enable` 范式一致;bind / unbind 未传 target flag 时默认 → 当前 chat agent(`ctx.agentId`)| 中 |
 | `builtins/app/schedule/` | 第四个真实命令:Scheduler job 管理。5 个 subcommand(create / list / update / remove / run)+ `_shared.ts` 内部 helper(`validateJobId` / `parseEnabledFlag` / `parseScheduleTypeFlag` / `formatJobLine`)+ `kernel/` 业务内核子目录(5 个 `*Internal()` 函数 + `JobView` snake_case 投影)。**`remove` 是本批顺手补齐**(老 LocalTool 时代缺 `delete_schedule`,LLM 没法删);**`--enabled true\|false`** 走 string flag 而非 boolean(`parseFlags` boolean 是二态,无法表达"显式 false")。始终在 `builtins/app/index.ts` 注册 | 中 |
 | `builtins/web/index.ts` + `builtins/web/` | Web 抓取 / 搜索 / 下载能力域。**与 `builtins/app/` 完全对等的「注册表 + router」结构**:`index.ts` 导出 `webCommands`(一个 `AppCommandRegistry`),eager 装 4 个成员 AppCommand —— `search` / `image` / `fetch`(read-only)+ `download`(各文件导出 `xCommand` = `{ name, synopsis, help, run: runXxx }`)+ `_shared.ts` 内部 helper(`toStringArray` / `parseNumberFlag`)+ `kernel/` 业务内核(`tavilySearch` / `bingImageSearch` / `fetchWebContent` / `download`)。**`search` 走 Tavily REST API**(`kernel/tavilySearch.ts`,纯 `fetch`,API key 取 `settings.json` `webSearch.tavilyApiKey` 或环境变量 `TAVILY_API_KEY`);原 Bing + Playwright 爬虫方案已废弃,Playwright 仅 `image` 仍用。`download` 是**唯一产出型命令**(写文件,经 `ctx.addDeliverable` 登记 → `ToolResult.deliverables` 回流 sub-agent 审计);其余 read-only。无 `--yes` / `--dry-run`;`--json` 是纪律。**positional `<query>`/`<url>` 与 repeatable `--query`/`--url` 并存**(`curl -d k=v` 范式)。**⚠️ 顶层一等工具**:`webCommands` 是与 `appCommands` 对等的独立注册表;`pi/tools/web.ts` = `makeCommandFacade(makeRouterCommand({ name:'web', registry: webCommands }))`,与 `app` 同源同形。**注**:`read-html` 已剥离并入 `read` 工具的 HTML backend(`tools/read/backends/html.ts`,query 轴 `?mode=...`);online HTML 用 `web fetch`。 | 中 |
-| `builtins/app/subagent/` | 冻结的旧 sub-agent 派生命令（spawn / spawn-many）；仅保留 Step 9 cutover 前的生产入口与 delegate-mode 递归拒绝，旧配置读取封装在本目录，不进入通用 ToolContext/AppCmdContext | 中 |
 | `vendor/` | 内嵌的 `args-tokenizer 0.3.0` + `[M1]` POSIX 单引号修正,见文件头注 | 小 |
 
 ## 架构

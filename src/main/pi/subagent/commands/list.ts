@@ -6,10 +6,8 @@ import {
   printSubAgentCommandOutcome,
   SUBAGENT_HELP_FLAGS,
 } from './_shared';
-import {
-  type SubAgentCommandRunner,
-  toSubAgentCommandScope,
-} from './types';
+import type { SubAgentManager } from '../manager';
+import { toSubAgentCommandScope } from './types';
 
 const HELP = `USAGE
   subagent list
@@ -28,7 +26,7 @@ OPTIONS
 
 const FLAGS: FlagSpec[] = [...SUBAGENT_HELP_FLAGS];
 
-export function createListCommand(runner: SubAgentCommandRunner): AppCommand {
+export function createListCommand(manager: SubAgentManager): AppCommand {
   return {
     name: 'list',
     synopsis: 'List allowed delegate Agents and unavailable configured IDs.',
@@ -51,7 +49,7 @@ export function createListCommand(runner: SubAgentCommandRunner): AppCommand {
         return;
       }
 
-      const outcome = await runner.listDelegates(toSubAgentCommandScope(ctx));
+      const outcome = await manager.listDelegates(toSubAgentCommandScope(ctx));
       printSubAgentCommandOutcome(ctx, outcome);
     },
   };

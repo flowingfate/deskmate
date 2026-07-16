@@ -37,7 +37,7 @@
 ## 4. 旧源码删除政策
 
 - 不逐文件修旧签名、补兼容 shim或更新旧测试；
-- 对 `lib/subAgent`、旧 app command、旧 CRUD IPC/UI/atom、旧 persist SubAgents store分别做 reachability proof；
+- `lib/subAgent` 与旧 app command 已由 Step 9 删除；对旧 CRUD IPC/UI/atom、旧 persist SubAgents store分别做 reachability proof，引用归零后整体删除。
 - 引用归零的子树连同测试和模块文档一起删除，不移动到 `tmp/` 或 archive；
 - 新 `pi/subagent/ai.prompt.md` 明确禁止旧依赖方向；
 - 旧本地 `sub-agents/` 数据目录完全不碰。

@@ -147,6 +147,15 @@
 - [ ] P1 production catalog 注册顶层 subagent，app registry 不再注册 subagent command。
 - [ ] P1 tool result JSON 可稳定恢复 formal results 与 subrun IDs。
 
+### Step 9 实际补充 — 2026-07-16
+- 实际 contract：manager 以完整 parent identity 管理 active run；短锁将 persisted total gate、stale-running recovery、reservation 与 active registration 串行化，timeout abort 实际 controller 后等待 SubAgentSession 收尾。
+- 新增候选：跨进程残留的 running Subrun 仅在没有同 parent active entry 时收敛为 interrupted failed；`cancelRun` 只影响一个完整 key，`cancelByParentSession` 取消全部 siblings；runtime state steps FIFO 上限 50，terminal state 可由 persisted data 恢复。
+- 新增候选：同一 `Profile` 的多次 `SubAgentManager.forProfile(profile)` 返回同一 owner，不同 Profile 的 active run/lock/listener 互不共享；Profile 选择只在 tool/IPC 边界完成，manager 不维护第二套 cross-profile rejection 分支。
+- 新增候选：parent signal 在 active registration 后、abort listener 绑定前已经中止时，实际 session signal 仍为 aborted，且最终释放 active slot。
+- 删除/改写候选：删除旧 `app subagent spawn/spawn-many`、旧 manager 和 legacy catalog builder 的测试候选；生产 catalog 应验证顶层 subagent 可见时 delegate catalog 不含同一 LocalTool 对象。
+- 最高风险：并发 run 绕过 reservation total gate，或 parent cancel/timeout 只中断等待而没有 abort 真正 session。
+- 需要用户在 Step 14 前决定：无。
+
 ## Step 10 候选：配置 UI 数据层
 
 - [ ] P1 editor patch 将 description/delegates 正确映射到 persist API。

@@ -1,8 +1,8 @@
 /**
  * `web` 顶层 LocalTool facade 行为测试。
  *
- * 验证 `makeCommandFacade(makeRouterCommand({ ..., registry: webCommands }))`
- * 产出的 LocalTool:
+ * 验证由 `web.ts` 显式定义、`makeRouterCommand({ ..., registry: webCommands })`
+ * 提供 command 的顶层 LocalTool：
  *   - spec.name / description 形态正确(LLM 看到 `web` 顶层工具,描述内嵌命令索引)
  *   - handler 把 cmdline 解析后交给 web router,空 / `--help` / 未知命令落顶层 help
  *   - cmdline 语法错降级到 router help + tip,不附 exit code

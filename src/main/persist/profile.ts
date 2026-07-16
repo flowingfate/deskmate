@@ -265,7 +265,7 @@ export class Profile {
 
   /**
    * 取 agent record 列表。`Profile.load()` 已在 bootstrap 阶段 preload `agentRegistry`，
-   * sync 返回（含 subAgentManager / skill 等登录关键路径上的同步 lookup 调用方共用）。
+   * sync 返回（含 subagent manager / skill 等登录关键路径上的同步 lookup 调用方共用）。
    */
   public listAgents(): AgentRecord[] {
     return this.agentRegistry.items;

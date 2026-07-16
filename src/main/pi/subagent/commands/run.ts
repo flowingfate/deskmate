@@ -11,10 +11,8 @@ import {
   printSubAgentCommandOutcome,
   SUBAGENT_HELP_FLAGS,
 } from './_shared';
-import {
-  type SubAgentCommandRunner,
-  toSubAgentCommandScope,
-} from './types';
+import type { SubAgentManager } from '../manager';
+import { toSubAgentCommandScope } from './types';
 
 interface ParseIntegerSuccess {
   ok: true;
@@ -210,7 +208,7 @@ async function prepareRunRequest(
   }
 }
 
-export function createRunCommand(runner: SubAgentCommandRunner): AppCommand {
+export function createRunCommand(manager: SubAgentManager): AppCommand {
   return {
     name: 'run',
     synopsis: 'Delegate one task; invoke multiple tool calls together for parallel work.',
@@ -235,7 +233,7 @@ export function createRunCommand(runner: SubAgentCommandRunner): AppCommand {
         return;
       }
 
-      const outcome = await runner.run(toSubAgentCommandScope(ctx), prepared.request);
+      const outcome = await manager.run(toSubAgentCommandScope(ctx), prepared.request);
       printSubAgentCommandOutcome(ctx, outcome);
     },
   };

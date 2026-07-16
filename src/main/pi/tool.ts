@@ -10,9 +10,7 @@
  * 全局 map 的老路径。
  *
  * 本文件分两段:
- *   1. **catalog** —— `ToolCatalog` class + `buildToolCatalogFor{Agent,SubAgent}`
- *      构建器 + 内部 helper。构建"本轮 LLM 看得见的 pi.Tool[]"与"执行时按工具
- *      名找到应去哪个 runtime"的不可变快照。
+ *   1. **catalog** —— `ToolCatalog` class + 构建器 + 内部 helper。构建"本轮 LLM 看得见的 pi.Tool[]"与"执行时按工具名找到应去哪个 runtime"的不可变快照。
  *   2. **execution** —— `executeToolCall` 按 route 分发到本地 registry / MCP
  *      server;`deriveToolTracer` 给 caller 统一 `chat.tool` span 形态。
  */
@@ -27,10 +25,11 @@ import { isDelegatedExecution } from '@main/lib/delegateExecutionScope';
 import type { AgentConfig } from './utils/config';
 import { executeMcpToolOnServer, listAllMcpTools } from './mcp';
 import { ask } from './tools/ask';
+import { subagent } from './tools/subagent';
 import { tools as localTools, ensureToolsRegistered, executeLocalTool } from './tools/registry';
 import type { LocalTool, ToolContext } from './tools/types';
 
-const DELEGATED_DISABLED_TOOLS = new Set<LocalTool>([ask]);
+const DELEGATED_DISABLED_TOOLS = new Set<LocalTool>([ask, subagent]);
 
 /** pi 流式层已解析后的 toolCall 入参。 */
 export interface ToolCallInput {
@@ -105,14 +104,6 @@ export class ToolCatalog {
   }
 }
 
-/**
- * Sub-agent 视角的 MCP server 选择:已经被 `subAgentMcpResolver` 解析到具体
- * server name + 该 server 的工具白名单(空数组 = 该 server 全部)。
- */
-export interface SubAgentMcpSelection {
-  name: string;
-  tools: string[];
-}
 
 /**
  * 给主 agent 构建 catalog。
@@ -145,44 +136,6 @@ export async function buildToolCatalogForAgent(agentCfg: AgentConfig): Promise<T
   return new ToolCatalog(specs, routes);
 }
 
-/**
- * 给 sub-agent 构建 catalog。
- *
- * 与主 agent 不同点:
- *   - mcp 白/黑名单已由 `subAgentMcpResolver` 解析为 `mcpSelections`,这里
- *     不再走 inherit 合并逻辑。
- *   - 本地工具读 `cfg.tools`(白名单)与 `cfg.disallowTools`(黑名单);
- *     语义与主 agent 主体一致 + 黑名单二次过滤。
- *
- * **递归保护**走 `app subagent ...` 命令内部的 `ensureSpawnPrerequisites`：
- * delegate mode 会立即 exit 1 并写 stderr。这里**不**再按 spec.name 二次过滤:
- *   - 老 `spawn_subagent` / `spawn_subagents` LocalTool 已物理删除,catalog
- *     不可能再列。
- *   - 替代品 `app` 工具是 sub-agent 触达全部应用能力的**唯一**入口,绝不
- *     能整体移除;按 name 移除等于禁掉所有应用能力,与设计文档 §4
- *     "`app` 永远 always-visible" 红线冲突。
- */
-export async function buildToolCatalogForSubAgent(
-  cfg: { tools?: string[]; disallowTools?: string[] },
-  mcpSelections: SubAgentMcpSelection[],
-): Promise<ToolCatalog> {
-  await ensureToolsRegistered();
-  const routes = new Map<string, ToolRoute>();
-  const specs: PiTool[] = [];
-
-  let selectedLocal = pickLocalSubset(cfg.tools);
-  if (cfg.disallowTools && cfg.disallowTools.length > 0) {
-    const denied = new Set(cfg.disallowTools);
-    selectedLocal = selectedLocal.filter((t) => !denied.has(t.spec.name));
-  }
-  for (const tool of selectedLocal) {
-    routes.set(tool.spec.name, { kind: 'local', tool });
-    specs.push(tool.spec);
-  }
-
-  await appendMcpTools(routes, specs, mcpSelections);
-  return new ToolCatalog(specs, routes);
-}
 
 /**
  * 主 agent / sub-agent 共用的"本地工具白名单解析":
@@ -199,15 +152,10 @@ function pickLocalSubset(selection: string[] | undefined): LocalTool[] {
     : localTools.list();
 }
 
-/**
- * 追加 MCP 工具到正在构建的 catalog。LLM 名称以 serverName 限定；只有完整
- * 限定名碰撞才 fail-fast。空 selection 不调 mcpClientManager，给无外部 MCP
- * agent 省一次远端 round-trip。
- */
 async function appendMcpTools(
   routes: Map<string, ToolRoute>,
   specs: PiTool[],
-  mcpSelections: SubAgentMcpSelection[],
+  mcpSelections: AgentConfig['mcpServers'],
 ): Promise<void> {
   if (mcpSelections.length === 0) return;
 

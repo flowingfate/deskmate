@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 8 complete，等待用户另行开始 Step 9**
-- 当前门禁：Step 8 BaseSession 驱动的 delegated session 已获用户 review 通过；未进入 Step 9 manager、生产注册或旧路径切换
-- 业务步骤：8 / 13 complete；Step 9 为 `pending`
-- 测试步骤：Step 14 尚未开始；Step 8 未新增或运行单测
-- 生产代码变更：新 submit tool 与新 subagent facade 仍未生产注册；旧 `app subagent` 仍是生产入口，等待 Step 9 原子 cutover
+- 总体阶段：**Step 9 complete**
+- 当前门禁：Step 9 已获用户 review 通过；Step 10 已具备前置，但尚未开始
+- 业务步骤：Step 9 为 `complete`；Step 10 为 `pending`
+- 测试步骤：Step 14 尚未开始；Step 9 未新增或运行单测
+- 生产代码变更：顶层 `subagent` 已注册，旧 `app subagent` 与 `lib/subAgent` backend/测试已删除；旧 CRUD/persist/IPC/renderer 等待 Step 10/11/13
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -42,7 +42,7 @@
 | 6 | [三位序号 Subrun 持久化](step6.md) | complete | Steps 1,2,4 | `001..999` allocator、parent-owned data/messages store、`PersistSessionLike` adapter、persisted type contract |
 | 7 | [submit_result 与正式结果状态机](step7.md) | complete | Steps 1,5,6 | delegated-only ordinary local submit route、一次性 controller、formal result reducer、missing-submit decision |
 | 8 | [BaseSession 驱动的新 SubagentSession](step8.md) | complete | Steps 2,4,5,6,7 | 单个 persisted delegated run 的 session；用户 review 通过 |
-| 9 | [Manager、顶层工具接线与主进程 cutover](step9.md) | pending | Steps 3,6,8 | production `subagent` tool、limits/cancel/state；旧 app command 下线 |
+| 9 | [Manager、顶层工具接线与主进程 cutover](step9.md) | complete | Steps 3,6,8 | production `subagent` tool、limits/cancel/state；旧 app command/backend 下线 |
 | 10 | [Agent Delegation 配置 UI](step10.md) | pending | Step 2 | description/delegates UI；独立 Sub-Agent 管理入口下线 |
 | 11 | [委派运行卡片与 audit/cancel IPC](step11.md) | pending | Steps 6,7,9 | reload-safe card、live state、single cancel、run metadata query |
 | 12 | [可选 Messages Dialog](step12.md) | pending | Step 11 review | 可实现则交付 Dialog；否则交付 verified deferred design 并标 deferred |
@@ -292,6 +292,26 @@
 - delegated prompt 将复用普通 `buildSystemPrompt` 的 identity/knowledge/skills/global 逻辑，通过新增默认开启的 `includeConfiguredSubAgents` 参数排除 legacy configured subAgents，再追加 run contract；不复制 skill format。
 - 下游 Step 9/11 的稳定输入预定为 `SubAgentSession` 的 pending-start outcome、terminal formal result 与 `{ onStep?, onResult? }` 窄回调；manager 保持唯一的授权、timeout、并发和取消 owner。
 
+### 2026-07-16 — Step 9 启动与 cutover plan review
+
+- 用户明确开始 Step 9，视为 Step 8 review 已通过；Step 8 保持 `complete`，Step 9 进入 `reviewing-plan`，此时禁止修改生产代码。
+- 已按实际 Step 3 command runner、Step 6 parent-scoped Subrun store、Step 8 `SubAgentSession`、当前 tool registration、parent cancellation、旧 runtime/import/test 与 prompt 路径复核。
+- 初始计划修订：`mode:'delegate' + delegateId` 是新 SubAgentSession 所需的正式 ToolContext/AppCmdContext contract，不能随旧 bridge 删除；删除范围限于旧 app command/backend、其专属 BaseSession accessors和旧测试。
+- manager admission 将以 parent identity 短锁串行持久 total gate、stale-running recovery、reservation 与 active registration；parent prompt 由 RegularSession/JobRun 在通用 prompt 后追加新 Agent graph guidance。
+
+### 2026-07-16 — Step 9 Profile-bound manager review
+
+- 用户要求删除跨 Profile 全局 `subAgentManager`，使每个 `Profile` 对应唯一 `SubAgentManager`；采用 `WeakMap<Profile, SubAgentManager>`，而非按 ID 的长期 `Map`。
+- `SubAgentManager.forProfile(profile)` 是唯一 production construction；它绑定 Profile，`activeRuns`、locks、listeners 因而不跨 Profile 共享，内部 parent map key 只保留 Agent/session。
+- Profile 选择已经由顶层 tool/未来 IPC 边界完成；用户指出跨 Profile 调用在该链路中不成立，因此删除 manager 内重复 `profileId` guard、重复 profile 参数与对应测试候选。
+- 顶层 `subagent` LocalTool 仍是一个 registry object；handler 按显式 `ToolContext.profileId` 解析 active Profile，首次创建后以 WeakMap 复用该 Profile 的 command facade。它复用 facade 的 parse/dispatch/format，不重建第二套 cmdline 行为，也不恢复 runner adapter。
+- admission 后的取消竞态修复保持：若 parent signal 已 aborted，manager 先 abort 实际 controller 再创建 SubAgentSession。
+
+### 2026-07-16 — Step 9 explicit top-level tool review
+
+- 用户确认顶层工具文件内保留少量 schema/description/handler 重复，换取直接可读性；删除无额外语义的 `makeCommandFacade` 工厂。
+- `app.ts`、`web.ts`、`subagent.ts` 都显式定义 LocalTool；仅复用 `executeCommandFacade(command, cmdline, ctx)` 的 parse/dispatch/format 行为，避免复制实际执行协议。
+- `_facade.ts` 重命名为 `executeCommandFacade.ts`；`AppCommand.toolDescription` 改为由顶层工具直接消费。
 ## 执行记录
 
 ### 2026-07-16 — Step 1 — complete
@@ -321,7 +341,7 @@
 ### 2026-07-16 — Step 3 — complete
 - Plan review 变化：无需重写；确认复用 `AppCommandRegistry` / `makeRouterCommand` / `makeCommandFacade`，并给 router 增加可选 `helpFooter`，使顶层 help 能承载 Agent ID 来源和两层 limits。
 - 实际输入：Step 1 `SubAgentRunRequest` / `normalizeSubAgentRunRequest`；app/web facade 通用基础设施；旧 `app subagent` 仅只读分析参数痛点。
-- 实际输出/API：`createSubAgentCommand(runner)`；`createSubagentTool(runner)`；`SubAgentCommandRunner.listDelegates/describeDelegate/run`；父 scope；三类 result/rejected outcomes；list/describe 安全 view types。
+- 实际输出/API：`createSubAgentCommand(manager)`；`subagent` facade 直接绑定 production manager；父 scope；三类 result/rejected outcomes；list/describe 安全 view types。
 - grammar：`subagent list`、`subagent describe <agent-id>`、`subagent run <agent-id> --task --expect [--with-parent-summary] [--max-turns] [--timeout-seconds]`；不提供 `run-many`。
 - list/describe：list 返回 resolver 顺序的 ID/name/description/model + unavailable IDs；describe 仅允许 available ID，返回 thinking/local-tools(all|selected)/MCP/Skills，明确排除 systemPrompt/delegates/subAgents/zero。
 - run/parser/output：flag/positional 先类型收窄，再进入唯一 normalizer；timeout seconds 安全换算；三条命令统一输出 `{ outcome }`，rejected exit 1。
@@ -430,5 +450,58 @@
 - 用户确认 Step 8 完结：BaseSession 保持完整自然 ReAct user turn；SubAgentSession 在 loop 外完成一次 missing-submit follow-up、总 turn budget、terminal result 与取消编排。
 - 通用 prompt 已与 legacy/new delegation guidance 完全解耦；Step 9 才在需要委派能力的 parent session 子类中按新 Agent graph 显式追加。
 - Step 8 状态切为 `complete`；Step 9 仍为 `pending`，只能由用户另行开始。
+
+### 2026-07-16 — Step 9 — awaiting-review
+- 实际输出/API：新增 `pi/subagent/{manager,runtimeState}.ts`。`SubAgentManager` 既是 commands 直接依赖的唯一生产对象，也是生命周期 owner；按完整 parent identity 完成授权、短锁 admission（persisted total=20、parallel=5）、stale running recovery、timeout/parent cancel 和有界 live state；`cancelRun`、`cancelByParentSession`、`subscribe`、`getRuntimeState` 作为 Step 11 稳定输入。
+- 生产切换：`tools/index.ts` 构造并注册真实 `subagent` LocalTool，同时将同一对象加入 delegated catalog blacklist；RegularSession/JobRun 仅在该工具实际在 catalog 中时追加 Agent graph guidance，RegularSession stop 取消同 parent active runs。旧 `app subagent`、`lib/subAgent`、旧 catalog builder及其测试已整体删除；旧 CRUD/persist/IPC/renderer 未动，等待后续指定步骤。
+- 结果与恢复：manager 不复制 SubAgentSession result 语义；Subrun terminal data 是事实源。无 active entry 的 persisted running run 由 manager 写为 `failed` / `Subrun interrupted by application restart.`；runtime state steps 上限 50，terminal state 可从 data 重新派生。
+- 共享 cleanup：删除 BaseSession 只供旧 inherit/full-history 使用的 accessors，保留 `getContextSummary` 作为 `--with-parent-summary` seam；删除 pi root 无调用的 legacy catalog builder export。现有 resume/prompt/catalog tests 仅移除或改写旧 API 依赖，未新增测试文件。
+- 静态验证：最终 LSP diagnostics 无 error；`npm run check:impact -- <14 个实际源/测试文件>` 已复核 direct dependents；`npm run typecheck` 与 `npm run build` 通过。build 仅报告既有 renderer chunk-size warning；npm 同时报既有 `.npmrc` unknown config warnings。
+- 未做的运行验证：按重构政策未新增/运行单测，未启动应用、未做 smoke/E2E 或人工 LLM 委派验证。
+- 下游交接：Step 11 消费 manager cancel/state seam；Step 13 只保留旧 CRUD/persist/UI/IPC cleanup，不能再假定旧 backend 存在。`unit-test.md` 已更新 manager observable contract 候选。
+- 用户 review 待确认：manager 的 short-lock/recovery 边界、parent prompt仅在可见 tool 时追加、top-level tool cutover 与旧 backend 整体删除。
+### 2026-07-16 — Step 9 runner abstraction review
+
+- 用户否决 `SubAgentCommandRunner`：它只为唯一的 `SubAgentManager` 使用，DI interface 没有独立语义或第二个实现，属于无价值抽象。
+- 本次修订必须将 commands、facade 与 manager 全部直接收敛到 `SubAgentManager`；删除 interface、`implements` 与所有 re-export，不改变命令 grammar、outcome、授权、state、limits 或 production registration。
+- 修订完成：删除 `SubAgentCommandRunner`、其 re-export 与 `SubAgentManager implements`；`commands/{index,list,describe,run}` 和顶层 facade 直接使用 concrete manager，命令行为不变。
+- 验证：LSP diagnostics 无 error；`npm run check:impact -- <7 个修改源文件>`、`npm run typecheck`、`npm run build` 均通过。build 仅有既有 renderer chunk-size warning，npm 同时报既有 `.npmrc` unknown-config warnings。
+### 2026-07-16 — Step 9 runtime subscription simplification
+
+- 用户确认不采用 EventEmitter；`SubAgentRuntimeStateStore` 只包了一组 listener 与单一 state event，改为内联到唯一 owner `SubAgentManager`。
+- 保留同步通知、listener 异常隔离与 unsubscribe 返回值；`runtimeState.ts` 仅保留纯 state projection/reducer，不再拥有 listener store。
+- 修订完成：删除 `SubAgentRuntimeStateStore`；manager 直接拥有 listener `Set`、`subscribe()` 与异常隔离的 private `publish()`。`runtimeState.ts` 现在只包含纯 state transition/projection。
+- 验证：LSP diagnostics 无 error；`npm run check:impact -- src/main/pi/subagent/runtimeState.ts src/main/pi/subagent/manager.ts`、`npm run typecheck`、`npm run build` 均通过。build 仅有既有 renderer chunk-size warning，npm 同时报既有 `.npmrc` unknown-config warnings。
+
+
+
+### 2026-07-16 — Step 9 manager simplification
+
+- 用户确认 `toParent` 已由其自行删除，并要求继续清除同类无价值 helper；本次直接内联 delegate summary，删去冗余 parent/scope 双参传递。
+- parent lock 改用现有项目已采用的 `Promise.withResolvers()`，替代手写 deferred resolver；锁的顺序、释放与 map cleanup 语义保持不变。
+- 实现细节：删除 `toDelegateSummary`，把安全 summary 直接投影在 list 和 describe 的唯一消费点；`executeRun`/`registerActiveRun` 不再重复接收可由 `scope` 派生的 parent/correlation 字段。
+- 验证：manager LSP diagnostics 无 error；`npm run check:impact -- src/main/pi/subagent/manager.ts`、`npm run typecheck`、`npm run build` 均通过。build 仅有既有 renderer chunk-size warning，npm 同时报既有 `.npmrc` unknown-config warnings。
+
+### 2026-07-16 — Step 9 Profile-bound manager review
+
+- 实现：删除全局 `subAgentManager`；`SubAgentManager.forProfile(profile)` 以 `WeakMap<Profile, SubAgentManager>` 返回唯一 profile-bound owner。顶层 `subagent` 在每次 handler 调用时按显式 profile 获得 manager，RegularSession stop 同样通过所属 Profile 取消 active runs。
+- review 修复：admission 只读取一次 persisted subrun list 供 recovery 和 reservation gate 复用；已在 listener 注册前中止的 parent signal 立即 abort 实际 controller。
+- 文档与测试计划：同步更新 Step 9 manager contract、appcmd reusable facade execution helper、Step 11 stable seam 和 profile-isolation/abort-race 测试候选；未新增测试。
+
+### 2026-07-16 — Step 9 manager ownership guard review
+
+- 用户指出 profile-bound manager 不存在生产跨 Profile 调用；确认顶层 tool、RegularSession cancel 与未来 IPC 都先选择 Profile 后才取得 `SubAgentManager.forProfile(profile)`。
+- 删除 `owns()`、五处重复 guard，以及 `loadParentSession` / `authorizeDelegate` 中重复传递的 Profile；manager 保留 `profileId` 仅用于 runtime state、日志和对外 parent identity。
+- 这不是降低授权边界：Agent/session/delegate 授权仍由绑定 Profile 的 `getAgent`、`findSessionAcrossKinds` 与 `resolveDelegates` 强制执行；Profile 选择边界保持在 tool/IPC。
+
+### 2026-07-16 — Step 9 profile command cache review
+
+- 用户指出 handler 每次 `createSubAgentCommand()` 会重复创建 registry/router；改为 `WeakMap<Profile, AppCommand>`，同一 Profile 的 immutable command facade 只在首个 tool call 创建。
+- command 仍直接绑定该 Profile 的 `SubAgentManager.forProfile(profile)`；不把 command cache 塞入 manager，避免反转 manager → commands 的依赖方向。
+
+### 2026-07-16 — Step 9 用户 review 通过
+
+- 用户确认 Step 9 的 manager、Profile-bound lifecycle、顶层工具显式定义与 production cutover 可接受。
+- Step 9 状态切为 `complete`；Step 10/11 前置均已满足，但保持 `pending`，等待用户明确开始。
 
 每个后续 step 完成后继续追加同结构记录。

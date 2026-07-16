@@ -1,6 +1,6 @@
 # DESKMATE AI Studio — 主进程架构
 
-<!-- Last verified: 2026-07-16 -->
+<!-- Last verified: 2026-07-16 (Step 9：production subagent manager/top-level tool 已切换) -->
 ## 1. 范围
 
 本文档覆盖**主进程**（`src/main/`）和**预加载脚本**（`src/preload/`）。渲染进程架构见 [arch-render.md](arch-render.md)。
@@ -24,7 +24,7 @@
 | **持久化（persist）** | `src/main/persist/` + `src/shared/persist/` | **生产路径**：`~/.deskmate/` 全部用户态数据。Agent 一等公民、`p_{ulid}` profile 目录、AGENT.md / sessions/{ym}/ 双层、parent-scoped hidden `subruns/001..999/`，12 条细粒度 IPC 通道 | [persist.md](persist.md)（架构总览） + [模块 ai.prompt.md](../src/main/persist/ai.prompt.md) |
 | MCP 运行时（external-only） | `src/main/lib/mcpRuntime/` | external MCP server 连接 / OAuth / 执行入口（`executeToolOnServer`，server-scoped）。**不再有"内置 server"**——本地工具已独立到 `pi/tools/` | [ai.prompt.md](../src/main/lib/mcpRuntime/ai.prompt.md) |
 | 本地工具（pi/tools + pi/appcmd） | `src/main/pi/tools/` + `src/main/pi/appcmd/` | `LocalTool` registry + `ToolContext`（chat 主链路直接调）+ 全部本地工具实现 / 启动注册 / lazy 重依赖。**与 MCP 平级,不是 MCP**。`appcmd/` 是新引入的 **`app` 伪 shell** 基础设施(synopsis + help 双轨自描述、shell 范式调用、命令注册表) | [tool-system.md](tool-system.md)（总体设计 + 落地路径） + [模块 ai.prompt.md](../src/main/pi/tools/ai.prompt.md)（LocalTool 细节） |
-| Agent 委派运行时（pi/subagent，建设中） | `src/main/pi/subagent/` + `src/shared/persist/types/subrun.ts` | 已有单个 persisted `SubAgentSession`、run contract、parent-scoped store、delegated-only `submit_result`/formal reducer、未注册 cmdline facade 与 `lib/delegateExecutionScope.ts` 能力边界；manager/production registration 尚未接线，旧 `lib/subAgent` 仍是生产路径 | [ai.prompt.md](../src/main/pi/subagent/ai.prompt.md) |
+| Agent 委派运行时（pi/subagent） | `src/main/pi/subagent/` + `src/shared/persist/types/subrun.ts` | **生产路径**：顶层 `subagent` tool 注入 manager；manager 以 Agent graph 授权、parent-scoped persisted Subrun 实现 limits/cancel/state/stale recovery，SubAgentSession 产出正式结果；旧 `lib/subAgent` 已删除 | [ai.prompt.md](../src/main/pi/subagent/ai.prompt.md) |
 | 工作区 | `src/main/lib/workspace/` | 文件树、ripgrep 搜索、chokidar 监听、模糊文件索引 | — |
 | 自动更新 | `src/main/lib/autoUpdate/` | electron-updater 封装，CDN/GitHub 更新检查 | — |
 | 功能标志 | `src/main/lib/featureFlags/` | 默认值根据 isDev/brand/platform 控制；CLI `--enable/disable-features` | [ai.prompt.md](../src/main/lib/featureFlags/ai.prompt.md) |
@@ -41,7 +41,6 @@
 | Token 计数 | `src/main/lib/token/` | js-tiktoken，视觉 tiling，LRU 缓存；驱动压缩门控 | — |
 | 快速启动缓存 | `src/main/lib/cache/` | CDN agent 卡片图片离线缓存 | — |
 | 取消令牌 | `src/main/lib/cancellation/` | 通过聊天 + 工具链的协作式取消 | — |
-| 旧子 Agent 系统（待 Step 9 切换） | `src/main/lib/subAgent/` | 当前生产 `SubAgentManager` + `SubAgentChat`；新代码只读参考，不再扩写 | — |
 | 共享类型/工具 | `src/main/lib/types/`，`lib/utilities/`，`lib/utils/` | 跨模块类型、错误类、Sharp 辅助函数、CDN 缓存清除 | — |
 | 评估框架 | `src/main/lib/evalHarness/` | AgenticEval HTTP 服务器；`--eval-mode` 无头 Agent 执行 | [ai.prompt.md](../src/main/lib/evalHarness/ai.prompt.md) |
 | 崩溃捕获 | `src/main/lib/crash/` | 崩溃包、运行标记、面包屑、最近日志/dump | [crash-bundle.md](../docs/crash-bundle.md) |
@@ -62,7 +61,7 @@
 | MCP 协议、外部 server | MCP 运行时 | `src/main/lib/mcpRuntime/` |
 | 本地工具、deskmate-native 工具、`app` 伪 shell | 本地工具 | `src/main/pi/tools/` + `src/main/pi/appcmd/` |
 | profile、session、数据持久化 | 持久化（persist） | `src/main/persist/` + `src/shared/persist/` |
-| spawn、并行委派任务 | 当前生产：旧子 Agent 系统；目标：pi/subagent | `src/main/lib/subAgent/`（当前）→ `src/main/pi/subagent/`（建设中） |
+| 委派、subrun、并行任务 | Agent 委派运行时 | `src/main/pi/subagent/` |
 | 模型、provider | Chat 引擎（pi） | `src/main/pi/model.ts` |
 | 文件树、ripgrep | 工作区 | `src/main/lib/workspace/` |
 | .skill 归档 | Skills | `src/main/lib/skill/` |

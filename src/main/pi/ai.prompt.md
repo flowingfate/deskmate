@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 8：BaseSession 新增 delegated run seams，单个 SubAgentSession 已落盘) -->
+<!-- Last verified: 2026-07-16 (Step 9：profile-bound subagent manager/top-level tool 已切换，旧 backend 已删除) -->
 # pi 模块 — Chat 引擎（pi-ai 底座）
 
 > Deskmate 的 chat orchestrator，基于 `@earendil-works/pi-ai` 适配多 provider。
@@ -11,11 +11,11 @@
 |------|------|------|
 | `index.ts` | **pi 子树唯一外部入口**。`src/main/pi/` 之外只能从 `@main/pi` 导入；使用显式 named export，只暴露仓库中真实存在的外部消费面。子树内部仍按依赖方向直接引用具体模块，避免 barrel 自引用；工具注册仍由 `ensureToolsRegistered()` 动态触发，根入口不得静态导入 `tools/index.ts` | 小 |
 | `agent.ts` | Agent 注册表 + getOrCreateSession | 小 |
-| `prompt.ts` | 通用 system prompt 拼装(identity + knowledge + skills + global)，默认绝不含委派指导；未来需要 delegation 的 BaseSession 子类在通用 prompt 后显式追加新 Agent graph guidance | 小 |
-| `session/` | turn loop 单一权威。RegularSession/JobRun 保持既有无 scope 行为；SubAgentSession 仅通过 additive run environment、iteration 与 completion seams 复用它，并在外层把多个完整 user turn 编排为 delegated run | 中 |
-| `tool.ts` | **catalog + 执行**两段同住一文件。catalog local route 直接持有 `LocalTool` snapshot，经统一 helper 执行；delegate context 存在时仅过滤交互式 `ask` LocalTool，单次 delegated catalog 可附未注册 `submit_result`。Step 9 加入真实 `subagent` 对象禁止嵌套；其它工具与 MCP OAuth 保持普通能力；`web research` 与已知 shell device-auth 在各自执行边界拒绝 | 中 |
-| `tools/` | **本地工具子系统** —— `LocalTool` registry + `ToolContext` + `lazy(spec, loader)` + 所有具体工具文件。delegate capability 在 scope 存在时于执行点收紧 | 见子目录 |
-| `subagent/` | **建设中**的 Agent 委派运行时边界。已有 single-run `SubAgentSession`、shared contract、parent-scoped store、delegated-only submit/result、未注册 cmdline facade 与 capability boundary；manager 与 production registration 仍待 Step 9，旧 `lib/subAgent` 仍是生产路径 | 中 |
+| `prompt.ts` | 通用 system prompt 拼装(identity + knowledge + skills + global)，默认绝不含委派指导；RegularSession/JobRun 仅在 catalog 已启用 `subagent` 时于通用 prompt 后追加新 Agent graph guidance | 小 |
+| `session/` | turn loop 单一权威。RegularSession/JobRun 维持无 scope 行为；RegularSession stop 先从所属 active Profile 取得 manager 并取消同一 parent 的 delegated runs；SubAgentSession 仅通过 additive seam 复用它，并在外层编排完整 delegated user turns | 中 |
+| `tool.ts` | **catalog + 执行**两段同住一文件。catalog local route 直接持有 `LocalTool` snapshot，经统一 helper 执行；delegate context 存在时排除 `ask` 与真实 `subagent` 对象，单次 delegated catalog 可附未注册 `submit_result` | 中 |
+| `tools/` | **本地工具子系统** —— `LocalTool` registry + `ToolContext` + 所有具体工具。生产注册 app/web/subagent 三个顶层 facade；subagent handler 再按 profile 取得 manager | 见子目录 |
+| `subagent/` | **生产 Agent 委派运行时**。`SubAgentManager.forProfile(profile)` 绑定 persisted Subrun 的授权、limits/cancel/state/recovery；旧 `lib/subAgent` 已删除 | 中 |
 | `auth.ts` | PiAuthManager:OAuth + apiKey 存取 + expires-based refresh + inflight dedup | 中 |
 | `compression.ts` | 压缩决策(usage = pi.usage.totalTokens,含 output,与 badge 同口径)+ 内置 compressWithFullMode 调用 | 小 |
 | `mcp.ts` | external MCP 工具薄包装:`listAllMcpTools()`(给 catalog 列举外部工具)/ `executeMcpToolOnServer(serverName, toolName, args, signal)`(server-scoped 执行,**不再**有按裸 toolName 查全局 map 的路径) | 小 |
@@ -29,7 +29,7 @@
 | `utils/buildLlmContext.ts` | 压缩快照回放 → 完整 LLM 上下文 | 小 |
 | `utils/globalSystemPrompt.ts` | 稳定的全局 system prompt；首条 user message 的固定发送时间是默认锚点，只有需要晚于该锚点的时间才调用 `app("time")` | 中 |
 | `utils/systemReminderUtils.ts` | system reminder 注入 | 小 |
-| `utils/promptTemplates.ts` | prompt.ts 用到的拼接模板(identity / knowledge / skills / sub-agents) | 中 |
+| `utils/promptTemplates.ts` | prompt.ts 用到的拼接模板(identity / knowledge / skills) | 中 |
 | `utils/llm-services/systemPromptLlmWriter.ts` | LLM 润色 system prompt(IPC `improveSystemPrompt`) | 中 |
 | `utils/llm-services/mcpConfigLlmFormatter.ts` | LLM 解析 MCP server 配置(IPC `formatMcpConfig`) | 中 |
 | `utils/llm-services/fileNameLlmGenerator.ts` | LLM 生成下载文件名(IPC `generateFileName`) | 小 |
@@ -101,7 +101,7 @@ agent → session → prompt / tool / mcp / compression → utils/internal
 - **不要在 messageBridge 之外 `import '@earendil-works/pi-ai'`**。一旦泄漏,Domain Message 是事实源的设计就破了。例外:`session/{base,regular,job}.ts` / `model.ts` / `tool.ts` / `auth.ts` / `utils/utilityCompletion.ts` 是 pi 适配器自身,必须 import。
 - **`ContextState.compressions` 由 session 持久化,buildLlmContext 回放**。修改 compression schema 时务必同步两侧。
 - **tool schema 用 `Type.Unsafe(jsonSchema)` 包装**,参数校验责任留给 MCP 服务端。
-- **取消语义**:`stopStream` 只 abort,不 close stream。让 turn loop 自然走完 catch → setStatus(IDLE) → 推 status_changed → 再 close。在 stopStream 中提前 close 会让按钮卡在"取消"形态。
+- **取消语义**:`RegularSession.stopStream` 先从所属 active Profile 取得 profile-bound manager，取消同一完整 parent identity 下的 delegated runs，再 abort parent turn；turn loop 仍自然收尾并推回 IDLE，不能提前 close stream。
 - **`getOrCreateSession` 走 lazy create**：persist 找不到该 sessionId 时调 `persistAgent.createSession({ id: sessionId })` 用 renderer 持有的 id 首次落盘。若该 id 已存在于 `job_runs`，必须拒绝而不能同 ID 创建 regular session；用户只能先通过 persist 的 schedule-run conversion 取得新 regular id。renderer 端 “New Chat” 不再触发 IPC，仅 `newEntityId('s')` 本地生成 id 后 navigate；首次 `streamMessage` / `retryChat` / `editUserMessage` 才落盘 data.json + sessions 索引，避免反复点新建却不发消息留下空壳 session。
 - **`pi-ai` 用动态 import**:electron-vite 把 dependencies 默认 external,pi-ai 又是 ESM-only 包,静态 `import` 在生产 main bundle 里会触发 ESM/CJS interop 问题。`scripts/check-mixed-imports.js` 会拦"同模块静态+动态混用"(以及测试期间常见的 mock 漂移),所以 pi-ai 必须**全仓库统一用 dynamic import**(根包 + `@earendil-works/pi-ai/oauth` 子路径都一样)。
 - **`OAuth provider` 从子路径 `@earendil-works/pi-ai/oauth` 引入**,根 index 只 re-export 了 *types*。

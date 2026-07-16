@@ -1,7 +1,7 @@
 # Step 9 — 实现 Manager、接通顶层工具并切换主进程生产路径
 
-> 状态：待执行
-> 前置：Step 3 command seam、Step 6 store、Step 8 single-session API complete
+> 状态：complete
+> 前置：Step 3 command seam、Step 6 store、Step 8 single-session API complete；用户 review 已通过
 > 下游：Steps 11、13、14
 > 这是新后端第一次对 LLM 生效的原子 cutover。
 
@@ -22,18 +22,18 @@
 
 ### Step 3 已具备输入（2026-07-16）
 
-- construction：`createSubagentTool(runner)` → `createSubAgentCommand(runner)`；没有未注入 runner 的工具常量。
-- runner：`listDelegates(scope)` / `describeDelegate(scope, id)` / `run(scope, request)`；scope 已含 `profileId + parentAgentId + parentSessionId + signal + tracer + correlationId`。
+- construction：`createSubAgentCommand(manager)` 直接接收真实 `SubAgentManager`；没有 runner interface、adapter 或未注入 manager 的工具常量。
+- manager 方法：`listDelegates(scope)` / `describeDelegate(scope, id)` / `run(scope, request)`；scope 已含 `profileId + parentAgentId + parentSessionId + signal + tracer + correlationId`。
 - outcomes：三条命令的可预期业务拒绝返回 `{ kind: 'rejected', error }`；run 的真实 subrun 终态返回 `{ kind: 'result', result: SubAgentRunResult }`。
 - run parser 已输出 normalized request；`--with-parent-summary` 会通过 AppCmdContext callback 获取 summary，manager 不再重复解析 CLI 或生成 summary。
-- facade 当前未从 `tools/index.ts` import/register；本 step 必须在 manager adapter 可用后调用 `createSubagentTool(adapter)` 原子注册。
+- Step 9 已将 facade 以 production manager 注册；本修订只删除无价值 runner interface，不改变 grammar 或注册路径。
 
 ### Step 4/5 已具备输入
 
 - parent Agent/session 固定为 `agentId/sessionId`；manager 把它传给 SubAgentSession，不复制到 delegate context。
 - Step 5 delegate context 只在 SubAgentSession run root 建立，只有 `delegateId`；normal execution 没有 store。
 - manager 不从 eventSender 推断角色，也不包装第二个 scope。MCP/Auth、tools、router 在 scope 有值时自行分支。
-- 旧 ToolContext/AppCmdContext mode union 仅是旧 runtime bridge；production root 切换并证明旧 backend orphan 后，必须随旧源码整体删除其 consumer/bridge。
+- `ToolContext` / `AppCmdContext` 的 `mode:'delegate' + delegateId` 仍是新 SubAgentSession 的正式 parent-identity/execution-identity contract；本步只删除旧 `app subagent` 的递归 guard 与旧 backend consumer，不删除该 union。
 
 ### Step 6 已具备输入（2026-07-16）
 
@@ -48,20 +48,43 @@
 - manager 对 newly created pending run 把 `not_pending` 视为明确 internal rejection；它必须等 `run()` resolve 后才从 result 读取 terminal state，不能预先合成 completed。
 - session 在 scope 内加载 delegate config/prompt/catalog，controller/missing-submit/formal builder 已内聚。manager 不复制这些语义，只提供 callbacks 的 bounded-state sink。
 - prompt 边界：`buildSystemPrompt()` 已完全通用化，不读取 legacy/new sub-agent config，也不输出 delegation guidance。Step 9 在新顶层 `subagent` 真正生产注册时，才由需要委派能力的 parent BaseSession 子类在通用 prompt 后显式追加基于 `Profile.resolveDelegates(parentId)` 的新 Agent graph guidance；SubAgentSession 永不追加。
+### 本次代码复核修订（2026-07-16）
+
+- `SubAgentManager.forProfile(profile)` 是唯一生产 construction：每个 Profile 由 WeakMap 绑定唯一 manager；commands 仍直接接收 concrete manager，facade 不增加 runner interface、adapter 或第二个 app command kernel。
+- admission 通过按完整 parent identity 串行的短临界区完成 `listSubruns → stale-running recovery → total gate → createSubrun → active registration`；绝不以仅内存计数或 `Promise.race` 替代持久 reservation。
+- recovery 只处理当前 parent 下、没有 active entry 的 persisted `running` Subrun，写入带 `interrupted by application restart` 原因的正式 failed result；正常 active sibling 不受影响。
+- `SubAgentRuntimeState` 的 active snapshot 只保存在 manager；步骤 FIFO 有界，terminal 由 `Subrun` data 派生，供后续 IPC/query reload。Step 9 不接 renderer IPC。
+- parent delegation guidance 放在 `pi/subagent/prompt.ts`，由 RegularSession/JobRun 在通用 prompt 后追加；它只消费 `Profile.resolveDelegates` 的 hot records，明确不为 unavailable ID 生成可执行样例。SubAgentSession 永不追加。
+- 移除旧 backend 后，BaseSession 的 `getCurrentModelId` 与 full-history accessor 没有新调用方，必须一并删除；`getContextSummary` 保留为 `--with-parent-summary` 的唯一 seam。
+
+### runner abstraction 修订（2026-07-16）
+
+- `SubAgentCommandRunner` 只有 `SubAgentManager` 一个生产实现与调用者，删除该 interface；commands 直接接收 concrete manager。
+- 唯一需要按执行上下文变化的 construction 是 Profile：`subagent` LocalTool handler 由显式 `ToolContext.profileId` 解析 active Profile，首次调用 `SubAgentManager.forProfile(profile)` 创建 command，后续复用该 Profile 的 WeakMap-cached facade；它复用 facade 的 parse/dispatch/format helper，不持有全局 manager 或增加 adapter。
+
+### runtime subscription 修订（2026-07-16）
+
+- 不使用 EventEmitter：这里只有一种强类型 state payload，且必须隔离单个 IPC listener 的异常。将 listener `Set`、`subscribe()` 与 private `publish()` 内联到唯一 state owner `SubAgentManager`。
+- `runtimeState.ts` 只保留纯 projection/reducer；不改变 state 内容、FIFO 上限、terminal recovery 或 Step 11 subscription API。
+
+### profile-bound manager 修订（2026-07-16）
+
+- manager 持有 active runs、parent locks 与 state listeners，不能作为跨 profile 全局 singleton；以 `WeakMap<Profile, SubAgentManager>` 绑定使 Profile evict 后没有独立 registry 强引用。
+- manager 内部 parent key 只需 Agent/session；Profile 已由 `SubAgentManager.forProfile(profile)` 在 tool/IPC 边界确定，不在每个 manager 方法重复做 impossible 的跨 Profile guard。
+- `RegularSession.stopStream` 先以所属 active Profile 取得同一 manager；parent signal 已在 admission 后中止时，也必须立即 abort run controller，不能漏进首次 LLM stream。
 
 ## 3. `src/main/pi/subagent/manager.ts`
 
 Manager 负责 orchestration，不复制 session逻辑：
 
 - 按 profile/parent Agent/session/request 校验；
-- 调 Step 2 `Profile.resolveDelegates(parentAgentId)`；返回 null 时明确报告 parent config unavailable，仅允许非 null `available` 中命中 request.delegateAgentId；`unavailableIds` 命中时区分 self 与 unavailable target，禁止直接读 config 或按 name fallback；
-- 通过 parent Session创建 Step 6 subrun，取得 `001..999`；
-- 创建 per-run AbortController并启动 Step 8 SubAgentSession；
-- 同 parent session max parallel=5、max total=20；多个独立 `subagent` tool calls 会由 RegularSession/JobRun 并行发起，manager 的 admission/reservation 必须并发安全；
-- timeout触发 controller.abort 并等待 session收尾，不用无界 `Promise.race`；
-- cancel one、cancel by parent；
-- finally释放 active map、parent set、timer和listener；
-- terminal state来自 persisted formal result，不另拼字符串。
+- 通过 parent `Session.createSubrun(normalizedRequest)` 取得 `001..999`；不得自行扫目录或分配 ID。
+- 在同一 parent identity 的短临界区内用 `listSubruns()` 作持久 total gate（max total=20）；并发调用必须串行完成 reservation，异常目录不静默复用。
+- 只把无 active entry 的 stale `running` record 收敛为 interrupted failed；同一进程活跃 sibling 绝不被 recovery 误终止。
+- 创建 per-run AbortController、绑定 parent signal 和 timeout 后启动 Step 8 SubAgentSession；timeout 只 abort 实际 controller，随后等待 session 收尾。
+- 同 parent session max parallel=5；多个独立 `subagent` tool calls 会由 RegularSession/JobRun 并行发起，active registration 与 finally release 必须并发安全。
+- cancel one、cancel by完整 parent identity；finally 释放 active map、parent listener和 timer。
+- terminal state来自 persisted formal result，不另拼字符串；active runtime state 的 terminal 投影先通知订阅者，再由 store 作为 reload 事实源。
 
 ### Key 设计
 
@@ -79,7 +102,7 @@ max total 20以已经 reservation 的 subrun count为准，跨 app restart仍一
 
 ## 4. Command kernel 接线
 
-实现 Step 3 `SubAgentCommandRunner` adapter：
+commands 直接使用 `SubAgentManager`：
 
 - `listDelegates` 调 `Profile.resolveDelegates(parentAgentId)`；null 返回 rejected，否则保持 available 顺序投影 ID/name/description/model，并原样返回 unavailable IDs；
 - `describeDelegate` 先走同一 resolver 授权，只允许 available ID；再对一个 target 调 `getAgentDetail`，投影 thinking/local-tools/MCP/Skills，禁止输出 systemPrompt/delegates/subAgents/zero；
@@ -99,13 +122,11 @@ max total 20以已经 reservation 的 subrun count为准，跨 app restart仍一
 
 更新 tool-system文档的顶层工具数和分工。
 
-## 6. 下线并删除旧 backend
-
-- 从 `appCommands` production registry删除旧 command 的 import/registration，并从 app help/synopsis移除；
-- parent prompt示例全部改 `subagent("run ...")`，所有生产调用改走新 manager；
-- 搜索证明 `src/main/lib/subAgent/` 与 `src/main/pi/appcmd/builtins/app/subagent/` 已无生产引用；
-- 证明不可达后整体删除上述旧 backend 目录及其旧测试，以及 Step 4 mode/delegate bridge、旧 recursion guard；禁止先逐文件修改它们；
-- 通用 ToolContext / AppCmdContext 删除不再有调用方的 identity 字段，只保留技术依赖与新 `run --with-parent-summary` getter；不留 alias、转发 shim或 archive 副本。仍被 Step 10 UI/persist 使用的旧 CRUD 数据层不在本步修改，等其引用归零再整体删除。
+- 从 `appCommands` production registry删除旧 command 的 import/registration，并从 app help/synopsis移除；保留 feature flag 及旧 CRUD/UI/persist 到 Step 10/11/13，不能把 runtime cutover 扩大为配置迁移。
+- parent prompt示例全部改 `subagent("run ...")`，所有生产调用改走新 manager；RegularSession 的 stopStream 以完整 parent identity 调 manager cancelByParentSession。
+- 搜索证明 `src/main/lib/subAgent/` 与 `src/main/pi/appcmd/builtins/app/subagent/` 已无生产引用；删除前先完成新 tool 注册、catalog object blacklist与 manager runner 接线。
+- 证明不可达后整体删除上述旧 backend 目录及其旧测试；删除 BaseSession 中仅为旧 inherit/full-history 留存的 accessors。禁止先逐文件修改旧实现。
+- 不删除仍由 Step 10/11 使用的旧 CRUD、persist、IPC、preload、renderer 源码；其 runtime producer 已随旧 backend 删除，后续步骤负责用新 contract 整体替换。
 
 ## 7. Parent prompt 与 context callback
 

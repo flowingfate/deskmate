@@ -141,46 +141,23 @@ export abstract class BaseSession {
     this.restoreTask = this.restore();
   }
 
-  // ─── readonly accessors for sub-agent / external bridges ────────────────
+  // ─── parent summary access ─────────────────────────────────────────────
 
-  /** 当前 agent 配置的 model id。读不到走 default model。供 SubAgentManager
-   *  解析 sub-agent "inherit" 时使用。 */
-  async getCurrentModelId(): Promise<string> {
-    const cfg = await readAgentRuntimeConfig(this.profileId, this.agentId);
-    if (cfg.ok) return cfg.agent.model;
-    // 配置缺失时由调用方决定 fallback；这里返回空字符串而非默认值，
-    // 避免 SubAgentManager 把"配置错误"误解为合法模型。
-    return '';
-  }
-
-  /** 返回经过 compression snapshot 折叠后的对话历史，等价于老
-   *  AgentChat.getContextHistory()。用于 SubAgent 的 full_history 模式。 */
-  async getContextHistory(): Promise<Message[]> {
-    await this.restoreTask;
-    const top =
-      this.contextState.compressions.length > 0
-        ? this.contextState.compressions[this.contextState.compressions.length - 1]
-        : null;
-    if (top) {
-      const { earlyPreservedCount, summary, compressedBeforeIndex } = top;
-      return [
-        ...this.messages.slice(0, earlyPreservedCount),
-        summary,
-        ...this.messages.slice(compressedBeforeIndex),
-      ];
-    }
-    return [...this.messages];
-  }
-
-  /** 取最近 20 条 user/assistant 文本拼成摘要。供 SubAgent 的 parent_summary 模式。 */
+  /** 取最近 20 条可见文本拼成摘要，供 `subagent run --with-parent-summary` 使用。 */
   async getContextSummary(): Promise<string> {
-    const history = await this.getContextHistory();
+    await this.restoreTask;
+    const top = this.contextState.compressions.at(-1);
+    const history = top
+      ? [
+        ...this.messages.slice(0, top.earlyPreservedCount),
+        top.summary,
+        ...this.messages.slice(top.compressedBeforeIndex),
+      ]
+      : this.messages;
     if (history.length === 0) return '';
-    const recent = history.slice(-20);
+
     const parts: string[] = [];
-    for (const msg of recent) {
-      // Domain 形态:user / assistant 的可见文本就是 content 串。
-      // assistant 的 think 是模型推理过程,不进 parent_summary。
+    for (const msg of history.slice(-20)) {
       const text = msg.content.trim();
       if (text) parts.push(`[${msg.role}]: ${text.substring(0, 500)}`);
     }
