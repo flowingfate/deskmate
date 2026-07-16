@@ -221,6 +221,15 @@ main 私有唯一归一化入口是 `normalizeSubAgentRunRequest`：文本 trim 
 - 不用自然语言 regex 猜“是否做完”；
 - 不把最后一条 assistant 文本直接冒充 completed。
 
+Step 7 实际 API（2026-07-16）：
+
+- `createSubmitResultTool(controller)` 生成未注册的 `LocalTool`；`ToolCatalog.withSubmitResult(tool)` 只为一个 delegated catalog snapshot 追加普通 local route。所有 local route 直接持有 tool object、走同一执行 helper；普通 catalog 和全局 registry 均不可见。
+- `SubmitResultController` 的状态只允许 `open → submitted`；重复调用返回显式 rejected，首份合法模型 payload 不可覆盖。
+- 模型只能提交 completed/partial/blocked；分支文本、warnings/deliverables、`local://` parent path 都在唯一输入边界校验。runtime metadata、failed/cancelled 不信任或接收模型参数。
+- `buildFormalResult()` 合并可信 `subrunId`、delegate、usage、工具产物；`decideMissingSubmit()` 只产生一次 reminder 或 `result_not_submitted` partial/failed，Step 8 负责注入 transient reminder 和最终持久化。
+
+Step 7 用户 review（2026-07-16）已确认：`submit_result` 是 dedicated tool，但它只作为 delegated catalog 的普通 local route 存在；所有 catalog local route 直持选中的 `LocalTool`，`resolveIdentity()` 对未知 route 仅作展示性 fallback，执行边界仍拒绝未知调用。
+
 ### 2.10 能力硬边界
 
 被委派 Agent 的能力边界只在 `getDelegateExecution()` 有值时于真实执行点收紧：
@@ -234,7 +243,7 @@ main 私有唯一归一化入口是 `normalizeSubAgentRunRequest`：文本 trim 
 Step 5 实际目标 API（delegate-only redesign）：
 
 - scope API 只有 `DelegateExecutionContext`、`runWithDelegateExecution`、`getDelegateExecution`、`isDelegatedExecution`；normal execution 不建 store。
-- ToolCatalog 仅在 delegate context 下按 LocalTool 对象黑名单过滤；Step 7 真实实现 submit_result 时再创建最小私有 route。
+- ToolCatalog 仅在 delegate context 下按 LocalTool 对象黑名单过滤；Step 7 的 `withSubmitResult()` 是已落地且仅限单次 delegated catalog 的私有 route。
 - 新 LocalTool 默认可见；Step 9 注册真实 `subagent` 对象时加入黑名单。只有 `web research` 与已知 shell device-auth 命令在执行边界读取 delegate context 并拒绝；MCP Auth 不读取它。
 
 ### 2.11 持久化和详情 UI

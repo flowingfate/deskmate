@@ -156,7 +156,7 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 1. LLM 在生成聊天回复时请求一次 tool call
 2. `pi/tool.ts::executeToolCall(call, catalog, ctx)` 用 `catalog.getRoute(toolName)` 取 route
 3. 按 route 分发:
-   - `route.kind === 'local'` → 本地工具 registry(`pi/tools/registry.ts`)调 `tools.execute(name, args, ctx)`
+   - `route.kind === 'local'` → route 直接持有的 `LocalTool` 经 `pi/tools/registry.ts::executeLocalTool(tool, args, ctx)` 执行
    - `route.kind === 'mcp'` → `mcpClientManager.executeToolOnServer({ serverName: route.serverName, toolName, ... })` 经 `VscMcpClient` 执行(stdio / SSE / HTTP transport)
 4. 工具结果返回给 LLM，继续生成后续回复
 5. 需要路径访问的文件 / 命令类工具会先经过 `SecurityValidator`，并在必要时请求用户批准

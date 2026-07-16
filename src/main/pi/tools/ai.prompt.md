@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 5：delegate-only context 驱动 delegated capability) -->
+<!-- Last verified: 2026-07-16 (Step 7：所有 catalog local route 统一直持 LocalTool，支持未注册 delegated submit_result) -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -9,7 +9,7 @@
 | 文件 | 职责 | 规模 |
 |------|------|------|
 | `types.ts` | `LocalTool` / `ToolContext` / `ToolResult` / `LazyHandlerLoader` 契约 | 小 |
-| `registry.ts` | `ToolsRegistry` 类 + 模块级单例 `tools`;`register / has / get / list / listSpecs / listNames / execute`;`ensureToolsRegistered()` 触发首次注册 | 小 |
+| `registry.ts` | `ToolsRegistry` 类 + 模块级单例 `tools` 的注册/查询；`executeLocalTool(tool,args,ctx)` 是 catalog local route 共用的取消/异常收敛边界；`ensureToolsRegistered()` 触发首次注册 | 小 |
 | `index.ts` | 启动期把所有工具 register 进 `tools`;无侧效仅副作用;按“批”分组。当前生产仍将旧 subagent 域注册为 `app subagent ...`；新 `tools/subagent.ts` 在 Step 3 已实现但明确未注册，Step 9 才与新 manager 原子切换。mcp / agent / skill / schedule 已下线为 `app <domain> ...`；`web` 是与 `app` 同级的一等工具 | 小 |
 | `lazy.ts` | `lazy(spec, loader)` 工厂:spec 立刻可见(LLM 列表/IPC `getAll` 不阻塞),handler 首调时 `await loader()` 动态 import 真实实现。并发首调共享同一 inflight promise | 小 |
 | `schema.ts` | `jsonSchema(literal)`:把 plain JSON Schema 字面量装成 pi-ai `TSchema`(pi-ai provider 全部按裸 JSON Schema 读 `tool.parameters`)。spec 模块加载期同步构造,无法 dynamic-import typebox | 小 |
@@ -59,16 +59,18 @@ class ToolCatalog {
   readonly specs: PiTool[];
   getRoute(llmName): ToolRoute | undefined;
   resolveIdentity(llmName): { name; mcp };
+  withSubmitResult(tool): ToolCatalog; // delegated-only, 未注册
   static empty(): ToolCatalog;
 }
 type ToolRoute =
-  | { kind: 'local'; toolName: string }
+  | { kind: 'local'; tool: LocalTool }
   | { kind: 'mcp'; serverName: string; toolName: string };
 ```
 
+- catalog local route 直接持有已选中的 `LocalTool` snapshot；`executeToolCall` 通过 registry 共用的执行 helper 调用它，避免“catalog 列举一份、registry 再按名称查一份”的第二个事实源。
 - delegate context 下 `buildToolCatalogForAgent` 在现有 Agent selection 基础上只排除交互式 `ask` LocalTool；Step 9 注册真实 `subagent` 对象时把它加入同一黑名单以禁止嵌套。其它 LocalTool 保持普通语义。
-- `web research` 与已知 shell device-auth 在各自执行边界拒绝；MCP OAuth 保持普通全局交互流。Step 7 出现真实 `submit_result` handler 时再增加其最小私有 route；本步不预建 inline route。
-- `executeToolCall` 对 local/MCP route 分发；MCP Auth 不读取 delegate context。
+- `submit_result` 由 Step 7 的 `SubmitResultController` 创建，`ToolCatalog.withSubmitResult()` 仅克隆一个 delegated run 的 snapshot 并追加普通 local route；普通构建路径和全局 `ToolsRegistry` 均不会看到它。禁止把该特例泛化回 replacement/guard API。
+- `web research` 与已知 shell device-auth 在各自执行边界拒绝；MCP OAuth 保持普通全局交互流。`executeToolCall` 只对 local/MCP route 分发；MCP Auth 不读取 delegate context。
 
 ### lazy / 重模块推迟加载
 
@@ -154,7 +156,7 @@ async function loadImpl() {
 - **`shell` 的裸 skill cwd 特例**：`skill://<name>` 在 `read` / command / args 仍指向 `SKILL.md`，仅在 `cwd` 位置映射为 skill 根目录；带子路径的 URI 保持精确解析，文件路径不得静默降级到父目录。
 - `find` 的 `workspaceRoot` 不可为文件系统根目录。其 10 秒超时会 abort 同一个传给 workspace search 的 signal，后者必须终止 `rg`；不得以 `Promise.race` 单独返回而让扫描继续在后台运行。
 - **IPC `tools` 通道是 dev/debug 入口**,chat 主链路**不走 IPC** —— `pi/tool.ts`
-  直接在主进程内调 `tools.execute(name, args, ctx)`,IPC 只服务 UI 列表
+  从 catalog local route 直接取得 `LocalTool`，经 `executeLocalTool(tool, args, ctx)` 执行；IPC 只服务 UI 列表
   (`getAll` / `has`)与偶尔的 debug `execute`。
 
 ## 相关模块

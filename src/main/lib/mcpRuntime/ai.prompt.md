@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (MCP OAuth 不受 delegate context 限制) -->
+<!-- Last verified: 2026-07-16 (MCP OAuth 不受 delegate context 限制；catalog local route 直持 LocalTool) -->
 # MCP Runtime
 
 > 仅管理 **外部 MCP server** 的连接生命周期、OAuth、工具元数据缓存与
@@ -36,7 +36,7 @@ pi/session/ (RegularSession / JobRun)
         ▼
 pi/tool.ts::executeToolCall(call, catalog, ctx)
         │
-        ├─── route.kind === 'local'  ─→  pi/tools/registry.ts::tools.execute(name, args, ctx)
+        ├─── route.kind === 'local'  ─→  pi/tools/registry.ts::executeLocalTool(route.tool, args, ctx)
         │
         └─── route.kind === 'mcp'    ─→  mcpClientManager.executeToolOnServer({ serverName, toolName, ... })
                                                   │

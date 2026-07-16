@@ -1,107 +1,58 @@
 # Step 7 — 实现 delegated-only `submit_result` 与正式结果状态机
 
-> 状态：待执行
-> 前置：Step 1 `SubAgentRunResult`、Step 5 reduced catalog extension seam
+> 状态：完成
+> 前置：Step 1 persisted result union、Step 5 delegate-only execution context、Step 6 Subrun store
 > 下游：Steps 8、9、11、14
-> 本步实现提交原语和纯状态归并，不运行完整 session。
+> 本步固定显式提交、正式结果归并和未提交决策；不实现 LLM session 或 terminal 持久化。
 
-## 1. 为什么在 Session 前固定
+## 1. 开始前复核结论
 
-Session 的停止条件、max-turn fallback、持久化 terminal state 和 renderer result shape都依赖“什么算正式完成”。如果先写 loop，再决定 submit_result，就会保留最后文本提取和 intent regex 的旧包袱。
+- Step 5 已删除早期的 catalog replacement/guard extension seam；正常 Agent 仍经 `buildToolCatalogForAgent()` 构建普通目录，只有 delegate scope 会过滤 `ask`。
+- `ToolCatalog` 是 per-turn immutable snapshot；全局 `ToolsRegistry` 是普通 Agent 默认可见的注册表。因此 `submit_result` 不能进入 registry，也不能复活通用替换/guard API。
+- Step 6 的 `Subrun.finish(result)` 只接受 `running` Subrun，并检查 `subrunId` 与 `delegateAgentId`；本步只产生经过验证的 formal result，绝不写 `data.json`。
+- `local://` 通过调用时的 parent `ToolContext.agentId/sessionId` 解析。deliverable policy 只接受非空、无 traversal segment 的 `local://` URI；不接受 knowledge、skill、absolute path 或任意 URL。
+- `ToolCatalog`、其出口以及 `executeToolCall` 有旧 runtime 调用者，但本步只添加新 private route，不修改旧 caller、旧 Sub-Agent 路径或生产注册。
 
-## 2. 开始前 review
+## 2. 私有工具路由
 
-1. 读取 Step 1 实际 result union；
-2. 确认 Step 5 没有预建 runtime route；
-3. 阅读 executeToolCall/LocalTool registry，在本 step实现普通 catalog 不可见的最小私有 submit route；
-4. result deliverable URI 只从 Step 1 contract 和 parent-local ownership 推导，不复制 Step 5 capability checks；
-5. impact 计划修改的 ToolCatalog/ToolContext/`pi/subagent` 文件，并确认清单不含旧 Sub-Agent 路径。
+在 `src/main/pi/tool.ts` 为真实 `submit_result` 增加唯一的 catalog-private route：
 
-## 3. Tool 可见性设计
+- `ToolCatalog.withSubmitResult(tool)` 仅接受名字严格为 `submit_result` 的 `LocalTool`，克隆当前 specs/routes 后追加该 tool；它不是通用 `withTool`/replacement/guard API。
+- catalog 内所有 local route 都直接持有对应的 `LocalTool` 对象，并经同一 registry 执行 helper 调用；`submit_result` 因此只是一条普通 local route，完全不需要 `kind:'submit_result'` 或第二个 dispatcher 分支。
+- 普通 `buildToolCatalogForAgent()` 不调用此方法，所以普通 Agent 永远不会枚举或调用 `submit_result`。
+- Step 8 在 delegate scope 内先构建执行 Agent 正常 catalog，再用 controller 生成的 tool 调用该方法；handler 只闭包调用 controller，不回读 manager singleton。
 
-`submit_result`：
+## 3. Submit 输入与 formal result
 
-- 不注册进全局 LocalTool registry，否则普通 Agent 默认全开会看到；
-- 本 step在真实 submit_result handler 出现时实现最小 catalog-private route；
-- 不注册进全局 LocalTool registry，普通 Agent catalog 不可见；
-- 不得复活 Step 5 的 replacement/guard API 或提前泛化 catalog；
-- handler 通过显式 execution context callback 提交，不回读 manager singleton。
+新增 `src/main/pi/subagent/submitResult.ts`，包含本步唯一的模型输入边界：
 
-Step 5 已具备：delegate-only context 只决定 catalog visibility 与能力边界；submit route 的具体承载留到本 step。
+- tool schema 只允许 `completed(content)`、`partial(content, incompleteReason)`、`blocked(reason, content?)` 和可选 `warnings` / `deliverables`；模型不能提交 `failed` / `cancelled` 或 metadata。
+- 输入在 handler/controller 边界逐字段校验：分支必填文本 trim 后非空，数组只保留 trim 后非空的字符串并稳定去重，deliverables 逐项执行 parent-local URI policy。
+- `SubmitResultController` 是每个 run 单独创建的一次性状态：`open → submitted`；第一次有效提交保存已规范化的模型 payload，重复提交返回可见 tool error，不覆盖首份 payload。
+- controller 以 runtime 注入的 `{ subrunId, delegateAgentId, usage, toolDeliverables }` 构建 `SubAgentRunResult`；metadata 不信任模型，usage 必须是有限非负整数，tool 与 submit deliverables 合并后稳定去重。
+- runtime failed/cancelled、timeout 和持久化失败继续由 Step 8/9 生成 system terminal result；已提交 payload 不能绕过最终 `Subrun.finish()`。
 
-Step 6 实际输入：controller/reducer 形成的正式 result 由 Step 8 交给 `Subrun.finish(result)`；该 store 只接受 running subrun 且检查 result 的 subrunId/delegateAgentId，故本 step 不得绕过它直接改 data.json，也不得把未校验的模型字段透传为 terminal result。
+## 4. 未提交的纯决策
 
-## 4. Submit schema
+导出不依赖 session/manager 的 `decideMissingSubmit()`：
 
-模型可提交：
+1. 首次模型停止且尚未提交，返回一次固定 reminder，要求调用 `submit_result`；
+2. 已提醒后再次停止、到达 max turns，或当前 catalog 没有可用 tools：有 assistant content 则为 `partial`，`incompleteReason='result_not_submitted'`；无 content 则为 `failed`，错误为 `result_not_submitted`；
+3. 不用自然语言意图 regex，不把最后 assistant 文本升级为 completed；
+4. cancel、timeout、异常不经该函数，由 runtime status 优先决定。
 
-- completed：content；
-- partial：content + incompleteReason；
-- blocked：reason，可带 content；
+Step 8 把该纯决策转为带 runtime metadata 的 terminal result，并将 reminder 作为 transient reminder 注入下一轮。
 
-共同可带 warnings、deliverables。failed/cancelled 主要由 runtime产生，不鼓励模型伪造系统错误/取消。
+## 5. 不做
 
-所有字段：
+- 不实现完整 LLM loop、manager、顶层 `subagent` 注册或 renderer；
+- 不调用 `Subrun.finish()`、不持久化 terminal data；
+- 不修改旧 `lib/subAgent`、旧 app subagent 或其测试；
+- 不新增/运行单测，不做 Electron/browser/manual/E2E 验证。
 
-- 运行时严格校验；
-- trim 非空；
-- arrays 去空去重保持顺序；
-- deliverable 必须是允许的 parent local URI，由 policy/validator确认；
-- 不接受 arbitrary JSON typed output。
-- 本步在真实 submit/reducer 边界实现唯一 result normalizer：负责分支必填字段、文本、usage、数组稳定去重和 parent-local deliverable URI policy；Step 1 不再预建通用 normalizer。
+## 6. 静态验证与交接
 
-## 5. 一次性提交控制器
-
-在 `pi/subagent` 内实现 run-scoped controller/reducer：
-
-- 初态 `open`；
-- 首次合法 submit 原子转 `submitted` 并保存 payload；
-- 重复 submit 返回明确 tool error，不能覆盖；
-- session 可同步读取 submitted result；
-- manager cancel/timeout/error 可在未提交时生成 system terminal result；
-- 已 submitted 后发生持久化错误时，最终 run 必须 failed，不能向父返回未落盘 completed；具体提交/落盘顺序由 Step 8 落实。
-
-## 6. 未提交 fallback 规则
-
-提供纯决策函数供 Step 8 使用：
-
-1. 首次出现“LLM停止且无 submit”时，追加固定 reminder，明确要求调用 submit_result；
-2. 第二次仍无 submit、达到 maxTurns、或模型无工具能力时：
-   - 有可用 assistant content → partial，incompleteReason=`result_not_submitted`；
-   - 无内容 → failed；
-3. timeout/cancel/error 由 runtime status决定；
-4. 不使用 `INTENT_PATTERNS` 或其它自然语言 regex；
-5. 不把最后文本标 completed。
-
-## 7. Usage/Deliverables 合并
-
-正式 result 的 metadata 由 Step 8/9 填：
-
-- subrunId/delegateAgentId 由 runtime注入，不信任模型 args；
-- turns/duration/token usage 由 session/manager注入；
-- tool execution 自动登记的 deliverables 与 submit payload 合并、校验、去重；
-- warning同样有稳定顺序。
-
-本 step 定义 reducer API，具体工具 hook Step 8 接线。
-
-## 8. 不做
-
-- 不实现完整 LLM loop；
-- 不写 manager/tool command；
-- 不持久化 terminal data（Step 8 用 Step 6 store）；
-- 不改 renderer；
-- 不新增/运行测试；
-- 不做 E2E。
-
-## 9. 静态验证与交接
-
-- typecheck/build/impact；
-- 确认普通 Agent catalog构建路径不会枚举 submit_result；
-- 更新 `unit-test.md` submit/fallback候选；
-- progress 记录 inline route API、controller API、fallback enum/reasons。
-
-Step 8 必须用该 controller作为唯一 stop truth；Step 9 tool result不得另行解析文本；Step 11 renderer只消费 formal result union。
-
-## 10. Review 门禁
-
-用户 review submit schema/fallback 后停止。任何 status 字段变化要同步 Steps 8、9、11 和 unit-test plan。
+- 运行影响分析、LSP diagnostics、typecheck、build；
+- 静态确认普通 catalog 不调用 `withSubmitResult()`，全局 registry 没有 `submit_result`；
+- 更新 `unit-test.md` 的 submit、metadata、URI、重复提交与 fallback 候选；
+- 将实际 API 回写 Step 8，并同步模块文档与 progress。完成后停在 `awaiting-review`，不进入 Step 8。

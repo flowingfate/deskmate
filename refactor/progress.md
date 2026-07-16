@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 6 complete，等待用户另行开始 Step 7**
-- 当前门禁：Subrun persist/store 与所有落盘类型归属已获用户 review 通过；未进入 Step 7
-- 业务步骤：6 / 13 complete；Step 7 为 `pending`
-- 测试步骤：Step 14 尚未开始；Step 6 未新增或运行单测
-- 生产代码变更：Subrun store 与其持久化 contract 已落盘但未连接 manager/session；新 subagent facade 未注册，旧 `app subagent` 仍是生产入口
+- 总体阶段：**Step 7 complete，等待用户另行开始 Step 8**
+- 当前门禁：Step 7 submit_result/state-machine 与 local route 统一设计已获用户 review 通过；未进入 Step 8
+- 业务步骤：7 / 13 complete；Step 8 为 `pending`
+- 测试步骤：Step 14 尚未开始；Step 7 未新增或运行单测
+- 生产代码变更：新 submit tool 仍只存在于 delegated catalog snapshot，未注册到全局 registry；新 subagent facade 仍未注册，旧 `app subagent` 仍是生产入口
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -39,8 +39,8 @@
 | 3 | [独立顶层 subagent cmdline facade](step3.md) | complete | Step 1 request grammar | 未注册的新 facade/registry/run parser，供 Step 9 接 manager |
 | 4 | [执行 Agent 与 Session owner 分离](step4.md) | complete | Step 1 execution scope | parent `agentId/sessionId` context；legacy mode union；delegate-only context 由 Step 5 追加 |
 | 5 | [Delegate Execution Context 与能力边界](step5.md) | complete | Steps 2–4 | `DelegateExecutionContext`、delegate-only capability checks |
-| 6 | [三位序号 Subrun 持久化](step6.md) | awaiting-review | Steps 1,2,4 | `001..999` allocator、parent-owned data/messages store、`PersistSessionLike` adapter、persisted type contract |
-| 7 | [submit_result 与正式结果状态机](step7.md) | pending | Steps 1,5 | delegated-only submit route、terminal result reducer |
+| 6 | [三位序号 Subrun 持久化](step6.md) | complete | Steps 1,2,4 | `001..999` allocator、parent-owned data/messages store、`PersistSessionLike` adapter、persisted type contract |
+| 7 | [submit_result 与正式结果状态机](step7.md) | complete | Steps 1,5,6 | delegated-only ordinary local submit route、一次性 controller、formal result reducer、missing-submit decision |
 | 8 | [BaseSession 驱动的新 SubagentSession](step8.md) | pending | Steps 2,4,5,6,7 | 可执行单个 persisted delegated run 的 session |
 | 9 | [Manager、顶层工具接线与主进程 cutover](step9.md) | pending | Steps 3,6,8 | production `subagent` tool、limits/cancel/state；旧 app command 下线 |
 | 10 | [Agent Delegation 配置 UI](step10.md) | pending | Step 2 | description/delegates UI；独立 Sub-Agent 管理入口下线 |
@@ -260,6 +260,30 @@
 
 - 用户确认所有会写入磁盘的 Subrun 类型均应位于 `src/shared/persist/types`；已完成的 `shared/persist/types/subrun.ts` 归属、runtime-state 分离与静态验证获通过。
 - Step 6 状态切为 `complete`；Step 7 仍为 `pending`，只能由用户另行开始。
+
+### 2026-07-16 — Step 7 启动与状态机复核
+
+- Step 5 已删除早期 catalog extension seam；真实 `submit_result` 出现后，仅为它增加精确的 `ToolCatalog.withSubmitResult()`，不复活通用 replacement/guard API。
+- 该 route 保留在单个 catalog snapshot 并携带未注册 tool 对象；普通 `buildToolCatalogForAgent()` 与全局 `ToolsRegistry` 均无此名称，旧 runtime caller 不修改。
+- controller 只保存首份已校验的 completed/partial/blocked payload；formal result builder 才注入可信 subrun/delegate/usage/tool deliverables，failed/cancelled 保持 runtime 专属。
+- missing-submit 规则固定为一次 reminder，之后或无 tools/max turns 按 content 收敛为 `result_not_submitted` partial/failed；不使用意图 regex 或最后文本 completed 推断。
+
+### 2026-07-16 — Step 7 ToolRoute review 修订
+
+- 用户接受 dedicated `submit_result` tool，但明确拒绝 `kind:'submit_result'` 进入通用 `ToolRoute` union。
+- 所有 local route 改为直接持有选中的 `LocalTool` snapshot；registry 与 catalog-private tool 通过同一 `executeLocalTool()` helper 收敛取消和异常。
+- `submit_result` 因此是普通 `{ kind:'local', tool }` route；它只由 `withSubmitResult()` 追加到单次 delegated catalog，不注册全局 registry，也没有第二个 dispatcher 分支。
+
+### 2026-07-16 — Step 7 路由容错与 registry cleanup
+
+- `ToolCatalog.resolveIdentity()` 的 route miss 继续回退原始 LLM name，不能抛错：它在流式 tool-call 展示和 assistant message rehydrate 阶段调用；真正的执行边界 `executeToolCall()` 会把不在 catalog 的调用收敛为 tool error，保证 assistant/tool 配对完整。
+- `ToolsRegistry.execute(name,args,ctx)` 没有生产调用方，只有其自身的旧单测；已删除。registry 保留注册/选择职责，`executeLocalTool(tool,args,ctx)` 成为 catalog selected tool 的唯一执行边界。
+
+### 2026-07-16 — Step 7 用户 review 通过
+
+- 用户确认 dedicated `submit_result` tool、普通 local route 直持 `LocalTool`、`resolveIdentity()` route miss 展示性 fallback，以及删除无生产调用的 `ToolsRegistry.execute()`；Step 7 状态切为 `complete`。
+- Step 8 仍为 `pending`，只能由用户另行开始。
+
 ## 执行记录
 
 ### 2026-07-16 — Step 1 — complete
@@ -336,5 +360,17 @@
 - 文档交接：已更新 persist/Pi/subagent/主架构文档、`context.md`、`unit-test.md`、Step 1/2/6/7/8/9/11/12；所有 persisted type import 已切至 `@shared/persist/types`，Step 8/9 计划保留实际 store API。
 - 用户 review 待确认：三位序号不复用、empty reservation 处理、data union 与 Step 9 stale-running recovery 边界。
 - 用户 review 结果：通过；Step 6 complete，等待用户另行开始 Step 7。
+
+### 2026-07-16 — Step 7 — awaiting-review
+- Plan review 变化：旧计划引用已删除的 Step 5 extension seam；实现后用户否决 `kind:'submit_result'` ToolRoute。最终改为所有 local route 直持 `LocalTool`，用 registry 的统一 helper 执行，不新增第二个 route kind 或 dispatcher 分支。
+- 实际输出/API：新 `pi/subagent/submitResult.ts` 的 `SubmitResultController`、`createSubmitResultTool`、`buildFormalResult`、`decideMissingSubmit`；`pi/tool.ts` 的 `ToolCatalog.withSubmitResult`。`executeLocalTool` 是 registry/public-catalog 共用的执行边界。
+- 提交语义：模型仅可提交 completed/partial/blocked；文本 trim/非空、warnings/deliverables 稳定去重、parent `local://` path policy 在唯一输入边界校验。重复 submit 以可见 tool error 拒绝；metadata、failed/cancelled 不能由模型伪造。
+- fallback：首次可继续的无 submit 停止只返回固定 transient reminder；已提醒、无 tools 或 max turns 才按 assistant content 生成 `result_not_submitted` partial/failed。timeout/cancel/error 仍由 runtime 优先。
+- 修改生产文件：`src/main/pi/tool.ts`、`src/main/pi/tools/registry.ts`、`src/main/pi/subagent/submitResult.ts`；同步更新两个受影响既有 catalog/message bridge 测试。未修改旧 `lib/subAgent`、旧 app subagent、持久化 terminal、renderer 或顶层工具注册。
+- 静态验证：LSP diagnostics 对生产文件和 tool catalog test 无错误；最终 `npm run typecheck`、`npm run build`、`npm run check:impact -- src/main/pi/tool.ts src/main/pi/tools/registry.ts src/main/pi/subagent/submitResult.ts` 全部通过。build 仅有既有 renderer chunk-size warning。
+- 未做的运行验证：按当前重构政策未新增/运行单测，未启动应用或执行 smoke/E2E。
+- 文档交接：更新 `context.md`、Step 7/8、`unit-test.md`、pi/subagent、pi/tools、pi 与主架构文档；Step 8 已绑定实际 route/controller/builder/fallback API。
+- review cleanup：保留 `resolveIdentity()` 对未知 route 的展示性 fallback；删除无生产调用的 `ToolsRegistry.execute`，既有 registry tests 改为覆盖 `executeLocalTool` 的异常、取消与 context 透传。
+- 用户 review 待确认：普通 local route 直持 tool object 的统一方向、submit schema、local deliverable policy、一次 reminder 后的 `result_not_submitted` 收敛语义。
 
 每个后续 step 完成后继续追加同结构记录。

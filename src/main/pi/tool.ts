@@ -1,10 +1,10 @@
 /**
  * pi 路径下的 tool 目录构建 + 执行编排（同一文件两段职责)。
  *
- * Per-turn `ToolCatalog` 同时持 `pi.Tool[]`(给 LLM)与
- * `routes: Map<llmName, { kind: 'local'; toolName } | { kind: 'mcp'; serverName; toolName }>`。
- * MCP 的 llmName 是 `serverName/toolName`；所有 route 都显式保存原始
- * `toolName`，绝不按 `/` 反解，也绝不按裸 toolName 找源。
+ * Per-turn `ToolCatalog` 同时持 `pi.Tool[]`(给 LLM)与 routes snapshot：local route
+ * 直接持有已选 `LocalTool`，MCP route 持有 `serverName/toolName`。MCP 的 llmName
+ * 是 `serverName/toolName`；MCP toolName 绝不按 `/` 反解，也绝不按裸 toolName
+ * 找源。
  *
  * MCP tool 的执行 server-scoped(显式 serverName),绝不回到按裸 toolName 查
  * 全局 map 的老路径。
@@ -27,7 +27,7 @@ import { isDelegatedExecution } from '@main/lib/delegateExecutionScope';
 import type { AgentConfig } from './utils/config';
 import { executeMcpToolOnServer, listAllMcpTools } from './mcp';
 import { ask } from './tools/ask';
-import { tools as localTools, ensureToolsRegistered } from './tools/registry';
+import { tools as localTools, ensureToolsRegistered, executeLocalTool } from './tools/registry';
 import type { LocalTool, ToolContext } from './tools/types';
 
 const DELEGATED_DISABLED_TOOLS = new Set<LocalTool>([ask]);
@@ -42,9 +42,9 @@ export interface ToolCallInput {
 
 // ─── catalog ────────────────────────────────────────────────────────────────
 
-/** 每条 route 都保存其原始 toolName；MCP route 额外保存 serverName。 */
+/** 每条 route 都保存其原始执行目标；MCP route 额外保存 serverName。 */
 export type ToolRoute =
-  | { kind: 'local'; toolName: string }
+  | { kind: 'local'; tool: LocalTool }
   | { kind: 'mcp'; serverName: string; toolName: string };
 
 /**
@@ -75,6 +75,22 @@ export class ToolCatalog {
   }
 
   /**
+   * 只为一个 delegated run 追加未注册的 `submit_result`。普通 catalog 从不调用它，
+   * 因而不会把 formal-result 协议暴露给普通 Agent。
+   */
+  withSubmitResult(tool: LocalTool): ToolCatalog {
+    if (tool.spec.name !== 'submit_result') {
+      throw new Error(`Expected submit_result tool, received: ${tool.spec.name}`);
+    }
+    if (this.routes.has(tool.spec.name)) {
+      throw new Error('submit_result is already present in this catalog.');
+    }
+    const routes = new Map(this.routes);
+    routes.set(tool.spec.name, { kind: 'local', tool });
+    return new ToolCatalog([...this.specs, tool.spec], routes);
+  }
+
+  /**
    * 把 LLM 限定名还原为 Domain 侧可读的自然 `name` + MCP `mcp` server。
    * 「LLM 限定名 → 自然名+mcp」这条 demux 规则的**唯一实现** —— messageBridge
    * 入境、session 流式 chunk、sub-agent hooks 展示名都调它,绝不各自 inline
@@ -83,8 +99,9 @@ export class ToolCatalog {
    */
   resolveIdentity(llmName: string): { name: string; mcp: string | undefined } {
     const route = this.routes.get(llmName);
-    if (route?.kind === 'mcp') return { name: route.toolName, mcp: route.serverName };
-    return { name: route?.toolName ?? llmName, mcp: undefined };
+    if (!route) return { name: llmName, mcp: undefined };
+    if (route.kind === 'mcp') return { name: route.toolName, mcp: route.serverName };
+    return { name: route.tool.spec.name, mcp: undefined };
   }
 }
 
@@ -120,7 +137,7 @@ export async function buildToolCatalogForAgent(agentCfg: AgentConfig): Promise<T
     selectedLocal = selectedLocal.filter((tool) => !DELEGATED_DISABLED_TOOLS.has(tool));
   }
   for (const tool of selectedLocal) {
-    routes.set(tool.spec.name, { kind: 'local', toolName: tool.spec.name });
+    routes.set(tool.spec.name, { kind: 'local', tool });
     specs.push(tool.spec);
   }
 
@@ -159,7 +176,7 @@ export async function buildToolCatalogForSubAgent(
     selectedLocal = selectedLocal.filter((t) => !denied.has(t.spec.name));
   }
   for (const tool of selectedLocal) {
-    routes.set(tool.spec.name, { kind: 'local', toolName: tool.spec.name });
+    routes.set(tool.spec.name, { kind: 'local', tool });
     specs.push(tool.spec);
   }
 
@@ -261,7 +278,7 @@ export async function executeToolCall(
   }));
 
   const route = catalog.getRoute(call.name);
-  const toolName = route?.toolName ?? call.name;
+  const toolName = route ? (route.kind === 'local' ? route.tool.spec.name : route.toolName) : call.name;
 
   try {
     if (!route) throw new Error(`Tool not in catalog: ${call.name}`);
@@ -271,7 +288,7 @@ export async function executeToolCall(
     let images: ToolResultImage[] | undefined;
     let deliverables: readonly string[] | undefined;
     if (route.kind === 'local') {
-      const result = await localTools.execute(route.toolName, args, ctx);
+      const result = await executeLocalTool(route.tool, args, ctx);
       if (!result.ok) throw new Error(result.error);
       rawContent = result.content;
       images = result.images;

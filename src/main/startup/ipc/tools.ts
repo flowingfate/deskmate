@@ -4,8 +4,8 @@
  *   - 检查某个名字是否已注册
  *   - (rare)直接 invoke 一个工具(debug / e2e)
  *
- * chat 主链路**不走本 IPC** —— pi/tool.ts 直接在主进程内调
- * `localTools.execute(name, args, ctx)`,IPC 仅服务 UI / 测试。
+ * chat 主链路**不走本 IPC** —— pi/tool.ts 从 catalog local route 直接取得 tool，
+ * 经 `executeLocalTool(tool, args, ctx)` 执行；IPC 仅服务 UI / 测试。
  */
 
 import { ipcMain } from 'electron';

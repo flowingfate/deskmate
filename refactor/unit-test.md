@@ -108,6 +108,15 @@
 - [ ] P0 deliverables/warnings 去重且保持顺序。
 - [ ] P1 未 submit 一次 reminder 后仍无 submit → partial/failed。
 
+### Step 7 实际补充 — 2026-07-16
+- 实际 contract：`submit_result` 是 `ToolCatalog.withSubmitResult()` 追加的未注册普通 local route；所有 catalog local route 都直持选中的 `LocalTool`，controller 一次性保存首份合法模型 payload，formal builder 才注入 trusted runtime metadata。
+- 新增候选：普通 `buildToolCatalogForAgent()` 与全局 `ToolsRegistry` 永不出现 submit_result；private handler 的 rejected 仍按正常 tool error 回填。
+- 新增候选：空白/错误类型文本、failed/cancelled 模型 status、非 local URI、空 path、`.`/`..` traversal deliverable 都被拒；tool 与 submit deliverables、warnings 按首次顺序合并去重。
+- 新增候选：invalid usage metadata 返回 explicit invalid_metadata；system partial/failed/cancelled 可由 runtime 构建，而模型提交不能伪造它们。
+- 改写候选：未提交 fallback 在首次可继续时仅返回固定 reminder；已提醒、无 tool 或 max-turn 时才按 assistant content 收敛 `result_not_submitted` partial/failed。
+- 最高风险：Step 8 不能绕过 controller/formal builder、自行把最后文本标 completed，或把 submit tool 注册进全局 registry。
+- 需要用户在 Step 14 前决定：无。
+
 ## Step 8 候选：SubagentSession
 
 - [ ] P0 使用 target Agent 自己的 model/prompt/thinking/catalog。
