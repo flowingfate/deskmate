@@ -48,6 +48,41 @@ function invoke(channel: string): Promise<boolean | object> {
       },
     });
   }
+  if (channel === 'subagentRun:getRunMessages') {
+    return Promise.resolve({
+      kind: 'found',
+      messages: [
+        {
+          role: 'user',
+          id: 'm_task',
+          time: Date.now() - 2_000,
+          content: 'Inspect the tool renderer composition.',
+          attachments: [],
+        },
+        {
+          role: 'assistant',
+          id: 'm_result',
+          time: Date.now() - 1_000,
+          think: 'Checking the renderer hierarchy, then examining the tool output shape.',
+          content: 'The renderer reuses the **standard tool detail slots** and keeps tool-specific UI localized.',
+          tool_calls: [
+            {
+              id: 'm_tool_find',
+              name: 'find',
+              time: Date.now() - 1_500,
+              args: { path: 'src/renderer/components/chat/tool' },
+              response: {
+                time: Date.now() - 1_400,
+                status: 'success',
+                result: 'Found the shared detail container and registered renderers.',
+                images: [],
+              },
+            },
+          ],
+        },
+      ],
+    });
+  }
   if (channel === 'subagentRun:cancelRun') {
     return Promise.resolve({ kind: 'cancel_requested' });
   }

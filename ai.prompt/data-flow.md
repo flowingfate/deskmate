@@ -1,6 +1,6 @@
 # 数据流
 
-<!-- Last verified: 2026-07-16 (Step 11：subagentRun runtime state/audit IPC 已接入) -->
+<!-- Last verified: 2026-07-17 (Step 12：subagentRun lazy transcript Dialog IPC 已接入) -->
 
 参考：`src/shared/ipc/base.ts`、`src/main/pi/`、`src/main/persist/`、`src/main/lib/mcpRuntime/mcpClientManager.ts`
 
@@ -171,7 +171,7 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 3. manager 以完整 parent identity 短锁完成 stale recovery、总数/并行 gate、三位 subrun reservation 与 active registration。
 4. `SubAgentSession` 在 delegate scope 内使用执行 Agent 的 config/catalog/prompt，持久化 hidden transcript，并以 `submit_result` 收敛正式结果。
 5. manager timeout/parent cancel 直接 abort 实际 run；终态 `Subrun data` 与 parent tool result 是 reload 事实源。
-6. `subagentRun` IPC 将所有 profile-bound manager 的 live state 推到对应卡片；`getRunData` 只读 parent-owned metadata，`cancelRun` 只取消完整 parent identity 下的单一 active run。renderer live cache 不参与 reload terminal 事实。
+6. `subagentRun` IPC 将所有 profile-bound manager 的 live state 推到对应卡片；`getRunData` 只读 parent-owned metadata，`getRunMessages` 只在 Dialog 打开后沿相同 owner chain 读取 Domain transcript，`cancelRun` 只取消完整 parent identity 下的单一 active run。Dialog 关闭释放 transcript，renderer live cache 与主聊天 cache 都不持有它。
 
 ---
 

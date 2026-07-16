@@ -286,21 +286,19 @@ agents/{parentAgentId}/sessions/{YYYYMM}/{parentSessionId}/
 - `SubrunId`、request/result/usage/context/policy 与 `SubrunDataFile` 都是落盘 contract，定义于 `src/shared/persist/types/subrun.ts` 并经其唯一入口导出；`shared/types/subAgentRunTypes.ts` 只保留不落盘的 runtime state/step。main `Subrun` store 是唯一 fs owner，`Session.createSubrun/getSubrun/listSubruns` 以 parent scope 暴露它。`Subrun` 直接实现 Pi 的最小 `PersistSessionLike`，用临时 per-`subruns/` lock 完成 scan → atomic mkdir reservation → initial data write；load 不自动改变 stale running，Step 9 负责唯一 recovery。
 - Step 6 用户 review 已确认该类型归属：任何会写入磁盘的 Subrun 类型必须留在 `shared/persist/types`；不得将其移回 runtime shared types。
 
-Renderer 基线必须能渲染委派工具卡片和正式结果。消息详情 Dialog 是独立 Step：
-
-- 如果核心 card 与 audit IPC 完成后成本可控，则实现；
-- 如果需要大规模改动 message render pipeline，则只保留经过代码现状校验的详细后续方案，不阻塞核心重构；
-- 是否实施由 Step 11 review 后的用户决定，不能擅自扩大。
+Renderer 基线能渲染委派工具卡片和正式结果；消息详情 Dialog 独立于主聊天消息缓存。
 
 Step 11 实际落地（2026-07-16）：
 
 - 新 `subagentRun` IPC 以完整 parent identity 查询/取消；`getRunData` 只返回 parent-owned `SubrunDataFile`，明确区分 parent 缺失、invalid/missing/incomplete/corrupt 与 I/O error，绝不读取 transcript；`cancelRun` 先解析同一 ownership chain，再区分 terminal 与 non-active。
 - `SubAgentManager.subscribeStateUpdates()` 是 main IPC 的唯一 process-level bridge，可接住所有现有及后续 profile-bound manager；renderer 仅缓存 live pending/running event，按 profile + parent Agent/session + correlationId（得到 ID 后再核对 subrunId）关联单张卡片，terminal/reload 仍以 tool result 和 persisted data 为事实源。
-- 顶层 `subagent` renderer 的运行卡片显示 Agent identity、`#001`、状态、turn/duration、最新 step、formal result、warning 和 deliverable；取消有 loading/error feedback。Step 12 前无 messages API，故没有无效的详情入口。
-- `src/renderer/story/tools/` 为当前全部 chat tool 可视组件提供独立 Ladle stories；IPC 依赖由该目录的 lazy-loaded Electron mock 隔离，生产组件与 runtime contract 均未为 Story 增加分支。
-- Story mock 已覆盖 subagent card 的传递依赖（persist、agentChat、research、workspace/fs/skills、renderer log 与 human-loop global）；浏览器中每个 `Chat / Tools` story 均能独立渲染，mock 仍只存在 Story 目录。
-- Subagent Story 场景矩阵覆盖 custom chip 的 completed/executing/execution-failed/interrupted、pending/running、completed/partial/blocked/failed/cancelled、rejected、list/describe 的 read-only output，以及未知 JSON fallback；正式结果均经真实 `ToolDetailView + subagentRenderer` slot 渲染。
-- 用户已于 2026-07-16 review 通过 Step 11；此处的 card/IPC/Story matrix 是 Step 12 的稳定输入，Step 12 是否实施 Dialog 仍须用户显式决定。
+
+Step 12 实际落地（2026-07-17）：
+
+- `getRunMessages(parent)` 复用同一 active Profile → parent Agent → parent Session → Subrun ownership chain，在 Dialog 打开后才调用 `Subrun.loadDomainMessages()`，返回 canonical Domain `Message[]`；不暴露路径、不加 files/session-list API，不写主聊天 cache。
+- `RunMessagesDialog` 是 `RunCard` 的局部受控 shadcn Dialog：loading/error/empty/ready 可辨识状态，关闭即释放消息；request 序号忽略关闭、重开或更换 run 后的旧返回。Header 展示 Agent、三位 ID、文字+icon 状态、task/expected output/duration/usage 与可点击 deliverables；Body 按时间显示 user/assistant Markdown 和只读 tool call，默认不显示 thinking。
+- Dialog 保持 Radix focus trap/Esc/trigger focus restore，一条外层 transcript scroll region；不支持 edit/retry/compose/cancel、搜索/export 或后续对话。`story/tools/subagent-run.stories.tsx::Transcript` 直接挂载 production Dialog，并由仅 Story 的 mock 提供 user/assistant/tool transcript；生产代码不依赖 Story。
+- 用户已于 2026-07-17 review 并确认 Step 12 按当前实现 `complete`；该实现是 Step 13 的稳定输入，Step 13 必须保留新 messages IPC，不能把 subrun 注入普通 session list 或 chat render pipeline。
 
 ## 3. 动态规划更新机制（强制）
 

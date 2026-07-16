@@ -14,6 +14,7 @@ import {
   SubagentFormalResultDetails,
   SubagentStatusIcon,
 } from './RunResultDetails';
+import { SubagentRunMessagesDialog } from './RunMessagesDialog';
 
 type AuditState =
   | { kind: 'idle' }
@@ -233,6 +234,23 @@ export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
       )}
 
       <SubagentFormalResultDetails result={formalResult} />
+
+      {subrunId && agentId && chatSessionId ? (
+        <SubagentRunMessagesDialog
+          parentAgentId={agentId}
+          parentSessionId={chatSessionId}
+          subrunId={subrunId}
+          agentName={agent?.name ?? delegateAgentId ?? 'Delegated Agent'}
+          status={status}
+          task={task}
+          expectedOutput={expectedOutput}
+          durationMs={durationMs}
+          turns={currentTurn}
+          usage={formalResult?.usage ?? null}
+          deliverables={formalResult?.deliverables ?? []}
+          maxTurns={maxTurns}
+        />
+      ) : null}
 
       {canCancel && (
         <div className="flex items-center justify-between gap-2">

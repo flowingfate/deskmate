@@ -15,6 +15,7 @@ const PendingRun = lazy(() => import('./SubagentRunDemo').then((module) => ({ de
 const ReadOnlyCommands = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.ReadOnlyCommands })));
 const RejectedRun = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.RejectedRun })));
 const UnknownResult = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.UnknownResult })));
+const TranscriptDialog = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.TranscriptDialog })));
 
 export default { title: 'Chat / Tools / Subagent Run Card' };
 
@@ -37,3 +38,4 @@ export const Cancelled: Story = () => <StoryBoundary><CancelledRun /></StoryBoun
 export const Rejected: Story = () => <StoryBoundary><RejectedRun /></StoryBoundary>;
 export const ReadOnlyListAndDescribe: Story = () => <StoryBoundary><ReadOnlyCommands /></StoryBoundary>;
 export const UnknownResultFallback: Story = () => <StoryBoundary><UnknownResult /></StoryBoundary>;
+export const Transcript: Story = () => <StoryBoundary><TranscriptDialog /></StoryBoundary>;

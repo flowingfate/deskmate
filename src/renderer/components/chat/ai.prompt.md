@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 11：顶层 subagent run 卡片、live state、cancel 与独立 tool stories 已接入) -->
+<!-- Last verified: 2026-07-17 (Step 12：subagent run lazy transcript Dialog 已接入) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -39,7 +39,7 @@
 | `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，图片走 `ImageViewerAtom.open`、其余走 `useOpenFilePreview()`） | ~110 LOC |
 | `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；不再持有已删除 `app subagent` 特化渲染，所有子命令走稳定的通用 cmdline/result fallback | ~45 LOC |
 | `tool/renderers/app/cmdline.ts` | App 命令展示工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
-| `tool/renderers/subagent/{parse,RunCard,RunResultDetails,index}.tsx` | 顶层 `subagent` renderer：只做 `{ outcome }` 展示解析；单 run 卡片关联 live state，查询 metadata、显示 formal result 并发起单次 cancel。list/describe 只读展示，不取 transcript | ~440 LOC |
+| `tool/renderers/subagent/{parse,RunCard,RunMessagesDialog,RunResultDetails,index}.tsx` | 顶层 `subagent` renderer：只做 `{ outcome }` 展示解析；单 run 卡片关联 live state、查询 metadata、显示 formal result 并发起单次 cancel；详情按钮以局部 Dialog state 懒取 parent-owned Domain transcript，关闭释放数据，复用 MarkdownView 和简化只读 tool 块，不进主 chat cache/render-items pipeline。`story/tools/subagent-run.stories.tsx::Transcript` 以 production Dialog + Electron mock 展示 user/assistant/tool transcript | ~700 LOC |
 | `agent-editor/AgentDelegationTab.tsx` | 普通 Agent delegates 选择器：hot `agents.atom` 候选、cold delegates、dangling 可移除行，以及 Agent 创建/设置导航 | ~205 LOC |
 | `message/MermaidDiagram.tsx` | 延迟加载的 Mermaid 图表渲染器，支持全屏 | — |
 | `message/ImageGallery.tsx` | `<IMAGE_REGISTRY>` 分段解析 + `ImageGalleryNew` 渲染；图 src 经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) `toImageDisplaySrc` 同步解析（`local://`/`knowledge://`→media://、远程 http(s) 原样），**不再** `fetch`+base64 缓存 | — |
@@ -154,7 +154,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 |------|---------------|------|
 | 修改 markdown 渲染（代码块、链接、表格、Mermaid） | `message/MarkdownView.tsx` — `markdownComponents` 对象 | 全部消息（assistant / user）共享同一渲染器，一处修改全局生效 |
 | 添加新的工具调用展示 | 顶层工具：新建 `tool/renderers/<tool>/index.tsx`（export `<tool>Renderer: ToolRenderer`）+ `tool/registerBuiltins.ts` 加一行 `registerToolRenderer('<tool>', <tool>Renderer)`。子命令域（如 `app mcp`）：新建 `tool/renderers/app/<sub>/`（export 子 renderer + `resolve<Sub>Renderer(tokens)` 路由），在 `tool/renderers/app/index.tsx` 的 `pickSubRenderer` 加一行委派 | 三个点位 chip / input / output 每个可细（label / argsText / resultText）或粗（Chip / InputBlock / OutputSuccessBlock）二选一覆盖；output 额外允许 OutputExecutingBlock。**注意**：粗粒度 block 一旦提供就完全接管该 slot，多层兜底由 renderer 自己内部承担 |
-| 修改委派 run 卡片 / IPC | `tool/renderers/subagent/`、`renderer/ipc/subagentRun.ts`、`shared/ipc/subagentRun.ts`、main/preload bridge | live event 必须匹配 profile + parent Agent/session + correlationId，已知结果后再核对 subrunId；terminal/reload 以 tool result 和 audit data 为事实 |
+| 修改委派 run 卡片 / IPC | `tool/renderers/subagent/`、`renderer/ipc/subagentRun.ts`、`shared/ipc/subagentRun.ts`、main/preload bridge | live event 必须匹配 profile + parent Agent/session + correlationId，已知结果后再核对 subrunId；terminal/reload 以 tool result 和 audit data 为事实；messages 仅由详情 Dialog 按需查询、关闭即释放 |
 | 区分 MCP 工具调用 | `shared/persist/types/message.ts` 的 `ToolCall.mcp` 是 Domain / 历史真值，值为 MCP server 名称；`session/regular.ts` 从本轮 catalog 投影，`streamingTypes.ts` / `session-manager.ts` 保持流式首帧一致；`ToolChip.tsx` 用字段是否存在展示 Plug + 紫色变体,并把 server 名称放进 hover tooltip | 旧历史无 `mcp`，按本地工具样式兼容 |
 | 添加新的渲染项类型 | `lib/chat/render-items-manager.ts`（`ChatRenderItem` 联合类型 + `computeRenderItems` + `isSameRenderItem`） + `ChatRenderItem.tsx`（`ChatRenderItemComponent` 分发） | derived 字段一并加入 `MessageDerived` + `reuseUnchangedItems` 复用判定 |
 | 修改主聊天输入行为 | `chat-input/ComposeInput.tsx` + `ribbon/ErrorBar.tsx` | 涉及发送、取消生成、模型选择和会话错误展示 |

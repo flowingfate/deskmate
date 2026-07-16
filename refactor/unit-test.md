@@ -194,6 +194,13 @@
 
 若 Step 12 deferred，删除本节候选或保留在明确的“后续独立任务”区，不纳入 Step 14。
 
+### Step 12 实际补充 — 2026-07-17
+- 实际 contract：`getRunMessages(parent)` 复用 `getRunData` 的完整 ownership chain，懒返回 canonical Domain `Message[]`；Dialog 只在打开后请求，关闭释放 transcript，并用 request 序号忽略过期结果。
+- 新增候选：parent/subrun lookup failure 不读取 messages；同 ID 的不同 parent 不能越权读取；Dialog 的 loading/error/empty/ready、关闭后重新打开再取数、关闭/换 run 后旧 Promise 不回填；assistant thinking 不渲染、tool response 与 deliverable 仅只读展示。
+- 删除/改写候选：不测主 chat cache/render-items 注入，因为该路径不参与 Dialog。
+- 最高风险：把 transcript 预取/缓存到主聊天状态、以裸 subrunId 查询，或让关闭后的异步结果重开已释放内容。
+- 需要用户在 Step 14 前决定：无。
+
 ## Step 13 候选：入口收口
 
 - [ ] P1 registry/snapshot/prompt 不再读取旧 SubAgents store。

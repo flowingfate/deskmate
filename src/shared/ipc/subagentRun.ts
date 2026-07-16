@@ -1,5 +1,5 @@
 import { connectMainToRender, connectRenderToMain } from './base';
-import type { SubAgentRunStatus, SubrunDataFile, SubrunId } from '../persist/types';
+import type { Message, SubAgentRunStatus, SubrunDataFile, SubrunId } from '../persist/types';
 import type { SubAgentRuntimeState } from '../types/subAgentRunTypes';
 
 export interface SubagentRunParent {
@@ -49,6 +49,13 @@ export type SubagentRunLookupFailure =
 
 export type SubagentRunDataResult = SubagentRunFound | SubagentRunLookupFailure;
 
+export interface SubagentRunMessagesFound {
+  kind: 'found';
+  messages: Message[];
+}
+
+export type SubagentRunMessagesResult = SubagentRunMessagesFound | SubagentRunLookupFailure;
+
 export interface SubagentRunCancelRequested {
   kind: 'cancel_requested';
 }
@@ -77,6 +84,10 @@ type RenderToMain = {
   getRunData: {
     call: [parent: SubagentRunParent];
     return: SubagentRunDataResult;
+  };
+  getRunMessages: {
+    call: [parent: SubagentRunParent];
+    return: SubagentRunMessagesResult;
   };
 };
 

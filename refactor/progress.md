@@ -1,6 +1,6 @@
 # Agent / Sub-Agent 统一重构进度
 
-<!-- Last updated: 2026-07-16 -->
+<!-- Last updated: 2026-07-17 -->
 
 ## 执行管控
 - 每个 session 只聚焦做一个 step 的任务，绝不跨 step；
@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 11 complete**
-- 当前门禁：用户已 review 通过 Step 11；Step 12 仍为 pending，等待用户明确选择 `in-progress` 或 `deferred`
-- 业务步骤：Step 9、Step 10、Step 11 均为 `complete`
-- 测试步骤：Step 14 尚未开始；Step 11 新增独立 Story，未新增或运行单测
-- 生产代码变更：新 subagentRun IPC、live state bridge、顶层 subagent run 卡片、单 run cancel 与 renderer-owned indigo/Bot chip 已接线；Story 完整覆盖 renderer visual branches
+- 总体阶段：**Step 12 complete**
+- 当前门禁：用户已确认 Step 12 按当前实现完结；Step 13 保持 `pending`，等待用户明确开始
+- 业务步骤：Step 9、Step 10、Step 11、Step 12 均为 `complete`
+- 测试步骤：Step 14 尚未开始；Step 12 未新增或运行单测
+- 生产代码变更：parent-owned lazy transcript IPC、局部只读 Dialog 与仅 Story 的 Transcript demo 已获用户确认
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -45,7 +45,7 @@
 | 9 | [Manager、顶层工具接线与主进程 cutover](step9.md) | complete | Steps 3,6,8 | production `subagent` tool、limits/cancel/state；旧 app command/backend 下线 |
 | 10 | [Agent Delegation 配置 UI](step10.md) | complete | Step 2 | description/delegates UI；独立 Sub-Agent 管理入口下线 |
 | 11 | [委派运行卡片与 audit/cancel IPC](step11.md) | complete | Steps 6,7,9 | reload-safe card、live state、single cancel、run metadata query、完整 renderer Story matrix |
-| 12 | [可选 Messages Dialog](step12.md) | pending | Step 11 review | 可实现则交付 Dialog；否则交付 verified deferred design 并标 deferred |
+| 12 | [可选 Messages Dialog](step12.md) | complete | Step 11 review | parent-owned lazy messages IPC、只读 Dialog、Ladle Transcript demo |
 | 13 | [证明新路径唯一并删除残留旧源码](step13.md) | pending | Steps 9–12 | 新路径唯一生效；残留旧源码/测试删除；全局文档更新 |
 | 14 | [统一编写单元测试](step14.md) | pending | Steps 1–13 + `unit-test.md` | 用户确认后的新单测与测试执行记录；仍无 E2E |
 
@@ -539,3 +539,14 @@
 ### 2026-07-16 — Step 11 用户 review 通过
 - 用户确认 Step 11 完成：委派运行卡片、audit/cancel IPC、renderer-owned Subagent chip、完整 Ladle renderer Story matrix 均获通过。
 - Step 11 状态切为 `complete`；Step 12 保持 `pending`，须由用户另行选择实施或 deferred。
+
+### 2026-07-17 — Step 12 — awaiting-review
+- Go 评估：`Session.getSubrun(...).found.subrun.loadDomainMessages()` 已满足 transcript 读取，无需 files/session-list API；现有 shadcn Dialog、MarkdownView 和 RunCard 局部状态即可实现，未触碰 ChatContainer/render-items/main chat cache。
+- 实际输出/API：`subagentRun.getRunMessages(parent)` 返回完整 owner chain 的 canonical Domain `Message[]` 或既有 lookup/error union；main/preload/renderer 四层接线。`RunMessagesDialog` 只在 trigger 打开后发起请求，关闭清空状态并以 request token 忽略过期结果；`Chat / Tools / Subagent Run Card / Transcript` Story 直接挂载 production Dialog，mock user/assistant/tool transcript 仅留在 Story。
+- 展示/边界：Header 具 Agent/`#ID`/文字+icon status/task/expected output/turn/duration/token usage/可点击 deliverable；Body 仅显示 user/assistant Markdown 与简化只读 tool call，不显示 thinking，不支持 edit/retry/compose/cancel/搜索/export/继续对话；单外层滚动、Radix focus/Esc/trigger focus restore。
+- 静态验证：`npm run check:impact -- <7 个代码文件>`、`npm run typecheck`、`npm run build`、`npm run ladle:build` 通过。Ladle 产物 5.42 MiB；build 仅有既有 renderer chunk-size warning，npm 有既有 `.npmrc` unknown-config warnings。未按 Steps 1–13 政策新增/运行单测、启动应用或做 browser/smoke/E2E。
+- 下游交接：Step 13 保留 `getRunMessages`、其四层 bridge 和 Dialog；不得把 subrun transcript 重新引入普通 session list、主 chat cache 或 render-items pipeline。Step 14 累积 lazy/owner/race/read-only 测试候选。
+
+### 2026-07-17 — Step 12 用户 review 通过
+- 用户确认 Messages Dialog、lazy transcript IPC 与 Ladle Transcript demo 先按当前实现完结；Step 12 状态切为 `complete`。
+- Step 13 仍为 `pending`，只能由用户另行明确开始；保留既有 messages IPC/Dialog 作为其稳定输入。

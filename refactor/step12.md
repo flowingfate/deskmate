@@ -1,6 +1,6 @@
 # Step 12 — 可选：以 Dialog 查看 Subrun Messages
 
-> 状态：待执行（Step 11 review 后可改为 `deferred`）
+> 状态：complete（2026-07-17：用户确认先按当前实现完结）
 > 前置：Step 11 complete，并已完成 go/no-go 复杂度评估
 > 下游：Step 13只需要知道本步 implemented 或 deferred
 > 本步不阻塞核心统一重构。
@@ -36,6 +36,13 @@ Sub-Agent transcript已经持久化。工具卡片提供详情入口，点击后
 - Step 11 review后用户决定后置。
 
 No-Go时不写placeholder代码；只更新本文件为基于实际代码的后续设计，progress标 deferred，继续Step13。
+
+### 2026-07-17 Go 评估
+
+- `Session.getSubrun(subrunId)` 的 found 分支已直接提供 `Subrun.loadDomainMessages()`；无需新增 files/session-list API。
+- 只需向既有 `subagentRun` typed IPC 增加一次 parent-owned messages query，并沿现有 main/preload/renderer 四层接线。
+- 运行卡片可局部挂载现有 shadcn Dialog；消息正文复用 `MarkdownView`，tool call 使用简化只读块，不触碰 `ChatContainer`、render-items 或主聊天缓存。
+- Dialog 持有局部 open/fetch state，关闭即释放 transcript；组件独立且小于 500 行。
 
 ## 3. Go路径实现
 
@@ -91,6 +98,14 @@ Body：
 ## 5. 静态验证
 
 Go路径：typecheck/build/impact、IPC四层、component行数、主render pipeline无非必要修改。
+
+### 2026-07-17 实施结果
+
+- 新 `subagentRun.getRunMessages(parent)` 复用 Step 11 的 active Profile → parent Agent → parent Session → Subrun ownership lookup；only found 分支调用 `Subrun.loadDomainMessages()` 并返回 canonical Domain `Message[]`。四层 IPC（shared/main/preload/renderer）均已接线，任何 lookup/I/O failure 继续使用既有显式 union。
+- `RunMessagesDialog` 由 `RunCard` 局部挂载。`DialogTrigger` 负责 trigger focus restore；open 时 lazy fetch，loading/error/empty/ready 明确分支，close 递增 request token 并释放 transcript，避免旧请求回填。无 atom/provider、无主聊天 cache/render-items 改动。
+- Header 显示 Agent、`#001`、文字+icon status、task/expected output、turn/duration/token usage 及可点击 deliverables；body 以单一外层滚动区按时间展示 user/assistant Markdown 和简化只读 tool call，thinking 不展示。Esc/close 由 shadcn/Radix Dialog 处理。
+- `RunMessagesDialog.tsx` 为 225 行，`RunCard.tsx` 为 276 行；均低于 500 行。`npm run check:impact -- <7 个代码文件>`、`npm run typecheck`、`npm run build` 已通过；build 仅有既有 renderer chunk-size warning，npm 有既有 `.npmrc` unknown-config warnings。按重构政策未新增/运行单测，未启动应用、未做 browser/smoke/E2E。
+- 按用户要求新增 `Chat / Tools / Subagent Run Card / Transcript` Ladle Story：点击 `View transcript` 可查看 production Dialog 的 mock user/assistant Markdown 与已完成 tool call；thinking fixture 存在但不会显示。`npm run typecheck && npm run ladle:build` 通过，Ladle 静态产物为 5.42 MiB。未启动浏览器或应用，仍遵循本 Step 的禁止 manual/E2E 政策。
 
 No-Go路径：只更新 context/progress/unit-test/本step的verified design，不修改生产代码，并记录具体阻塞文件/依赖，不能写“太复杂”空结论。
 

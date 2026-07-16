@@ -6,14 +6,14 @@ import {
   type SubagentRunLookupFailure,
   type SubagentRunParent,
 } from '@shared/ipc/subagentRun';
-import type { Profile } from '@main/persist';
+import type { Profile, Subrun } from '@main/persist';
 import type { SubrunDataFile } from '@shared/persist/types';
 import { Profiles } from '@main/persist';
 import { SubAgentManager } from '@main/pi/subagent/manager';
 import { mainWindow } from '@main/startup/wins';
 
 type LoadedSubrun =
-  | { kind: 'found'; profile: Profile; data: SubrunDataFile }
+  | { kind: 'found'; profile: Profile; subrun: Subrun; data: SubrunDataFile }
   | SubagentRunLookupFailure;
 
 let registered = false;
@@ -39,7 +39,7 @@ async function loadSubrun(parent: SubagentRunParent): Promise<LoadedSubrun> {
   const loaded = await session.getSubrun(parent.subrunId);
   switch (loaded.kind) {
     case 'found':
-      return { kind: 'found', profile, data: loaded.subrun.toDataFile() };
+      return { kind: 'found', profile, subrun: loaded.subrun, data: loaded.subrun.toDataFile() };
     case 'invalid_id':
       return { kind: 'invalid_id' };
     case 'missing':
@@ -66,6 +66,20 @@ export function registerSubagentRunIpc(ipc: IpcMain): void {
   handle.getRunData(async (_event, parent) => {
     try {
       return dataResult(await loadSubrun(parent));
+    } catch (error) {
+      return {
+        kind: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  handle.getRunMessages(async (_event, parent) => {
+    try {
+      const loaded = await loadSubrun(parent);
+      if (loaded.kind !== 'found') return loaded;
+      const { messages } = await loaded.subrun.loadDomainMessages();
+      return { kind: 'found', messages };
     } catch (error) {
       return {
         kind: 'error',
