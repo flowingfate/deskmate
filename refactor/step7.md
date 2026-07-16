@@ -1,7 +1,7 @@
 # Step 7 — 实现 delegated-only `submit_result` 与正式结果状态机
 
 > 状态：待执行
-> 前置：Step 1 result union、Step 5 reduced catalog extension seam
+> 前置：Step 1 `SubAgentRunResult`、Step 5 reduced catalog extension seam
 > 下游：Steps 8、9、11、14
 > 本步实现提交原语和纯状态归并，不运行完整 session。
 
@@ -46,6 +46,7 @@ Session 的停止条件、max-turn fallback、持久化 terminal state 和 rende
 - arrays 去空去重保持顺序；
 - deliverable 必须是允许的 parent local URI，由 policy/validator确认；
 - 不接受 arbitrary JSON typed output。
+- 本步在真实 submit/reducer 边界实现唯一 result normalizer：负责分支必填字段、文本、usage、数组稳定去重和 parent-local deliverable URI policy；Step 1 不再预建通用 normalizer。
 
 ## 5. 一次性提交控制器
 

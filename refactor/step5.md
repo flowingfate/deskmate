@@ -1,7 +1,7 @@
 # Step 5 — 建立委派能力 Policy 与 Reduced ToolCatalog
 
 > 状态：待执行
-> 前置：Step 2 graph resolver、Step 3 顶层工具名称、Step 4 ownership context
+> 前置：Step 1 `SubAgentRunRequest`/`SubAgentRuntimeState`、Step 2 graph resolver、Step 3 顶层工具名称、Step 4 ownership context
 > 下游：Steps 7、8、9、14
 > 本步将 policy 接到可复用执行边界，但尚无新 SubAgentSession。
 

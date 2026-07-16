@@ -26,7 +26,7 @@
 
 优先：
 
-- SubrunId/normalization；
+- `SubrunId` helpers、`normalizeSubAgentRunRequest`；
 - Agent delegates graph normalization/resolution；
 - capability policy matrix；
 - result reducer/submit controller；

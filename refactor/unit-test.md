@@ -23,9 +23,15 @@
 ## Step 1 候选：共享契约
 
 - [ ] P0 `SubrunId` 接受 `001/010/999`，拒绝 `1/01/000/1000/abc`。
-- [ ] P0 result union 每个 status 的 required fields 通过 runtime validator/normalizer 得到唯一合法形态。
 - [ ] P1 runtime policy 默认值与 max clamp 行为明确。
 - [ ] P1 isolated / parent_summary context union 不接受 full_history。
+
+### Step 1 实际补充 — 2026-07-16
+- 实际 contract：`SubrunId` 非 branded，合法范围 `001..999`；request 由唯一 main 私有 normalizer 收敛；result/runtime state 只在 shared 固定 discriminated union。
+- 新增候选：policy 缺省 timeout 随 normalized maxTurns 推导并受 60 分钟上限约束。
+- 删除/改写候选：删除 Step 1 result/usage/list normalizer 测试；真实 result validation、数组稳定去重和 parent-local URI 授权统一归 Step 7。
+- 最高风险：`SubrunId` 是 parent-scoped 普通字符串，后续 store/IPC 不得单独用它做 key。
+- 需要用户在 Step 14 前决定：无。
 
 ## Step 2 候选：Agent graph
 
@@ -74,6 +80,7 @@
 
 - [ ] P0 submit_result 只在 delegated catalog 可见。
 - [ ] P0 completed/partial/blocked 参数验证和 formal result 映射正确。
+- [ ] P0 result normalizer 校验各 status 必填字段、usage 非负整数及 parent-local deliverable URI。
 - [ ] P0 重复 submit 被拒，不覆盖首个正式结果。
 - [ ] P0 deliverables/warnings 去重且保持顺序。
 - [ ] P1 未 submit 一次 reminder 后仍无 submit → partial/failed。

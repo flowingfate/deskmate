@@ -18,6 +18,7 @@
 3. 只读参考旧 `appcmd/builtins/app/subagent` 的参数痛点，不复制实现或测试；
 4. impact 计划新增的 `pi/subagent/commands` 和 `tools/subagent.ts`；
 5. 确认 Step 1 最终 request 字段名。
+6. 实际 Step 1 输入固定为 `SubAgentRunRequest` 与 `normalizeSubAgentRunRequest`（`src/main/pi/subagent/types.ts`）；parser 输出必须交给该 normalizer，不能复制 trim/default/clamp 规则。
 
 ## 3. 目标目录
 
@@ -51,6 +52,8 @@ subagent("run <agent-id> --task \"...\" --expect \"...\"")
 - `--max-turns <n>`；
 - `--timeout-seconds <n>`；
 - `--json` 只在与 facade 通用语义一致且确有用途时保留。
+
+Step 1 policy 契约：`maxTurns` 默认 25 / 最大 100；未给 timeout 时按 maxTurns × 60 秒推导，`timeoutMs` 最大 60 分钟。`--timeout-seconds` 只负责安全换算成 `timeoutMs`。
 
 要求：agent-id/task/expect 缺失均是 usage error；不接受旧 name 主键、`inherit`、`context_access`、`share-context` 拼写或 full history。
 

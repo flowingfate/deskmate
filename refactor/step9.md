@@ -17,6 +17,7 @@
 4. 写出 manager state key：必须包含 parent identity + 三位 subrunId；
 5. impact Pi root exports、tool registration、session regular/job、app command registry；
 6. 若 Step 8 尚未用户 review complete，不开始本 cutover。
+7. runtime event 使用 Step 1 的 `SubAgentRuntimeState`，terminal result 使用 `SubAgentRunResult`；不得弱化 parent identity 或复制第二套状态 shape。
 
 ## 3. `src/main/pi/subagent/manager.ts`
 

@@ -24,7 +24,7 @@
 
 Main → Renderer：
 
-- `stateUpdate(SubAgentRuntimeState)`。
+- `stateUpdate(SubAgentRuntimeState)`；该 union 已强制携带 `profileId + parentAgentId + parentSessionId + subrunId`，terminal `status` 与 `result.status` 对齐。
 
 Renderer → Main：
 

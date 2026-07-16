@@ -2,28 +2,20 @@
 
 <!-- Last updated: 2026-07-16 -->
 
+## 执行管控
+- 每个 session 只聚焦做一个 step 的任务，绝不跨 step；
+- 如果要做 todo list，那么每个 step 只做一个 todo list，绝不跨 step；
+
 ## 当前状态
 
-- 总体阶段：**第二轮规划已重写，尚未开始生产代码**
-- 当前门禁：等待用户 review 新的总体方案与 Step 1
-- 业务步骤：0 / 13 complete
+- 总体阶段：**Step 1 已实现，等待用户 review**
+- 当前门禁：Step 1 `awaiting-review`；用户确认前不进入 Step 2
+- 业务步骤：0 / 13 complete（Step 1 尚待用户确认）
 - 测试步骤：Step 14 尚未开始
-- 生产代码变更：无
+- 生产代码变更：新增共享委派契约与 main 私有 normalization；未注册工具、未改变生产运行路径
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
-
-## 为什么第一版规划失效
-
-用户 review 指出第一版 step 过短、缺少上下游输出关系，并给出新的架构决策。第一版以下内容已经废弃：
-
-- ULID subrun ID；
-- `app subagent` 作为生产入口；
-- 旧数据迁移和 migration journal；
-- 新 runtime 继续围绕旧 `lib/subAgent` 演进；
-- 每 step 立即新增/运行单测或执行端到端 smoke；
-- 本次必须物理删除所有旧参考源码。
-
-新计划以 `context.md` 2026-07-16 第二轮决策为准。
+- 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
 
 ## 状态定义
 
@@ -42,7 +34,7 @@
 
 | Step | 计划 | 状态 | 读取的上游产物 | 向下游交付的稳定产物 |
 |---:|---|---|---|---|
-| 1 | [目标契约与 Pi/Subagent 边界](step1.md) | pending | `context.md` | shared request/result/state types；`pi/subagent` 依赖规则与 public surface |
+| 1 | [目标契约与 Pi/Subagent 边界](step1.md) | awaiting-review | `context.md` | `src/shared/types/subAgentRunTypes.ts`；`src/main/pi/subagent/types.ts`；模块依赖规则 |
 | 2 | [Agent description/delegates 持久化](step2.md) | pending | Step 1 AgentId/contract | 可落盘的 Agent graph、ID resolver、IPC patch |
 | 3 | [独立顶层 subagent cmdline facade](step3.md) | pending | Step 1 request grammar | 未注册的新 facade/registry/run parser，供 Step 9 接 manager |
 | 4 | [执行 Agent 与 Session owner 分离](step4.md) | pending | Step 1 execution scope | Tool/Internal URL 可表达 own knowledge + parent local |
@@ -143,21 +135,29 @@
 - 旧代码只读参考，不修不测，不强制本次删除；
 - 禁止 E2E；新单测统一延后到 Step 14，通过 `unit-test.md` 累积。
 
+### 2026-07-16 — Step 1 类型风格 review
+
+- 用户明确偏好：存在选择时，公共字段继承使用 `interface Xxx extends Base`，不使用 `type Xxx = Base & {...}`；
+- `SubAgentRunResult`、`SubAgentRunStep`、`SubAgentRuntimeState` 的所有分支已改为命名 interface，union type 只负责聚合；
+- 该调整不改变运行契约和下游字段名。
+
+### 2026-07-16 — Step 1 normalization 简化 review
+
+- 删除 `normalizeSubAgentRunResult` 以及 `normalizeRunUsage`、`normalizeTokenUsage`、`normalizeSubrunId`、`normalizeRequiredText`、`normalizeOptionalText`、`normalizeStringList`、数字 helper；
+- 仅保留有真实集中价值的 `normalizeSubAgentRunRequest`，并把少量校验直接写在函数内；
+- result 的运行时校验延后到 Step 7 的真实 submit/reducer 边界，避免 Step 1 先造第二层抽象。
+
 ## 执行记录
 
-尚未开始代码实施。
+### 2026-07-16 — Step 1 — awaiting-review
+- Plan review 变化：确认 shared direct import 与 Pi root export 边界；按用户反馈将 union 分支改为命名 `interface extends Base`，并删除尚无真实输入边界的 result/usage/list 归一化层。
+- 实际输入：第二轮 `context.md`；现有 `profileTypes.ts` 旧 runtime 只读参考；Pi public boundary。
+- 实际输出/API：`SubrunId` helpers；`SubAgentRunRequest/Result/RuntimeState`；`normalizeSubAgentRunRequest`；`SUB_AGENT_RUN_POLICY_LIMITS`。
+- 修改文件：`src/shared/types/subAgentRunTypes.ts`、`src/main/pi/subagent/types.ts`、`src/main/pi/subagent/ai.prompt.md`、`src/main/pi/ai.prompt.md`、`ai.prompt/arch-main.md`，以及本 refactor 交接文档。
+- 静态验证：初版、interface 风格修订及 normalization 精简后均完成 `npm run check:impact -- <实际修改文件>`、`npm run typecheck`、`npm run build`，全部通过（仅既有 chunk-size warning）。
+- 未做的运行验证：按用户确认的政策，未新增/运行单测，未启动应用，未做 smoke/E2E。
+- unit-test.md 更新：保留 request policy normalization；result/usage/数组/URI validation 候选统一移至 Step 7。
+- 影响的下游 steps：2、3、5、6、7、9、11、14 已回写真实名称与边界；其余计划契约仍成立。
+- 用户 review 待确认：shared 字段、result 五态、policy 默认值/上限、`SubrunId` 规则。
 
-每个 step 完成后追加：
-
-```text
-### YYYY-MM-DD — Step N — awaiting-review
-- Plan review 变化：
-- 实际输入：
-- 实际输出/API：
-- 修改文件：
-- 静态验证：
-- 未做的运行验证：
-- unit-test.md 更新：
-- 影响的下游 steps：
-- 用户 review 待确认：
-```
+每个后续 step 完成后继续追加同结构记录。

@@ -11,7 +11,7 @@
 
 ## 2. 已具备输入
 
-从 Step 1 获取：Agent ID 字段类型、request 中 target 字段名、shared result/state 的 parent identity 表达。执行前把这些实际名称写回本文件；若 Step 1 尚未 complete，不开始。
+从 Step 1 获取：target 字段固定为 `SubAgentRunRequest.delegateAgentId: string`；shared result/state 分别为 `SubAgentRunResult` / `SubAgentRuntimeState`；state 的 parent identity 固定为 `profileId + parentAgentId + parentSessionId + subrunId`。运行类型直接从 `@shared/types/subAgentRunTypes` 导入。Step 1 当前为 `awaiting-review`，用户确认前不开始本步。
 
 ## 3. 开始前 review
 

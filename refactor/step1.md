@@ -1,6 +1,6 @@
 # Step 1 — 固化目标契约与 `pi/subagent` 模块边界
 
-> 状态：待执行
+> 状态：awaiting-review
 > 上游输入：`context.md` 第二轮决策、当前 shared Agent schema、Pi public boundary
 > 下游消费者：Steps 2–9、11、14
 > 本步不改变生产行为，不注册新工具。
@@ -118,3 +118,14 @@
 ## 9. Review 门禁
 
 本 step 完成后状态改 `awaiting-review` 并停止。用户若修改任何 shared 字段，所有下游 steps 先标 `needs-replan`，完成级联更新后才能进入 Step 2。
+
+## 10. 2026-07-16 实际实现
+
+- shared 文件：`src/shared/types/subAgentRunTypes.ts`，按仓库惯例由 `@shared/types/subAgentRunTypes` 直接导入（`src/shared/types/` 无 barrel）；
+- main 私有文件：`src/main/pi/subagent/types.ts`；未向 `src/main/pi/index.ts` 提前导出；
+- ID API：`isSubrunId`、`parseSubrunId`、`formatSubrunId`，合法范围 `001..999`；
+- 唯一保留的归一化入口是 `normalizeSubAgentRunRequest`，因为它集中承载必填文本、context 默认值和 policy default/clamp；policy 常量为 `SUB_AGENT_RUN_POLICY_LIMITS`；
+- 用户 review 后删除尚无真实输入边界的 result/usage/list normalizer 及其细碎 helper；结果运行时校验下放到 Step 7 的真实 submit/reducer 边界；
+- 用户 review 后将 result/step/runtime state 的所有公共字段变体改为命名 `interface extends Base`；union `type` 只聚合分支，不再使用交叉类型继承；
+- 新模块文档：`src/main/pi/subagent/ai.prompt.md`；没有创建未来 manager/session 空壳；
+- `npm run check:impact -- ...`、`npm run typecheck`、`npm run build` 已通过；按本重构政策未新增或运行测试、未做运行 smoke/E2E。

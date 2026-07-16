@@ -37,7 +37,7 @@ Sub-Agent Run（运行角色）
 
 原始讨论输入：`tmp/unify-agent-subagent.md`。讨论稿不是实现约束；本文件中用户后续确认的决策优先。
 
-## 2. 2026-07-16 第二轮 review 后的已确认决策
+## 2. 已确认决策
 
 ### 2.1 唯一 Agent 实体与委派关系
 
@@ -125,12 +125,13 @@ subagent("run-many --config-json '[...]'")
 ### 2.6 Subrun 三位序号
 
 - Subrun ID 是父 session 内局部唯一的三位十进制字符串：`001`、`002`、…、`010`、…、`099`、…、`999`。
-- 类型/校验规则：`^[0-9]{3}$`。不使用 ULID、时间戳或随机串。
+- 类型/校验规则：`001..999`，等价于 `^(?!000$)[0-9]{3}$`；`000` 非法。
 - ID 只在 `(profileId, parentAgentId, parentSessionId)` scope 内有意义；IPC/日志不得把 `001` 当全局唯一键。
 - allocator 在父 session 下使用单飞锁：扫描/读取已分配的最大序号，取 `max + 1`，原子创建 `subruns/<id>/data.json` 完成 reservation。
 - 并发 `run-many` 必须得到不重复且按 reservation 顺序递增的编号。
 - 当前每父 session 最多 20 次委派，因此正常范围只到 `020`；仍实现 `001..999` 的完整校验。超过 `999` 明确拒绝，不复用旧编号。
 - 目录名和对外 `subrunId` 使用同一个三位字符串，不再另造 run ULID。
+- shared helper 固定为 `isSubrunId` / `parseSubrunId` / `formatSubrunId`，定义于 `src/shared/types/subAgentRunTypes.ts`；`SubrunId` 是非 branded 的语义别名。
 
 ### 2.7 执行身份与资源归属
 
@@ -149,14 +150,15 @@ subagent("run-many --config-json '[...]'")
 
 ### 2.8 委派请求和上下文
 
-`SubagentRequest`（最终命名可在 Step 1 固化）包含：
+`SubAgentRunRequest`（`src/shared/types/subAgentRunTypes.ts`）包含：
 
-- target Agent ID；
-- task；
-- `expectedOutput`（自然语言，必填）；
-- context policy：默认 isolated，可选 parent summary；
-- maxTurns、timeout 等本次运行限制。
+- `delegateAgentId: string`；
+- `task: string`；
+- `expectedOutput: string`；
+- `context: SubAgentRunContext`，默认 `{ kind: 'isolated' }`，可选 `{ kind: 'parent_summary', summary }`；
+- `policy: { maxTurns, timeoutMs }`。
 
+main 私有唯一归一化入口是 `normalizeSubAgentRunRequest`：文本 trim + 非空校验；`maxTurns` 默认 25、最大 clamp 100；timeout 缺省按归一化后的 maxTurns × 60 秒推导，最大 clamp 60 分钟。
 首版：
 
 - 不支持 full history；
@@ -168,15 +170,19 @@ subagent("run-many --config-json '[...]'")
 
 被委派 Agent 必须通过 delegated-only `submit_result` 动作交付。它不进入普通 Agent catalog。
 
-正式结果是 discriminated union：
+正式结果 `SubAgentRunResult` 是 discriminated union：
 
-- `completed`；
-- `partial`；
-- `blocked`；
-- `failed`；
-- `cancelled`。
+- `completed`：`content`；
+- `partial`：`content + incompleteReason`；
+- `blocked`：`reason`，可带 `content`；
+- `failed`：`error`；
+- `cancelled`：`reason`。
 
-共享字段至少有：subrunId、delegateAgentId、deliverables、warnings、usage。各分支的 content/reason/error 必填规则由 discriminator 决定，不能堆 optional fields。
+共享字段固定为：`subrunId`、`delegateAgentId`、`deliverables`、`warnings`、`usage`；usage 是 `turns + durationMs + tokenUsage?`。Step 1 只固定类型，不预建 result/usage/list normalizer；真实校验留给 Step 7 的 submit/result 边界，deliverable URI 权限同时由 policy 校验。
+
+`SubAgentRuntimeState` 同样是 discriminated union：所有事件携带 `profileId + parentAgentId + parentSessionId + subrunId`；terminal 分支的 `status` 与 `result.status` 在类型上强关联。
+
+共享 union 的各分支使用命名 `interface extends Base` 表达公共字段继承；`type` 只聚合分支。存在可选 interface 方案时，不写 `type Xxx = Aaa & Bbb`。
 
 未调用 submit_result：
 
