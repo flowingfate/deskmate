@@ -1,6 +1,6 @@
 # Step 2 — 让普通 Agent 承载 description 与 delegates 图
 
-> 状态：待执行
+> 状态：等待用户 review
 > 前置：Step 1 complete，shared request/ID 命名已固定
 > 输出将被 Steps 5、6、8、9、10、14 消费
 > 本步仍不启用 subagent runtime。
@@ -11,7 +11,7 @@
 
 ## 2. 已具备输入
 
-从 Step 1 获取：target 字段固定为 `SubAgentRunRequest.delegateAgentId: string`；shared result/state 分别为 `SubAgentRunResult` / `SubAgentRuntimeState`；state 的 parent identity 固定为 `profileId + parentAgentId + parentSessionId + subrunId`。运行类型直接从 `@shared/types/subAgentRunTypes` 导入。Step 1 当前为 `awaiting-review`，用户确认前不开始本步。
+从 Step 1 获取：target 字段固定为 `SubAgentRunRequest.delegateAgentId: string`；shared result/state 分别为 `SubAgentRunResult` / `SubAgentRuntimeState`；state 的 parent identity 固定为 `profileId + parentAgentId + parentSessionId + subrunId`。运行类型直接从 `@shared/types/subAgentRunTypes` 导入。Step 1 已由用户 review 通过并置为 `complete`。
 
 ## 3. 开始前 review
 
@@ -49,12 +49,12 @@
 
 ## 5. Graph 规则放在 Profile/Agent 事实源
 
-提供单一 normalization/resolution 入口，避免 command、renderer、manager 三处各写一份：
+提供单一 resolution 入口，避免 command、renderer、manager 三处各写一份：
 
-- trim/去空/去重，保持首次顺序；
-- self ID 拒绝；
-- dangling ID 允许落盘并保留；
-- `resolveDelegates(parentId)` 返回按配置顺序的 available records + unavailable IDs；
+- `delegates` 按配置原样落盘，不额外引入 normalization helper；
+- `resolveDelegates(parentId)` 在解析时 trim/忽略空值/稳定去重；
+- self ID 与 dangling ID 都不会进入 available，其中 self 也进入 unavailable，运行时明确拒绝；
+- resolver 返回 `ResolvedAgentDelegates | null`，parent record/AGENT.md 缺失用 `null` 显式表达，不抛业务异常；
 - archived target 因不在 active registry，表现为 unavailable；
 - runtime 在真正 run 前再次调用 resolver，不能信任 prompt/UI 的旧快照。
 
@@ -72,7 +72,7 @@
 - renderer atoms 的类型消费（不做 UI）；
 - app agent 的 status/list/update schema若展示或修改这些字段，先只保证编译，完整 delegation command 在 Step 3/9。
 
-Duplicate 规则：复制 description 和 outgoing delegates；如果复制后 delegates 包含新 Agent 自己的 ID，normalizer 必须剔除（通常旧 ID 不等于新 ID）。
+Duplicate 规则：复制 description 和 outgoing delegates；新 Agent ID 由 ULID 新生成，不额外建立 speculative self-normalization 分支。
 
 Archive 规则：不主动重写其它 Agents；dangling 保留。
 
@@ -108,6 +108,17 @@ Archive 规则：不主动重写其它 Agents；dangling 保留。
 - Step 10 使用最终 patch 字段和 atom 数据源；
 - `unit-test.md` 增加 graph/round-trip 候选。
 
-## 10. Review 门禁
+## 10. 实际交付（2026-07-16）
+
+- Hot：`AgentRecord.description?`；源真值为 AGENT.md front-matter `description`。
+- Cold：AGENT.md / `AgentDetail.delegates?`；`AgentFrontPatch` 支持 description/delegates，`CreateAgentInput` 支持 description。
+- 不再存在独立 `normalizeAgentDelegates`；delegates 由 patch 原样持久化，resolver 内部仅完成解析所需的 trim/去空/稳定去重。
+- `Profile.resolveDelegates(parentId): Promise<ResolvedAgentDelegates | null>`：保持配置顺序，只读取父 Agent detail，再 join active hot registry；parent 缺失返回 null，self/dangling/归档目标进入 unavailable。
+- duplicate 复制 description 与 outgoing delegates；archive 不重写其它 Agents；restore 后 dangling 自然恢复。
+- renderer compat `AgentPersona` / `agentOps` 已映射两字段；未实现 UI。app agent command 未扩展新参数，现有 schema 保持编译通过。
+- 验证：impact、workspace diagnostics、typecheck、build 均通过；既有测试 145 files / 1618 tests 全通过。未启动应用，未做 smoke/E2E。
+
+## 11. Review 门禁
+
 
 停在 `awaiting-review`。若用户改变 description hot/cold 或 dangling 语义，Steps 5、8、9、10 必须同步重写后再继续。

@@ -42,11 +42,10 @@ import { readTextOrNull, removeDirIfExists, writeText } from './lib/atomic';
 // `import type` 仅类型擦除，运行时不引入 ./profile，避免与 profile.ts 的 value-level `import { Agent }` 形成循环。
 import type { AgentRegistry } from './profile';
 
-
-
 /** AGENT.md front-matter 的可变状态承载。 */
 class AgentConfig {
   public name: string = '';
+  public description?: string;
   public version: string = '';
   public emoji?: string;
   public avatar?: string;
@@ -57,6 +56,7 @@ class AgentConfig {
   public mcpServers?: AgentMarkdownFront['mcpServers'];
   public skills?: SkillBindings;
   public subAgents?: string[];
+  public delegates?: string[];
   /** 聊天空态预设提示词;见 `AgentMarkdownFrontBase.zero`。 */
   public zero?: AgentZeroState;
   /** 受保护标记;见 `AgentMarkdownFrontBase.locked`。 */
@@ -67,6 +67,7 @@ class AgentConfig {
   /** 用 raw front-matter 一次性覆盖所有字段。 */
   public assign(fm: AgentMarkdownFront): void {
     this.name = fm.name;
+    this.description = fm.description;
     this.version = fm.version;
     this.model = fm.model;
     this.emoji = fm.emoji;
@@ -76,6 +77,7 @@ class AgentConfig {
     this.mcpServers = fm.mcpServers;
     this.skills = fm.skills;
     this.subAgents = fm.subAgents;
+    this.delegates = fm.delegates;
     this.zero = fm.zero;
     this.locked = fm.locked;
   }
@@ -89,12 +91,14 @@ class AgentConfig {
     };
     const opt: Partial<AgentMarkdownFront> = {};
     if (this.emoji !== undefined)           opt.emoji = this.emoji;
+    if (this.description !== undefined)     opt.description = this.description;
     if (this.avatar !== undefined)          opt.avatar = this.avatar;
     if (this.thinkingLevel !== undefined) opt.thinkingLevel = this.thinkingLevel;
     if (this.tools !== undefined)           opt.tools = this.tools;
     if (this.mcpServers !== undefined)      opt.mcpServers = this.mcpServers;
     if (this.skills !== undefined) opt.skills = this.skills;
     if (this.subAgents !== undefined)       opt.subAgents = this.subAgents;
+    if (this.delegates !== undefined)       opt.delegates = this.delegates;
     if (this.zero !== undefined)            opt.zero = this.zero;
     if (this.locked !== undefined)          opt.locked = this.locked;
 
@@ -178,6 +182,7 @@ export class Agent extends PersistBase {
   public init(input: {
     name: string;
     version: string;
+    description?: string;
     model?: string;
     emoji?: string;
     avatar?: string;
@@ -186,6 +191,7 @@ export class Agent extends PersistBase {
   }): void {
     const ts = input.nowIso ?? new Date().toISOString();
     this.config.name = input.name;
+    this.config.description = input.description;
     this.config.version = input.version;
     this.config.model = input.model ?? '';
     this.config.emoji = input.emoji;
@@ -211,6 +217,7 @@ export class Agent extends PersistBase {
     return {
       id: this.id,
       name: this.config.name,
+      description: this.config.description,
       version: this.config.version,
       emoji: this.config.emoji,
       avatar: this.config.avatar,
@@ -236,6 +243,7 @@ export class Agent extends PersistBase {
       mcpServers: c.mcpServers,
       skills: c.skills,
       subAgents: c.subAgents,
+      delegates: c.delegates,
       zero: c.zero,
     };
   }
@@ -270,6 +278,7 @@ export class Agent extends PersistBase {
   public async patchFront(partial: AgentFrontPatch): Promise<void> {
     const c = this.config;
     if (partial.name !== undefined)            c.name = partial.name;
+    if (partial.description !== undefined)     c.description = partial.description;
     if (partial.version !== undefined)         c.version = partial.version;
 
     // ── model 与 thinkingLevel 联动 ──
@@ -297,6 +306,7 @@ export class Agent extends PersistBase {
     if (partial.mcpServers !== undefined)      c.mcpServers = partial.mcpServers;
     if (partial.skills !== undefined)          c.skills = partial.skills;
     if (partial.subAgents !== undefined)       c.subAgents = partial.subAgents;
+    if (partial.delegates !== undefined)       c.delegates = partial.delegates;
     if (partial.zero !== undefined)            c.zero = partial.zero;
     if (partial.locked !== undefined)          c.locked = partial.locked;
 

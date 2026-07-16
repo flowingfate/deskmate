@@ -18,6 +18,8 @@
 5. 运行 impact 并读 tool-system、pi/tools、MCP 文档；
 6. 不打开旧 SubAgent tests 作为行为标准，只可读旧 recursion guard 的问题背景。
 
+Step 2 已具备输入：`Profile.resolveDelegates(parentId): Promise<ResolvedAgentDelegates | null>`；null 表示 parent record/AGENT.md 缺失，调用方必须显式处理。非 null 时 available 按配置顺序，self/dangling/archived 位于 unavailable。Policy/授权不得直接读 `agent.config.delegates`、按 name fallback，或把 null 当空授权列表。
+
 ## 3. Policy 模型
 
 在 `src/main/pi/subagent/policy.ts` 定义新生产 policy，避免散落 `if (ctx.isSubAgent)`：

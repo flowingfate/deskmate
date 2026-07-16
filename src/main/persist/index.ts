@@ -16,6 +16,7 @@
 
 export { Profiles } from './profiles';
 export { Profile } from './profile';
+export type { ResolvedAgentDelegates } from './profile';
 export { Agent } from './agent';
 export { Session, RegularSession, JobRun } from './session';
 export { ScheduleJob, ScheduleRegistry } from './schedule';

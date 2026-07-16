@@ -18,6 +18,8 @@
 5. impact routes、settings sidepanel、ProfileDataProvider/snapshot；
 6. 不启动浏览器或应用；视觉/行为验证留给用户。
 
+Step 2 已具备输入：`AgentFrontPatch` 字段为 `description` / `delegates`；`CreateAgentInput` 可直接带 `description`；`AgentRecord.description` 是 hot 数据；`AgentDetail.delegates` 是 cold 数据。现有 `AgentPersona` compat bridge 已映射两字段，本 step 不得另造 snake_case `delegate_agents` alias。
+
 ## 3. Basic description
 
 在 `AgentBasicTab` 增加：

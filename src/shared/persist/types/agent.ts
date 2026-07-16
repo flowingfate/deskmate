@@ -13,6 +13,8 @@ export interface AgentRegistryFile {
 export interface AgentRecord {
   id: string;
   name: string;
+  /** AGENT.md front-matter `description` 的 hot 缓存，供列表与委派选择使用。 */
+  description?: string;
   version: string;
   emoji?: string;
   avatar?: string;
@@ -41,6 +43,7 @@ export interface AgentZeroState {
 /** `AGENT.md` front-matter。 */
 export interface AgentMarkdownFront {
   name: string;
+  description?: string;
   emoji?: string;
   avatar?: string;
   locked?: boolean;
@@ -52,6 +55,8 @@ export interface AgentMarkdownFront {
   mcpServers?: AgentMcpServer[];
   skills?: SkillBindings;
   subAgents?: string[];
+  /** 可委派的普通 Agent ID；允许保留暂不可用的 dangling ID。 */
+  delegates?: string[];
   zero?: AgentZeroState;
 }
 
@@ -62,13 +67,14 @@ export interface AgentMarkdownFile {
 
 /** `Agent.patchFront` 与 IPC 共用的 front-matter patch。 */
 export type AgentFrontPatch =
-  & Partial<Pick<AgentRecord, 'name' | 'version' | 'model' | 'emoji' | 'avatar' | 'locked'>>
-  & Partial<Pick<AgentDetail, 'tools' | 'mcpServers' | 'skills' | 'subAgents' | 'zero'>>
+  & Partial<Pick<AgentRecord, 'name' | 'description' | 'version' | 'model' | 'emoji' | 'avatar' | 'locked'>>
+  & Partial<Pick<AgentDetail, 'tools' | 'mcpServers' | 'skills' | 'subAgents' | 'delegates' | 'zero'>>
   & { thinkingLevel?: ThinkingLevel | null };
 
 /** `agent:create` IPC 入参。 */
 export interface CreateAgentInput {
   name: string;
+  description?: string;
   version?: string;
   model?: string;
   emoji?: string;
@@ -93,5 +99,7 @@ export interface AgentDetail {
   mcpServers?: AgentMcpServer[];
   skills?: SkillBindings;
   subAgents?: string[];
+  /** 按配置顺序保存的普通 Agent ID；dangling ID 不会在此层丢失。 */
+  delegates?: string[];
   zero?: AgentZeroState;
 }

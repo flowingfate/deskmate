@@ -30,6 +30,8 @@
 5. impact BaseSession/Pi public export；
 6. 如果需要大幅重写 BaseSession，先更新本计划和后续 steps，等待用户 review再动代码。
 
+Step 2 已具备输入：执行 Agent 的 description 位于 hot `AgentRecord`，outgoing delegates 位于 cold `AgentDetail`；单 run 只按 `delegateAgentId` 加载执行 Agent 配置，不注入其 delegates。父授权已经由 Step 9 manager 调 `Profile.resolveDelegates(parentId)` 完成，session 不复制第二套 graph 判定。
+
 ## 4. BaseSession 最小抽象
 
 目标不是做万能框架，而是抽出真实第三种 session形态需要的差异：

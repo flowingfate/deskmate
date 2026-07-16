@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-15 (terminal schedule run 可派生独立 regular continuation) -->
+<!-- Last verified: 2026-07-16 (Agent description/delegates graph 与 resolver) -->
 
 ## 1. 范围
 
@@ -149,8 +149,8 @@ Profiles.get().active()        → Profile
 | `getSession(agentId, sessionId)` | 单条 `SessionDataFile` |
 | `getSessionMessages(agentId, sessionId)` | `data.json` + `messages.jsonl` 全量 |
 | `getSessionFilesDir(agentId, sessionId)` | session 私有 sandbox 绝对路径 |
-| `createAgent / patchAgentFront / archiveAgent / unarchiveAgent / duplicateAgent / setPrimaryAgent / listArchivedAgents` | Agent CRUD(取代老 `profile.*` 通道) |
-| `getAgentDetail(agentId)` | 懒读单个 agent 的 cold 字段(解析对应 AGENT.md) |
+| `createAgent / patchAgentFront / archiveAgent / unarchiveAgent / duplicateAgent / setPrimaryAgent / listArchivedAgents` | Agent CRUD；create/patch 支持 description/delegates，duplicate 复制 description 与 outgoing delegates |
+| `getAgentDetail(agentId)` | 懒读单个 agent 的 cold 字段（含 delegates，解析对应 AGENT.md） |
 | `renameSession / setSessionStarred / deleteSession / deleteScheduleRun / forkJobRunToSession` | regular session 与已结束的 schedule run 写路径；fork 会创建新 regular session，原 run 保留；运行中的 run 拒绝删除或 fork |
 | `getUnreadSummary(agentId)` | 未读统计(regular 全量 + schedule_run 窗口),两条 SQL |
 | `updateConfirmationSettings` | confirmation settings 写入 |
@@ -164,7 +164,7 @@ Profiles.get().active()        → Profile
 |---|---|---|
 | `profile:switched` | `{ profileId, previous }` | `Profiles.setActive()` |
 | `agent:registry:updated` | `{ profileId, kind, items, primaryAgentId? }`(`kind` 可为 `agents` / `subAgents` / `skills` / `mcp`) | agents.json(含 `primaryAgentId`)/ sub-agents / skills / mcp 写盘 |
-| `agent:updated` | `{ profileId, agentId, record, detail }`(同时下发 hot+cold,省 renderer 一次回查) | `Agent.persist()`(按 agentId 防抖) |
+| `agent:updated` | `{ profileId, agentId, record, detail }`（record 含 hot description，detail 含 cold delegates） | `Agent.persist()`（按 agentId 防抖） |
 | `agent:removed` | `{ profileId, agentId }` | `Agent.archive()` |
 | `session:index:updated` | `{ op:'upsert', entry }` 或 `{ op:'remove', id }`(**单条 op**,renderer 按 id 合并) | `SessionIdx.upsert` / `remove` |
 | `session:updated` | `{ profileId, agentId, sessionId, data }` | `RegularSession.afterPersist`(按 sessionId 防抖) |
@@ -209,8 +209,15 @@ AGENT.md 是源真值;`AgentRecord` 是其同名字段的派生缓存。
 
 | 视图 | 类型 | 字段 | renderer 用法 |
 |---|---|---|---|
-| Hot | `AgentRecord`(`agents.json#items` 行) | `id / name / version / model / emoji? / avatar? / locked? / createdAt / updatedAt` | sidebar / chat header / model selector 直接持 `agents.atom`;`locked?` 驱动受保护 agent 的只读/不可删 UI(取代旧 `isBuiltinAgent` 名字硬编码) | 
-| Cold | `AgentDetail`(AGENT.md 解析) | `agentId / systemPrompt / thinkingLevel? / knowledge? / mcpServers? / skills? / subAgents?` | agent editor / apply-to-dialog / context-menu skill list 按 agentId lazy fetch(`getAgentDetail` IPC,命中 `agentDetail.atom` cache 同步返) |
+| Hot | `AgentRecord`(`agents.json#items` 行) | `id / name / description? / version / model / emoji? / avatar? / locked? / createdAt / updatedAt` | sidebar / chat header / model selector / delegation picker 直接持 `agents.atom`；description 放 hot 避免候选列表 fan-out 读 AGENT.md | 
+| Cold | `AgentDetail`(AGENT.md 解析) | `agentId / systemPrompt / thinkingLevel? / tools? / mcpServers? / skills? / subAgents? / delegates? / zero?` | agent editor 按 agentId lazy fetch；delegates 保留配置顺序与 dangling ID |
+
+### Agent graph resolver
+
+- `Agent.patchFront({ delegates })` 按类型化输入原样落盘，不额外建立 normalization helper。
+- `Profile.resolveDelegates(parentId)` 是授权与 prompt 的唯一解析入口，返回 `ResolvedAgentDelegates | null`；parent 缺失返回 null，调用方必须显式分支。
+- resolver 解析时 trim/忽略空值/稳定去重；available 按配置顺序 join active `AgentRecord`，self/归档/不存在目标进入 unavailable。
+- resolver 只按需读取父 Agent 的 AGENT.md，不读取 target details；runtime 每次真正 run 前必须重新调用。archive 不改 incoming references，restore 后 dangling 自动恢复；duplicate 复制 description 与 outgoing delegates。
 
 ### 唯一写入口
 

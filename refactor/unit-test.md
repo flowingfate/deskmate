@@ -35,12 +35,19 @@
 
 ## Step 2 候选：Agent graph
 
-- [ ] P0 delegates 去重且保持首次出现顺序。
-- [ ] P0 self delegation 被拒绝。
+- [ ] P0 resolver trim/忽略空值/稳定去重，保持首次出现顺序。
+- [ ] P0 self ID 保留在配置但只解析为 unavailable，永不进入 available。
 - [ ] P0 dangling target 保留并解析为 unavailable；archive/restore 状态切换正确。
 - [ ] P1 description/delegates AGENT.md round-trip。
-- [ ] P1 duplicate 复制 outgoing delegates，不产生 self reference。
+- [ ] P1 duplicate 原样复制 outgoing delegates。
 - [ ] P1 reload + patch 后 AgentRecord/AgentDetail 同步；snapshot 不 fan-out 读 AGENT.md。
+
+### Step 2 实际补充 — 2026-07-16
+- 实际 contract：description 是 AGENT.md 源真值 + AgentRecord hot 缓存；delegates 是 AgentDetail cold 字段；resolver 返回按配置顺序的 available records + unavailable IDs。
+- 新增候选：resolver 对 parent record/AGENT.md 缺失返回 null；self/dangling/archived 进入 unavailable；resolver 不读取 target AGENT.md。
+- 删除/改写候选：删除独立 normalizer、Markdown 新增 throw、patch/load self error 和 normalization round-trip 测试；delegates 写路径只验证原样 round-trip。
+- 最高风险：任何 manager/prompt 调用方绕过 `Profile.resolveDelegates` 会漏掉 self/dangling/archive 规则。
+- 需要用户在 Step 14 前决定：无。
 
 ## Step 3 候选：顶层 cmdline facade
 

@@ -24,7 +24,7 @@
 Manager 负责 orchestration，不复制 session逻辑：
 
 - 按 profile/parent Agent/session/request 校验；
-- 调 Step 2 resolver确认 parent授权 target、target active、非 self；
+- 调 Step 2 `Profile.resolveDelegates(parentAgentId)`；返回 null 时明确报告 parent config unavailable，仅允许非 null `available` 中命中 request.delegateAgentId；`unavailableIds` 命中时区分 self 与 unavailable target，禁止直接读 config 或按 name fallback；
 - 通过 parent Session创建 Step 6 subrun，取得 `001..999`；
 - 创建 per-run AbortController并启动 Step 8 SubAgentSession；
 - 同 parent session max parallel=5、max total=20；
@@ -82,12 +82,14 @@ max total 20以已经 reservation 的 subrun count为准，跨 app restart仍一
 
 `pi/prompt.ts`：
 
-- 读取 parent delegates IDs；
+- 调用 `Profile.resolveDelegates(parentAgentId)` 获取结果并显式处理 null，不直接读取 parent config；
 - join active AgentRecord，展示 ID/name/description/model；
 - dangling targets不提供可执行示例，并记录/显示 unavailable；
 - 指导 task/expect具体化；
 - 不暴露旧 global subAgents registry；
 - SubAgentSession自身 prompt不注入 delegation list。
+
+Step 2 已固定 prompt 数据源：available 直接使用 resolver 返回的 hot `AgentRecord`（含 description/model），unavailable 只展示真实 ID；不要为 prompt fan-out 调 `getAgentDetail`。
 
 RegularSession/JobRun ToolContext：
 

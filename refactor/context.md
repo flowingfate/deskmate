@@ -48,6 +48,16 @@ Sub-Agent Run（运行角色）
 - duplicate Agent 时复制其 outgoing delegates；不修改其它 Agent 的 incoming references。
 - 不新增第二套“被委派时专用 Agent 配置”。
 
+Step 2 实际落地 API（2026-07-16）：
+
+- `AgentRecord.description?` 是 `agents.json` hot 缓存；源真值仍是 AGENT.md front-matter `description`；`AgentDetail` 不重复该字段。
+- AGENT.md front-matter 与 `AgentDetail` 新增 `delegates?: string[]`；`AgentFrontPatch` 支持 description/delegates，`CreateAgentInput` 支持 description。
+- 不再提供独立 delegates normalization helper；`Agent.patchFront` 按类型化输入原样保存 delegates，避免为简单数组制造第二层抽象。
+- `Profile.resolveDelegates(parentId): Promise<ResolvedAgentDelegates | null>` 在解析时 trim/去空/稳定去重；parent record/AGENT.md 缺失返回 `null`，self/dangling/archived ID 进入 `unavailableIds`，available 按配置顺序 join active registry。
+- duplicate 复制 description 与 outgoing delegates；archive 不改其它 Agent 的 incoming references。
+- renderer 既有 `AgentPersona` bridge 暂时映射 description/delegates；Step 10 UI 使用 `agents.atom` candidates + `agentDetail.atom.delegates`，不读取旧 subAgents atom。
+- 错误契约原则：可预期业务失败必须出现在 TypeScript 返回类型中；普通函数/方法不得通过未声明的 `throw` 表达 not-found、self-reference、invalid-state 等正常分支。
+
 ### 2.2 不做旧数据迁移
 
 - **不读取、不转换、不备份、不删除用户磁盘上的旧 `sub-agents/` 数据。**

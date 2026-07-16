@@ -29,6 +29,11 @@ import { partialAssign } from '@shared/persist/data';
 import { PersistBase } from './lib/persistBase';
 
 const SETTINGS_FILE_VERSION = 1 as const;
+export interface ResolvedAgentDelegates {
+  available: AgentRecord[];
+  unavailableIds: string[];
+}
+
 
 /** 对应 settings.json —— UI 偏好聚合。 */
 class ProfileSettings extends PersistBase {
@@ -282,6 +287,27 @@ export class Profile {
   }
 
   /**
+   * 按父 Agent 的配置顺序解析 outgoing delegates。只读取父 Agent 的 AGENT.md，
+   * target 直接 join hot registry；归档或不存在的 ID 保留为 unavailable。
+   */
+  public async resolveDelegates(parentId: string): Promise<ResolvedAgentDelegates | null> {
+    if (!this.agentRegistry.items.some((record) => record.id === parentId)) return null;
+    const parent = await this.getAgent(parentId);
+    if (!parent) return null;
+
+    const activeById = new Map(this.agentRegistry.items.map((record) => [record.id, record]));
+    const available: AgentRecord[] = [];
+    const unavailableIds: string[] = [];
+    const seen = new Set<string>(parent.config.delegates || []);
+    for (const delegateId of seen) {
+      const record = activeById.get(delegateId);
+      if (record && delegateId !== parentId) available.push(record);
+      else unavailableIds.push(delegateId);
+    }
+    return { available, unavailableIds };
+  }
+
+  /**
    * 单 agent 懒读 cold 字段。命中不到（目录被外部删 / agent id 错）返 null。
    * 不重复 record 字段（id 用 agentId 区分边界）；renderer 端按需 join AgentRecord。
    */
@@ -337,6 +363,7 @@ export class Profile {
   public async createAgent(input: {
     name: string;
     version: string;
+    description?: string;
     model?: string;
     emoji?: string;
     avatar?: string;
@@ -377,6 +404,7 @@ export class Profile {
     const dst = new Agent(this.id, id, this.agentRegistry, this.sessionIdx, this.jobRunIdx);
     dst.init({
       name: newName.trim(),
+      description: src.config.description,
       version: '1.0.0',
       model: src.config.model,
       emoji: src.config.emoji,
@@ -384,7 +412,7 @@ export class Profile {
       systemPrompt: src.systemPrompt,
       nowIso: ts,
     });
-    // patchFront 复制其余 front-matter 字段（thinkingLevel/mcpServers/skills/subAgents）
+    // patchFront 复制其余 front-matter 字段（thinkingLevel/mcpServers/skills/subAgents/delegates）
     // 写盘在 patchFront 内一并完成；此时 dst 还没进 agentRegistry.items，agentRegistry.syncRecord
     // 会找不到 id 而 no-op，下面 push 仍由 agentRegistry.persist 统一发 registry 事件。
     await dst.patchFront({
@@ -392,6 +420,7 @@ export class Profile {
       mcpServers: src.config.mcpServers,
       skills: src.config.skills,
       subAgents: src.config.subAgents,
+      delegates: src.config.delegates,
     });
 
     // 写顺序：AGENT.md（patchFront 已写）→ knowledge cp → agents.json

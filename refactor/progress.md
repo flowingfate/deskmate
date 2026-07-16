@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 1 已实现，等待用户 review**
-- 当前门禁：Step 1 `awaiting-review`；用户确认前不进入 Step 2
-- 业务步骤：0 / 13 complete（Step 1 尚待用户确认）
+- 总体阶段：**Step 2 已实现，等待用户 review**
+- 当前门禁：Step 2 `awaiting-review`；用户确认前不进入 Step 3
+- 业务步骤：1 / 13 complete（Step 2 尚待用户确认）
 - 测试步骤：Step 14 尚未开始
-- 生产代码变更：新增共享委派契约与 main 私有 normalization；未注册工具、未改变生产运行路径
+- 生产代码变更：普通 Agent 已可持久化 description/delegates，并提供显式 nullable graph resolver；未接入 subagent runtime
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -34,8 +34,8 @@
 
 | Step | 计划 | 状态 | 读取的上游产物 | 向下游交付的稳定产物 |
 |---:|---|---|---|---|
-| 1 | [目标契约与 Pi/Subagent 边界](step1.md) | awaiting-review | `context.md` | `src/shared/types/subAgentRunTypes.ts`；`src/main/pi/subagent/types.ts`；模块依赖规则 |
-| 2 | [Agent description/delegates 持久化](step2.md) | pending | Step 1 AgentId/contract | 可落盘的 Agent graph、ID resolver、IPC patch |
+| 1 | [目标契约与 Pi/Subagent 边界](step1.md) | complete | `context.md` | `src/shared/types/subAgentRunTypes.ts`；`src/main/pi/subagent/types.ts`；模块依赖规则 |
+| 2 | [Agent description/delegates 持久化](step2.md) | awaiting-review | Step 1 AgentId/contract | 可落盘的 Agent graph、ID resolver、IPC patch |
 | 3 | [独立顶层 subagent cmdline facade](step3.md) | pending | Step 1 request grammar | 未注册的新 facade/registry/run parser，供 Step 9 接 manager |
 | 4 | [执行 Agent 与 Session owner 分离](step4.md) | pending | Step 1 execution scope | Tool/Internal URL 可表达 own knowledge + parent local |
 | 5 | [委派能力 policy 与 reduced catalog](step5.md) | pending | Steps 2–4 | 硬 allow/deny policy、可构建 delegated catalog |
@@ -147,9 +147,22 @@
 - 仅保留有真实集中价值的 `normalizeSubAgentRunRequest`，并把少量校验直接写在函数内；
 - result 的运行时校验延后到 Step 7 的真实 submit/reducer 边界，避免 Step 1 先造第二层抽象。
 
+### 2026-07-16 — Step 2 启动
+
+- 用户明确要求开始 Step 2，视为 Step 1 review 通过；Step 1 状态切为 `complete`。
+- Step 2 计划按当前仓库复核后无需改写：`description` 保持 AGENT.md 源真值 + AgentRecord hot 缓存，`delegates` 保持 AgentDetail cold 字段；resolver 只按需读取父 Agent detail，再 join active registry，不在 snapshot/bootstrap fan-out 读取 AGENT.md。
+- 当时计划采用 trim/去空/稳定去重与 self 拒绝；该实现已被下方“Step 2 error contract review”替代。
+
+### 2026-07-16 — Step 2 error contract review
+
+- 用户指出 `normalizeAgentDelegates` 属于过度设计，已删除；delegates 由现有 patch/config 路径原样持久化。
+- 用户确认错误处理原则：普通函数/方法不能用签名不可见的 `throw` 表达可预期业务失败；此类失败必须返回 discriminated union、Result、null 等显式类型。
+- `Profile.resolveDelegates` 改为返回 `ResolvedAgentDelegates | null`；parent record/AGENT.md 缺失返回 null。resolver 内联完成解析所需 trim/去空/稳定去重，self/dangling/archived 进入 unavailable，不抛领域异常。
+- 删除本 step 新增的 Markdown description/delegates throw 校验；既有 parser 契约不在本 review 扩大重构。
+
 ## 执行记录
 
-### 2026-07-16 — Step 1 — awaiting-review
+### 2026-07-16 — Step 1 — complete
 - Plan review 变化：确认 shared direct import 与 Pi root export 边界；按用户反馈将 union 分支改为命名 `interface extends Base`，并删除尚无真实输入边界的 result/usage/list 归一化层。
 - 实际输入：第二轮 `context.md`；现有 `profileTypes.ts` 旧 runtime 只读参考；Pi public boundary。
 - 实际输出/API：`SubrunId` helpers；`SubAgentRunRequest/Result/RuntimeState`；`normalizeSubAgentRunRequest`；`SUB_AGENT_RUN_POLICY_LIMITS`。
@@ -159,5 +172,18 @@
 - unit-test.md 更新：保留 request policy normalization；result/usage/数组/URI validation 候选统一移至 Step 7。
 - 影响的下游 steps：2、3、5、6、7、9、11、14 已回写真实名称与边界；其余计划契约仍成立。
 - 用户 review 待确认：shared 字段、result 五态、policy 默认值/上限、`SubrunId` 规则。
+
+### 2026-07-16 — Step 2 — awaiting-review
+- Plan review 变化：无需重写原计划；确认 description 作为 AGENT.md 源真值 + AgentRecord hot 缓存，delegates 作为 AgentDetail cold 字段，resolver 只读父 detail 后 join hot registry。
+- 实际输入：Step 1 shared request/ID 契约；persist Hot/Cold、AGENT.md、IPC/atom 既有写路径。
+- 实际输出/API：`AgentRecord.description?`；AGENT.md/`AgentDetail.delegates?`；`AgentFrontPatch` description/delegates；`CreateAgentInput.description`；`Profile.resolveDelegates(parentId): Promise<ResolvedAgentDelegates | null>`。
+- graph 语义：delegates 原样落盘；resolver trim/去空/稳定去重；parent 缺失返回 null；self/dangling/archived 进入 unavailable；duplicate 复制 description 与 outgoing delegates；archive 不重写 incoming references。
+- 修改生产文件：`src/shared/persist/types/agent.ts`、`src/shared/persist/markdown.ts`、`src/shared/ipc/persist.ts`、`src/shared/types/profileTypes.ts`、`src/main/persist/{agent,profile,ipc,index}.ts`、`src/renderer/lib/chat/agentOps.ts`。
+- 写路径闭合：create 可直接带 description；patch 同步 AGENT.md → AgentRecord；detail/event 下发 delegates；archive 列表保留 description；renderer compat bridge 双向映射 description/delegates。app agent command 未扩展新 CLI 参数。
+- 静态与回归验证：初版及 error-contract review 修订后均完成 `check:impact`、workspace diagnostics、`npm run typecheck`、`npm run build`；全部通过（仅既有 chunk-size warning）。修订后 `npm test` 再次通过：145 files / 1618 tests。
+- 未做的运行验证：按重构政策未启动应用、未做 smoke/E2E；未新增测试文件。
+- unit-test.md 更新：删除独立 normalization/throw 候选；保留 graph round-trip，并新增 resolver null/self/dangling/archive/fan-out 候选。
+- 影响的下游 steps：5、8、9、10 已回写真实 resolver/字段/atom 边界；6 仅依赖普通 Agent ID，计划仍成立。
+- 用户 review 待确认：description hot/cold 拆分、nullable resolver、self 进入 unavailable、dangling/archive 输出、duplicate 复制规则。
 
 每个后续 step 完成后继续追加同结构记录。

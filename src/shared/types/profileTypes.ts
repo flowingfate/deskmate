@@ -197,6 +197,8 @@ export interface AgentPersona {
   avatar?: string;
   /** Agent name */
   name: string;
+  /** Agent 专长简介；真值来自 AGENT.md，列表层由 AgentRecord hot 缓存。 */
+  description?: string;
   /**
    * Model used.
    *
@@ -238,6 +240,8 @@ export interface AgentPersona {
   skills?: SkillBindings;
   /** Sub-agent name list referenced by the Agent */
   sub_agents?: string[];
+  /** 可委派的普通 Agent ID；保留 dangling ID 供 UI 显示 unavailable。 */
+  delegates?: string[];
 }
 
 /**
