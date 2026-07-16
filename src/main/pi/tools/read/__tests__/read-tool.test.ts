@@ -34,13 +34,13 @@ const PROFILE_ID = 'p_TEST';
 
 function makeCtx(): ToolContext {
   return {
+    mode: 'agent',
     profileId: PROFILE_ID,
     agentId,
     sessionId: 's',
     signal: new AbortController().signal,
     eventSender: null,
     tracer: Tracer.noop,
-    isSubAgent: false,
     callId: 'c',
     chunkStream: null,
   };

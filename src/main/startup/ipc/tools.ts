@@ -34,13 +34,13 @@ export default function setUpToolsIPC(_ctx: Context) {
       // chat 工具(executeCommand / spawn / 等)会因 ctx 不全在 handler 内抛错。
       const controller = new AbortController();
       const result = await tool.handler(args as never, {
+        mode: 'agent',
         profileId: '',
         agentId: '',
         sessionId: '',
         signal: controller.signal,
         eventSender: null,
         tracer: Tracer.noop,
-        isSubAgent: false,
         callId: `ipc_${Date.now()}`,
         chunkStream: null,
       });

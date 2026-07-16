@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (新增未注册的 subagent facade construction seam) -->
+<!-- Last verified: 2026-07-16 (ToolContext 改为 agent/delegate mode union) -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -42,31 +42,16 @@ interface LocalTool<TParams extends TSchema = TSchema> {
 ### ToolContext —— 显式上下文
 
 ```ts
-interface ToolContext {
-  profileId: string;
-  agentId: string;
-  sessionId: string;
-  signal: AbortSignal;
-  eventSender: WebContents | null;
-  tracer: Tracer;
-  isSubAgent: boolean;
-  callId: string;
-  chunkStream: ChunkStream | null;
-  catalog?: ToolCatalog;
-  getParentContextSummary?: () => Promise<string>;
-  getSubAgentConfig?: (name: string) => Promise<SubAgentConfig | undefined>;
-}
+type ToolContext =
+  | { mode: 'agent'; agentId: string; sessionId: string; /* common fields */ }
+  | { mode: 'delegate'; agentId: string; sessionId: string; delegateId: string; /* common fields */ };
 ```
 
-- 所有依赖**显式**作为 handler 参数传入。
-- 主链路 (`RegularSession.handleToolCalls`) 注入完整 ctx;JobRun(scheduler)注入
-  `eventSender = null` / `chunkStream = null` —— 工具内部用 `if (!ctx.chunkStream) return`
-  早返保护。
-- `getParentContextSummary` / `getSubAgentConfig` **仅 spawn 类工具消费**;
-  缺席时 spawn 工具显式抛错(不允许静默 no-op)。
-- IPC handler(`startup/ipc/tools.ts`)的 dev/debug 入口给空字符串 + Tracer.noop +
-  null chunkStream;chat-bound 工具(executeCommand / spawn 等)在此路径会因
-  ctx 不全在 handler 内抛错(预期行为)。
+- `agentId/sessionId` 始终定位 parent session。
+- `executorId(ctx)`：agent mode 返回 agentId；delegate mode 返回必填 delegateId。Knowledge/Skill 使用它，Local 始终使用 agentId。
+- `mode` 取代旧 `isSubAgent`；冻结的旧 `app subagent` 在 Step 9 前临时借 delegate mode 拒绝递归，该 bridge 不属于新 runtime 契约。
+- RegularSession/JobRun 与 debug/media/attachment 边界使用 agent mode；Step 8 新 runtime 使用真实 delegate ID。
+- `getParentContextSummary` 是新 `subagent run --with-parent-summary` 的正式 seam；旧配置读取不进入 ToolContext。
 
 ### per-turn ToolCatalog(`pi/tool.ts` 的 catalog 段)
 

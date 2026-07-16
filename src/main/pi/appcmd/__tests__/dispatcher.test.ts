@@ -20,10 +20,10 @@ import { describe, it, expect } from 'vitest';
 import { dispatchAppCommand, formatAppCmdContent } from '../dispatcher';
 import { AppCommandRegistry } from '../registry';
 import type { AppCommand, AppCmdContext } from '../types';
-import type { ToolContext } from '../../tools/types';
+import type { AgentToolContext, DelegateToolContext } from '../../tools/types';
 import { Tracer } from '@shared/log/trace';
 
-function makeToolCtx(overrides: Partial<ToolContext> = {}): ToolContext {
+function makeToolCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
     profileId: 'p',
     agentId: 'a',
@@ -31,10 +31,28 @@ function makeToolCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     signal: new AbortController().signal,
     eventSender: null,
     tracer: Tracer.noop,
-    isSubAgent: false,
     callId: 'c',
     chunkStream: null,
     ...overrides,
+    mode: 'agent',
+  };
+}
+
+function makeDelegateToolCtx(
+  overrides: Partial<DelegateToolContext> = {},
+): DelegateToolContext {
+  return {
+    profileId: 'p',
+    agentId: 'a',
+    sessionId: 's',
+    signal: new AbortController().signal,
+    eventSender: null,
+    tracer: Tracer.noop,
+    callId: 'c',
+    chunkStream: null,
+    delegateId: 'd',
+    ...overrides,
+    mode: 'delegate',
   };
 }
 
@@ -123,38 +141,32 @@ describe('dispatchAppCommand', () => {
     expect(captured!.sessionId).toBe('S1');
     expect(captured!.callId).toBe('C1');
     expect(captured!.signal).toBe(ac.signal);
-    // `isSubAgent` 是 spawn 专属字段,但走 boolean 透传(true/false 都有意义),
-    // 默认 false。`subagent` 命令读它做递归保护;其它命令忽略。
-    expect(captured!.isSubAgent).toBe(false);
-    // spawn 专属可选字段:不传时透传为 undefined(由 subagent 命令检查)。
-    expect(captured!.getSubAgentConfig).toBeUndefined();
+    expect(captured!.mode).toBe('agent');
     expect(captured!.getParentContextSummary).toBeUndefined();
-    // `catalog` 不在精确子集内 —— AppCommand 不消费 per-turn 工具目录。
-    expect((captured as unknown as Record<string, unknown>).catalog).toBeUndefined();
+    expect(Object.hasOwn(captured!, 'catalog')).toBe(false);
   });
 
-  it('isSubAgent=true 透传到 AppCmdContext(subagent 域递归保护依赖)', async () => {
+  it('delegate mode 与 delegateId 透传到 AppCmdContext', async () => {
     let captured: AppCmdContext | null = null;
     const cmd = makeCmd('cap', async (_argv, ctx) => {
       captured = ctx;
     });
-    await dispatchAppCommand(cmd, [], makeToolCtx({ isSubAgent: true }));
-    expect(captured!.isSubAgent).toBe(true);
+    await dispatchAppCommand(cmd, [], makeDelegateToolCtx({ delegateId: 'delegate-1' }));
+    expect(captured!.mode).toBe('delegate');
+    if (captured!.mode === 'delegate') expect(captured!.delegateId).toBe('delegate-1');
   });
 
-  it('spawn 专属字段(getSubAgentConfig/getParentContextSummary)透传引用相同', async () => {
+  it('parent summary getter 透传引用相同', async () => {
     let captured: AppCmdContext | null = null;
     const cmd = makeCmd('cap', async (_argv, ctx) => {
       captured = ctx;
     });
-    const getSubAgentConfig = async () => undefined;
     const getParentContextSummary = async () => 'parent';
     await dispatchAppCommand(
       cmd,
       [],
-      makeToolCtx({ getSubAgentConfig, getParentContextSummary }),
+      makeToolCtx({ getParentContextSummary }),
     );
-    expect(captured!.getSubAgentConfig).toBe(getSubAgentConfig);
     expect(captured!.getParentContextSummary).toBe(getParentContextSummary);
   });
 

@@ -11,7 +11,7 @@
 
 ## 2. 开始前 review
 
-1. 阅读 chat tool renderer registry、app/web/shell renderer模式和旧 app/subagent卡片；
+1. 阅读 chat tool renderer registry和当前 app/web/shell renderer模式；不打开旧 app/subagent卡片或旧测试作为模板；
 2. 从 Step 9 获取最终 manager state/cancel API，并核对 Step 3 已固定的单调用 `{ outcome }` envelope；
 3. 从 Step 6获取 parent-scoped subrun query API；
 4. 设计 shared IPC，确认 preload四层协变；
@@ -20,7 +20,7 @@
 
 ## 3. IPC namespace
 
-新增独立 `subAgent` run namespace或命名更明确的 `subagentRun`（实现前结合旧 channel冲突决定，并更新所有文档）：
+新增命名明确且不复用旧 channel 的 `subagentRun` namespace，并更新所有文档：
 
 Main → Renderer：
 
@@ -53,7 +53,7 @@ Step 12再决定是否暴露 `getRunMessages`；本 step不让 card预取 transc
 - run result.status 映射 completed/partial/blocked/failed/cancelled；任意 `kind: 'rejected'` 显示调用拒绝且不伪造 subrunId；
 - correlationId匹配各自 parent tool call；run live state按 parent identity + subrunId更新；final response到达后以各 tool result JSON为事实源。
 
-不再经 `renderers/app/subagent`。
+注册新顶层 renderer 后，从生产 registry删除旧 renderer import；确认不可达后整体删除旧 `renderers/app/subagent` 源码，不修改其内部实现。
 
 ## 5. 单任务卡片
 
@@ -107,6 +107,7 @@ Step 12再决定是否暴露 `getRunMessages`；本 step不让 card预取 transc
 - typecheck/build/impact；
 - IPC whitelist/handler/binding编译闭合；
 - renderer registry只有顶层 subagent新入口；
+- 搜索确认旧 subagent renderer 路径已删除且无生产引用；
 - component行数检查；
 - 搜索 state key 不单独使用 `subrunId`。
 

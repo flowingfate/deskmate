@@ -14,36 +14,20 @@ import { SubAgentManager as SubAgentManagerImpl } from '@main/lib/subAgent/subAg
 import type { AppCmdContext } from '../../../types';
 
 /**
- * 校验 ctx 是否满足 spawn 类命令的契约:
- *   - 不是 sub-agent 链路(递归 spawn 拒绝)
- *   - `getSubAgentConfig` / `getParentContextSummary` 已被 caller 注入
- *
- * 通过返回 `manager` 单例,失败时返回 error 字符串供子命令落 stderr +
- * exit code。这把"spawn 前置校验"集中在一处,spawn / spawn-many 共用。
+ * 校验 ctx 是否满足旧 spawn 类命令的唯一运行约束：delegate mode 禁止
+ * 递归 spawn。Manager 与旧配置读取都留在本旧模块内部，不再进入通用
+ * ToolContext / AppCmdContext。
  *
  * 拒绝场景退出码语义(与 mcp/skill 等域纪律一致):
  *   - recursion:exit 1(业务拒绝)
- *   - missing ctx field:exit 1(应用启动期编程错误,LLM 看到原因即可)
  */
 export function ensureSpawnPrerequisites(
   ctx: AppCmdContext,
 ): { ok: true; manager: SubAgentManager } | { ok: false; error: string } {
-  if (ctx.isSubAgent) {
+  if (ctx.mode === 'delegate') {
     return {
       ok: false,
       error: 'recursion not allowed: sub-agents cannot spawn other sub-agents.',
-    };
-  }
-  if (!ctx.getSubAgentConfig) {
-    return {
-      ok: false,
-      error: 'spawn requires ctx.getSubAgentConfig (caller must inject it).',
-    };
-  }
-  if (!ctx.getParentContextSummary) {
-    return {
-      ok: false,
-      error: 'spawn requires ctx.getParentContextSummary (caller must inject it).',
     };
   }
   return { ok: true, manager: SubAgentManagerImpl.getInstance() };

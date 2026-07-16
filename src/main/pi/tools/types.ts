@@ -18,7 +18,6 @@
 import type { Static, Tool as PiTool, TSchema } from '@earendil-works/pi-ai';
 import type { ToolResultImage } from '@shared/persist/types'
 import type { Tracer } from '@shared/log/trace';
-import type { SubAgentConfig } from '@shared/persist/types'
 import type { WebContents } from 'electron';
 
 import type { ToolCatalog } from '../tool';
@@ -38,59 +37,50 @@ export type ToolResult =
   | { ok: true; content: string; images?: ToolResultImage[]; deliverables?: readonly string[] }
   | { ok: false; error: string };
 
-/**
- * 单次工具执行的上下文。所有依赖**显式**作为参数传入。
- *
- * 字段语义:
- * - `signal`:caller(turn loop)对取消的唯一表达,handler 必须把它一路传到
- *   底层 fetch / spawn / page。
- * - `eventSender`:可空(JobRun / 测试路径)。human-loop 工具在 null 时退化
- *   为"用户拒绝"等价语义。
- * - `tracer`:caller 已 derive 出 `chat.tool` span 后注入。handler 内部
- *   嵌套 LLM / sub-agent 应进一步 derive,保持 trace 树连贯。
- * - `catalog`:per-turn 构建的 ToolCatalog。**当前没有 LocalTool 实际消费**
- *   它(spawn 类工具走 `getSubAgentConfig` + SubAgentChat 自建 sub-agent
- *   catalog;其它工具无需"本轮还有哪些工具可用"信息)。caller 仍注入它
- *   作为扩展点:如未来加入"看到当前 LLM 工具集再做路由"的工具,字段已就位。
- * - `getParentContextSummary` / `getSubAgentConfig`:**仅 sub-agent 派生类
- *   入口消费**(今天是 `app subagent spawn` / `spawn-many` 经 AppCmdContext
- *   透传过去的 `subagent` 命令)。缺席时这些命令必须显式抛错 —— 不允许
- *   静默 no-op 误导用户。
- */
-export interface ToolContext {
-  profileId: string;
+/** 普通 Agent 在自己的 session 中执行。 */
+export interface AgentExecution {
+  mode: 'agent';
+  /** 当前 session 所属的 Agent。普通模式下也是执行 Agent。 */
   agentId: string;
+}
+
+/** 父 Agent 把自己的 session 委派给另一个普通 Agent 执行。 */
+export interface DelegateExecution {
+  mode: 'delegate';
+  /** 当前 session 所属的父 Agent。 */
+  agentId: string;
+  /** 实际执行当前任务的 Agent。 */
+  delegateId: string;
+}
+
+export type ExecutionIdentity = AgentExecution | DelegateExecution;
+
+/** 返回当前真正执行模型、Knowledge、Skills 与工具配置的 Agent ID。 */
+export function executorId(identity: ExecutionIdentity): string {
+  return identity.mode === 'delegate' ? identity.delegateId : identity.agentId;
+}
+
+/** 单次工具执行的公共上下文。所有依赖均由 caller 显式注入。 */
+interface ToolContextBase {
+  profileId: string;
   sessionId: string;
   signal: AbortSignal;
   eventSender: WebContents | null;
   tracer: Tracer;
-  /** sub-agent 链路标记。用于 spawn 类工具的递归保护。 */
-  isSubAgent: boolean;
-  /**
-   * 当前 toolCall.id 的快照,供 spawn 类工具传给 SubAgentManager 做
-   * correlationId 关联(让 renderer 端的 sub-agent 状态卡片能精确对应到
-   * 父 tool call)。caller 必须填,不允许 undefined,缺失等价"对应不上 UI"。
-   */
+  /** 当前 toolCall.id，供运行状态和父消息关联。 */
   callId: string;
-  /**
-   * 主链路推流口子。RegularSession 注入 `activeStream`,JobRun / 测试路径 = null。
-   *
-   * 用途专一:**部分 tool_result 流式输出** —— `shell` 在命令真正退出前可
-   * 以先把当前 stdout/stderr 片段、device-auth code 之类
-   * 中间态推回 UI,避免 30s+ 的命令期间 UI 没反馈。完成态由 turn loop 在
-   * tool 返回后统一推 `tool_result`,partial 与 final 共享同一 `toolCallId`。
-   *
-   * `null` 等价"无可推流端",工具内部统一以 `if (!ctx.chunkStream) return`
-   * 早返保护(scheduler 静默跑时即此路径)。
-   */
+  /** RegularSession 注入推流对象；JobRun / 测试路径为 null。 */
   chunkStream: import('@shared/types/streamingTypes').ChunkStream | null;
-  /** 由 pi 层 turn loop 注入的 per-turn 工具目录,供 spawn 类工具消费。 */
+  /** 由 pi 层 turn loop 注入的 per-turn 工具目录。 */
   catalog?: ToolCatalog;
-  /** sub-agent 专用:取父 chat 的上下文摘要。其它工具忽略。 */
+  /** 新 `subagent run --with-parent-summary` 按需读取父会话摘要。 */
   getParentContextSummary?: () => Promise<string>;
-  /** sub-agent 专用:按 name 取当前 agent 已注册的 sub-agent 配置。 */
-  getSubAgentConfig?: (name: string) => Promise<SubAgentConfig | undefined>;
 }
+export interface AgentToolContext extends ToolContextBase, AgentExecution {}
+
+export interface DelegateToolContext extends ToolContextBase, DelegateExecution {}
+
+export type ToolContext = AgentToolContext | DelegateToolContext;
 
 /**
  * 单个本地工具的最小可执行单元。spec 即 pi-ai `Tool<TParams>`,可直接喂给

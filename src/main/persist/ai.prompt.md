@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Agent description/delegates graph 持久化与 resolver) -->
+<!-- Last verified: 2026-07-16 (local:// 按 parent agentId 查找 regular/job session) -->
 
 # Persist 模块（新布局 store 层）
 
@@ -76,7 +76,7 @@ Profiles.get().active()          → Profile
 两类入口的取舍:
 - 业务调用方如果**已经从上下文知道 kind**(URL 路由 `/agent/:agentId/:sessionId` vs `/agent/:agentId/job/:jobId/:sessionId`、IPC 入参 `agentIpc.markSessionRead` vs `markJobRunRead` 等),走 `getSession` / `getRun` 各自的入口 —— 类型层把 kind 钉死,下游不必判断。
 - **只有当调用方天然不区分 kind** 时才用 `findSessionAcrossKinds`。当前合法用例:
-  - `LocalProtocolHandler` —— 解析 `local://` URI 时,`ResolveContext.sessionId` 来自 `ToolContext.sessionId`,而 `JobRun.handleToolCalls` / `RegularSession.handleToolCalls` 注入同字段,handler 不该按 caller kind 分裂。
+  - `LocalProtocolHandler` —— 解析 `local://` 时直接用 `ResolveContext.agentId` 取得 parent Agent，再用 `sessionId` 调本方法；delegateId 不参与 session 定位。
   - `getSessionFilesDir` IPC —— renderer `WorkspaceExplorer` 在 job-run 与 regular 路由下都展示 session-files 区段,需要同一查询路径。
 - 反例:不要用它做"全局按 sessionId 找 session"的兜底。仍然要从上下文区分 kind 时,坚持各自入口。
 

@@ -122,9 +122,8 @@ export async function buildToolCatalogForAgent(agentCfg: AgentConfig): Promise<T
  *   - 本地工具读 `cfg.tools`(白名单)与 `cfg.disallowTools`(黑名单);
  *     语义与主 agent 主体一致 + 黑名单二次过滤。
  *
- * **递归保护**走 `app subagent ...` 命令内部的 `ensureSpawnPrerequisites`
- * —— sub-agent 调到那条命令时 `ctx.isSubAgent === true`,命令立即 exit 1
- * 并写 stderr。这里**不**再按 spec.name 二次过滤:
+ * **递归保护**走 `app subagent ...` 命令内部的 `ensureSpawnPrerequisites`：
+ * delegate mode 会立即 exit 1 并写 stderr。这里**不**再按 spec.name 二次过滤:
  *   - 老 `spawn_subagent` / `spawn_subagents` LocalTool 已物理删除,catalog
  *     不可能再列。
  *   - 替代品 `app` 工具是 sub-agent 触达全部应用能力的**唯一**入口,绝不

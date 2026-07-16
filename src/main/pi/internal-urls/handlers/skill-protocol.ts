@@ -15,8 +15,8 @@
  *   `skill://{name}/scripts/foo.py` 被读取。相对路径的 base 天然就是 skill name。
  * - **immutable: true** —— skill 文件是 agent 资产,`write skill://foo` 应被拒。
  *   本 handler 不实现 `write?`,router 在写侧抛 read-only。
- * - **绑定授权**：`resolve` 与 `resolveToPath` 均要求 `ctx.agentId` 的 bindings map
- *   含该 skill，off skill 不能被 LLM 读取或执行。
+ * - **绑定授权**：`resolve` 与 `resolveToPath` 均要求 execution Agent 的 bindings
+ *   map 含该 skill，未绑定的 skill 不能被 LLM 读取或执行。
  * - **`resolveToPath` 实现**:skill 文件需要被 shell 执行(`python <abs>`)，故有意
  *   翻译为绝对路径；裸 name 指向 SKILL.md **文件**(非目录)，避免 dispatch 的
  *   filesystem 分支撞上 EISDIR。
@@ -32,6 +32,7 @@ import { PERSIST_PATH } from '@shared/persist/path';
 import { boundSkillNames } from '@shared/types/profileTypes';
 import { getAppRoot } from '@main/persist/lib/root';
 import { Profile } from '@main/persist/profile';
+import { executorId } from '../../tools/types';
 import {
   ResourceNotFoundError,
   type InternalResource,
@@ -83,7 +84,7 @@ export class SkillProtocolHandler implements ProtocolHandler {
 
   private async assertSkillEnabled(name: string, ctx: ResolveContext): Promise<void> {
     const profile = await Profile.getOrLoad(ctx.profileId);
-    const agent = await profile.getAgent(ctx.agentId);
+    const agent = await profile.getAgent(executorId(ctx));
     if (!agent || !boundSkillNames(agent.config.skills).includes(name)) {
       throw new ResourceNotFoundError(
         `Skill "${name}" is not enabled for the current agent.`,

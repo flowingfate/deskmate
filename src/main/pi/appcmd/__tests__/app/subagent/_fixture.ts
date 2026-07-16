@@ -22,7 +22,7 @@
 import { vi } from 'vitest';
 
 import { Tracer } from '@shared/log/trace';
-import type { ToolContext } from '@main/pi/tools/types';
+import type { AgentToolContext } from '@main/pi/tools/types';
 
 // ---------------------------------------------------------------------------
 // 被 mock 模块的 stub state(必须 hoisted)
@@ -67,28 +67,19 @@ if (!appCommands.has('subagent')) {
   appCommands.register(subagentCommand);
 }
 
-/**
- * `ToolContext` 默认值:`isSubAgent=false`,**包含 spawn 专属字段**(否则
- * `_shared.ensureSpawnPrerequisites` 会因缺字段而 exit 1)。各 test 覆盖
- * 时显式传递。
- */
-function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
-  return {
+
+function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
+  const common = {
     profileId: 'profile-test',
     agentId: 'agent-test',
     sessionId: 'session-test',
     signal: new AbortController().signal,
     eventSender: null,
     tracer: new Tracer('test'),
-    isSubAgent: false,
     callId: 'call-test',
     chunkStream: null,
-    // 默认提供 spawn 专属字段以让 ensureSpawnPrerequisites 通过;
-    // "测 ctx 字段缺失"的 case 自己显式置 undefined 覆盖。
-    getSubAgentConfig: vi.fn(),
-    getParentContextSummary: vi.fn(),
-    ...overrides,
   };
+  return { ...common, ...overrides, mode: 'agent' };
 }
 
 export interface RunResult {
@@ -107,7 +98,7 @@ export interface RunResult {
  */
 export async function runSubagent(
   argvOrCmdline: string | readonly string[],
-  overrides?: Partial<ToolContext>,
+  overrides?: Partial<AgentToolContext>,
 ): Promise<RunResult> {
   const argv = Array.isArray(argvOrCmdline)
     ? Array.from(argvOrCmdline)

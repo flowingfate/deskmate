@@ -247,9 +247,9 @@ catch e:
 
 **关键不变量**:
 
-- **handler 显式拿 ctx**:`ToolContext` 含 `profileId / agentId / sessionId / signal / eventSender / tracer / isSubAgent / callId / chunkStream / catalog?` —— Phase 3 已删除"静态执行上下文"读法,新代码不允许回到全局字段。
+- **handler 显式拿 ctx**：`ToolContext` 用 `mode:'agent' | 'delegate'` 区分执行角色；`agentId/sessionId` 固定 parent session，delegate 分支必填 `delegateId`。其它字段仍显式注入，禁止回读全局执行上下文。
 - **错误不抛,以字符串回填**:assistant/tool 配对必须完整,否则下一轮 LLM 看到孤儿 toolCall 会报 schema 错。
-- **`isSubAgent` 透传**:`spawn_subagent` / `spawn_subagents` 工具入口在 sub-agent context 下拒绝再 spawn,杜绝无限递归。
+- **递归保护**：旧 `app subagent` 在 delegate mode 下拒绝再 spawn；`mode` 已取代 `isSubAgent`。
 - **`eventSender=null` 模式**:JobRun(scheduler 静默)走这条;`ask` / 选择 / 表单 类工具自动返回 cancel 默认应答 = "用户拒绝",turn 自然收敛。
 - **`chunkStream=null` 模式**:JobRun / 测试路径无可推流端,工具内 `if (!ctx.chunkStream) return` 早返,跳过 partial-result 推流。
 
@@ -464,7 +464,7 @@ onTurnComplete → IDLE
 
 ## 15. 子 Agent
 
-`lib/subAgent/SubAgentManager` + `SubAgentChat` 实现 spawn_subagent 工具。每个 sub-agent 跑独立的 pi.RegularSession(内存版 `PersistSessionLike`,不落盘),复用 §4 turn loop。`ToolExecutionScope.isSubAgent = true` 透传到 sub-agent 自己的 toolScope,sub-agent 内 `spawn_subagent` 工具拒绝再 spawn 防递归。详见 [data-flow.md "子智能体执行流"](data-flow.md)。
+`lib/subAgent/SubAgentManager` + `SubAgentChat` 是当前旧生产路径。旧 SubAgentSession 透传 delegate mode，使 `app subagent` 拒绝递归；其 `delegateId` 暂复用父 `agentId`，只保持旧父资源行为。新普通 Agent 委派运行时由 `pi/subagent` 分步接替。
 
 ---
 

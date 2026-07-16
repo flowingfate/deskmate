@@ -182,25 +182,6 @@ describe('subagent spawn-many', () => {
     expect(subagentMocks.spawnManyInternal).not.toHaveBeenCalled();
   });
 
-  it('ctx.isSubAgent === true → exit 1 + recursion 拒绝', async () => {
-    const r = await runSubagent(
-      ['spawn-many', '--task', 'a:t'],
-      { isSubAgent: true },
-    );
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain('recursion not allowed');
-    expect(subagentMocks.spawnManyInternal).not.toHaveBeenCalled();
-  });
-
-  it('ctx.getSubAgentConfig 缺失 → exit 1', async () => {
-    const r = await runSubagent(
-      ['spawn-many', '--task', 'a:t'],
-      { getSubAgentConfig: undefined },
-    );
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain('getSubAgentConfig');
-    expect(subagentMocks.spawnManyInternal).not.toHaveBeenCalled();
-  });
 
   it('kernel 返回 ok=true → exit 0', async () => {
     subagentMocks.spawnManyInternal.mockResolvedValueOnce({

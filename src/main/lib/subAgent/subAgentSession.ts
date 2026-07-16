@@ -10,7 +10,7 @@
  * - messageBridge.toPiContext / fromPiAssistantMessage：chatTypes <-> pi.Message
  * - pi.checkAndCompress：跨形态共用的压缩链路（阈值可注入）
  * - resolveModel / resolveCredentials：跨 provider model + apiKey + baseUrl 解析
- * - pi.executeToolCall：local / mcp tool 执行 + isSubAgent 透传
+ * - pi.executeToolCall：local / mcp tool 执行 + delegate mode 透传
  * - pi.errors.classifyError：服务端 overflow 走强制压缩重试
  *
  * 消息历史只放在 this.messages（内存数组）—— 没有任何持久化形态需要同步。
@@ -420,9 +420,13 @@ export class SubAgentSession {
 
       const call = { id: tc.id, name: tc.name, arguments: tc.arguments };
       const ctx: ToolContext = {
+        mode: 'delegate',
         profileId: this.profileId,
         agentId: this.agentId,
         sessionId: this.sessionId,
+        // Step 9 取消旧 `app subagent` 注册后删除本适配。旧 runtime 没有普通
+        // Agent delegate identity，临时复用父 ID，不能作为新 runtime 范例。
+        delegateId: this.agentId,
         signal,
         eventSender: null,
         tracer: deriveToolTracer(parentTracer, call, {
@@ -430,12 +434,9 @@ export class SubAgentSession {
           agentId: this.agentId,
           sessionId: this.sessionId,
         }),
-        isSubAgent: true,
         callId: call.id,
         chunkStream: null,
         catalog,
-        // sub-agent 不能再 spawn 子 sub-agent;留这两个 stub 给 spawn 工具
-        // 内部的"缺失即抛"断言走不到(catalog 已不暴露 spawn_*)。
       };
 
       const result = await executeToolCall(call, catalog, ctx);

@@ -287,17 +287,16 @@ export class RegularSession extends BaseSession {
       toolCalls.map((tc) => {
         const call = { id: tc.id, name: tc.name, arguments: tc.arguments ?? {} };
         const ctx: ToolContext = {
+          mode: 'agent',
           profileId: this.profileId,
           agentId: this.agentId,
           sessionId: this.id,
           signal,
           eventSender,
           tracer: deriveToolTracer(parent, call, { profileId: this.profileId, agentId: this.agentId, sessionId: this.id }),
-          isSubAgent: false,
           callId: call.id,
           chunkStream: stream,
           catalog,
-          getSubAgentConfig: (name) => this.getSubAgentConfigByName(name),
           getParentContextSummary: () => this.getContextSummary(),
         };
         return executeToolCall(call, catalog, ctx);

@@ -12,10 +12,10 @@
 import { describe, it, expect } from 'vitest';
 
 import { ask } from '../ask';
-import type { ToolContext } from '../types';
+import type { AgentToolContext } from '../types';
 import { Tracer } from '@shared/log/trace';
 
-function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
+function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
     profileId: 'p',
     agentId: 'a',
@@ -23,10 +23,10 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     signal: new AbortController().signal,
     eventSender: null,
     tracer: Tracer.noop,
-    isSubAgent: false,
     callId: 'c',
     chunkStream: null,
     ...overrides,
+    mode: 'agent',
   };
 }
 

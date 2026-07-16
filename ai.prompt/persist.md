@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-16 (Agent description/delegates graph 与 resolver) -->
+<!-- Last verified: 2026-07-16 (local:// session owner 与 executor identity 分离) -->
 
 ## 1. 范围
 
@@ -254,6 +254,7 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 - agent Knowledge Base 路径固定为 `${agentRoot}/knowledge`,无配置覆盖入口。
   `KnowledgeProtocolHandler.resolveBaseDir` 直接拼这个路径,renderer 走 `knowledge://`
   URI 解析。
+- `local://` 始终沿 `agentId → Agent.findSessionAcrossKinds(sessionId)` 定位 parent RegularSession/JobRun；delegate mode 的 `delegateId` 只决定 execution Agent 的 Knowledge/Skills，不参与 parent store 定位。
 - MCP server config 的 `url` / `env` 只接受绝对路径(没有占位符展开层)。
 
 ---

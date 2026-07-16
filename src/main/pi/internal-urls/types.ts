@@ -13,7 +13,7 @@
  * 2. **handler 不持状态** —— 所有 per-session / per-profile 状态由 caller 通过
  *    {@link ResolveContext} 注入。handler 实例进程级单例,跟 `ToolContext` 不耦合。
  */
-import type { ToolContext } from '../tools/types';
+import type { AgentExecution, DelegateExecution, ToolContext } from '../tools/types';
 
 /**
  * Handler 返回给 router 的原始资源 payload。`immutable` 由 router 从
@@ -46,24 +46,17 @@ export interface InternalResource {
   immutable?: boolean;
 }
 
-/**
- * Caller 注入给 handler 的上下文,跟 {@link ToolContext} 是精确子集(spawn 专属
- * 字段不进来)。
- *
- * `profileId` / `agentId` / `sessionId` 是必填:
- * - `skill://foo` 需要 profileId 才能找到 `${root}/profiles/{pid}/skills/foo/SKILL.md`
- * - `local://staging` 需要 sessionId 才能定位 session-scoped 暂存目录
- * - `agent://abc` 需要 profileId 才能区分跨 profile 的同 id agent
- *
- * 缺失视为程序 bug —— handler 应直接抛错,不允许"猜一个默认值"。
- */
-export interface ResolveContext {
+/** Internal URL handler 的公共 session/profile 上下文。 */
+interface ResolveContextBase {
   readonly profileId: string;
-  readonly agentId: string;
   readonly sessionId: string;
-  /** Caller 的取消信号,handler 应一路透传到底层 I/O。 */
   readonly signal?: AbortSignal;
 }
+export interface AgentResolveContext extends ResolveContextBase, AgentExecution {}
+
+export interface DelegateResolveContext extends ResolveContextBase, DelegateExecution {}
+
+export type ResolveContext = AgentResolveContext | DelegateResolveContext;
 
 /**
  * 一个 scheme 的 handler。
@@ -164,19 +157,17 @@ export interface UrlCompletion {
   readonly description?: string;
 }
 
-/**
- * `write` 工具调 `ProtocolHandler.write?` 时注入的上下文。
- *
- * 跟 {@link ResolveContext} 同形(profile/agent/session/signal),单独定义
- * 让 read/write 路径的 ctx 命名清晰 —— handler 实现时一眼看出"我现在在
- * 处理读还是写"。
- */
-export interface WriteContext {
+/** `write` handler 使用的同形 execution context，单独命名以区分读写入口。 */
+interface WriteContextBase {
   readonly profileId: string;
-  readonly agentId: string;
   readonly sessionId: string;
   readonly signal?: AbortSignal;
 }
+export interface AgentWriteContext extends WriteContextBase, AgentExecution {}
+
+export interface DelegateWriteContext extends WriteContextBase, DelegateExecution {}
+
+export type WriteContext = AgentWriteContext | DelegateWriteContext;
 
 /**
  * Sentinel:handler.resolve 命中 ENOENT 时抛此错。
@@ -202,7 +193,18 @@ export class ResourceNotFoundError extends Error {
  * 看见。
  */
 export function toResolveContext(ctx: ToolContext): ResolveContext {
+  if (ctx.mode === 'delegate') {
+    return {
+      mode: 'delegate',
+      profileId: ctx.profileId,
+      agentId: ctx.agentId,
+      sessionId: ctx.sessionId,
+      delegateId: ctx.delegateId,
+      signal: ctx.signal,
+    };
+  }
   return {
+    mode: 'agent',
     profileId: ctx.profileId,
     agentId: ctx.agentId,
     sessionId: ctx.sessionId,
@@ -217,7 +219,18 @@ export function toResolveContext(ctx: ToolContext): ResolveContext {
  * call site 处一眼可辨,handler 实现也不用做形态判断。
  */
 export function toWriteContext(ctx: ToolContext): WriteContext {
+  if (ctx.mode === 'delegate') {
+    return {
+      mode: 'delegate',
+      profileId: ctx.profileId,
+      agentId: ctx.agentId,
+      sessionId: ctx.sessionId,
+      delegateId: ctx.delegateId,
+      signal: ctx.signal,
+    };
+  }
   return {
+    mode: 'agent',
     profileId: ctx.profileId,
     agentId: ctx.agentId,
     sessionId: ctx.sessionId,

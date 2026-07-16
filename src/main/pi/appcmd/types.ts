@@ -18,22 +18,16 @@
 
 import type { Tracer } from '@shared/log/trace';
 import type { ChunkStream } from '@shared/types/streamingTypes';
-import type { SubAgentConfig } from '@shared/persist/types'
 import type { WebContents } from 'electron';
+import type { AgentExecution, DelegateExecution } from '../tools/types';
 
 /**
  * `AppCommand.run` 收到的执行上下文。
- *
- * 设计:`ToolContext` 的**精确子集 + spawn 专属可选字段** + stdio helpers。
- *   - 主体子集是"AppCommand 普遍可能用到"的字段:profile/agent/session
- *     id、cancel signal、tracer、event sender、chunk stream、callId。
- *     `catalog` 仍然不暴露 —— per-turn 工具目录是 spawn 链路用,不是
- *     AppCommand 业务用。
- *   - **spawn 专属可选字段**(`isSubAgent` / `getSubAgentConfig` /
- *     `getParentContextSummary`)只服务 `subagent` 域:递归保护 + 解析
- *     当前 agent 可用 sub-agent 列表 + 取父上下文摘要。其它 AppCommand
- *     一律忽略;`subagent` 域缺失这些字段会显式抛错(与老 LocalTool
- *     `spawn_subagent` 同纪律)—— 不允许静默 no-op。
+ * 设计:`ToolContext` 的精确子集 + stdio helpers。
+ *   - `mode/agentId/sessionId/delegateId` 保持同一 discriminated union；冻结的
+ *     旧 `app subagent` 在 Step 9 前临时用 delegate mode 拒绝递归。
+ *   - `getParentContextSummary` 服务新 `subagent run --with-parent-summary`；
+ *     缺失时由命令返回显式业务错误。
  *   - stdio helpers(`print` / `printErr` / `setExitCode`)让 run 实现像
  *     写 Node CLI 一样:不返回结构化对象,而是"往 stdout/stderr 写,设个
  *     exit code"。dispatcher 收集后合成 `ToolResult`。
@@ -41,69 +35,28 @@ import type { WebContents } from 'electron';
  * **不变量**:run 实现**不允许**回读任何全局 / 静态字段获取"当前执行
  * 上下文",一律走 `ctx` 参数 —— 与 ToolContext 同纪律。
  */
-export interface AppCmdContext {
-  // ---- 透传字段(与 ToolContext 同义,handler 可直接用) ----
+interface AppCmdContextBase {
   profileId: string;
-  agentId: string;
   sessionId: string;
   signal: AbortSignal;
   tracer: Tracer;
   eventSender: WebContents | null;
   chunkStream: ChunkStream | null;
-  /** 当前 toolCall.id,与 ToolContext.callId 同义 —— 给需要 correlationId 的命令用。 */
+  /** 当前 toolCall.id，供需要 correlationId 的命令使用。 */
   callId: string;
-
-  // ---- spawn 专属字段(仅 `subagent` 域消费,其它域忽略) ----
-
-  /**
-   * sub-agent 链路标记。`subagent` 命令用它做递归保护:`true` 时拒绝
-   * spawn(返回 exit 1)。其它 AppCommand 一律忽略此标记；是否允许调用由各命令
-   * 自身契约决定，不在共享类型层判断。
-   */
-  isSubAgent: boolean;
-
-  /**
-   * 按 name 取当前 agent 已注册的 sub-agent 配置。仅 `subagent` 域消费;
-   * 该域缺席即抛错。其它命令永远不应读这个字段。
-   */
-  getSubAgentConfig?: (name: string) => Promise<SubAgentConfig | undefined>;
-
-  /**
-   * 取父 chat 的上下文摘要,供 sub-agent 启动期注入。仅 `subagent` 域消费;
-   * 该域缺席即抛错。其它命令永远不应读这个字段。
-   */
+  /** 新 `subagent run --with-parent-summary` 按需读取父会话摘要。 */
   getParentContextSummary?: () => Promise<string>;
-
-  // ---- stdio helpers(dispatcher 提供,run 实现按需调用) ----
-
-  /**
-   * 累积到 stdout buffer。允许多次调用,顺序保留。
-   * 不自动追加换行 —— 跟 Node `process.stdout.write` 一样,需要换行自己加。
-   */
   print(text: string): void;
-
-  /**
-   * 累积到 stderr buffer。语义同 `print`。
-   * dispatcher 在合成最终 content 时,stderr 非空才会拼进去。
-   */
   printErr(text: string): void;
-
-  /**
-   * 设置 exit code。默认 0。
-   * 任何非 0 值都会被合成进最终 content(`(exit <code>)`),LLM 据此判断
-   * 命令是否成功 —— 跟 shell 完全一致的心智模型。
-   */
   setExitCode(code: number): void;
-
-  /**
-   * 登记本次命令产出 / 修改的用户可见文件 URI(如 `web download` 落盘的
-   * `local://...`)。dispatcher 收集后挂到 `AppCmdInternalResult.deliverables`,
-   * 经 facade → `ToolResult.deliverables` 回流给 sub-agent 审计 —— 与 stdio
-   * 同纪律,run 实现"像写 CLI 一样"显式登记产出,不靠下游解析输出反推。
-   * 产出型命令(download 等)调用;只读命令一律不调。
-   */
   addDeliverable(uri: string): void;
 }
+
+export interface AgentAppCmdContext extends AppCmdContextBase, AgentExecution {}
+
+export interface DelegateAppCmdContext extends AppCmdContextBase, DelegateExecution {}
+
+export type AppCmdContext = AgentAppCmdContext | DelegateAppCmdContext;
 
 /**
  * 单个应用内能力的可执行单元。

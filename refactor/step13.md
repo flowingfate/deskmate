@@ -1,22 +1,22 @@
-# Step 13 — 收口生产入口、隔离旧参考代码、更新全局文档
+# Step 13 — 证明新路径唯一、删除残留旧源码、更新全局文档
 
 > 状态：待执行
 > 前置：Step 9后端、Step 10配置UI、Step 11卡片完成；Step 12已明确 implemented/deferred
 > 下游：Step 14只对稳定后的最终生产结构写单测
-> 本步是业务代码cleanup，不物理删除用户数据，也不强制删除旧源码。
+> 本步是最终源码 cleanup；不读取、迁移或删除用户磁盘上的旧数据。
 
 ## 1. 目标
 
-确保新 `src/main/pi/subagent` 是唯一生产运行路径；旧 Sub-Agent代码即使留在仓库，也不被启动、注册、IPC、prompt、UI或新代码引用。同步所有 ai.prompt文档，使下一 session不会误读旧模块为生产架构。
+确保新 `src/main/pi/subagent` 是唯一生产运行路径；证明旧 Sub-Agent 源码均已不可达并删除任何残留文件/测试。同步所有 ai.prompt文档，使下一 session不可能把旧模块误读为生产架构。
 
 ## 2. 开始前 review
 
 1. 读取 progress中Steps 9–12的真实文件/API；
-2. 全仓搜索旧符号和入口；
-3. 区分：production reachable、legacy internal self-reference、docs/history；
-4. 不因为搜索命中旧文件就机械删除；用户允许其留档；
+2. 全仓搜索旧符号、路径和入口；
+3. 从 production roots 证明旧代码不可达；
+4. 对仍有引用的残留先删除引用并验证新路径覆盖，再整体删除对应旧子树；
 5. 运行所有实际修改文件的 impact，列出必须刷新文档；
-6. 如果旧源码阻碍build/typecheck，先向用户说明并决定“最小修到可编译”还是“移动到非编译archive”，不能擅自大删。
+6. 旧源码若阻碍 build/typecheck，直接定位并删除其最后生产引用及 orphan 源码，不修旧实现、不移动到 archive。
 
 ## 3. Production reachability检查
 
@@ -32,27 +32,24 @@
 - persist snapshot/bootstrap不load/list旧SubAgents store；
 - feature flag不控制新delegation能力。
 
-旧文件之间互相import可以存在，但不能从production root可达。
+旧文件之间的 self-import 不能作为保留理由；production root 不可达后整体删除。
 
-## 4. 旧代码保留政策
+## 4. 旧源码删除政策
 
-默认：文件留在原路径作为reference，不修、不测试、不协变。通过以下方式降低误用：
-
-- `arch-main.md`、persist/Pi docs从生产模块表移除旧系统；
-- 旧模块 `ai.prompt.md` 顶部改成明确的 LEGACY / NOT PRODUCTION（只改文档，不重写代码）；
-- 新 `pi/subagent/ai.prompt.md` 明确禁止import旧模块；
-- 如旧代码在编译期持续造成类型耦合，提出把整套旧目录移动到 `tmp/legacy-subagent-reference/` 的选项，等待用户决定；本 step默认不移动。
-
-旧本地 `sub-agents/` 数据完全不碰。
+- 不逐文件修旧签名、补兼容 shim或更新旧测试；
+- 对 `lib/subAgent`、旧 app command、旧 CRUD IPC/UI/atom、旧 persist SubAgents store分别做 reachability proof；
+- 引用归零的子树连同测试和模块文档一起删除，不移动到 `tmp/` 或 archive；
+- 新 `pi/subagent/ai.prompt.md` 明确禁止旧依赖方向；
+- 旧本地 `sub-agents/` 数据目录完全不碰。
 
 ## 5. Shared/persist清理
 
-从新生产 contract删除旧数据暴露：
+从生产 contract删除所有旧数据暴露：
 
 - PersistSnapshot不再含subAgents；
-- storage overview不再把旧sub-agents作为可管理产品分类；旧目录字节可落profileConfig兜底；
-- production Agent detail只读 delegates；旧subAgents字段可因legacy源码编译暂留类型，但需标deprecated/reference且新代码零引用；
-- old CRUD IPC不注册；
+- storage overview不再把旧sub-agents作为可管理产品分类；
+- production Agent detail只读 delegates，不保留旧 subAgents 字段/alias；
+- old CRUD IPC/channel/type/source均不存在；
 - no migration code/journal/path。
 
 不做破坏性磁盘schema修改；旧字段/文件被忽略。
@@ -96,9 +93,9 @@ parent LLM → subagent tool → pi/subagent manager → SubAgentSession
 - 全部实际文件 impact；
 - typecheck/build；
 - production import/registration grep；
+- 旧源码路径不存在，旧符号只允许出现在 refactor历史记录；
 - 顶层tool/help/docs一致性；
-- 不做E2E/浏览器/manual smoke；
-- 不新增单测。
+- 不做E2E/浏览器/manual smoke；不新增单测。
 
 如果用户需要实际行为确认，提供手工检查清单并停下，不自行执行。
 
@@ -107,12 +104,12 @@ parent LLM → subagent tool → pi/subagent manager → SubAgentSession
 - 根据最终实现删除已失效候选；
 - Step 12 deferred则移除Dialog候选到future区；
 - 给每条P0/P1标实际目标文件/API；
-- 记录不测试旧reference代码；
+- 确认 `unit-test.md` 不含已删除旧源码/旧测试候选；
 - 不创建测试文件。
 
 ## 10. 下游交接
 
-Progress必须列出最终production roots和所有仍保留legacy目录，证明它们不可达。将Steps 1–13标记为业务逻辑已稳定、等待用户review。用户确认后才进入Step14。
+Progress必须列出最终production roots和已删除的legacy源码闭包，证明旧实现不再存在。将Steps 1–13标记为业务逻辑已稳定、等待用户review。用户确认后才进入Step14。
 
 ## 11. Review 门禁
 

@@ -110,9 +110,6 @@ export async function runSpawn(argv: string[], ctx: AppCmdContext): Promise<void
       tracer: ctx.tracer,
       eventSender: ctx.eventSender,
       callId: ctx.callId,
-      // ensureSpawnPrerequisites 已校验非 undefined;`!` 在这里是
-      // ctx 字段 optionality 与 kernel 必需性之间的桥。
-      getSubAgentConfig: ctx.getSubAgentConfig!,
     },
     {
       subAgentName: name,

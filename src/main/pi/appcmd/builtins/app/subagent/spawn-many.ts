@@ -161,7 +161,6 @@ export async function runSpawnMany(argv: string[], ctx: AppCmdContext): Promise<
       tracer: ctx.tracer,
       eventSender: ctx.eventSender,
       callId: ctx.callId,
-      getSubAgentConfig: ctx.getSubAgentConfig!,
     },
     { tasks },
   );

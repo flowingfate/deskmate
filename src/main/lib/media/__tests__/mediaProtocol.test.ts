@@ -165,6 +165,7 @@ describe('resolveMediaRequest — knowledge', () => {
   it('走 agent KB sandbox,字节直供', async () => {
     const bytes = Buffer.from([42, 43, 44, 45]);
     const absPath = await InternalUrlRouter.get().resolveToPath('knowledge://diagram.png', {
+      mode: 'agent',
       profileId,
       agentId,
       sessionId: '',

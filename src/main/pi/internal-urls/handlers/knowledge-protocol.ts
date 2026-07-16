@@ -20,12 +20,13 @@ import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
 
 import type { ResolveContext } from '../types';
+import { executorId } from '../../tools/types';
 import { SandboxProtocolHandler } from './sandbox-base';
 
 export class KnowledgeProtocolHandler extends SandboxProtocolHandler {
   public readonly scheme = 'knowledge';
 
   protected async resolveBaseDir(ctx: ResolveContext): Promise<string> {
-    return PERSIST_PATH.agentKnowledge(getAppRoot(), ctx.profileId, ctx.agentId);
+    return PERSIST_PATH.agentKnowledge(getAppRoot(), ctx.profileId, executorId(ctx));
   }
 }

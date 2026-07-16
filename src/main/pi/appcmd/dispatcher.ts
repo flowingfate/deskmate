@@ -48,7 +48,45 @@ function buildAppCmdContext(
   exit: { code: number },
   deliverables: string[],
 ): AppCmdContext {
+  function print(text: string): void {
+    buffers.stdout.write(text);
+  }
+
+  function printErr(text: string): void {
+    buffers.stderr.write(text);
+  }
+
+  function setExitCode(code: number): void {
+    exit.code = code;
+  }
+
+  function addDeliverable(uri: string): void {
+    const trimmed = uri.trim();
+    if (trimmed.length > 0 && !deliverables.includes(trimmed)) deliverables.push(trimmed);
+  }
+
+  if (toolCtx.mode === 'delegate') {
+    return {
+      mode: 'delegate',
+      profileId: toolCtx.profileId,
+      agentId: toolCtx.agentId,
+      sessionId: toolCtx.sessionId,
+      delegateId: toolCtx.delegateId,
+      signal: toolCtx.signal,
+      tracer: toolCtx.tracer,
+      eventSender: toolCtx.eventSender,
+      chunkStream: toolCtx.chunkStream,
+      callId: toolCtx.callId,
+      getParentContextSummary: toolCtx.getParentContextSummary,
+      print,
+      printErr,
+      setExitCode,
+      addDeliverable,
+    };
+  }
+
   return {
+    mode: 'agent',
     profileId: toolCtx.profileId,
     agentId: toolCtx.agentId,
     sessionId: toolCtx.sessionId,
@@ -57,25 +95,11 @@ function buildAppCmdContext(
     eventSender: toolCtx.eventSender,
     chunkStream: toolCtx.chunkStream,
     callId: toolCtx.callId,
-    // spawn 专属:`subagent` 域读这三个字段;其它 AppCommand 忽略。
-    // 透传保持 ToolContext 的 optionality(可能 undefined)—— 由消费方
-    // 自己抛错,不在 dispatcher 层做默认值。
-    isSubAgent: toolCtx.isSubAgent,
-    getSubAgentConfig: toolCtx.getSubAgentConfig,
     getParentContextSummary: toolCtx.getParentContextSummary,
-    print(text: string) {
-      buffers.stdout.write(text);
-    },
-    printErr(text: string) {
-      buffers.stderr.write(text);
-    },
-    setExitCode(code: number) {
-      exit.code = code;
-    },
-    addDeliverable(uri: string) {
-      const trimmed = uri.trim();
-      if (trimmed.length > 0 && !deliverables.includes(trimmed)) deliverables.push(trimmed);
-    },
+    print,
+    printErr,
+    setExitCode,
+    addDeliverable,
   };
 }
 

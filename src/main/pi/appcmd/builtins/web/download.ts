@@ -22,6 +22,7 @@
  * error }`,这里据此 `(exit 1)`。
  */
 
+import { toResolveContext } from '@main/pi/internal-urls';
 import { downloadFileInternal, type DownloadArgs } from './kernel/download';
 
 import { COMMON_FLAGS, isHelp, isJson } from '../../_commonFlags';
@@ -134,12 +135,7 @@ export async function runDownload(argv: string[], ctx: AppCmdContext): Promise<v
 
   const result = await downloadFileInternal(args, {
     signal: ctx.signal,
-    ctx: {
-      profileId: ctx.profileId,
-      agentId: ctx.agentId,
-      sessionId: ctx.sessionId,
-      signal: ctx.signal,
-    },
+    ctx: toResolveContext(ctx),
   });
 
   if (isJson(parsed.flags)) {

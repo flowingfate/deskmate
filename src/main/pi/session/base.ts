@@ -25,11 +25,9 @@ ToolResult,
 UserMessage, } from '@shared/persist/types'
 import type { ContextState } from '@shared/persist/types'
 import type { ThinkingLevel } from '@shared/persist/types'
-import type { SubAgentConfig } from '@shared/persist/types'
 
 import { CancellationError } from '@main/lib/utilities/errors';
 
-import { Profiles } from '@main/persist';
 import { readAgentRuntimeConfig } from '../utils/config';
 import { resolveCredentials, getModelInfo } from '../model';
 import { buildSystemPrompt } from '../prompt';
@@ -174,24 +172,6 @@ export abstract class BaseSession {
     return parts.join('\n');
   }
 
-  // ─── tool context helpers ───────────────────────────────────────────────
-
-  /**
-   * 给 spawn 类工具(以及未来其它需要 sub-agent 元数据 / 父上下文摘要的本地
-   * 工具)准备的 ctx 子字段。
-   *
-   * 之所以以 method 形态暴露而非简单 closure:
-   *   - `getSubAgentConfig` 要走 active profile,捕获时点决定快照(spawn 中
-   *     若用户改了 sub-agent 配置,本 turn 仍用 turn 开始时的配置版本)。
-   *   - `getParentContextSummary` 复用 `getContextSummary()` 的实现,避免
-   *     两条独立"摘要构造"逻辑漂移。
-   */
-  protected async getSubAgentConfigByName(name: string): Promise<SubAgentConfig | undefined> {
-    // profileId 必须与 active 一致(pi/utils/config 已校验);这里直接 lookup。
-    const profile = await Profiles.get().active();
-    const cfg = await profile.subAgents.getConfig(name);
-    return cfg ?? undefined;
-  }
 
   // ─── core turn loop ─────────────────────────────────────────────────────
 

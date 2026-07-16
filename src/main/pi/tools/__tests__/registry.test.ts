@@ -17,11 +17,11 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { ToolsRegistry } from '../registry';
 import { lazy } from '../lazy';
-import type { LocalTool, ToolContext } from '../types';
+import type { AgentToolContext, LocalTool, ToolContext } from '../types';
 import { Tracer } from '@shared/log/trace';
 
 /** 构造一个最小可用 ToolContext。caller 可按需 override 单个字段。 */
-function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
+function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
     profileId: 'p',
     agentId: 'a',
@@ -29,10 +29,10 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     signal: new AbortController().signal,
     eventSender: null,
     tracer: Tracer.noop,
-    isSubAgent: false,
     callId: 'c',
     chunkStream: null,
     ...overrides,
+    mode: 'agent',
   };
 }
 

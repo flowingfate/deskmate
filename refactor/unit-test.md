@@ -69,10 +69,17 @@
 
 ## Step 4 候选：资源 ownership
 
-- [ ] P0 executor=B、owner=A 时 local 命中 A session，knowledge/skill 命中 B。
+- [ ] P0 `{mode:'delegate', agentId:A, sessionId:S, delegateId:B}` 时 local 命中 A/S，knowledge/skill 命中 B。
 - [ ] P0 B 无法通过 knowledge URI 读取 A knowledge。
-- [ ] P0 regular/job 非委派路径 executor===owner，行为不回归。
-- [ ] P1 ToolContext/ResolveContext 转换不丢 signal/owner。
+- [ ] P0 `{mode:'agent', agentId:A, sessionId:S}` 的 regular/job 行为不回归。
+- [ ] P1 ToolContext → ResolveContext/WriteContext/AppCmdContext 转换保留 mode、delegateId、signal。
+
+### Step 4 实际补充 — 2026-07-16
+- 实际 contract：四类 context 使用相同 discriminated union；delegate 分支必有 `delegateId`，agent 分支没有该字段；`isSubAgent` 被 mode 取代。
+- 新增候选：agent/delegate 两分支转换矩阵；local 始终按 `agentId`，knowledge/skill 按 execution Agent。旧 runtime 临时 bridge 不进入 Step 14 测试范围。
+- 删除/改写候选：删除 `sessionAgentId` 与“缺 owner fallback”候选；不存在 optional `subagent?: string` 状态。
+- 最高风险：任何 delegated capability 仍直接把 `agentId` 当 executor，会泄漏父 Agent Knowledge/Skills；集中 execution identity 判定必须覆盖 handler/policy/catalog。
+- 需要用户在 Step 14 前决定：无。
 
 ## Step 5 候选：能力 policy
 

@@ -14,8 +14,8 @@ Session 的停止条件、max-turn fallback、持久化 terminal state 和 rende
 1. 读取 Step 1 实际 result union；
 2. 读取 Step 5 ToolCatalog route 扩展方式；
 3. 阅读 executeToolCall/LocalTool registry，选择不会让普通 catalog看到 submit_result 的方案；
-4. 只读旧 `extractFinalResult`/deliverables tracking，识别要避免的行为，不复制旧 follow-up；
-5. impact 计划修改的 ToolCatalog/ToolContext/`pi/subagent` 文件。
+4. 结果与 deliverables 规则只从 Step 1 正式 union、Step 5 policy 和当前 ToolResult 契约推导，不读取旧提取/follow-up 实现；
+5. impact 计划修改的 ToolCatalog/ToolContext/`pi/subagent` 文件，并确认清单不含旧 Sub-Agent 路径。
 
 ## 3. Tool 可见性设计
 

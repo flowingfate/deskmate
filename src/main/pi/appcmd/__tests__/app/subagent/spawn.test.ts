@@ -48,26 +48,6 @@ describe('subagent spawn', () => {
     expect(subagentMocks.spawnSingleInternal).not.toHaveBeenCalled();
   });
 
-  it('ctx.isSubAgent === true → exit 1 + recursion error + 不调内核', async () => {
-    const r = await runSubagent(['spawn', 'researcher', 'task'], { isSubAgent: true });
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain('recursion not allowed');
-    expect(subagentMocks.spawnSingleInternal).not.toHaveBeenCalled();
-  });
-
-  it('ctx.getSubAgentConfig 缺失 → exit 1 + 提示 + 不调内核', async () => {
-    const r = await runSubagent(['spawn', 'researcher', 'task'], { getSubAgentConfig: undefined });
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain('getSubAgentConfig');
-    expect(subagentMocks.spawnSingleInternal).not.toHaveBeenCalled();
-  });
-
-  it('ctx.getParentContextSummary 缺失 → exit 1 + 提示 + 不调内核', async () => {
-    const r = await runSubagent(['spawn', 'researcher', 'task'], { getParentContextSummary: undefined });
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain('getParentContextSummary');
-    expect(subagentMocks.spawnSingleInternal).not.toHaveBeenCalled();
-  });
 
   it('成功路径:内核返回 ok=true → exit 0 + stdout 是 envelope content', async () => {
     subagentMocks.spawnSingleInternal.mockResolvedValueOnce({

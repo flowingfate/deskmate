@@ -9,15 +9,15 @@
  *     SubAgentManager → 包装回结果)从 LocalTool handler 整段平移过来,
  *     一字不改;唯一变化是 ctx 形态 —— 不再依赖 ToolContext 的全部字段,
  *     只接收 spawn 真正需要的部分。
- *   - 校验(`isSubAgent` 递归 / `getSubAgentConfig` / `getParentContextSummary`
- *     缺失)放在 caller 层(`spawn.ts` 子命令)做,本 kernel 假定 ctx 已合法。
+ *   - delegate mode 递归校验放在 caller 层；旧配置读取留在本 legacy kernel，
+ *     不再通过通用 ToolContext / AppCmdContext 透传。
  *
  * 输出:走 LLM 友好的 JSON envelope `{ success, data | error }`,与
  * **现存 renderer view 完全兼容** —— `SubAgentToolCallView` 解析的就是
  * 这个 result 形态。
  */
 import type { SubAgentManager } from '@main/lib/subAgent/subAgentManager';
-import type { SubAgentConfig } from '@shared/persist/types'
+import { Profiles } from '@main/persist';
 import type { WebContents } from 'electron';
 import type { Tracer } from '@shared/log/trace';
 
@@ -33,8 +33,6 @@ export interface SpawnSingleCtx {
   tracer: Tracer;
   eventSender: WebContents | null;
   callId: string;
-  /** 由 caller 校验过非 undefined 才传进来 —— 内核直接调,不再判空。 */
-  getSubAgentConfig: (name: string) => Promise<SubAgentConfig | undefined>;
 }
 
 export interface SpawnSingleArgs {
@@ -59,7 +57,8 @@ export async function spawnSingleInternal(
   ctx: SpawnSingleCtx,
   args: SpawnSingleArgs,
 ): Promise<SpawnSingleResult> {
-  const subAgentConfig = await ctx.getSubAgentConfig(args.subAgentName);
+  const profile = await Profiles.get().active();
+  const subAgentConfig = await profile.subAgents.getConfig(args.subAgentName);
   if (!subAgentConfig) {
     return {
       content: JSON.stringify({

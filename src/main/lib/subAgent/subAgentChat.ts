@@ -8,8 +8,8 @@
  * - 更激进的压缩：阈值 0.60（vs 主 chat 0.85）
  * - Phase 0 消息计数压缩：>20 条 → 头 15 条蒸馏为单条 summary
  * - 工具结果蒸馏：>15K char 的 tool result 走 haiku 摘要
- * - 工具白名单:走 `buildToolCatalogForSubAgent`(本地 `tools` / `disallowTools` + 外部 MCP selection)。**`app` 工具不再被按 name 移除** —— sub-agent 调 `app subagent ...` 时,命令内部 `ensureSpawnPrerequisites` 根据 `ctx.isSubAgent` 拒绝并 exit 1。
- * - Tool 执行打 isSubAgent=true,让 `app subagent spawn` / `spawn-many` 的递归保护生效
+ * - 工具白名单:走 `buildToolCatalogForSubAgent`。`app` 不按 name 移除；旧 sub-agent 的 delegate mode 会在 `app subagent ...` 内触发递归拒绝
+ * - ToolContext 使用 delegate mode，让 `app subagent spawn` / `spawn-many` 拒绝递归
  * - follow-up guidance：单轮纯文本若像 "intent" 则注入 "Please execute…" 再跑一轮
  * - deliverables 跟踪：file output 类工具自动入册，结果末尾汇报
  *

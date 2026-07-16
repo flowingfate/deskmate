@@ -19,7 +19,7 @@
 
 import { vi } from 'vitest';
 
-import type { ToolContext } from '@main/pi/tools/types';
+import type { AgentToolContext } from '@main/pi/tools/types';
 
 // ---------------------------------------------------------------------------
 // 被 mock 模块的 stub state(必须 hoisted)
@@ -67,8 +67,9 @@ const webRouter = makeRouterCommand({
   registry: webCommands,
 });
 
-export function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
-  const base: ToolContext = {
+export function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
+  const base: AgentToolContext = {
+    mode: 'agent',
     profileId: 'profile-1',
     agentId: 'agent-1',
     sessionId: 'session-1',
@@ -77,9 +78,8 @@ export function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     tracer: { traceId: 't', traceSpan: () => ({ end: () => {}, addTag: () => {}, log: () => {} }) } as never,
     eventSender: null,
     chunkStream: null,
-    isSubAgent: false,
   };
-  return { ...base, ...overrides };
+  return { ...base, ...overrides, mode: 'agent' };
 }
 
 export interface RunResult {
@@ -101,7 +101,7 @@ export interface RunResult {
  */
 export async function runWeb(
   argvOrCmdline: string | readonly string[],
-  overrides?: Partial<ToolContext>,
+  overrides?: Partial<AgentToolContext>,
 ): Promise<RunResult> {
   const argv = typeof argvOrCmdline === 'string'
     ? argvOrCmdline.split(/\s+/).filter((t) => t.length > 0)

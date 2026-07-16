@@ -89,7 +89,7 @@ src/main/pi/subagent/
 - 不复制一套与 `BaseSession` 长期漂移的完整聊天引擎；
 - `src/main/pi/subagent` 只依赖 Pi 内部与公开 persist API，外部模块通过 `@main/pi` 或明确的新入口使用，不产生反向循环。
 
-### 2.4 旧代码只作只读参考
+### 2.4 旧代码采用并行替换，不做就地演进
 
 旧代码包括：
 
@@ -98,13 +98,15 @@ src/main/pi/subagent/
 - `src/main/pi/appcmd/builtins/app/subagent/`；
 - 独立 Sub-Agent CRUD IPC/UI/atom。
 
-规则：
+后续规则：
 
-1. 可以读它了解已有问题、UI 信息和取消/进度需求；
-2. 不以旧类结构为新设计模板；
-3. 不修旧 bug、不补旧单测、不为旧代码保持新 API 兼容；
-4. production cutover 后取消注册和入口，但文件可暂时留在仓库作为 reference；
-5. 后续是否物理删除由用户另行决定，本次不强制删除。
+1. 新实现只从当前通用基础设施和已确认的新契约生长；旧代码最多只读了解产品问题，不作为实现模板，也不打开旧测试寻找预期。
+2. cutover 前，未来 step 的修改文件清单不得包含旧目录/文件；不得修旧 bug、改旧签名、补旧测试或给旧实现适配新 API。
+3. 若共享接口变更会让旧调用方无法编译，优先新增只由新路径消费的 additive seam，或把 breaking change 延后到 cutover；禁止通过修改旧 caller 解围。
+4. Step 5–8 的新 policy/session 不能仅凭 `mode:'delegate'` 全局激活，因为 Step 4 的旧 bridge 也暂用该 mode；新能力必须由新 catalog/executor/session 显式接线。
+5. cutover 先从生产 root 删除对旧模块的 import/注册/路由，再证明旧子树不可达；一旦某个旧子树成为 orphan，就在同一步整体删除源码和旧测试，不留下编译期耦合，也不逐文件“维护到能编译”。
+6. 物理删除源码不等于迁移或删除用户数据：磁盘上的旧 `sub-agents/` 目录始终不读、不改、不删。
+7. Step 4 已存在的 `delegateId=agentId` 是唯一历史例外；后续不再扩展它，Step 9 通过整体删除旧 backend 源码消除，而不是继续修改 bridge。
 
 ### 2.5 独立顶层 `subagent` 工具
 
@@ -156,10 +158,12 @@ Step 3 实际落地 API（2026-07-16，尚未生产注册）：
 
 ### 2.7 执行身份与资源归属
 
-一个委派运行有两个 Agent 身份：
+一个委派运行有 session identity 与 execution identity：
 
-- `agentId` / executor：被委派 Agent，决定 model、prompt、Tools、MCP、Skills、Knowledge；
-- `sessionOwnerAgentId`：父 session 的 owner，决定 `local://` / subrun 物理位置。
+- `agentId`：父 session 所属的 Agent；
+- `sessionId`：父 regular session 或 job run；
+- `mode: 'agent' | 'delegate'`：运行角色 discriminant；
+- delegate 分支必填 `delegateId`，表示实际执行 Agent，决定 model、prompt、Tools、MCP、Skills、Knowledge。
 
 资源规则：
 
@@ -168,6 +172,15 @@ Step 3 实际落地 API（2026-07-16，尚未生产注册）：
 - `skill://` → executor Agent 自己绑定的 Skills；
 - 不默认暴露父 Agent Knowledge；
 - subrun 不建独立 files 目录。
+
+Step 4 最终落地 API（2026-07-16，review 修订后）：
+
+- `ToolContext`、`ResolveContext`、`WriteContext`、`AppCmdContext` 采用同一 discriminated union：agent 分支只有 `mode:'agent' + agentId + sessionId`；delegate 分支额外必填 `delegateId`。
+- `agentId` 是 session 所属 Agent；LocalProtocolHandler 直接用它取得 `Agent.findSessionAcrossKinds(sessionId)`。
+- Knowledge/Skill 使用 execution Agent：agent mode 为 `agentId`，delegate mode 为 `delegateId`；不允许缺 delegateId 的隐式 delegated 状态。
+- `toResolveContext` / `toWriteContext` / AppCommand dispatcher 全部保留 discriminant；`getParentContextSummary` 是新 `subagent run --with-parent-summary` 的正式 seam，旧 Sub-Agent 配置读取不进入通用 context。
+- renderer-facing internal-url/media/attachment/debug 边界全部使用 `mode:'agent'`。
+- 旧 `lib/subAgent/SubAgentSession` 的 `delegateId=agentId` 只是 Step 9 前防递归的唯一临时 bridge，不属于新 runtime 契约，也不产生旧 runtime 测试候选；Step 9 必须随旧入口删除。
 
 ### 2.8 委派请求和上下文
 
@@ -339,9 +352,9 @@ Renderer 基线必须能渲染委派工具卡片和正式结果。消息详情 D
 - shared delegation IPC + preload + renderer binding；
 - Agent editor / agents atom / tool renderer。
 
-### 5.3 旧参考代码
+### 5.3 旧代码删除边界
 
-旧 `lib/subAgent`、persist SubAgents store、`app subagent`、独立 CRUD UI 不属于新生产依赖。取消入口后可以留文件，不测试、不协变、不从新代码 import。
+旧 `lib/subAgent`、persist SubAgents store、`app subagent`、独立 CRUD UI 不属于新生产依赖。未来 step 只删除其生产引用；当一个旧子树引用归零后，在同一步整体删除该子树及测试，不再修改其内部实现。Step 4 的临时 bridge 随 Step 9 删除旧 backend 源码自然消失。
 
 ## 6. 步骤依赖总图
 
@@ -397,4 +410,3 @@ Steps 1–13 review complete
 - subrun 进入普通 session picker/SQL index；
 - 开发过程中的端到端测试；
 - 业务完成前新增单元测试；
-- 本次强制物理删除旧参考源码。

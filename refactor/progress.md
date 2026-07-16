@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 3 complete，等待开始 Step 4**
-- 当前门禁：Step 4 `pending`；尚未开始计划 review
-- 业务步骤：3 / 13 complete
-- 测试步骤：Step 14 尚未开始
-- 生产代码变更：新增未注册的顶层 `subagent` command/facade construction seam；旧 `app subagent` 仍是生产入口
+- 总体阶段：**Step 4 complete，等待另行开始 Step 5**
+- 当前门禁：Step 4 已通过用户 review；Step 5 尚未开始
+- 业务步骤：4 / 13 complete
+- 测试步骤：Step 14 尚未开始；Step 4 未新增测试文件
+- 生产代码变更：Tool/Internal URL/AppCmd context 已使用 agent/delegate mode union；新 `subagent` facade 仍未注册，旧 `app subagent` 仍是生产入口
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -37,7 +37,7 @@
 | 1 | [目标契约与 Pi/Subagent 边界](step1.md) | complete | `context.md` | `src/shared/types/subAgentRunTypes.ts`；`src/main/pi/subagent/types.ts`；模块依赖规则 |
 | 2 | [Agent description/delegates 持久化](step2.md) | complete | Step 1 AgentId/contract | 可落盘的 Agent graph、ID resolver、IPC patch |
 | 3 | [独立顶层 subagent cmdline facade](step3.md) | complete | Step 1 request grammar | 未注册的新 facade/registry/run parser，供 Step 9 接 manager |
-| 4 | [执行 Agent 与 Session owner 分离](step4.md) | pending | Step 1 execution scope | Tool/Internal URL 可表达 own knowledge + parent local |
+| 4 | [执行 Agent 与 Session owner 分离](step4.md) | complete | Step 1 execution scope | mode discriminated union；parent `agentId/sessionId`；delegate 分支强制 `delegateId` |
 | 5 | [委派能力 policy 与 reduced catalog](step5.md) | pending | Steps 2–4 | 硬 allow/deny policy、可构建 delegated catalog |
 | 6 | [三位序号 Subrun 持久化](step6.md) | pending | Steps 1,2,4 | `001..999` allocator、data/messages store、persist adapter |
 | 7 | [submit_result 与正式结果状态机](step7.md) | pending | Steps 1,5 | delegated-only submit route、terminal result reducer |
@@ -46,7 +46,7 @@
 | 10 | [Agent Delegation 配置 UI](step10.md) | pending | Step 2 | description/delegates UI；独立 Sub-Agent 管理入口下线 |
 | 11 | [委派运行卡片与 audit/cancel IPC](step11.md) | pending | Steps 6,7,9 | reload-safe card、live state、single cancel、run metadata query |
 | 12 | [可选 Messages Dialog](step12.md) | pending | Step 11 review | 可实现则交付 Dialog；否则交付 verified deferred design 并标 deferred |
-| 13 | [生产入口收口与文档一致性](step13.md) | pending | Steps 9–12 | 新路径唯一生效；旧源码只读隔离；全局文档更新 |
+| 13 | [证明新路径唯一并删除残留旧源码](step13.md) | pending | Steps 9–12 | 新路径唯一生效；残留旧源码/测试删除；全局文档更新 |
 | 14 | [统一编写单元测试](step14.md) | pending | Steps 1–13 + `unit-test.md` | 用户确认后的新单测与测试执行记录；仍无 E2E |
 
 ## 关键路径
@@ -110,7 +110,7 @@
 |---|---|---:|---|
 | `001` 在不同 session 冲突 | 所有 key/IPC 带 parent identity，subrunId 明确局部 scope | 1/6/11 | 已规划 |
 | 多个 tool calls 并发分配序号冲突 | per-parent-session allocator lock + atomic reservation | 6 | 已规划 |
-| ToolContext 一个 agentId 混淆两种 ownership | executor + sessionOwnerAgentId 分离 | 4 | 已规划 |
+| ToolContext 混淆 session 与 execution identity | `agentId/sessionId` 固定 parent；`mode:'delegate'` 分支强制 `delegateId` | 4 | 已实现 |
 | 顶层工具注册后但 manager 未完成形成空壳 | Step 3 不注册，Step 9 原子注册并接线 | 3/9 | 已规划 |
 | `app` 内只读/写命令混杂 | delegated router policy；新 spawn 不再放 app | 5 | 已规划 |
 | shell 绕过 sandbox | delegated catalog 完全隐藏 shell | 5 | 已规划 |
@@ -118,7 +118,7 @@
 | timeout 只停止等待不 abort | manager/session 持实际 AbortController | 8/9 | 已规划 |
 | live event 丢失后 UI 卡死 | final tool result + persisted subrun 为 reload 事实源 | 11 | 已规划 |
 | Dialog 改动过大拖慢核心重构 | Step 12 单独 review，可 deferred | 12 | 已规划 |
-| 旧代码牵引新设计 | 禁止新生产 import，旧代码不改不测 | 全程/13 | 已规划 |
+| 旧代码牵引新设计 | Steps 5–8 零修改旧路径；shared breaking change additive/延后；cutover 删除引用后整体删 orphan 源码 | 全程/9/10/11/13 | 强制门禁 |
 | review 改变上游 contract | downstream steps 标 needs-replan 并级联更新 | 全程 | 强制机制 |
 
 ## 决策变更日志
@@ -171,6 +171,42 @@
 - `list` 只读 resolver hot records，不 fan-out；`describe` 先 resolver 授权再单 target cold read，禁止输出 systemPrompt/outgoing graph/zero 等非选择信息。
 - 用户确认 Step 3 可视为完成；`list` / `describe` / `run` grammar、runner seam 与未注册门禁正式作为下游稳定输入。
 
+### 2026-07-16 — Step 4 启动与 ownership review
+
+- 用户确认 Step 3 完成并要求开始 Step 4，Step 3 状态保持 `complete`。
+- 现有计划经 ToolContext、Internal URL、RegularSession/JobRun、AppCommand、media/attachment renderer 边界与 persist Session API 复核，无需改写后进入实现。
+- ownership 采用两个必填平铺字段：`agentId` 是 executor，`sessionAgentId` 是 session 所属 Agent；不提供 optional fallback、nested scope 或绝对 session path。
+- 普通 RegularSession/JobRun 两者相同；新 delegated run 到 Step 8 才构造 executor=delegate、owner=parent。旧 runtime 只补同 ID 字段保持原行为。
+
+### 2026-07-16 — Step 4 字段命名 review
+
+- 用户否决 `sessionOwnerAgentId`：该名称把可从上下文推导的 `owner` 冗余塞进标识符，属于堆词式长命名。
+- 最终改为 `sessionAgentId`：`session` 已表达归属关系，字段直接表示“这个 session 属于哪个 Agent”；与 executor `agentId` 并列即可读懂。
+- 该调整只改字段名，不改变 local/knowledge/skill 分流、必填约束或下游 ownership 契约。
+
+### 2026-07-16 — Step 4 execution identity 反向设计 review
+
+- 用户确认恢复 `agentId + sessionId` 的原始语义：二者始终表示当前 parent session。
+- 不采用 `subagent?: string`；最终采用 discriminated union，delegate 分支通过 `mode:'delegate' + delegateId` 强制表达执行 Agent，agent 分支为 `mode:'agent'`。
+- `mode` 取代 `isSubAgent`，避免两个字段描述同一运行角色；该变更使 Steps 5/6/8/9 的输入契约同步改写。
+
+### 2026-07-16 — Step 4 旧兼容路径 review
+
+- 用户再次确认：不兼容历史数据，也不为终将下线的旧 Sub-Agent 实现维护新 API 契约。
+- 删除 `ToolContext` / `AppCmdContext` / `BaseSession` 的旧 `getSubAgentConfig` callback seam；冻结旧 command/kernel 自己读取旧配置，依赖不再外溢到新通用上下文。
+- `getParentContextSummary` 明确为新 `subagent run --with-parent-summary` 的正式 seam，不再与旧配置 callback 混为一谈。
+- 旧 `SubAgentSession` 的 `delegateId=agentId` 只保留为 Step 9 前阻止旧入口递归的单点安全 bridge；它不属于稳定契约、不进入 Step 14 测试候选，Step 9 必须随旧注册和旧 guard 删除。
+- 删除本次 Step 4 对旧命令新增的 delegate/callback 兼容测试维护；新 ownership 的测试候选只覆盖正式 agent/delegate 资源边界。
+
+### 2026-07-16 — 后续重构改为严格并行替换
+
+- 用户确认期望的迁移方式：新实现独立生长，生产引用逐步切换；旧代码一旦成为 orphan 就整体删除，而不是继续协变或维护。
+- 根因复盘：Step 4 直接替换共享 `ToolContext`，同时旧 runtime 仍注册并参与编译，导致类型系统迫使旧 caller 协变；这是步骤隔离设计不足，不是旧数据迁移需要。
+- Steps 5–8 新增硬门禁：修改文件清单不得包含旧 Sub-Agent 路径；shared breaking change 必须 additive 或延后；新 policy不能仅凭 delegate mode全局激活。
+- Step 9 改为从 production roots 原子切换引用，随后整体删除旧 backend/app command及测试，不再修改临时 bridge/guard。
+- Step 10/11 在旧 UI/CRUD/persist/renderer引用归零后各自整体删除对应源码；Step 13负责最终残留证明和清除。
+- 用户磁盘上的旧 `sub-agents/` 数据仍然不读、不迁移、不删除；“删除旧源码”与“删除旧数据”严格分离。
+
 ## 执行记录
 
 ### 2026-07-16 — Step 1 — complete
@@ -211,5 +247,16 @@
 - 未做的运行验证：按重构政策未新增/运行单测，未执行 command smoke，未启动应用，未做 E2E。
 - 文档交接：更新 subagent/Pi/tool-system 文档，回写 `context.md`、Steps 3/9/11/14 与 `unit-test.md`。
 - 用户 review 结果：通过；Step 3 complete，等待另行开始 Step 4。
+
+### 2026-07-16 — Step 4 — complete（最终 mode union）
+- Plan review 变化：用户最终选择反向 identity 设计；不再增加第二个 session owner ID，而是保持 `agentId/sessionId` 为 parent session，通过 mode union 表达 execution identity。
+- 实际输出/API：`ToolContext`、`ResolveContext`、`WriteContext`、`AppCmdContext` 均为命名 interface 分支组成的 discriminated union；agent 分支无 delegateId，delegate 分支必填 `delegateId`；共享 `executorId()` 收敛 execution Agent 选择。
+- ownership 语义：Local 始终用 parent `agentId/sessionId`；Knowledge/Skill 使用 `executorId(ctx)`；RegularSession/JobRun/debug/media/attachment 使用 agent mode；Step 8 新 runtime 将使用真实 delegate ID。
+- 旧代码处理：旧配置读取已从通用 context/BaseSession 移回冻结的旧 kernel；仅剩旧 `SubAgentSession` 的 `delegateId=agentId` 单点安全 bridge，明确不属于稳定契约并由 Step 9 强制删除。
+- 修改生产文件：`pi/tools/types.ts`、`pi/internal-urls/{types,handlers/{local,knowledge,skill}-protocol}.ts`、`pi/session/{base,regular,job}.ts`、`pi/appcmd/{types,dispatcher}.ts`、旧 subagent command/kernel 隔离点、`web download`、startup/media/attachment/旧 SubAgentSession；fixtures 按正式 context 收紧。
+- 验证：最终 `check:impact` 通过；相关 LSP diagnostics 无错误；`npm run typecheck`、`npm run build` 通过（仅既有 chunk-size warning）；相关回归 5 files / 100 tests 通过；全量 `npm test` 145 files / 1613 tests 通过。
+- 未做：未新增测试文件，未启动应用，未做 browser/manual file-write/E2E。
+- 文档交接：已更新 `context.md`、Steps 4/9、`unit-test.md` 与相关模块文档；Step 9 有显式 bridge/guard 清理门禁。
+- 用户 review 结果：通过；Step 4 complete，等待另行开始 Step 5。
 
 每个后续 step 完成后继续追加同结构记录。

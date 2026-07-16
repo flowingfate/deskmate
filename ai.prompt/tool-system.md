@@ -123,23 +123,12 @@ interface AppCommand {
 ### 5.2 AppCmdContext
 
 ```ts
-interface AppCmdContext {
-  // 透传自 ToolContext 的精确子集(spawn 专属字段不暴露)
-  profileId: string;
-  agentId: string;
-  sessionId: string;
-  signal: AbortSignal;
-  tracer: Tracer;
-  eventSender: WebContents | null;
-  chunkStream: ChunkStream | null;
-  callId: string;
-
-  // stdio helpers,dispatcher 提供
-  print(text: string): void;       // 累积到 stdout buffer
-  printErr(text: string): void;    // 累积到 stderr buffer
-  setExitCode(code: number): void; // 默认 0,非 0 显示 "(exit N)"
-}
+type AppCmdContext =
+  | { mode: 'agent'; agentId: string; sessionId: string; /* common fields */ }
+  | { mode: 'delegate'; agentId: string; sessionId: string; delegateId: string; /* common fields */ };
 ```
+
+`agentId/sessionId` 固定表示 parent session；delegate mode 的 `delegateId` 表示 execution Agent。dispatcher 显式保留 discriminant，旧 `app subagent` 直接按 mode 拒绝递归，不再维护 `isSubAgent`。
 
 ### 5.3 dispatcher 输出合成规则
 

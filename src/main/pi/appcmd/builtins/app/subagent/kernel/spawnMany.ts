@@ -11,14 +11,14 @@
  *     markdown 拼接)整段平移过来,一字不改。
  *   - **绝不**走 `spawnMultipleSubAgents`:那条签名只接一个共享 parent
  *     context,per-task 的 shareContext 差异在那里会被丢弃,等价 bug。
- *   - 校验(`isSubAgent` 递归 / `getSubAgentConfig` 缺失)放在 caller 层做。
+ *   - delegate mode 递归校验放在 caller 层；旧配置读取留在本 legacy kernel。
  *
  * 输出形态:`{ success, data: <markdown> }`,与 **现存
  * `ParallelSubAgentsToolCallView` 完全兼容**。
  */
 import type { SubAgentManager } from '@main/lib/subAgent/subAgentManager';
+import { Profiles } from '@main/persist';
 import { SUB_AGENT_LIMITS } from '@shared/types/profileTypes';
-import type { SubAgentConfig } from '@shared/persist/types';
 import type { WebContents } from 'electron';
 import type { Tracer } from '@shared/log/trace';
 
@@ -31,7 +31,6 @@ export interface SpawnManyCtx {
   tracer: Tracer;
   eventSender: WebContents | null;
   callId: string;
-  getSubAgentConfig: (name: string) => Promise<SubAgentConfig | undefined>;
 }
 
 export interface SpawnManyTask {
@@ -63,11 +62,14 @@ export async function spawnManyInternal(
   args: SpawnManyArgs,
 ): Promise<SpawnManyResult> {
   const limitedTasks = args.tasks.slice(0, SUB_AGENT_LIMITS.MAX_PARALLEL_TASKS);
+  const profile = limitedTasks.some((task) => task.shareContext)
+    ? await Profiles.get().active()
+    : null;
 
   const promises = limitedTasks.map(async (task, index) => {
     let parentContext: string | undefined;
-    if (task.shareContext) {
-      const subAgentConfig = await ctx.getSubAgentConfig(task.subAgentName);
+    if (task.shareContext && profile) {
+      const subAgentConfig = await profile.subAgents.getConfig(task.subAgentName);
       // 找不到 sub-agent 时不直接抛 —— spawnSubAgent 自己会回错;
       // 这里只决定是否要建 parentContext。
       if (subAgentConfig && subAgentConfig.context_access !== 'isolated') {

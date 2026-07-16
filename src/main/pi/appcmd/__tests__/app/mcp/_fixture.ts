@@ -16,7 +16,7 @@
 import { vi } from 'vitest';
 
 import { Tracer } from '@shared/log/trace';
-import type { ToolContext } from '@main/pi/tools/types';
+import type { AgentToolContext } from '@main/pi/tools/types';
 
 // ---------------------------------------------------------------------------
 // 被 mock 模块的 stub state(必须 hoisted —— vi.mock factory 在 import 前跑)
@@ -93,7 +93,7 @@ import { dispatchAppCommand, formatAppCmdContent } from '@main/pi/appcmd/dispatc
 import '@main/pi/appcmd/builtins/app';
 import { mcpCommand } from '@main/pi/appcmd/builtins/app/mcp';
 
-function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
+function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
     profileId: 'profile-test',
     agentId: 'agent-test',
@@ -101,10 +101,10 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     signal: new AbortController().signal,
     eventSender: null,
     tracer: new Tracer('test'),
-    isSubAgent: false,
     callId: 'call-test',
     chunkStream: null,
     ...overrides,
+    mode: 'agent',
   };
 }
 
@@ -123,7 +123,7 @@ export interface RunResult {
  */
 export async function runMcp(
   argvOrCmdline: string | readonly string[],
-  overrides?: Partial<ToolContext>,
+  overrides?: Partial<AgentToolContext>,
 ): Promise<RunResult> {
   const argv = Array.isArray(argvOrCmdline)
     ? Array.from(argvOrCmdline)

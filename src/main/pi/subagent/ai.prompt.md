@@ -1,8 +1,8 @@
-<!-- Last verified: 2026-07-16 (Step 3：未注册 cmdline facade 与 runner seam 已实现) -->
+<!-- Last verified: 2026-07-16 (Step 4：execution identity mode union 已完成) -->
 # pi/subagent 模块 — Agent 委派运行时
 
 > 普通 Agent 在父 session 中被委派执行一次任务的运行时边界。Sub-Agent 是运行角色，不是第二种配置实体。
-> 当前已固定共享契约、request normalization 与未注册的顶层 cmdline facade；manager、session、持久化尚未生产接线。
+> 当前已固定共享契约、request normalization、未注册的顶层 cmdline facade，以及 Tool/Internal URL 的 executor/session owner seam；manager、session、持久化尚未生产接线。
 
 ## 关键文件
 
@@ -40,7 +40,7 @@ shared run contract
         ↑
 appcmd infrastructure ← pi/subagent/commands → injected manager seam
         ↓
-pi session/tool/internal-url + main/persist public subrun adapter（后续 Steps 4–9）
+pi session/tool/internal-url（Step 4 已具备双身份）+ main/persist public subrun adapter（后续 Steps 6–9）
 ```
 
 `src/main/lib/subAgent/` 仅作只读参考。新生产代码禁止 import 旧 manager、chat、旧 SubAgent 持久化类型或旧 `app subagent` command。
@@ -48,7 +48,7 @@ pi session/tool/internal-url + main/persist public subrun adapter（后续 Steps
 ### 核心不变量
 
 1. `SubrunId` 只在 `(profileId, parentAgentId, parentSessionId)` 内唯一；合法范围是 `001..999`，`000` 非法。
-2. executor 是 `delegateAgentId`；父 session 的 owner 单独决定 `local://` 与 subrun 物理位置。
+2. ToolContext 的 `agentId/sessionId` 是 parent session identity；delegate mode 的 `delegateId` 是 executor，决定 Knowledge/Skills/Tools。
 3. context 只有 `isolated` 和 `parent_summary`，不接受 full history。
 4. request 的 target/task/expectedOutput 必填；policy 经唯一 normalizer 补默认并执行 max clamp。
 5. result 和 runtime state 都是 discriminated union；terminal state 的 `status` 必须与 `result.status` 一致。
@@ -63,6 +63,7 @@ pi session/tool/internal-url + main/persist public subrun adapter（后续 Steps
 - shared：`SubrunId`、`isSubrunId`、`parseSubrunId`、`formatSubrunId`、`SubAgentRunContext`、`SubAgentRunPolicy`、`SubAgentRunRequest`、`SubAgentRunUsage`、`SubAgentRunResult`、`SubAgentRunStep`、`SubAgentRuntimeState`；
 - main private：`normalizeSubAgentRunRequest`、`SUB_AGENT_RUN_POLICY_LIMITS`；`SubAgentCommandRunner.listDelegates/describeDelegate/run`；各命令的 `result | rejected` outcome；list/describe 安全 view types；
 - construction seam：`createSubAgentCommand(runner)` 与 `createSubagentTool(runner)`；两者未从 Pi root 导出，`tools/index.ts` 也未注册。
+- ownership seam：四类 context 使用 `mode:'agent' | 'delegate'` union；Local 只用 parent `agentId/sessionId`，Knowledge/Skill 通过 `executorId()` 选择 agentId 或 delegateId。
 
 ## 常见变更
 

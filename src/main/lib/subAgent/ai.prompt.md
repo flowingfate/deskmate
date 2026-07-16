@@ -1,7 +1,7 @@
-<!-- Last verified: 2026-07-14 (pi 外部依赖统一经 @main/pi 根入口) -->
-# Sub-Agent System
+<!-- Last verified: 2026-07-16 (冻结旧 runtime；仅记录 Step 9 前临时安全适配) -->
+# Sub-Agent System（冻结旧实现）
 
-> 在父 agent 对话中按需 spawn / 控制生命周期 / 报告结果的轻量 sub-agent。
+> 本模块只在 Step 9 原子 cutover 前维持现有生产入口。新代码不得依赖、扩写或复制本模块；不为其新增测试和兼容契约。
 
 ## Key Files
 | File | Responsibility | Size |
@@ -21,7 +21,7 @@
 - **SubAgentSession** 自己维护内存 messages 数组（不落盘）。不继承 `BaseSession` —— sub-agent 是 wrapper 控 turn 节奏，借不到 30-轮 for loop 抽象，自己写 ~200 行 turn loop 复用 pi 原子能力：
   - `pi.stream`（动态 import）做 SSE 解析与 tool call args parse
   - `@main/pi` 导出的 `checkAndCompress` —— 阈值通过构造参数注入 0.60（vs 主 chat 0.85）
-  - `@main/pi` 导出的 `executeToolCall(scope)` 透传 `isSubAgent: true`，让 `app subagent ...` 的递归保护生效
+  - `@main/pi` 导出的 `executeToolCall` 临时接收 delegate mode；旧 runtime 没有普通 Agent delegate ID，故 `delegateId=agentId=父 Agent`。这是防止旧 `app subagent` 递归的过渡适配，Step 9 必须随旧入口一起删除，不属于新 runtime 契约
   - `@main/pi` 导出的 `resolveModel + resolveCredentials` 跨 provider 解析（baseUrl 按 fresh OAuth credentials 派生，GHC enterprise 账户必经；`resolveApiKey` 不在公共入口，stream 路径只用 `resolveCredentials`）
 - **模型解析**：sub-agent `model` 字段为空 / `'inherit'` → 取父 `pi.RegularSession.getCurrentModelId()`；不是合法 `provider::id` 复合 key → 回退到父模型并打 warn；父没模型 → spawn 直接 fail。
 - **工具来源**:走 `@main/pi` 导出的 `buildToolCatalogForSubAgent(cfg, mcpSelections)` —— 父继承 + 本地 `tools` 白名单 + `disallowTools` 二次过滤。MCP tool 以 `serverName/toolName` 给 LLM，route 精确保留原始 server / tool 名；sub-agent 历史由同一入口的 `fromPiAssistantMessage(final, catalog)` demux 回自然 toolName + MCP server（出境回放由 `toLlmToolName` 再限定），**不**按 `/` 反解。**`app` 工具不再被按 name 移除**(`app` 是 sub-agent 触达全部应用能力的唯一入口,移除等于禁掉所有应用能力);递归保护下沉到 `app subagent ...` 命令内部 `ensureSpawnPrerequisites`,sub-agent 调 spawn 时 exit 1 + stderr。MCP 工具按 server-scoped 路由到 `executeToolOnServer`,本地工具按 `route.kind === 'local'` 路由到 `pi/tools/registry.tools.execute(name, args, ctx)`。
@@ -40,12 +40,12 @@
 | 向渲染进程暴露新 step type | `types.ts` (`SubAgentStepUpdate`) + `subAgentManager.ts` (onStepUpdate 分支) + `subAgentChat.ts` (调用点) | 注意 step 列表 FIFO 30 上限 |
 
 ## Gotchas
-- ⚠️ **`isSubAgent` 标志必须透传**:sub-agent 调 `executeToolCall` 时 `scope.isSubAgent = true`,否则 `app subagent ...` 命令的递归保护失效,会无限 spawn。`SubAgentSession.handleToolCalls` 已默认带上。
+- ⚠️ **临时 delegate bridge**：只为 Step 9 前的旧生产入口阻止递归；不得被新代码引用，cutover 时必须删除。
 - ⚠️ **不发 StreamingChunk**：sub-agent 走 `SubAgentStepUpdate` IPC（`subAgent:stateUpdate`），不要往其上接 StreamingChunk 链路。
 - ⚠️ **AGENT.md 写锁**：通过 `writeLock` Map 串行化（与 `RuntimeManager.installLocks` 同模式）。并发 spawn 绕过会损坏文件。
-- ⚠️ **pi-ai stream 已经处理截断 tool call**：老 SubAgentChat 自带的 `normalizeToolCalls` / `detectTruncatedToolCalls` / `repairToolCallArguments` 整条 fallback 链已下线。`pi.stream` 给的 `ToolCall.arguments` 已 parse 完整；只在 SubAgent wrapper 收到 `stopReason: 'length'` 时把这一轮当作"text 截断 → 继续 follow-up"处理。
-- ⚠️ **`isSubAgent` 与递归保护**:`app subagent spawn` / `spawn-many` 子命令通过 `ensureSpawnPrerequisites(ctx)` 在 `ctx.isSubAgent === true` 时拒绝(exit 1 + "recursion not allowed");dispatcher 透传 `isSubAgent` 字段,链路完整。
+- ⚠️ **pi-ai stream 已经处理截断 tool call**：老 SubAgentChat 自带的 repair fallback 已下线。
+- ⚠️ **递归保护**：冻结旧命令的 `ensureSpawnPrerequisites(ctx)` 暂按 `ctx.mode === 'delegate'` 拒绝；新 runtime 通过 reduced catalog 结构性移除 `subagent`。
 
 ## Related
 - 依赖：[pi 子树](../../pi/ai.prompt.md)（model + session + compression + tool + utility）、[MCP Runtime](../mcpRuntime/ai.prompt.md)、[Skill](../skill/ai.prompt.md)
-- 被依赖:`app subagent` AppCommand(`appcmd/builtins/subagent/`),`spawn_subagent` / `spawn_subagents` LocalTool 已于 2026-06 物理删除并迁入 `app subagent spawn` / `spawn-many`。
+- 被依赖：冻结的 `app subagent` AppCommand（`appcmd/builtins/app/subagent/`），仅到 Step 9 cutover。
