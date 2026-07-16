@@ -120,8 +120,9 @@ read / write / find / search / ask / shell / app / web / subagent
 
 ```text
 subagent("--help")
+subagent("list")
+subagent("describe <agent-id>")
 subagent("run <agent-id> --task \"...\" --expect \"...\"")
-subagent("run-many --config-json '[...]'")
 ```
 
 架构：
@@ -132,13 +133,23 @@ subagent("run-many --config-json '[...]'")
 - 不把新业务重新塞进 `appcmd/builtins/app/`；
 - 被委派 Agent 的 catalog 完全移除 `subagent` 顶层工具，从结构上禁止嵌套。
 
+Step 3 实际落地 API（2026-07-16，尚未生产注册）：
+
+- `createSubAgentCommand(runner)` 构建注册 `list` / `describe` / `run` 的独立 registry/router；`createSubagentTool(runner)` 再包为 `LocalTool`。
+- `SubAgentCommandRunner` 固定三个方法：`listDelegates(scope)`、`describeDelegate(scope, id)`、`run(scope, request)`；scope 包含 profile、parent Agent/session、signal、tracer、correlationId。所有正常业务拒绝都返回显式 `kind: 'rejected'`。
+- `list` 返回 resolver 配置顺序的 available hot summaries（ID/name/description/model）与 `unavailableIds`；parent 配置缺失返回 rejected。
+- `describe` 只接受 resolver available ID，再按需读取一个 target detail；返回 thinking/local-tools/MCP/Skills 的安全投影，明确排除 system prompt、delegates、legacy subAgents、zero state。
+- `run` flags 固定为 `--task`、`--expect`、`--with-parent-summary`、`--max-turns`、`--timeout-seconds`、`--help/-h`；不支持 `--json`、name key、旧 share-context/full-history 语法。
+- 不提供 `run-many`：并行委派由同一 assistant response 中的多个 `subagent` tool calls 表达；三个命令都固定输出 `{ outcome }`。
+- `makeRouterCommand.helpFooter` 让顶层 help 追加命令选择、Agent ID、两层 limits 与并行多调用提示；app/web 行为不变。
+
 ### 2.6 Subrun 三位序号
 
 - Subrun ID 是父 session 内局部唯一的三位十进制字符串：`001`、`002`、…、`010`、…、`099`、…、`999`。
 - 类型/校验规则：`001..999`，等价于 `^(?!000$)[0-9]{3}$`；`000` 非法。
 - ID 只在 `(profileId, parentAgentId, parentSessionId)` scope 内有意义；IPC/日志不得把 `001` 当全局唯一键。
 - allocator 在父 session 下使用单飞锁：扫描/读取已分配的最大序号，取 `max + 1`，原子创建 `subruns/<id>/data.json` 完成 reservation。
-- 并发 `run-many` 必须得到不重复且按 reservation 顺序递增的编号。
+- 并发多个 `subagent` tool calls 必须通过 per-parent-session allocator lock 获得不重复、按 reservation 顺序递增的编号。
 - 当前每父 session 最多 20 次委派，因此正常范围只到 `020`；仍实现 `001..999` 的完整校验。超过 `999` 明确拒绝，不复用旧编号。
 - 目录名和对外 `subrunId` 使用同一个三位字符串，不再另造 run ULID。
 - shared helper 固定为 `isSubrunId` / `parseSubrunId` / `formatSubrunId`，定义于 `src/shared/types/subAgentRunTypes.ts`；`SubrunId` 是非 branded 的语义别名。
@@ -313,7 +324,7 @@ Renderer 基线必须能渲染委派工具卡片和正式结果。消息详情 D
 | `src/main/pi/subagent/submitResult.ts` | explicit result submission |
 | `src/main/pi/subagent/session.ts` | BaseSession-based delegated run |
 | `src/main/pi/subagent/manager.ts` | limits/cancel/state/lifecycle |
-| `src/main/pi/subagent/commands/` | cmdline run/run-many |
+| `src/main/pi/subagent/commands/` | `list` / `describe` / `run` 与未来真实子命令的 router 扩展点 |
 | `src/main/pi/tools/subagent.ts` | 顶层 facade |
 
 文件拆分在 Step 1 以实际依赖为准；禁止为了凑地图创建空壳或无价值 wrapper。

@@ -1,6 +1,6 @@
 # Tool System —— 用 shell 范式重塑应用内工具调用
 
-<!-- Last verified: 2026-07-13 -->
+<!-- Last verified: 2026-07-16 -->
 ## 1. 范围
 
 本文档覆盖 DESKMATE **本地工具系统**的总体设计 —— 包括今天已有的 `LocalTool` registry,以及新引入的 **`app` 伪 shell** 机制。
@@ -9,6 +9,7 @@
 - `src/main/pi/tools/` —— `LocalTool` registry / 全部本地工具实现 / 启动注册 / lazy 重依赖
 - `src/main/pi/appcmd/` —— `app` 工具的执行基础设施(parseCmdline / flags / dispatcher / registry / vendored argsTokenizer)
 - `src/main/pi/appcmd/builtins/` —— 应用内能力的 AppCommand 实现
+- `src/main/pi/subagent/commands/` —— 新顶层 `subagent` 的 registry、grammar 与 runner DI seam（Step 3 已实现，尚未生产注册）
 
 模块级深度文档(LocalTool 契约细节、工具实现规范):[src/main/pi/tools/ai.prompt.md](../src/main/pi/tools/ai.prompt.md)。
 
@@ -39,7 +40,7 @@ PI 之所以好用,根本原因有两条:
 | `shell` | 执行**真** shell 命令,跑 `git` / `npm` / `python` / 任意外部 CLI | ✅ |
 | `app` | shell 风格调用**应用内**能力 —— 自解释、渐进披露 | ✅ |
 
-> **现状**:顶层 LLM-visible 工具数为 **8**(`read` / `write` / `find` / `search` / `shell` / `ask` / `app` / `web`)。`app` 与 `web` 是两个**对等**的 router facade(共享 `makeRouterCommand` + `makeCommandFacade`,见 §10)。`edit` 尚未独立;`download` 已并入 `web download` 子命令(不再是顶层工具);`present_deliverables` 已下线 —— LLM 在收尾消息文字里直接提到产出 URI,renderer 端通过 `extractFilePathsFromText` 抽取并渲染卡片。
+> **现状**:顶层 LLM-visible 工具数仍为 **8**(`read` / `write` / `find` / `search` / `shell` / `ask` / `app` / `web`)。Step 3 已准备第 9 个 `subagent` facade，但它要求注入真实 runner，且在 Step 9 前不进入 `tools/index.ts`。`app` / `web` / 未来 `subagent` 共用 `makeRouterCommand` + `makeCommandFacade`；`edit` 尚未独立，`download` 已并入 `web download`。
 
 确立 "read-only 域" 的设计纪律(后续若有同形态命令直接照搬)
 
@@ -77,7 +78,7 @@ src/main/pi/appcmd/
 ├── flags.ts                       boolean / string / array flag parser + `--` 终止符
 ├── registry.ts                    AppCommandRegistry 容器**类**(不持有单例)
 ├── dispatcher.ts                  构造 AppCmdContext + stdio buffer + 错误收敛 + formatAppCmdContent
-├── makeRouterCommand.ts           把一个 registry 包成「router 形态」AppCommand(顶层工具核心)
+├── makeRouterCommand.ts           registry → router AppCommand；可选 helpFooter 追加领域规则
 ├── _facade.ts                     makeCommandFacade(cmd):把 AppCommand 包成顶层 LocalTool
 ├── _commonFlags.ts                跨命令共享 flag spec + isHelp/isJson/isDryRun/isYes helper
 ├── builtins/                      两个对等的「注册表 + 成员」域包:
@@ -101,7 +102,10 @@ src/main/pi/appcmd/
 
 src/main/pi/tools/
 ├── app.ts                         app = makeCommandFacade(makeRouterCommand({ registry: appCommands }))
-└── web.ts                         web = makeCommandFacade(makeRouterCommand({ registry: webCommands }))  ← 与 app.ts 逐字对等
+├── web.ts                         web = makeCommandFacade(makeRouterCommand({ registry: webCommands }))
+└── subagent.ts                    createSubagentTool(runner)，Step 3 未注册
+
+src/main/pi/subagent/commands/     list / describe / run + 可扩展 registry/router + runner seam
 
 ### 5.1 AppCommand 契约
 

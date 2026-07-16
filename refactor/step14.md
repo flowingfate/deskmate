@@ -50,14 +50,14 @@
 - timeout actual abort；
 - max parallel/total和finally cleanup；
 - single/parent cancel；
-- run-many allSettled；
+- 多个独立 tool calls 并发 admission，单个失败不取消 siblings；
 - persisted terminal result。
 
 LLM provider使用仓库既有deterministic mock/stream fixture，不访问真实网络。
 
 ### Phase D — Command/IPC/Renderer data
 
-- run/run-many解析和manager seam；
+- list/describe/run解析、manager adapter、安全投影与并行多调用usage；
 - IPC ownership/cancel；
 - renderer result/state reducer、reload final JSON；
 - Agent editor patch/dangling logic；

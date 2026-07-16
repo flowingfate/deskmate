@@ -28,6 +28,8 @@ interface RouterSpec {
   readonly synopsis: string;
   /** 被路由的注册表。成员命令由各自的 builtins 模块填充。 */
   readonly registry: AppCommandRegistry;
+  /** 可选的领域规则，追加到自动生成的命令表后。 */
+  readonly helpFooter?: string;
 }
 
 /**
@@ -44,7 +46,11 @@ function buildCommandTable(cmds: readonly AppCommand[]): string {
 }
 
 /** 顶层 help —— `<name> --help` / 空 cmdline / 路由失败时统一应答。 */
-function buildRegistryHelp(name: string, registry: AppCommandRegistry): string {
+function buildRegistryHelp(
+  name: string,
+  registry: AppCommandRegistry,
+  helpFooter?: string,
+): string {
   const cmds = registry.list();
   if (cmds.length === 0) {
     return `${name}: no commands registered.\n`;
@@ -57,6 +63,7 @@ function buildRegistryHelp(name: string, registry: AppCommandRegistry): string {
     `Run "${name} <command> --help" for detailed usage.`,
     'Add --json to any command for structured JSON output (if supported).',
   ];
+  if (helpFooter) lines.push('', helpFooter);
   return lines.join('\n') + '\n';
 }
 
@@ -88,13 +95,13 @@ function buildRegistryDescription(name: string, registry: AppCommandRegistry): s
 }
 
 export function makeRouterCommand(spec: RouterSpec): AppCommand {
-  const { name, synopsis, registry } = spec;
+  const { name, synopsis, registry, helpFooter } = spec;
   return {
     name,
     synopsis,
     // help / toolDescription 都动态枚举注册表 —— 永远反映「当前注册了谁」。
     get help() {
-      return buildRegistryHelp(name, registry);
+      return buildRegistryHelp(name, registry, helpFooter);
     },
     toolDescription() {
       return buildRegistryDescription(name, registry);
@@ -103,7 +110,7 @@ export function makeRouterCommand(spec: RouterSpec): AppCommand {
     async run(argv: string[], ctx: AppCmdContext): Promise<void> {
       // 顶层「松散」:空 / --help / -h → 顶层 help,exit 0。
       if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
-        ctx.print(buildRegistryHelp(name, registry));
+        ctx.print(buildRegistryHelp(name, registry, helpFooter));
         return;
       }
 
@@ -113,7 +120,7 @@ export function makeRouterCommand(spec: RouterSpec): AppCommand {
         // 未知命令仍走「松散兜底」:端 help + 温和 tip,不附 exit code,
         // 零负面信号、降低 LLM 重试摩擦。
         ctx.print(
-          `${buildRegistryHelp(name, registry)}\ntip: no command named "${sub}" — pick one from the list above.\n`,
+          `${buildRegistryHelp(name, registry, helpFooter)}\ntip: no command named "${sub}" — pick one from the list above.\n`,
         );
         return;
       }

@@ -12,10 +12,10 @@
 ## 2. 开始前 review
 
 1. 阅读 chat tool renderer registry、app/web/shell renderer模式和旧 app/subagent卡片；
-2. 从 Step 9获取真实 tool command grammar、tool result JSON、manager state/cancel API；
+2. 从 Step 9 获取最终 manager state/cancel API，并核对 Step 3 已固定的单调用 `{ outcome }` envelope；
 3. 从 Step 6获取 parent-scoped subrun query API；
 4. 设计 shared IPC，确认 preload四层协变；
-5. 组件不得超过500行；单/多任务共享纯展示和hook，不复制两套状态逻辑；
+5. 组件不得超过500行；所有 tool call 复用同一单任务卡片，不为并行调用复制 batch 展示逻辑；
 6. 不启动应用/浏览器，用户负责可视行为验证。
 
 ## 3. IPC namespace
@@ -46,11 +46,12 @@ Step 12再决定是否暴露 `getRunMessages`；本 step不让 card预取 transc
 
 新增 `tool/renderers/subagent/` 并在顶层 registry注册 tool name `subagent`：
 
-- parse `run` / `run-many`；
-- command parser只服务展示，不作为业务安全解析；
-- correlationId匹配 parent tool call；
-- live state按 parent identity + subrunId更新；
-- final response到达后以 tool result JSON为事实源，取消live subscription或忽略过时event。
+- parse `list` / `describe <agent-id>` / `run <agent-id> --task ... --expect ...`；run 可选 `--with-parent-summary` / `--max-turns` / `--timeout-seconds`；
+- command parser只服务展示，不作为业务安全解析；不得支持旧 name、share-context、spawn/spawn-many 或已删除的 run-many；
+- 三条命令 final JSON 都读取 `{ outcome: { kind: 'result' | 'rejected', ... } }`；
+- 只有 run 的 `kind: 'result'` 进入 subrun runtime card；list/describe 使用只读 command result 展示，不订阅 runtime state、不显示 cancel；
+- run result.status 映射 completed/partial/blocked/failed/cancelled；任意 `kind: 'rejected'` 显示调用拒绝且不伪造 subrunId；
+- correlationId匹配各自 parent tool call；run live state按 parent identity + subrunId更新；final response到达后以各 tool result JSON为事实源。
 
 不再经 `renderers/app/subagent`。
 
@@ -69,14 +70,13 @@ Step 12再决定是否暴露 `getRunMessages`；本 step不让 card预取 transc
 
 状态用文字+icon，不只颜色。Cancel有loading、disabled和error feedback。
 
-## 6. 并行卡片
+## 6. 并行多调用
 
-- 每个 request独立 row/card，以 subrunId为key；
-- 一个失败不改变其它状态；
-- 总览显示完成计数；
-- final results顺序与请求顺序保持，不能按完成时间乱序；
-- 单个 cancel只作用目标 run；
-- state event丢失时 final JSON仍可渲染。
+- 同一 assistant response 的多个 `subagent` tool calls 各自渲染一张单任务卡片，不合并成 batch card；
+- 每张卡片以自己的 toolCallId/correlationId 关联；有正式 result 后再使用 parent identity + subrunId 关联 live/audit 状态；
+- 一个调用失败或 rejected 不改变其它卡片；
+- 单个 cancel只作用已有 subrunId 的目标 run；
+- state event丢失时，每个 call 自己的 final `{ outcome }` 仍可恢复终态。
 
 ## 7. Reload与持久化事实源
 

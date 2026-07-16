@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 2 已实现，等待用户 review**
-- 当前门禁：Step 2 `awaiting-review`；用户确认前不进入 Step 3
-- 业务步骤：1 / 13 complete（Step 2 尚待用户确认）
+- 总体阶段：**Step 3 complete，等待开始 Step 4**
+- 当前门禁：Step 4 `pending`；尚未开始计划 review
+- 业务步骤：3 / 13 complete
 - 测试步骤：Step 14 尚未开始
-- 生产代码变更：普通 Agent 已可持久化 description/delegates，并提供显式 nullable graph resolver；未接入 subagent runtime
+- 生产代码变更：新增未注册的顶层 `subagent` command/facade construction seam；旧 `app subagent` 仍是生产入口
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -35,8 +35,8 @@
 | Step | 计划 | 状态 | 读取的上游产物 | 向下游交付的稳定产物 |
 |---:|---|---|---|---|
 | 1 | [目标契约与 Pi/Subagent 边界](step1.md) | complete | `context.md` | `src/shared/types/subAgentRunTypes.ts`；`src/main/pi/subagent/types.ts`；模块依赖规则 |
-| 2 | [Agent description/delegates 持久化](step2.md) | awaiting-review | Step 1 AgentId/contract | 可落盘的 Agent graph、ID resolver、IPC patch |
-| 3 | [独立顶层 subagent cmdline facade](step3.md) | pending | Step 1 request grammar | 未注册的新 facade/registry/run parser，供 Step 9 接 manager |
+| 2 | [Agent description/delegates 持久化](step2.md) | complete | Step 1 AgentId/contract | 可落盘的 Agent graph、ID resolver、IPC patch |
+| 3 | [独立顶层 subagent cmdline facade](step3.md) | complete | Step 1 request grammar | 未注册的新 facade/registry/run parser，供 Step 9 接 manager |
 | 4 | [执行 Agent 与 Session owner 分离](step4.md) | pending | Step 1 execution scope | Tool/Internal URL 可表达 own knowledge + parent local |
 | 5 | [委派能力 policy 与 reduced catalog](step5.md) | pending | Steps 2–4 | 硬 allow/deny policy、可构建 delegated catalog |
 | 6 | [三位序号 Subrun 持久化](step6.md) | pending | Steps 1,2,4 | `001..999` allocator、data/messages store、persist adapter |
@@ -109,7 +109,7 @@
 | 风险 | 设计应对 | 首次处理 | 状态 |
 |---|---|---:|---|
 | `001` 在不同 session 冲突 | 所有 key/IPC 带 parent identity，subrunId 明确局部 scope | 1/6/11 | 已规划 |
-| run-many 并发重复分配序号 | per-parent-session allocator lock + atomic reservation | 6 | 已规划 |
+| 多个 tool calls 并发分配序号冲突 | per-parent-session allocator lock + atomic reservation | 6 | 已规划 |
 | ToolContext 一个 agentId 混淆两种 ownership | executor + sessionOwnerAgentId 分离 | 4 | 已规划 |
 | 顶层工具注册后但 manager 未完成形成空壳 | Step 3 不注册，Step 9 原子注册并接线 | 3/9 | 已规划 |
 | `app` 内只读/写命令混杂 | delegated router policy；新 spawn 不再放 app | 5 | 已规划 |
@@ -160,6 +160,17 @@
 - `Profile.resolveDelegates` 改为返回 `ResolvedAgentDelegates | null`；parent record/AGENT.md 缺失返回 null。resolver 内联完成解析所需 trim/去空/稳定去重，self/dangling/archived 进入 unavailable，不抛领域异常。
 - 删除本 step 新增的 Markdown description/delegates throw 校验；既有 parser 契约不在本 review 扩大重构。
 
+### 2026-07-16 — Step 3 启动与 grammar review
+
+- 用户确认 Step 2 完成并要求开始 Step 3，Step 2 状态切为 `complete`。
+- 现有计划经当前 app/web facade、通用 parser/router、旧 app subagent 参数形态与 Step 1 request contract 复核，无需改写后进入实现。
+- 用户 review 决定删除 `run-many`：并行由同一 assistant response 中的多个独立 `subagent` tool calls 表达，现有 session 会并行执行 tool-call 数组。
+- 保留 cmdline facade、registry 与 router，作为未来新增真实管理子命令的扩展空间；当前不创建 placeholder。
+- runner 对可预期 pre-run 拒绝继续使用显式 `kind: 'rejected'`，不通过未声明 throw 或伪造 failed formal result表达。
+- 用户要求新增两个有价值的管理子命令；选择 `list`（低成本刷新可委派目标）与 `describe`（按需查看单个已授权 target 的安全能力摘要）。
+- `list` 只读 resolver hot records，不 fan-out；`describe` 先 resolver 授权再单 target cold read，禁止输出 systemPrompt/outgoing graph/zero 等非选择信息。
+- 用户确认 Step 3 可视为完成；`list` / `describe` / `run` grammar、runner seam 与未注册门禁正式作为下游稳定输入。
+
 ## 执行记录
 
 ### 2026-07-16 — Step 1 — complete
@@ -173,7 +184,7 @@
 - 影响的下游 steps：2、3、5、6、7、9、11、14 已回写真实名称与边界；其余计划契约仍成立。
 - 用户 review 待确认：shared 字段、result 五态、policy 默认值/上限、`SubrunId` 规则。
 
-### 2026-07-16 — Step 2 — awaiting-review
+### 2026-07-16 — Step 2 — complete
 - Plan review 变化：无需重写原计划；确认 description 作为 AGENT.md 源真值 + AgentRecord hot 缓存，delegates 作为 AgentDetail cold 字段，resolver 只读父 detail 后 join hot registry。
 - 实际输入：Step 1 shared request/ID 契约；persist Hot/Cold、AGENT.md、IPC/atom 既有写路径。
 - 实际输出/API：`AgentRecord.description?`；AGENT.md/`AgentDetail.delegates?`；`AgentFrontPatch` description/delegates；`CreateAgentInput.description`；`Profile.resolveDelegates(parentId): Promise<ResolvedAgentDelegates | null>`。
@@ -184,6 +195,21 @@
 - 未做的运行验证：按重构政策未启动应用、未做 smoke/E2E；未新增测试文件。
 - unit-test.md 更新：删除独立 normalization/throw 候选；保留 graph round-trip，并新增 resolver null/self/dangling/archive/fan-out 候选。
 - 影响的下游 steps：5、8、9、10 已回写真实 resolver/字段/atom 边界；6 仅依赖普通 Agent ID，计划仍成立。
-- 用户 review 待确认：description hot/cold 拆分、nullable resolver、self 进入 unavailable、dangling/archive 输出、duplicate 复制规则。
+- 用户 review 结果：通过；2026-07-16 进入 Step 3。
+
+### 2026-07-16 — Step 3 — complete
+- Plan review 变化：无需重写；确认复用 `AppCommandRegistry` / `makeRouterCommand` / `makeCommandFacade`，并给 router 增加可选 `helpFooter`，使顶层 help 能承载 Agent ID 来源和两层 limits。
+- 实际输入：Step 1 `SubAgentRunRequest` / `normalizeSubAgentRunRequest`；app/web facade 通用基础设施；旧 `app subagent` 仅只读分析参数痛点。
+- 实际输出/API：`createSubAgentCommand(runner)`；`createSubagentTool(runner)`；`SubAgentCommandRunner.listDelegates/describeDelegate/run`；父 scope；三类 result/rejected outcomes；list/describe 安全 view types。
+- grammar：`subagent list`、`subagent describe <agent-id>`、`subagent run <agent-id> --task --expect [--with-parent-summary] [--max-turns] [--timeout-seconds]`；不提供 `run-many`。
+- list/describe：list 返回 resolver 顺序的 ID/name/description/model + unavailable IDs；describe 仅允许 available ID，返回 thinking/local-tools(all|selected)/MCP/Skills，明确排除 systemPrompt/delegates/subAgents/zero。
+- run/parser/output：flag/positional 先类型收窄，再进入唯一 normalizer；timeout seconds 安全换算；三条命令统一输出 `{ outcome }`，rejected exit 1。
+- 并行语义：顶层 help、tool description command synopsis 与 `run --help` 均提示 LLM 在同一 assistant response 发起多个 run calls；RegularSession/JobRun 会并行执行。
+- 最终生产文件：`commands/{_shared,types,list,describe,run,index}.ts`、`tools/subagent.ts`、`appcmd/makeRouterCommand.ts`；review 中删除 `parse.ts` / `runMany.ts`。`tools/index.ts` 未修改。
+- 生产未注册证据：`tools/index.ts` 搜索 `createSubagentTool` / `tools/subagent` 无结果；旧 `appCommands.register(subagentCommand)` 仍在 feature gate 内，等待 Step 9 原子 cutover。
+- 静态验证：全部 command/facade diagnostics 无错误；最终 `npm run check:impact -- <8 个代码文件>` 通过，直接依赖只有已复核的 `tools/app.ts` / `tools/web.ts`；`npm run typecheck`、`npm run build` 通过（仅既有 chunk-size warning）。
+- 未做的运行验证：按重构政策未新增/运行单测，未执行 command smoke，未启动应用，未做 E2E。
+- 文档交接：更新 subagent/Pi/tool-system 文档，回写 `context.md`、Steps 3/9/11/14 与 `unit-test.md`。
+- 用户 review 结果：通过；Step 3 complete，等待另行开始 Step 4。
 
 每个后续 step 完成后继续追加同结构记录。

@@ -1,6 +1,6 @@
 # Step 3 — 建立独立顶层 `subagent` cmdline facade（暂不注册）
 
-> 状态：待执行
+> 状态：complete（用户已 review 通过）
 > 前置：Step 1 complete，request 字段/normalization 已固定
 > 下游：Step 9 将 command kernel 接到 manager 并原子注册
 > 本步不能向 LLM 暴露不可执行的空壳工具。
@@ -25,10 +25,12 @@
 ```text
 src/main/pi/subagent/
   commands/
+    _shared.ts
+    describe.ts
     index.ts
+    list.ts
     run.ts
-    runMany.ts
-    parse.ts（只有真实共享解析逻辑时）
+    types.ts
 
 src/main/pi/tools/subagent.ts
 ```
@@ -36,9 +38,30 @@ src/main/pi/tools/subagent.ts
 - registry 与 commands 位于 `pi/subagent`，不是 `appcmd/builtins/app`；
 - `tools/subagent.ts` 与 app/web 一样仅做 facade 装配；
 - generic tokenizer/flags/router/facade 仍从 appcmd infrastructure 复用；
-- 不创建第二套 tokenizer/flag parser。
+- 当前注册 `list` / `describe` / `run` 三个真实命令，保留 registry/router 供未来新增有明确需求的子命令；不创建 placeholder。
 
 ## 4. Cmdline 契约
+
+### 委派目标列表
+
+```text
+subagent("list")
+```
+
+- 返回当前 parent Agent 被允许委派的 active Agents，保持 delegates 配置顺序；
+- 每项只含稳定 ID、name、description、model；另返回 `unavailableIds`；
+- 只读，固定 JSON `{ outcome }`，不接受位置参数。
+
+### 委派目标详情
+
+```text
+subagent("describe <agent-id>")
+```
+
+- 只允许 describe 当前 resolver 的 available target，不允许借此读取任意 Agent；
+- 返回 identity/model/thinking、local tool selection、MCP tool selection、Skill bindings；
+- 不返回 system prompt、delegates、legacy subAgents、zero state 或其它未授权配置；
+- 只读，固定 JSON `{ outcome }`。
 
 ### 单任务
 
@@ -59,15 +82,12 @@ Step 1 policy 契约：`maxTurns` 默认 25 / 最大 100；未给 timeout 时按
 
 ### 并行任务
 
-```text
-subagent("run-many --config-json '[{...}]'")
-```
-
-只支持一个清晰的 JSON 数组入口，避免同时维护旧 `--task name:task` 与 config-json 两种语法。每项直接对应 Step 1 request 所需字段；错误必须指出数组 index。
+不提供 `run-many`。一次 assistant response 可返回多个同名 `subagent` tool calls，RegularSession/JobRun 会并行执行这些 calls。usage/help 必须明确指导 LLM：每个独立任务发起一次 `subagent("run ...")`，需要并行时在同一 response 中发起多次。
 
 ### Help
 
-- 顶层 help 列 run/run-many、两层限制、Agent ID 来源、expected output；
+- 顶层 help 列 `list` / `describe` / `run`、两层限制、Agent ID 来源、expected output；
+- 顶层 help 与 `run --help` 都明确“同一 response 多次调用 = 并行”，且不存在 batch subcommand；
 - 明确 sub-agent 不能调用 subagent tool；
 - 不在 help 中承诺 async handle/join、full history、shell。
 
@@ -75,9 +95,8 @@ subagent("run-many --config-json '[{...}]'")
 
 commands 不 import 尚不存在的 concrete manager。定义最小 injected runner interface 或让 Step 9 填入真实 kernel，但不能交付 no-op：
 
-- parser/command object 可以被静态构造；
-- `run` 被实际调用时若 runner 未装配应属于不可注册状态，而不是返回 fake success；
-- Step 9 production registration 必须同时提供 runner。
+- command object 被实际调用时若 runner 未装配应属于不可注册状态，而不是返回 fake success；
+- Step 9 production registration 必须同时实现 `listDelegates` / `describeDelegate` / `run`。
 
 实现时优先让 command functions 接显式 `SubAgentCommandContext`/runner，避免全局 singleton 回读。
 
@@ -101,7 +120,7 @@ commands 不 import 尚不存在的 concrete manager。定义最小 injected run
 
 在 `progress.md` 记录：
 
-- 最终 tool name、subcommands、flags；
+- 最终 tool name、`list` / `describe` / `run` subcommands、flags 与并行多调用提示；
 - registry/facade/runner seam 文件；
 - 生产未注册的证据（具体注册点未修改）；
 - Step 9 需要实现的 manager call signature。

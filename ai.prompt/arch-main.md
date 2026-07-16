@@ -24,7 +24,7 @@
 | **持久化（persist）** | `src/main/persist/` + `src/shared/persist/` | **生产路径**：`~/.deskmate/` 全部用户态数据。Agent 一等公民、`p_{ulid}` profile 目录、AGENT.md / sessions/{ym}/ 双层、12 条细粒度 IPC 通道 | [persist.md](persist.md)（架构总览） + [模块 ai.prompt.md](../src/main/persist/ai.prompt.md) |
 | MCP 运行时（external-only） | `src/main/lib/mcpRuntime/` | external MCP server 连接 / OAuth / 执行入口（`executeToolOnServer`，server-scoped）。**不再有"内置 server"**——本地工具已独立到 `pi/tools/` | [ai.prompt.md](../src/main/lib/mcpRuntime/ai.prompt.md) |
 | 本地工具（pi/tools + pi/appcmd） | `src/main/pi/tools/` + `src/main/pi/appcmd/` | `LocalTool` registry + `ToolContext`（chat 主链路直接调）+ 全部本地工具实现 / 启动注册 / lazy 重依赖。**与 MCP 平级,不是 MCP**。`appcmd/` 是新引入的 **`app` 伪 shell** 基础设施(synopsis + help 双轨自描述、shell 范式调用、命令注册表) | [tool-system.md](tool-system.md)（总体设计 + 落地路径） + [模块 ai.prompt.md](../src/main/pi/tools/ai.prompt.md)（LocalTool 细节） |
-| Agent 委派运行时（pi/subagent，建设中） | `src/main/pi/subagent/` + `src/shared/types/subAgentRunTypes.ts` | 普通 Agent 作为一次委派运行角色的目标架构；当前仅共享 request/result/state 与 normalization，尚未接入生产 manager/session/tool | [ai.prompt.md](../src/main/pi/subagent/ai.prompt.md) |
+| Agent 委派运行时（pi/subagent，建设中） | `src/main/pi/subagent/` + `src/shared/types/subAgentRunTypes.ts` | 已有共享契约与未注册的顶层 `subagent` cmdline facade/runner seam；manager/session/persist 尚未接线，旧 `lib/subAgent` 仍是生产路径 | [ai.prompt.md](../src/main/pi/subagent/ai.prompt.md) |
 | 工作区 | `src/main/lib/workspace/` | 文件树、ripgrep 搜索、chokidar 监听、模糊文件索引 | — |
 | 自动更新 | `src/main/lib/autoUpdate/` | electron-updater 封装，CDN/GitHub 更新检查 | — |
 | 功能标志 | `src/main/lib/featureFlags/` | 默认值根据 isDev/brand/platform 控制；CLI `--enable/disable-features` | [ai.prompt.md](../src/main/lib/featureFlags/ai.prompt.md) |

@@ -52,9 +52,20 @@
 ## Step 3 候选：顶层 cmdline facade
 
 - [ ] P0 `run` 必须有 agent-id、task、expect。
-- [ ] P0 `run-many --config-json` 严格解析每条 request，错误指出数组 index。
+- [ ] P0 `list` 保持 resolver available 配置顺序并返回 unavailable IDs；parent config 缺失显式 rejected。
+- [ ] P0 `describe` 只接受 available ID；安全投影不含 systemPrompt/delegates/subAgents/zero。
 - [ ] P1 `--help` / unknown command / malformed quoting 遵循 app/web facade 统一语义。
 - [ ] P1 Step 3 尚未 production register，不能出现在普通 catalog。
+
+### Step 3 实际补充 — 2026-07-16
+- 实际 contract：registry 当前注册 `list` / `describe` / `run`；三者统一使用必填 runner DI 与 `{ outcome }` envelope，保留未来真实子命令扩展空间。
+- 新增候选：`list` 的 hot summary 字段、顺序、unavailable IDs 与 rejected；不得 fan-out 读取 target detail。
+- 新增候选：`describe` 单 target cold read，localTools 用 `all | selected` union，MCP/Skills 只投影安全选择；任意未授权/失效 ID rejected。
+- 新增候选：run 秒到毫秒转换拒绝非正/非 safe integer，policy 上限仍由 normalizer clamp；parent summary getter 缺失/失败显式返回命令错误。
+- 新增候选：runner 的 result/rejected outcomes 均产生 `{ outcome }`，rejected 设 exit 1；顶层 help 与 `run --help` 指导同一 response 多 call 并行。
+- 改写候选：Step 3 的“未 production register”只做 registry/catalog observable 检查，不测源码文本；Step 9 注册后改为 cutover 测试。
+- 最高风险：Step 9 adapter 绕过 resolver、describe 泄漏 cold 敏感字段，或 run 共享 admission/allocator 无法承受并发 tool calls。
+- 需要用户在 Step 14 前决定：是否保留 help 文案关键句断言；默认不做整段 snapshot。
 
 ## Step 4 候选：资源 ownership
 
@@ -104,10 +115,11 @@
 ## Step 9 候选：Manager 与生产工具
 
 - [ ] P0 parent delegates 未授权/self/dangling/archived target 全部明确拒绝。
+- [ ] P0 list/describe adapter 都复用 `Profile.resolveDelegates`；describe 只对一个已授权 target 读取 detail。
 - [ ] P0 每 parent session max parallel/max total 生效；所有 terminal finally 释放 active slot。
 - [ ] P0 timeout 触发真实 abort，而非只 Promise.race 返回。
 - [ ] P0 cancel single 不影响 siblings；cancel parent 取消全部。
-- [ ] P0 run-many 使用 allSettled，一个失败不取消其它任务。
+- [ ] P0 多个并发 `subagent` tool calls 共享 max parallel/total，单个失败不取消 siblings。
 - [ ] P1 production catalog 注册顶层 subagent，app registry 不再注册 subagent command。
 - [ ] P1 tool result JSON 可稳定恢复 formal results 与 subrun IDs。
 

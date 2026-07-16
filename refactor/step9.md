@@ -19,6 +19,14 @@
 6. 若 Step 8 尚未用户 review complete，不开始本 cutover。
 7. runtime event 使用 Step 1 的 `SubAgentRuntimeState`，terminal result 使用 `SubAgentRunResult`；不得弱化 parent identity 或复制第二套状态 shape。
 
+### Step 3 已具备输入（2026-07-16）
+
+- construction：`createSubagentTool(runner)` → `createSubAgentCommand(runner)`；没有未注入 runner 的工具常量。
+- runner：`listDelegates(scope)` / `describeDelegate(scope, id)` / `run(scope, request)`；scope 已含 `profileId + parentAgentId + parentSessionId + signal + tracer + correlationId`。
+- outcomes：三条命令的可预期业务拒绝返回 `{ kind: 'rejected', error }`；run 的真实 subrun 终态返回 `{ kind: 'result', result: SubAgentRunResult }`。
+- run parser 已输出 normalized request；`--with-parent-summary` 会通过 AppCmdContext callback 获取 summary，manager 不再重复解析 CLI 或生成 summary。
+- facade 当前未从 `tools/index.ts` import/register；本 step 必须在 manager adapter 可用后调用 `createSubagentTool(adapter)` 原子注册。
+
 ## 3. `src/main/pi/subagent/manager.ts`
 
 Manager 负责 orchestration，不复制 session逻辑：
@@ -27,8 +35,7 @@ Manager 负责 orchestration，不复制 session逻辑：
 - 调 Step 2 `Profile.resolveDelegates(parentAgentId)`；返回 null 时明确报告 parent config unavailable，仅允许非 null `available` 中命中 request.delegateAgentId；`unavailableIds` 命中时区分 self 与 unavailable target，禁止直接读 config 或按 name fallback；
 - 通过 parent Session创建 Step 6 subrun，取得 `001..999`；
 - 创建 per-run AbortController并启动 Step 8 SubAgentSession；
-- 同 parent session max parallel=5、max total=20；
-- run-many用 `Promise.allSettled`，单个失败不影响 siblings；
+- 同 parent session max parallel=5、max total=20；多个独立 `subagent` tool calls 会由 RegularSession/JobRun 并行发起，manager 的 admission/reservation 必须并发安全；
 - timeout触发 controller.abort 并等待 session收尾，不用无界 `Promise.race`；
 - cancel one、cancel by parent；
 - finally释放 active map、parent set、timer和listener；
@@ -50,18 +57,18 @@ max total 20以已经 reservation 的 subrun count为准，跨 app restart仍一
 
 ## 4. Command kernel 接线
 
-将 Step 3 `run` / `run-many` 接 manager：
+实现 Step 3 `SubAgentCommandRunner` adapter：
 
-- parser只负责 cmdline → normalized request；
-- manager负责授权/limits/store/session；
-- output是稳定 JSON envelope，包含 formal result和 parent-scoped subrunId；
-- 不输出旧 `<sub_agent_result>` 自由文本包；
-- 不按 name lookup；
-- command必须透传 signal、tracer、profile/agent/session owner、correlationId。
+- `listDelegates` 调 `Profile.resolveDelegates(parentAgentId)`；null 返回 rejected，否则保持 available 顺序投影 ID/name/description/model，并原样返回 unavailable IDs；
+- `describeDelegate` 先走同一 resolver 授权，只允许 available ID；再对一个 target 调 `getAgentDetail`，投影 thinking/local-tools/MCP/Skills，禁止输出 systemPrompt/delegates/subAgents/zero；
+- `run` 不改 command grammar、复制 parser 或绕过 `normalizeSubAgentRunRequest`；manager负责授权/limits/store/session；
+- 三条命令固定 JSON `{ outcome }`；run 的 formal result 自带 parent-scoped subrunId；
+- 并行来自同一 assistant response 的多个独立 run calls，不在 manager/command 内再造 batch API；
+- 不输出旧 `<sub_agent_result>` 自由文本包，不按 name lookup；scope 已透传 signal、tracer、profile/parent Agent/session、correlationId。
 
 ## 5. 注册新顶层工具
 
-在 `src/main/pi/tools/index.ts` 注册 `subagent` facade：
+在 `src/main/pi/tools/index.ts` 用真实 adapter 注册 `createSubagentTool(adapter)`：
 
 - 与 app/web并列；
 - spec description列出 commands synopsis；
