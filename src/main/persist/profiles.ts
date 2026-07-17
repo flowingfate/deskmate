@@ -69,7 +69,7 @@ export class Profiles {
    *  1. profilesIndex.ensure() —— items 为空 → 初始化 guest
    *  2. resolveActive() —— activeProfileId 不在 items 中 → fallback items[0]
    *  3. profile.settings 装载
-   *  4. profile.mcp / sub-agents / skills / models 装载
+   *  4. profile.mcp / skills / models 装载
    *  5. agent registry 装载（默认 agent 注入由调用方负责）
    *  6. Profile.load 内部已开 `ProfileDb` + integrity_check（损坏 → 自愈重建两张表）
    *  7. profile.reconcileAgents() —— 目录 ↔ agents.json items 对账
@@ -135,7 +135,7 @@ export class Profiles {
 
   /**
    * 同步取 active profile —— 仅在 bootstrap() 完成后可用。
-   * 给登录关键路径上的 sync getter（skill / subAgent 等同步 lookup）用。
+   * 给登录关键路径上的 sync getter（skill 等同步 lookup）用。
    * 实现走 `Profile.get()` 同步缓存（bootstrap 已 load 进 cache）；未 bootstrap 时抛错。
    */
   public activeSync(): Profile {

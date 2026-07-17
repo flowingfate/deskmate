@@ -36,7 +36,7 @@ export interface AgentItem {
 
 interface UseApplyToAgentsStateOptions {
   open: boolean;
-  /** 资源标识；变化时会重新预选。例如 skillName / subAgentName / mcpServerNames.join(','). */
+  /** 资源标识；变化时会重新预选。例如 skillName / delegateAgentName / mcpServerNames.join(','). */
   resourceKey: string;
   /** 给定某个 agent 的 cold detail，判断该 agent 是否已经应用了该资源。 */
   isAlreadyApplied: (detail: AgentDetail) => boolean;

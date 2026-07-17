@@ -11,7 +11,6 @@ import type { ScheduleJob } from './schedule';
 import { LegacyAuth, PiAuth } from './auth';
 import { Mcp } from './mcp';
 import { Skills } from './skills';
-import { SubAgents } from './subAgents';
 import { Models } from './models';
 import { Archive } from './archive';
 import { SchedulerState } from './schedulerState';
@@ -29,6 +28,11 @@ import { partialAssign } from '@shared/persist/data';
 import { PersistBase } from './lib/persistBase';
 
 const SETTINGS_FILE_VERSION = 1 as const;
+export interface ResolvedAgentDelegates {
+  available: AgentRecord[];
+  unavailableIds: string[];
+}
+
 
 /** 对应 settings.json —— UI 偏好聚合。 */
 class ProfileSettings extends PersistBase {
@@ -160,7 +164,6 @@ export class Profile {
   // —— profile 级共享资源 ——
   public readonly mcp:        Mcp;
   public readonly skills:     Skills;
-  public readonly subAgents:  SubAgents;
   public readonly models:     Models;
   public readonly archive:    Archive;
   public readonly schedulerState: SchedulerState;
@@ -185,7 +188,6 @@ export class Profile {
     this.piAuth    = new PiAuth(id);
     this.mcp       = new Mcp(id);
     this.skills    = new Skills(id);
-    this.subAgents = new SubAgents(id);
     this.models    = new Models(id);
     this.archive   = new Archive(id);
     this.schedulerState = new SchedulerState(id);
@@ -203,7 +205,6 @@ export class Profile {
         this.piAuth.load(),
         this.mcp.load(),
         this.skills.load(),
-        this.subAgents.load(),
         this.models.load(),
         // archive 当前无需 load
         this.schedulerState.load(),
@@ -247,7 +248,6 @@ export class Profile {
       settings: this.settings.toFile(),
       agents: this.agentRegistry.items,
       primaryAgentId: this.agentRegistry.primaryAgentId,
-      subAgents: await this.subAgents.listConfigs(),
       skills: this.skills.items,
       mcp: this.mcp.items,
       starred: this.sessionIdx.listStarred(),
@@ -260,7 +260,7 @@ export class Profile {
 
   /**
    * 取 agent record 列表。`Profile.load()` 已在 bootstrap 阶段 preload `agentRegistry`，
-   * sync 返回（含 subAgentManager / skill 等登录关键路径上的同步 lookup 调用方共用）。
+   * sync 返回（含 subagent manager / skill 等登录关键路径上的同步 lookup 调用方共用）。
    */
   public listAgents(): AgentRecord[] {
     return this.agentRegistry.items;
@@ -279,6 +279,31 @@ export class Profile {
     const loaded = await Agent.load(this.id, id, this.agentRegistry, this.sessionIdx, this.jobRunIdx);
     if (loaded) this.agents.set(id, loaded);
     return loaded;
+  }
+
+  /**
+   * 按父 Agent 的配置顺序解析 outgoing delegates。只读取父 Agent 的 AGENT.md，
+   * target 直接 join hot registry；归档或不存在的 ID 保留为 unavailable。
+   */
+  public async resolveDelegates(parentId: string): Promise<ResolvedAgentDelegates | null> {
+    if (!this.agentRegistry.items.some((record) => record.id === parentId)) return null;
+    const parent = await this.getAgent(parentId);
+    if (!parent) return null;
+
+    const activeById = new Map(this.agentRegistry.items.map((record) => [record.id, record]));
+    const available: AgentRecord[] = [];
+    const unavailableIds: string[] = [];
+    const seen = new Set<string>();
+    for (const configuredId of parent.config.delegates ?? []) {
+      const delegateId = configuredId.trim();
+      if (!delegateId || seen.has(delegateId)) continue;
+      seen.add(delegateId);
+
+      const record = activeById.get(delegateId);
+      if (record && delegateId !== parentId) available.push(record);
+      else unavailableIds.push(delegateId);
+    }
+    return { available, unavailableIds };
   }
 
   /**
@@ -337,6 +362,7 @@ export class Profile {
   public async createAgent(input: {
     name: string;
     version: string;
+    description?: string;
     model?: string;
     emoji?: string;
     avatar?: string;
@@ -377,6 +403,7 @@ export class Profile {
     const dst = new Agent(this.id, id, this.agentRegistry, this.sessionIdx, this.jobRunIdx);
     dst.init({
       name: newName.trim(),
+      description: src.config.description,
       version: '1.0.0',
       model: src.config.model,
       emoji: src.config.emoji,
@@ -384,14 +411,14 @@ export class Profile {
       systemPrompt: src.systemPrompt,
       nowIso: ts,
     });
-    // patchFront 复制其余 front-matter 字段（thinkingLevel/mcpServers/skills/subAgents）
+    // patchFront 复制其余 front-matter 字段（thinkingLevel/mcpServers/skills/delegates）
     // 写盘在 patchFront 内一并完成；此时 dst 还没进 agentRegistry.items，agentRegistry.syncRecord
     // 会找不到 id 而 no-op，下面 push 仍由 agentRegistry.persist 统一发 registry 事件。
     await dst.patchFront({
       thinkingLevel: src.config.thinkingLevel,
       mcpServers: src.config.mcpServers,
       skills: src.config.skills,
-      subAgents: src.config.subAgents,
+      delegates: src.config.delegates,
     });
 
     // 写顺序：AGENT.md（patchFront 已写）→ knowledge cp → agents.json

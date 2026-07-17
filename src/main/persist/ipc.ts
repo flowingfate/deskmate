@@ -122,6 +122,7 @@ export function registerPersistIpc(ipc: IpcMain): void {
       const profile = await Profiles.get().active();
       const agent = await profile.createAgent({
         name: input.name,
+        description: input.description,
         version: input.version ?? '1.0.0',
         model: input.model,
         emoji: input.emoji,
@@ -200,6 +201,7 @@ export function registerPersistIpc(ipc: IpcMain): void {
           id: item.id,
           name: item.name,
           version: item.version,
+          description: item.description ?? md?.frontMatter.description,
           emoji: item.emoji,
           avatar: item.avatar,
           model,

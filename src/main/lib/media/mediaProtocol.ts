@@ -17,7 +17,7 @@
  * - `<path…>` = 内层路径,renderer 每段 `encodeURIComponent`;本模块每段
  *   `decodeURIComponent` 还原后拼回 `<authority>://<path>` 交给 router。
  * - `<query>` = 解析上下文 + 传输提示:
- *     - `agent`   —— ULID,resolveToPath 的 agentId(local / knowledge 必填)
+ *     - `agent`   —— ULID，同时映射 ResolveContext executor 与 session owner
  *     - `session` —— ULID,resolveToPath 的 sessionId(local 必填;knowledge 不消费)
  *     - `mime`    —— URL-encoded,直接作为 Content-Type(必填;主进程不读字节嗅探,
  *                    renderer 持久化的 attachment 已知 mime,由它权威给出)
@@ -72,6 +72,7 @@ const MEDIA_AUTHORITIES: Record<string, MediaAuthority> = {
     requiredContext: ['agent', 'session'],
     buildContext(q, profileId): ResolveContext {
       return {
+        mode: 'agent',
         profileId,
         agentId: q.get('agent') ?? '',
         sessionId: q.get('session') ?? '',
@@ -85,6 +86,7 @@ const MEDIA_AUTHORITIES: Record<string, MediaAuthority> = {
     requiredContext: ['agent'],
     buildContext(q, profileId): ResolveContext {
       return {
+        mode: 'agent',
         profileId,
         agentId: q.get('agent') ?? '',
         sessionId: '',

@@ -25,6 +25,7 @@ import '@main/pi/internal-urls';
 import { app } from './app';
 import { web } from './web';
 import { shell } from './shell';
+import { subagent } from './subagent';
 
 let registered = false;
 export function registerAllTools(): void {
@@ -42,6 +43,7 @@ export function registerAllTools(): void {
   tools.register(app);
   tools.register(web);
   tools.register(shell);
+  tools.register(subagent);
 }
 
 registerAllTools();

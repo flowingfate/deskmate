@@ -1,6 +1,7 @@
 import { COMMON_FLAGS, isHelp, isJson } from '../../_commonFlags';
 import { parseFlags, type FlagSpec } from '../../flags';
 import type { AppCommand, AppCmdContext } from '../../types';
+import { isDelegatedExecution } from '@main/lib/delegateExecutionScope';
 import type { InteractiveSearchEngine, InteractiveSearchSource } from '@shared/types/interactiveRequestTypes';
 import { parseNumberFlag } from './_shared';
 import { runResearchSession } from './kernel/research';
@@ -53,6 +54,11 @@ export async function runResearch(argv: readonly string[], ctx: AppCmdContext): 
   }
   if (isHelp(parsed.flags)) {
     ctx.print(HELP);
+    return;
+  }
+  if (isDelegatedExecution()) {
+    ctx.printErr('web research requires user interaction and is unavailable in delegated runs.\n');
+    ctx.setExitCode(1);
     return;
   }
 

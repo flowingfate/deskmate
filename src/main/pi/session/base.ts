@@ -25,12 +25,10 @@ ToolResult,
 UserMessage, } from '@shared/persist/types'
 import type { ContextState } from '@shared/persist/types'
 import type { ThinkingLevel } from '@shared/persist/types'
-import type { SubAgentConfig } from '@shared/persist/types'
 
 import { CancellationError } from '@main/lib/utilities/errors';
 
-import { Profiles } from '@main/persist';
-import { readAgentRuntimeConfig } from '../utils/config';
+import { readAgentRuntimeConfig, type AgentConfig } from '../utils/config';
 import { resolveCredentials, getModelInfo } from '../model';
 import { buildSystemPrompt } from '../prompt';
 import { toPiContext, fromPiAssistantMessage } from '../utils/messageBridge';
@@ -96,6 +94,21 @@ export interface StreamOneRoundArgs {
   thinkingLevel?: ThinkingLevel;
 }
 
+/** 单次 turn loop 在开始 LLM 循环前确定的不可变运行环境。 */
+export interface RunEnvironment {
+  agentCfg: AgentConfig;
+  baseModel: PiModel<PiApi>;
+  systemPrompt: string;
+  catalog: ToolCatalog;
+  maxTurns: number;
+}
+
+
+export interface TurnCompletion {
+  iterations: number;
+  stopReason: string | undefined;
+}
+
 /**
  * 共用 turn loop / 持久化 / 上下文导出能力的抽象基类。形态差异落在子类钩子
  * （streamOneRound / handleToolCalls / onTurnComplete / onTurnCancelled /
@@ -128,70 +141,29 @@ export abstract class BaseSession {
     this.restoreTask = this.restore();
   }
 
-  // ─── readonly accessors for sub-agent / external bridges ────────────────
+  // ─── parent summary access ─────────────────────────────────────────────
 
-  /** 当前 agent 配置的 model id。读不到走 default model。供 SubAgentManager
-   *  解析 sub-agent "inherit" 时使用。 */
-  async getCurrentModelId(): Promise<string> {
-    const cfg = await readAgentRuntimeConfig(this.profileId, this.agentId);
-    if (cfg.ok) return cfg.agent.model;
-    // 配置缺失时由调用方决定 fallback；这里返回空字符串而非默认值，
-    // 避免 SubAgentManager 把"配置错误"误解为合法模型。
-    return '';
-  }
-
-  /** 返回经过 compression snapshot 折叠后的对话历史，等价于老
-   *  AgentChat.getContextHistory()。用于 SubAgent 的 full_history 模式。 */
-  async getContextHistory(): Promise<Message[]> {
-    await this.restoreTask;
-    const top =
-      this.contextState.compressions.length > 0
-        ? this.contextState.compressions[this.contextState.compressions.length - 1]
-        : null;
-    if (top) {
-      const { earlyPreservedCount, summary, compressedBeforeIndex } = top;
-      return [
-        ...this.messages.slice(0, earlyPreservedCount),
-        summary,
-        ...this.messages.slice(compressedBeforeIndex),
-      ];
-    }
-    return [...this.messages];
-  }
-
-  /** 取最近 20 条 user/assistant 文本拼成摘要。供 SubAgent 的 parent_summary 模式。 */
+  /** 取最近 20 条可见文本拼成摘要，供 `subagent run --with-parent-summary` 使用。 */
   async getContextSummary(): Promise<string> {
-    const history = await this.getContextHistory();
+    await this.restoreTask;
+    const top = this.contextState.compressions.at(-1);
+    const history = top
+      ? [
+        ...this.messages.slice(0, top.earlyPreservedCount),
+        top.summary,
+        ...this.messages.slice(top.compressedBeforeIndex),
+      ]
+      : this.messages;
     if (history.length === 0) return '';
-    const recent = history.slice(-20);
+
     const parts: string[] = [];
-    for (const msg of recent) {
-      // Domain 形态:user / assistant 的可见文本就是 content 串。
-      // assistant 的 think 是模型推理过程,不进 parent_summary。
+    for (const msg of history.slice(-20)) {
       const text = msg.content.trim();
       if (text) parts.push(`[${msg.role}]: ${text.substring(0, 500)}`);
     }
     return parts.join('\n');
   }
 
-  // ─── tool context helpers ───────────────────────────────────────────────
-
-  /**
-   * 给 spawn 类工具(以及未来其它需要 sub-agent 元数据 / 父上下文摘要的本地
-   * 工具)准备的 ctx 子字段。
-   *
-   * 之所以以 method 形态暴露而非简单 closure:
-   *   - `getSubAgentConfig` 要走 active profile,捕获时点决定快照(spawn 中
-   *     若用户改了 sub-agent 配置,本 turn 仍用 turn 开始时的配置版本)。
-   *   - `getParentContextSummary` 复用 `getContextSummary()` 的实现,避免
-   *     两条独立"摘要构造"逻辑漂移。
-   */
-  protected async getSubAgentConfigByName(name: string): Promise<SubAgentConfig | undefined> {
-    // profileId 必须与 active 一致(pi/utils/config 已校验);这里直接 lookup。
-    const profile = await Profiles.get().active();
-    const cfg = await profile.subAgents.getConfig(name);
-    return cfg ?? undefined;
-  }
 
   // ─── core turn loop ─────────────────────────────────────────────────────
 
@@ -224,29 +196,8 @@ export abstract class BaseSession {
     let turnError: Error | null = null;
 
     try {
-      const cfg = await readAgentRuntimeConfig(this.profileId, this.agentId);
-      if (!cfg.ok) throw new Error(cfg.error);
-      const { agent: agentCfg, parsedModel } = cfg;
-
-      // 一次解析 pi.Model + capability —— supportsTools 决定要不要拉 MCP 工具。
-      const resolved = await getModelInfo(parsedModel);
-      if (!resolved) {
-        throw new Error(`[pi/session] Model "${agentCfg.model}" not found; please reselect`);
-      }
-      const baseModel = resolved.model;
-
-      const systemPrompt = await buildSystemPrompt({
-        agentCfg,
-        profileId: this.profileId,
-        agentId: this.agentId,
-        sessionId: this.id,
-      });
-      // Catalog 在第一次循环里构建一次,后续 iteration 复用 —— turn 内 MCP
-      // server 增删的可见性留给下一次 turn。compressed 估算和 stream 调用
-      // 共用同一份 specs,保证"LLM 看到的"与"我们估算的"一致。
-      const catalog: ToolCatalog = resolved.capabilities.tools
-        ? await buildToolCatalogForAgent(agentCfg)
-        : ToolCatalog.empty();
+      const environment = await this.prepareRunEnvironment();
+      const { agentCfg, baseModel, systemPrompt, catalog, maxTurns } = environment;
       const piTools = catalog.specs;
       const contextWindow = baseModel.contextWindow || 128_000;
 
@@ -278,8 +229,9 @@ export abstract class BaseSession {
         return result;
       };
 
-      for (let iter = 0; iter < MAX_TURN_ITERATIONS; iter++) {
+      for (let iter = 0; iter < maxTurns; iter++) {
         iters = iter + 1;
+        this.onTurnStarted(iters);
         if (signal.aborted) throw new CancellationError('Turn cancelled');
 
         const compressionResult = await doCompress();
@@ -354,17 +306,16 @@ export abstract class BaseSession {
           },
         };
 
+        const toolCalls = final.content.filter((c) => c.type === 'toolCall');
+
         // 仅当 pi 明确告知 toolUse 时继续；模型只输出 toolCall 但 stopReason
         // 非 'toolUse' 视作终止。
-        if (final.stopReason !== 'toolUse') break;
-
-        const toolCalls = final.content.filter((c): c is Extract<typeof c, { type: 'toolCall' }> => c.type === 'toolCall');
-        if (toolCalls.length === 0) break;
+        if (final.stopReason !== 'toolUse' || toolCalls.length === 0) break;
         if (signal.aborted) throw new CancellationError('Cancelled before tool execution');
         await this.handleToolCalls(toolCalls, signal, turnTracer, catalog);
       }
 
-      await this.onTurnComplete();
+      await this.onTurnComplete({ iterations: iters, stopReason: lastStopReason });
     } catch (err) {
       if (err instanceof CancellationError) {
         turnOutcome = 'cancelled';
@@ -401,7 +352,7 @@ export abstract class BaseSession {
   ): Promise<void>;
 
   /** turn 正常跑完（所有迭代 break / aborted partial 落盘后）。 */
-  protected abstract onTurnComplete(): Promise<void>;
+  protected abstract onTurnComplete(completion: TurnCompletion): Promise<void>;
   /**
    * turn 抛 CancellationError 后的收尾。**默认收敛掉错误**——base 调完即 `return`，
    * runTurnLoop 整体 resolve。需要把 cancel 抛回上层（如 scheduler）的子类，在
@@ -420,6 +371,26 @@ export abstract class BaseSession {
   protected abstract onCompressionApplied(): Promise<void>;
   /** compression 即将启动（用于推 COMPRESSING_CONTEXT status）。默认 no-op。 */
   protected onWillCompress(): void {}
+
+  /** 默认环境保持 RegularSession / JobRun 的既有 config、prompt、catalog 与 30-turn 语义。 */
+  protected async prepareRunEnvironment(): Promise<RunEnvironment> {
+    const { profileId, agentId, id } = this;
+    const cfg = await readAgentRuntimeConfig(profileId, agentId);
+    if (!cfg.ok) throw new Error(cfg.error);
+    const { agent: agentCfg, parsedModel } = cfg;
+    const resolved = await getModelInfo(parsedModel);
+    if (!resolved) {
+      throw new Error(`[pi/session] Model "${agentCfg.model}" not found; please reselect`);
+    }
+    const { model: baseModel, capabilities: cap } = resolved;
+    const systemPrompt = await buildSystemPrompt({ agentCfg, profileId, agentId, sessionId: id });
+    const catalog = cap.tools ? await buildToolCatalogForAgent(agentCfg) : ToolCatalog.empty();
+    return { agentCfg, baseModel, systemPrompt, catalog, maxTurns: MAX_TURN_ITERATIONS };
+  }
+
+  /** 每个真实 iteration 恰调用一次；overflow retry 仍属于同一 iteration。 */
+  protected onTurnStarted(_iteration: number): void {}
+
 
   // ─── helpers / persistence ──────────────────────────────────────────────
   /**

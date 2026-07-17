@@ -279,7 +279,6 @@ describe('Agent rename via patchFront', () => {
     await agent.patchFront({
       thinkingLevel: 'high',
       skills: { s1: 'live' },
-      subAgents: ['sa1'],
       tools: ['read', 'write'],
       mcpServers: [{ name: 'mcp1', tools: ['t1'] }],
     });
@@ -291,7 +290,6 @@ describe('Agent rename via patchFront', () => {
       tools: ['read', 'write'],
       mcpServers: [{ name: 'mcp1', tools: ['t1'] }],
       skills: { s1: 'live' },
-      subAgents: ['sa1'],
     });
     // 不带 record 字段（避免回归：列表展示 stale 时不该用 detail 兜底）
     expect((d as unknown as Record<string, unknown>).name).toBeUndefined();
@@ -489,6 +487,28 @@ describe('Profile.reconcileAgents', () => {
     expect(result.primaryCleared).toBe(true);
     expect(profile.listAgents().map((r) => r.id)).toEqual([a.id]);
     expect(profile.getPrimaryAgentId()).toBeUndefined();
+  });
+});
+
+describe('Profile.resolveDelegates', () => {
+  it('normalizes configured IDs and keeps self, missing, and archived targets unavailable', async () => {
+    const { Profiles } = await freshModules();
+    await Profiles.get().bootstrap();
+    const profile = await Profiles.get().active();
+    const parent = await profile.createAgent({ name: 'Parent', version: '1' });
+    const available = await profile.createAgent({ name: 'Available', version: '1' });
+    const archived = await profile.createAgent({ name: 'Archived', version: '1' });
+
+    await parent.patchFront({
+      delegates: [' ', ` ${available.id} `, parent.id, 'a_missing', archived.id, available.id],
+    });
+    await profile.archiveAgent(archived.id);
+
+    const availableRecords = profile.listAgents().filter((record) => record.id === available.id);
+    expect(await profile.resolveDelegates(parent.id)).toEqual({
+      available: availableRecords,
+      unavailableIds: [parent.id, 'a_missing', archived.id],
+    });
   });
 });
 

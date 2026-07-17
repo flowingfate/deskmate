@@ -1,6 +1,6 @@
 # `src/main/lib/attachment/` — 用户附件 sandbox 落盘
 
-<!-- Last verified: 2026-06-28 -->
+<!-- Last verified: 2026-07-16 (附件 URI context 使用 agent mode) -->
 
 > 本模块把所有用户附件(拖入 / 粘贴 / 剪贴板图片 / screenshot /
 > Electron 文件选择)物化进当前 session 的 `files/uploads/` sandbox,返回
@@ -35,7 +35,7 @@
 ### URI 不带 ULID
 LLM 看见的 URI 是 `local://uploads/<name>` —— **没有 session/agent id**。
 当前 session 由 IPC handler 的 `Profiles.get().active()` + 调用方传入的
-`{ agentId, sessionId }` 注入,与 [internal-urls handlers](../../pi/internal-urls/handlers/local-protocol.ts) 的 `ResolveContext` 同形。
+`{ agentId, sessionId }` 注入；附件只服务当前普通会话，调用 internal URL router 时显式使用 `mode:'agent'`。
 
 ### 唯一名生成
 同目录冲突 → `foo.png` / `foo_1.png` / `foo_2.png` ...(扩展名前追加),

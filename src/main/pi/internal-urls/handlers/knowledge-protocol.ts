@@ -18,6 +18,7 @@
  */
 import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
+import { getDelegateExecution } from '@main/lib/delegateExecutionScope';
 
 import type { ResolveContext } from '../types';
 import { SandboxProtocolHandler } from './sandbox-base';
@@ -26,6 +27,11 @@ export class KnowledgeProtocolHandler extends SandboxProtocolHandler {
   public readonly scheme = 'knowledge';
 
   protected async resolveBaseDir(ctx: ResolveContext): Promise<string> {
-    return PERSIST_PATH.agentKnowledge(getAppRoot(), ctx.profileId, ctx.agentId);
+    const delegate = getDelegateExecution();
+    return PERSIST_PATH.agentKnowledge(
+      getAppRoot(),
+      ctx.profileId,
+      delegate?.delegateId ?? ctx.agentId,
+    );
   }
 }

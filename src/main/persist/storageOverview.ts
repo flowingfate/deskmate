@@ -5,13 +5,11 @@
  * 组织轴心：**agent 是一等公民**。
  *  - agent 私有数据（会话 / 定时运行 / 知识库 / 配置）按 agent 分组（`AgentStorageGroup`），
  *    每个 agent 一个卡片，内部再拆 conversations / scheduledRuns / knowledge / config 四个子项。
- *  - profile 级共享数据（skills / sub-agents / mcp / models / 搜索索引 / 归档 / 设置）保持扁平
- *    分类（`StorageCategory`）。
+ *  - profile 级共享数据（skills / mcp / models / 搜索索引 / 归档 / 设置）保持扁平分类（`StorageCategory`）。
  *
  * 设计要点：
  *  - **只读**：纯统计，从不写盘 / 删盘。
- *  - **源真值优先**：条目计数走已有的 SQLite index（会话 / 定时运行）与内存注册表
- *    （agents / skills / sub-agents / mcp），不重复扫盘。
+ *  - **源真值优先**：条目计数走已有的 SQLite index（会话 / 定时运行）与内存注册表（agents / skills / mcp），不重复扫盘。
  *  - **字节数走真实扫盘**：`dirBytes` 递归 stat 每个文件，反映用户磁盘上的真实占用。
  *  - **无遗漏**：`profileConfig` 分类 = profile 根目录总字节 − (Σ agent 目录 + 其余共享分类)，
  *    把 settings.json / auth.json / scheduler-state.json 等散落小文件全部兜住，
@@ -144,7 +142,6 @@ export async function computeStorageOverview(
 
   // ── profile 级共享分类 ──
   const skillsBytes = await dirBytes(PERSIST_PATH.skillsDir(root, profileId));
-  const subAgentsBytes = await dirBytes(PERSIST_PATH.subAgentsDir(root, profileId));
   const mcpBytes = await dirBytes(PERSIST_PATH.mcpDir(root, profileId));
   const modelsBytes = await dirBytes(PERSIST_PATH.modelsDir(root, profileId));
   const archiveBytes = await dirBytes(PERSIST_PATH.archiveDir(root, profileId));
@@ -159,13 +156,11 @@ export async function computeStorageOverview(
 
   // 计数（走 index / 注册表）。
   const skillCount = profile.skills.items.length;
-  const subAgentCount = profile.subAgents.items.length;
   const mcpCount = profile.mcp.items.length;
   const archivedCount = (await profile.archive.listArchivedAgents()).length;
 
   // profileConfig 兜底 = 总字节 − (agents + 其余共享)，把散落小文件全部收口，保证守恒。
-  const sharedNonProfile =
-    skillsBytes + subAgentsBytes + mcpBytes + modelsBytes + searchIndexBytes + archiveBytes;
+  const sharedNonProfile = skillsBytes + mcpBytes + modelsBytes + searchIndexBytes + archiveBytes;
   const profileConfigBytes = Math.max(0, totalBytes - agentsTotalBytes - sharedNonProfile);
 
   const shared: StorageCategory[] = [
@@ -176,14 +171,6 @@ export async function computeStorageOverview(
       bytes: skillsBytes,
       path: PERSIST_PATH.skillsDir(root, profileId),
       count: skillCount,
-    },
-    {
-      key: 'subAgents',
-      label: 'Sub-Agents',
-      description: 'Reusable sub-agent definitions shared across your agents.',
-      bytes: subAgentsBytes,
-      path: PERSIST_PATH.subAgentsDir(root, profileId),
-      count: subAgentCount,
     },
     {
       key: 'mcp',
@@ -244,7 +231,6 @@ export async function computeStorageOverview(
       conversations: conversationTotal,
       scheduledRuns: scheduledRunTotal,
       skills: skillCount,
-      subAgents: subAgentCount,
       mcpServers: mcpCount,
       archivedAgents: archivedCount,
     },

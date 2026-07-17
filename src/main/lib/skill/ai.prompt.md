@@ -29,7 +29,7 @@
 - 渲染进程安装入口可能请求显式的设备选择模式（`artifact` 用于 `.zip/.skill`，`folder` 用于目录），这样菜单操作可以在 Windows 上跳过额外的原生模式选择器，同时保持文件选择器硬限制为 `.zip/.skill`。
 - 本地卸载和 agent 级别解绑是有意分离的流程：卸载移除全局 skill 配置加本地包文件，但不触及 `chat.agent.skills`；从 agents 移除仅编辑 agent 配置而不卸载本地包。
 - 外部 Agent 导入只扫描固定 registry（`~/.claude/skills`、`~/.codex/skills`、`~/.cursor/skills`、`~/.agents/skills`、`~/.config/agents/skills`、`~/.config/opencode/skills`、`~/.gemini/skills`、`~/.copilot/skills`），不递归、不执行脚本、不静默安装。默认 link；copy 复用设备 folder import。导入后给 `SkillConfig.foreign` 写 provenance（本地绝对路径只用于 UI / 管理，不进入 LLM prompt）。
-- `js-yaml` 用于 YAML 解析（与 `subAgentMarkdown` 一致）。
+- `js-yaml` 用于 SKILL.md YAML front-matter 解析。
 - **读取/消费侧**（与本目录的安装侧解耦）：只有当前 agent bindings map 中存在的 skill 可经 `skill://<name>` 读取或执行；`resolve` 与 `resolveToPath` 都在 `pi/internal-urls/handlers/skill-protocol.ts` 校验绑定、词法路径、realpath containment、目录/二进制/1MB 限制。`shell` 工具会把命令/args/cwd 里的已授权 `skill://` URI 自动解析成绝对路径，故 LLM 可直接 `python skill://pdf/scripts/run.py` 执行 skill 脚本；裸 `skill://pdf` 在 `cwd` 位置特例映射 skill 根目录，在 read / command / args 中仍指向 `SKILL.md`。SKILL.md 里的相对路径（`scripts/run.py`）1:1 映射成 `skill://<name>/scripts/run.py`。
 
 ## Common Changes

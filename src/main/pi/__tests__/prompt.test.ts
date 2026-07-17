@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SubAgentConfig } from '@shared/persist/types'
 import type { SkillRecord } from '@shared/persist/types';
 import type { AgentConfig } from '../utils/config';
 
@@ -18,7 +17,6 @@ const profile: {
     items: SkillRecord[];
     get: (name: string) => SkillRecord | undefined;
   };
-  subAgents: { listConfigs: () => Promise<SubAgentConfig[]> };
 } = {
   id: 'p_active',
   skills: {
@@ -27,7 +25,6 @@ const profile: {
       return this.items.find((s) => s.name === name);
     },
   },
-  subAgents: { listConfigs: async () => [] },
 };
 
 vi.mock('@main/persist', () => ({
@@ -50,7 +47,6 @@ function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
 beforeEach(() => {
   profile.id = 'p_active';
   profile.skills.items = [];
-  profile.subAgents.listConfigs = async () => [];
 });
 
 describe('buildSystemPrompt', () => {
@@ -149,38 +145,6 @@ describe('buildSystemPrompt', () => {
     expect(out).not.toContain('Description: pdf');
   });
 
-  it('renders sub-agents block from profile.subAgents.listConfigs()', async () => {
-    profile.subAgents.listConfigs = async () => [
-      {
-        version: '1.0.0',
-        name: 'researcher',
-        display_name: 'Researcher',
-        description: 'Does research',
-        emoji: '🔍',
-        system_prompt: 'You research things.',
-        context_access: 'isolated',
-        maxTurns: 10,
-        skills: ['web-search'],
-      },
-    ];
-    const out = await buildSystemPrompt({
-      agentCfg: makeAgent({ subAgents: ['researcher'] }),
-      profileId: 'p_active', agentId: 'a1', sessionId: 's1',
-    });
-    expect(out).toContain('Available Sub-Agents');
-    expect(out).toContain('Researcher');
-    expect(out).toContain('`researcher`');
-    expect(out).toContain('Skills: web-search');
-  });
-
-  it('omits sub-agents block when none of agent.subAgents resolves', async () => {
-    profile.subAgents.listConfigs = async () => [];
-    const out = await buildSystemPrompt({
-      agentCfg: makeAgent({ subAgents: ['ghost'] }),
-      profileId: 'p_active', agentId: 'a1', sessionId: 's1',
-    });
-    expect(out).not.toContain('Available Sub-Agents');
-  });
 });
 
 

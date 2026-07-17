@@ -2,7 +2,7 @@
  * pi 路径下的 system prompt 拼装（自包含，不依赖 lib/chat 或 lib/skill）。
  *
  * 拼接顺序：custom（agent.systemPrompt） → agent-specific（identity + knowledge +
- * fsSkills + boundSkills + subAgents） → global。各段缺数据时整段跳过。
+ * boundSkills） → global。各段缺数据时整段跳过。
  *
  * 模板字符串集中在 `./utils/promptTemplates`；本文件只负责"取数据 + 决定段是否出现"。
  * skill snapshot 不落盘（overview §3.3）；workspace / deliverables 概念已删（§3.5）。
@@ -19,8 +19,6 @@ import {
   identityBlock,
   knowledgeBlock,
   boundSkillsBlock,
-  subAgentsBlock,
-  type SubAgentItem,
 } from './utils/promptTemplates';
 
 const logger = log;
@@ -58,8 +56,6 @@ async function buildAgentSpecific(
   blocks.push(knowledgeBlock());
   const bound = buildBoundSkills(agentCfg, profile);
   if (bound) blocks.push(bound);
-  const sub = await buildSubAgents(agentCfg, profile);
-  if (sub) blocks.push(sub);
 
   return blocks.join('');
 }
@@ -99,37 +95,6 @@ function buildBoundSkills(agentCfg: AgentConfig, profile: Profile): string {
   return boundSkillsBlock(items, { hasLazySkills });
 }
 
-/** agent.subAgents → profile.subAgents.listConfigs() 过滤；返回模板字符串或 ''。 */
-async function buildSubAgents(agentCfg: AgentConfig, profile: Profile): Promise<string> {
-  const wanted = Array.isArray(agentCfg.subAgents) ? agentCfg.subAgents : [];
-  if (wanted.length === 0) return '';
-
-  const all = await profile.subAgents.listConfigs();
-  const enabled = all.filter((sa) => wanted.includes(sa.name));
-  if (enabled.length === 0) return '';
-
-  const items: SubAgentItem[] = enabled.map((sa) => {
-    const caps: string[] = [];
-    if (sa.mcpServers && sa.mcpServers.length > 0) {
-      const names = sa.mcpServers.map((s) => (typeof s === 'string' ? s : s.name));
-      caps.push(`MCP Servers: ${names.join(', ')}`);
-    }
-    if (sa.skills && sa.skills.length > 0) {
-      caps.push(`Skills: ${sa.skills.join(', ')}`);
-    }
-    caps.push(`Context Access: ${sa.context_access}`);
-    caps.push(`Max Turns: ${sa.maxTurns ?? 25}`);
-    return {
-      name: sa.name,
-      displayName: sa.display_name,
-      emoji: sa.emoji,
-      description: sa.description,
-      capabilities: caps,
-    };
-  });
-
-  return subAgentsBlock(items);
-}
 
 function normalizeNames(names?: string[]): string[] {
   if (!Array.isArray(names)) return [];

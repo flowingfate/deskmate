@@ -1,13 +1,10 @@
 /**
- * `buildToolCatalog*` 关键不变量:
+ * `buildToolCatalogForAgent` 关键不变量:
  *
- * - 本地工具白名单空 ⇒ 全开;非空 ⇒ 仅列表内,未注册的名字直接跳过(不报错)。
- * - 外部 MCP tool 以 `serverName/toolName` 注册给 LLM，同名 tool 可由多个
- *   server 同时暴露；route 保存原始 serverName / toolName 供精确执行。
+ * - 本地 route 持有已选 LocalTool 快照；外部 MCP tool 以 `serverName/toolName`
+ *   注册给 LLM，同名 tool 可由多个 server 同时暴露；MCP route 保存原始
+ *   serverName / toolName 供精确执行。
  * - 仅 LLM 限定名碰撞才构建期 throw，避免静默覆盖。
- * - sub-agent catalog **不再**按 spec.name 二次过滤(spawn_* 防递归保护已下沉
- *   到 `app subagent` 命令内部的 `ensureSpawnPrerequisites`)—— `app` 是
- *   sub-agent 触达全部应用能力的唯一入口,按 name 移除等于禁掉所有能力。
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -26,7 +23,7 @@ vi.mock('@earendil-works/pi-ai', async () => ({
 }));
 
 import { listAllMcpTools } from '../mcp';
-import { buildToolCatalogForAgent, buildToolCatalogForSubAgent, ToolCatalog } from '../tool';
+import { buildToolCatalogForAgent, ToolCatalog, type ToolRoute } from '../tool';
 import { tools as localRegistry } from '../tools/registry';
 
 // 把 tools/index 副作用先跑一遍(它会注册所有真实工具),让后续
@@ -48,11 +45,19 @@ function freshRegistry(): void {
     handler: async () => ({ ok: true, content: 'b' }),
   });
   localRegistry.register({
-    // 第三个虚拟本地工具 —— 没有特殊语义,仅用来证明 sub-agent catalog
-    // 不会再"按 name 移除"它(老代码会硬过滤 spawn_*;新世界不再做)。
     spec: { name: 'app', description: 'mock app facade', parameters: {} as never },
     handler: async () => ({ ok: true, content: 'app' }),
   });
+}
+
+function localRoute(name: string): ToolRoute {
+  return {
+    kind: 'local',
+    tool: {
+      spec: { name, description: '', parameters: {} as never },
+      handler: async () => ({ ok: true, content: '' }),
+    },
+  };
 }
 
 describe('buildToolCatalogForAgent', () => {
@@ -68,9 +73,9 @@ describe('buildToolCatalogForAgent', () => {
       mcpServers: [], systemPrompt: '',
     });
     expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a', 'local_b']);
-    expect(catalog.getRoute('local_a')).toEqual({ kind: 'local', toolName: 'local_a' });
-    expect(catalog.getRoute('local_b')).toEqual({ kind: 'local', toolName: 'local_b' });
-    expect(catalog.getRoute('app')).toEqual({ kind: 'local', toolName: 'app' });
+    expect(catalog.getRoute('local_a')).toMatchObject({ kind: 'local', tool: { spec: { name: 'local_a' } } });
+    expect(catalog.getRoute('local_b')).toMatchObject({ kind: 'local', tool: { spec: { name: 'local_b' } } });
+    expect(catalog.getRoute('app')).toMatchObject({ kind: 'local', tool: { spec: { name: 'app' } } });
   });
 
   it('tools=[] ⇒ 全开(与缺席等价)', async () => {
@@ -114,7 +119,7 @@ describe('buildToolCatalogForAgent', () => {
       tools: [], mcpServers: [{ name: 'srv1', tools: [] }], systemPrompt: '',
     });
     expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a', 'local_b', 'srv1/local_a']);
-    expect(catalog.getRoute('local_a')).toEqual({ kind: 'local', toolName: 'local_a' });
+    expect(catalog.getRoute('local_a')).toMatchObject({ kind: 'local', tool: { spec: { name: 'local_a' } } });
     expect(catalog.getRoute('srv1/local_a')).toEqual({ kind: 'mcp', serverName: 'srv1', toolName: 'local_a' });
   });
 
@@ -138,30 +143,6 @@ describe('buildToolCatalogForAgent', () => {
   });
 });
 
-describe('buildToolCatalogForSubAgent', () => {
-  beforeEach(() => {
-    freshRegistry();
-    mockedListAllMcp.mockReset();
-    mockedListAllMcp.mockResolvedValue([]);
-  });
-
-  it('sub-agent catalog 保留 app 工具(spawn 递归保护已下沉到 `app subagent` 命令)', async () => {
-    const catalog = await buildToolCatalogForSubAgent(
-      { tools: ['local_a', 'app'] },
-      [],
-    );
-    // 老语义会强制移除 `app`(那时是 spawn_subagent);新语义保留。
-    expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a']);
-  });
-
-  it('sub-agent catalog 仍尊重 disallowTools 黑名单(普通 tool 名)', async () => {
-    const catalog = await buildToolCatalogForSubAgent(
-      { tools: ['local_a', 'local_b'], disallowTools: ['local_b'] },
-      [],
-    );
-    expect(catalog.specs.map((s) => s.name)).toEqual(['local_a']);
-  });
-});
 
 describe('ToolCatalog.resolveIdentity', () => {
   it('MCP 限定名 → 自然 toolName + mcp server', () => {
@@ -173,7 +154,7 @@ describe('ToolCatalog.resolveIdentity', () => {
 
   it('local 名 → 自然 toolName, mcp 缺席', () => {
     const catalog = new ToolCatalog([], new Map([
-      ['read', { kind: 'local', toolName: 'read' }],
+      ['read', localRoute('read')],
     ]));
     expect(catalog.resolveIdentity('read')).toEqual({ name: 'read', mcp: undefined });
   });

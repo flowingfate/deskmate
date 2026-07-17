@@ -34,13 +34,13 @@ const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
 
 function makeCtx(): ToolContext {
   return {
+    mode: 'agent',
     profileId,
     agentId,
     sessionId,
     signal: new AbortController().signal,
     eventSender: null,
     tracer: Tracer.noop,
-    isSubAgent: false,
     callId: 'c_test',
     chunkStream: null,
   };

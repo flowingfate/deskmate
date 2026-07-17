@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-15 (chatSession 支持 schedule-run 专用下载与 session 根目录查询；persist 保持细粒度 run remove event) -->
+<!-- Last verified: 2026-07-17 (subagentRun 精简 lookup failure contract) -->
 # IPC 框架（`src/shared/ipc/`）
 
 > 基于 TypeScript 泛型 + Proxy 的框架，从单一共享定义文件出发，在 Electron 的三个层（main / preload / renderer）之间强制实现类型安全、编译期检查的 IPC。
@@ -130,6 +130,8 @@ const result = await screenshotApi.saveToFile(displayId, rect, imageData);
 ## 添加新契约
 
 在 `src/shared/ipc/` 下创建新文件，使用唯一前缀字符串实例化 `connectRenderToMain`（和/或 `connectMainToRender`），然后遵循上述四步模式。每个新契约需要自己的 preload `invoke.ts` 和 main 进程 `*IPC.ts` 注册器。
+
+`subagentRun` 是双向范例：`getRunState(parent)` 与 live `stateUpdate` 都返回唯一 `SubAgentRuntimeState`，不暴露磁盘 `PersistSubrunDataFile`，也不维护第二套 audit data union；`getRunMessages(parent)` 懒返回同一 owner 的 Domain `Message[]`，`cancelRun(parent)` 返回 explicit lifecycle/lookup outcome。所有调用都携带 parent Agent/session + Subrun ID；renderer 绝不传绝对路径或自行拼 persist 路径。
 
 ## 注意事项
 - ⚠️ 由于 `if (!main_handle)` 守卫，`bindMain` 跨调用复用单个 proxy 实例。在 `main.ts` 中每个 `ipcMain` 调用一次；在开发环境热重载后调用可能静默复用过时的 proxy。开发时需重启主进程。

@@ -1,7 +1,7 @@
 // pi 子树的唯一外部入口。只导出 src/main/pi 外部实际使用的符号；子树内部仍按
 // 依赖方向直接引用具体模块，避免 barrel 反向依赖自身。
 //
-// 注意：不要在这里 `import './tools'`。那会在 scheduler / subAgentManager 等
+// 注意：不要在这里 `import './tools'`。那会在 scheduler / delegated-run 等
 // 下游 import `@main/pi` 时触发工具注册，并经 SchedulerManager 回引本入口形成循环。
 // `ensureToolsRegistered()` 保持动态 import `./tools/index.ts`，只有真正需要工具
 // catalog 或 tools IPC 时才注册。
@@ -38,7 +38,6 @@ export { classifyError } from './utils/errors';
 export { toPiContext, fromPiAssistantMessage } from './utils/messageBridge';
 export {
   ToolCatalog,
-  buildToolCatalogForSubAgent,
   deriveToolTracer,
   executeToolCall,
 } from './tool';

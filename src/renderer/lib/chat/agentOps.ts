@@ -27,6 +27,7 @@ export interface AgentOperationResult {
 function agentPersonaToPatch(partial: Partial<AgentPersona>): { patch: AgentFrontPatch; systemPrompt?: string } {
   const patch: AgentFrontPatch = {};
   if (partial.name !== undefined)            patch.name = partial.name;
+  if (partial.description !== undefined)     patch.description = partial.description;
   if (partial.version !== undefined)         patch.version = partial.version;
   if (partial.model !== undefined)           patch.model = partial.model;
   if (partial.emoji !== undefined)           patch.emoji = partial.emoji;
@@ -36,7 +37,7 @@ function agentPersonaToPatch(partial: Partial<AgentPersona>): { patch: AgentFron
   if (partial.tools !== undefined)           patch.tools = partial.tools;
   if (partial.mcp_servers !== undefined)     patch.mcpServers = partial.mcp_servers;
   if (partial.skills !== undefined)          patch.skills = partial.skills;
-  if (partial.sub_agents !== undefined)      patch.subAgents = partial.sub_agents;
+  if (partial.delegates !== undefined)       patch.delegates = partial.delegates;
   return {
     patch,
     systemPrompt: partial.system_prompt,
@@ -45,8 +46,8 @@ function agentPersonaToPatch(partial: Partial<AgentPersona>): { patch: AgentFron
 
 /**
  * `(AgentRecord, AgentDetail|null) → AgentEnvelope`。detail===null 时只能填
- * record 字段；cold 字段（systemPrompt / mcpServers / skills / subAgents /
- * knowledge / thinkingLevel）退化为空/缺席。caller 若需要完整
+ * record 字段；cold 字段（systemPrompt / mcpServers / skills / knowledge /
+ * thinkingLevel）退化为空/缺席。caller 若需要完整
  * envelope，请先 `await persistApi.getAgentDetail(record.id)` 再传 detail。
  */
 function agentRecordToConfig(record: AgentRecord, detail: AgentDetail | null): AgentEnvelope {
@@ -59,11 +60,12 @@ function agentRecordToConfig(record: AgentRecord, detail: AgentDetail | null): A
     system_prompt: detail?.systemPrompt ?? '',
   };
   if (record.avatar !== undefined)                                          agent.avatar = record.avatar;
+  if (record.description !== undefined)                                     agent.description = record.description;
   if (record.version !== undefined)                                         agent.version = record.version;
   if (detail?.thinkingLevel !== undefined)                                  agent.thinkingLevel = detail.thinkingLevel;
   if (detail?.tools !== undefined)                                          agent.tools = detail.tools;
   if (detail?.skills !== undefined)                                         agent.skills = detail.skills;
-  if (detail?.subAgents !== undefined)                                      agent.sub_agents = detail.subAgents;
+  if (detail?.delegates !== undefined)                                      agent.delegates = detail.delegates;
   return { agent_id: record.id, agent };
 }
 
@@ -78,9 +80,10 @@ export async function addAgentConfig(envelope: Partial<AgentEnvelope>): Promise<
     validateUser();
     const a = envelope.agent ?? { ...DEFAULT_AGENT_PERSONA } as AgentPersona;
     const { patch, systemPrompt } = agentPersonaToPatch(a);
-    const { name: _n, version: _v, model: _m, emoji: _e, avatar: _av, ...front } = patch;
+    const { name: _n, description: _d, version: _v, model: _m, emoji: _e, avatar: _av, ...front } = patch;
     const result = await persistApi.createAgent({
       name: a.name,
+      description: a.description,
       version: a.version ?? '1.0.0',
       model: a.model,
       emoji: a.emoji,

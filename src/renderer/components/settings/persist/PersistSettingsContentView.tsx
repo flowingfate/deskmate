@@ -114,7 +114,6 @@ const PersistSettingsContentView: React.FC<PersistSettingsContentViewProps> = ({
                 <StatCell label="Conversations" value={overview.stats.conversations} />
                 <StatCell label="Scheduled Runs" value={overview.stats.scheduledRuns} />
                 <StatCell label="Skills" value={overview.stats.skills} />
-                <StatCell label="Sub-Agents" value={overview.stats.subAgents} />
                 <StatCell label="MCP Servers" value={overview.stats.mcpServers} />
                 <StatCell label="Archived" value={overview.stats.archivedAgents} />
               </div>

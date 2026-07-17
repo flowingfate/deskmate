@@ -3,11 +3,11 @@
  * `AppCommand`:cmdline 的**第一个 token 当作命令名**,从该注册表里查出对应
  * 成员命令并转交执行。
  *
- * 这是 `app` 与 `web` **完全对等**的根:两者都是
- * `makeCommandFacade(makeRouterCommand({ name, synopsis, registry }))` ——
- *   - `app` 的 registry = 全局 `appCommands`(成员:mcp / agent / skill / ...)
- *   - `web` 的 registry = `webCommands`(成员:search / image / fetch / download)
- * 路由 / 顶层 help / 工具描述索引的逻辑只有这一份,差异仅在「注册表里装了谁」。
+ * 这是 `app` 与 `web` 完全对等的根：两个顶层 LocalTool 都显式持有
+ * `makeRouterCommand({ name, synopsis, registry })` 的结果：
+ *   - `app`: registry = 全局 `appCommands`(成员:mcp / agent / skill / ...)
+ *   - `web`: registry = `webCommands`(成员:search / image / fetch / download)
+ * 路由 / 顶层 help / 工具描述索引的逻辑只有这一份，差异仅在「注册表里装了谁」。
  *
  * 顶层入口「松散」纪律(与设计文档 §4 一致):空 cmdline / `--help` / `-h` /
  * 未知命令 一律降级到顶层 help,**不**附 exit code —— 顶层「教 LLM 怎么用」,
@@ -18,6 +18,7 @@
  * 设计文档:[`ai.prompt/tool-system.md`](../../../ai.prompt/tool-system.md)
  */
 
+import { isDelegatedExecution } from '@main/lib/delegateExecutionScope';
 import type { AppCommandRegistry } from './registry';
 import type { AppCommand, AppCmdContext } from './types';
 
@@ -28,6 +29,33 @@ interface RouterSpec {
   readonly synopsis: string;
   /** 被路由的注册表。成员命令由各自的 builtins 模块填充。 */
   readonly registry: AppCommandRegistry;
+  /** 可选的领域规则，追加到自动生成的命令表后。 */
+  readonly helpFooter?: string;
+}
+
+const DELEGATED_WEB_BLOCKED_COMMANDS = new Set(['research']);
+
+function visibleCommands(name: string, registry: AppCommandRegistry): AppCommand[] {
+  const commands = registry.list();
+  if (!isDelegatedExecution() || name !== 'web') return commands;
+  return commands.filter((command) => !DELEGATED_WEB_BLOCKED_COMMANDS.has(command.name));
+}
+
+function rejectDelegatedCommand(name: string, argv: readonly string[], ctx: AppCmdContext): boolean {
+  const [command] = argv;
+  if (
+    !isDelegatedExecution() ||
+    name !== 'web' ||
+    !command ||
+    command === '--help' ||
+    command === '-h' ||
+    !DELEGATED_WEB_BLOCKED_COMMANDS.has(command)
+  ) {
+    return false;
+  }
+  ctx.printErr(`web ${command} requires user interaction and is unavailable in delegated runs.\n`);
+  ctx.setExitCode(1);
+  return true;
 }
 
 /**
@@ -44,8 +72,12 @@ function buildCommandTable(cmds: readonly AppCommand[]): string {
 }
 
 /** 顶层 help —— `<name> --help` / 空 cmdline / 路由失败时统一应答。 */
-function buildRegistryHelp(name: string, registry: AppCommandRegistry): string {
-  const cmds = registry.list();
+function buildRegistryHelp(
+  name: string,
+  registry: AppCommandRegistry,
+  helpFooter?: string,
+): string {
+  const cmds = visibleCommands(name, registry);
   if (cmds.length === 0) {
     return `${name}: no commands registered.\n`;
   }
@@ -57,6 +89,7 @@ function buildRegistryHelp(name: string, registry: AppCommandRegistry): string {
     `Run "${name} <command> --help" for detailed usage.`,
     'Add --json to any command for structured JSON output (if supported).',
   ];
+  if (helpFooter) lines.push('', helpFooter);
   return lines.join('\n') + '\n';
 }
 
@@ -68,7 +101,7 @@ function buildRegistryHelp(name: string, registry: AppCommandRegistry): string {
  * —— dev hot-reload / 测试隔离期会重新注册,缓存可能让刚注册的命令缺席。
  */
 function buildRegistryDescription(name: string, registry: AppCommandRegistry): string {
-  const cmds = registry.list();
+  const cmds = visibleCommands(name, registry);
   if (cmds.length === 0) {
     return (
       `Run a "${name}" command using a shell-style cmdline. ` +
@@ -88,13 +121,13 @@ function buildRegistryDescription(name: string, registry: AppCommandRegistry): s
 }
 
 export function makeRouterCommand(spec: RouterSpec): AppCommand {
-  const { name, synopsis, registry } = spec;
+  const { name, synopsis, registry, helpFooter } = spec;
   return {
     name,
     synopsis,
     // help / toolDescription 都动态枚举注册表 —— 永远反映「当前注册了谁」。
     get help() {
-      return buildRegistryHelp(name, registry);
+      return buildRegistryHelp(name, registry, helpFooter);
     },
     toolDescription() {
       return buildRegistryDescription(name, registry);
@@ -103,17 +136,18 @@ export function makeRouterCommand(spec: RouterSpec): AppCommand {
     async run(argv: string[], ctx: AppCmdContext): Promise<void> {
       // 顶层「松散」:空 / --help / -h → 顶层 help,exit 0。
       if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
-        ctx.print(buildRegistryHelp(name, registry));
+        ctx.print(buildRegistryHelp(name, registry, helpFooter));
         return;
       }
 
+      if (rejectDelegatedCommand(name, argv, ctx)) return;
       const [sub, ...rest] = argv;
       const cmd = registry.get(sub);
       if (!cmd) {
         // 未知命令仍走「松散兜底」:端 help + 温和 tip,不附 exit code,
         // 零负面信号、降低 LLM 重试摩擦。
         ctx.print(
-          `${buildRegistryHelp(name, registry)}\ntip: no command named "${sub}" — pick one from the list above.\n`,
+          `${buildRegistryHelp(name, registry, helpFooter)}\ntip: no command named "${sub}" — pick one from the list above.\n`,
         );
         return;
       }

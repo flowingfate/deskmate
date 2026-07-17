@@ -342,7 +342,7 @@ describe('Profile duplicateAgent', () => {
       model: 'github-copilot::claude-sonnet-4.6',
       systemPrompt: 'You are Otto.',
     });
-    await src.patchFront({ skills: { 'skill-a': 'live' }, subAgents: ['sub-a'] });
+    await src.patchFront({ skills: { 'skill-a': 'live' } });
 
     await src.knowledge.remove();
     const dst = await profile.duplicateAgent(src.id, 'Otto Clone');
@@ -352,7 +352,6 @@ describe('Profile duplicateAgent', () => {
     expect(dst.config.version).toBe('1.0.0');
     expect(dst.config.model).toBe(src.config.model);
     expect(dst.config.skills).toEqual({ 'skill-a': 'live' });
-    expect(dst.config.subAgents).toEqual(['sub-a']);
     expect(dst.systemPrompt).toBe('You are Otto.');
 
     // 出现在 agents.json items

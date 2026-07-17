@@ -57,13 +57,13 @@ async function seed(): Promise<void> {
 
 function makeCtx(): ToolContext {
   return {
+    mode: 'agent',
     profileId,
     agentId,
     sessionId,
     signal: new AbortController().signal,
     eventSender: null,
     tracer: Tracer.noop,
-    isSubAgent: false,
     callId: 'c_test',
     chunkStream: null,
   };

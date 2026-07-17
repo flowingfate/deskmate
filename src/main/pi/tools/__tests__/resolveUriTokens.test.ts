@@ -17,7 +17,8 @@ import { Skills } from '@main/persist/skills';
 import { Profile } from '@main/persist/profile';
 import { Profiles } from '@main/persist/profiles';
 import { setRootForTesting } from '@main/persist/lib/root';
-import type { ToolContext } from '../types';
+import { Tracer } from '@shared/log/trace';
+import type { AgentToolContext } from '../types';
 
 let tmpRoot = '';
 let agentId = '';
@@ -44,13 +45,18 @@ afterEach(() => {
   InternalUrlRouter.resetForTesting();
 });
 
-function makeCtx(): ToolContext {
+function makeCtx(): AgentToolContext {
   return {
+    mode: 'agent',
     profileId: PROFILE_ID,
     agentId,
     sessionId: 's',
     signal: new AbortController().signal,
-  } as unknown as ToolContext;
+    eventSender: null,
+    tracer: Tracer.noop,
+    callId: 'c',
+    chunkStream: null,
+  };
 }
 
 async function bindSkill(name: string): Promise<void> {

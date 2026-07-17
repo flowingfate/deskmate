@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-28 -->
+<!-- Last verified: 2026-07-16 (media ResolveContext 使用 agent mode) -->
 # Media Protocol 模块
 
 > `media://` —— renderer `<img>` / `<video>` 的「字节直供」前置层。把 session sandbox /
@@ -25,6 +25,7 @@ media://<authority>/<path…>?agent=&session=&mime=
   还原(逐段,避免文件名里被编码的 `%2F` 被误当目录分隔符),拼回内层 URI
   `<authority>://<path>`。
 - `<query>`:`agent`(ULID)、`session`(ULID)、`mime`(URL-encoded → Content-Type)。
+`media://` 是 renderer 当前会话的展示通道，main 构造 `{ mode:'agent', agentId, sessionId }` 的 ResolveContext；它不承担 delegated hidden transcript 的 execution identity 解析。
 
 ### per-authority 必填 query(`MEDIA_AUTHORITIES` 注册表)
 | authority | 内层 scheme | 必填(除 mime 外) | 说明 |

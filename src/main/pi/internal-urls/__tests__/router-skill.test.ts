@@ -54,6 +54,7 @@ afterEach(() => {
 
 function makeCtx(): ResolveContext {
   return {
+    mode: 'agent',
     profileId: PROFILE_ID,
     agentId,
     sessionId: 's',

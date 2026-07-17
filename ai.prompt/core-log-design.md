@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-08 (revised: TraceContext 跨进程信封 + Tracer.deserialize 接力，修 chat.ipc → chat.turn 断链) -->
+<!-- Last verified: 2026-07-17 (Step 13：trace 文档已切至唯一 subagent run 路径) -->
 # 核心链路日志设计 — 聊天 / Agent 回复 端到端 Trace
 
 > 目标：在 **用户发消息 → 主进程编排 → LLM 流式响应 → 工具调用 → 前端渲染收尾** 这条主链路上，
@@ -107,9 +107,8 @@
 | 工具执行 | `chat.tool` | `newSpanId()`(每个 toolCall 一个) | `chat.turn.sid` | 始 + 终(含 toolName / isError / dur) | 并行执行:sibling span 共享 psid |
 | Renderer 收尾 | `chat.recv` | 沿用 R 端 tid 链路 | `chat.send.sid` | 收到 `complete` 或 `status_changed=IDLE` 时 1 条 INFO(含 dur 从 send 起算) | 用户感知耗时 |
 
-> **sub-agent / utility 链路 与主 trace 关系**：
-> - `spawn_subagents` 在主 turn 中以工具调用形式出现，会先有 `chat.tool` span（psid=主 turn sid）；
->   sub-agent 内部 `SubAgentSession.runTurn` 用**同一 tid**，新开 `chat.subturn` span（psid=对应 `chat.tool` sid）。
+> **delegated run / utility 链路与主 trace 关系**：
+> - `subagent run` 在主 turn 中以工具调用形式出现，先有 `chat.tool` span（psid=主 turn sid）；manager 将该 tracer 作为 `parentTracer` 交给 `SubAgentSession`，其标准 Pi session trace 继续使用同一 tid。
 > - 压缩用的 `contextCompressionLlmSummarizer` 已有自己的 INFO log；本设计把它升级为 **child span**：
 >   `mod=chat.compress.summary`，psid=`chat.compress.sid`，复用 tid。
 > - 其他 utility（chat title / file name 等）**与主链路无关**，保留现有 log，不挂 tid。
@@ -192,7 +191,7 @@
 | `src/main/pi/session/job.ts` `JobRun.streamOneRound` | 同 RegularSession（job 场景同样要 trace） |
 | `src/main/pi/tool.ts` `executeToolCall` | `ToolContext.tracer: Tracer` → `(ctx.tracer ?? Tracer.noop).derive().bind({mod:'chat.tool', toolName, callId, ...})` 起 chat.tool span;并行 sibling 共享 psid（chat.turn.sid）;ToolContext.tracer 一路传给 handler,sub-agent / 嵌套 LLM 复用同一棵 trace 树 |
 | `src/main/pi/utils/llm-services/contextCompressionLlmSummarizer.ts` | `summarize({tracer?})` 接收主链路 tracer，每个 attempt 起子 span `chat.compress.summary`，psid = chat.compress.sid；缺省 `Tracer.noop` 仍写完整业务 log |
-| `src/main/lib/subAgent/subAgentSession.ts` / `subAgentChat.ts` | sub-agent 一轮内 `chat.subturn` span（psid = 触发 spawn 的 chat.tool sid），复用主 tid；内部 LLM / tool 各自 derive 子 span |
+| `src/main/pi/subagent/session.ts` | delegated run 复用标准 `chat.turn` / `chat.llm` / `chat.tool` span；manager 不另造不连续的 trace 树 |
 
 ### 3.5 持久化（**不需要**）
 
@@ -271,9 +270,9 @@
    3.1 cancel / overflow / pi.stream error / tool throw 四条；
    ✅ 手动制造 overflow（贴大文本），timeline 看到 `chat.turn overflow_retry` + `chat.compress applied(force)`。
 
-4. **sub-agent**
-   4.1 `chat.subturn` + 工具→子 turn 的 psid 链；
-   ✅ spawn_subagents 工具触发的二级 trace 树。
+4. **delegated run**
+   4.1 `subagent run` 的 `chat.tool` 父 span 与继承 tid 的 delegated session trace；
+   ✅ 单次委派形成可关联的二级 trace。
 
 5. **renderer 收尾**
    5.1 `chat.send`（起点） + `chat.recv`（终点）；

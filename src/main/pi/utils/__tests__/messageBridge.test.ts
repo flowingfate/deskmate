@@ -61,6 +61,16 @@ const tc = (id: string, withResponse: 'success' | 'fail' | false = false): ToolC
 const catalog = (routes: Array<[string, ToolRoute]> = []): ToolCatalog =>
   new ToolCatalog([], new Map(routes));
 
+function localRoute(name: string): ToolRoute {
+  return {
+    kind: 'local',
+    tool: {
+      spec: { name, description: '', parameters: {} as never },
+      handler: async () => ({ ok: true, content: '' }),
+    },
+  };
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // 入境
 // ───────────────────────────────────────────────────────────────────────────
@@ -170,7 +180,7 @@ describe('fromPiAssistantMessage 入境', () => {
     });
     const out = fromPiAssistantMessage(pi, catalog([
       ['brave/search', { kind: 'mcp', serverName: 'brave', toolName: 'search' }],
-      ['read', { kind: 'local', toolName: 'read' }],
+      ['read', localRoute('read')],
     ]));
     expect(out.tool_calls[0]).toMatchObject({ id: 't1', name: 'search', mcp: 'brave' });
     expect(out.tool_calls[1]).toMatchObject({ id: 't2', name: 'read' });

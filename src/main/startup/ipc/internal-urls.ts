@@ -1,14 +1,14 @@
 /**
  * Internal URL IPC —— renderer-facing 路径解析。
  *
- * Handler 透传 `InternalUrlRouter.resolveToPath`,profile 走 active,agent/session
- * 由 caller 传入。不暴露 sessionId 给 `knowledge://`(handler 自己不消费)。
+ * Handler 透传 `InternalUrlRouter.resolveToPath`,profile 走 active；renderer 只传一个
+ * 当前 agent，本边界显式映射为 executor 与 session owner，session 由 caller 传入。
  */
 import { ipcMain } from 'electron';
 
 import { renderToMain } from '@shared/ipc/internalUrls';
 import { Profiles } from '@main/persist';
-import { InternalUrlRouter } from '@main/pi';
+import { InternalUrlRouter, type ResolveContext } from '@main/pi';
 import { log } from '@main/log';
 
 const logger = log.child({ mod: 'InternalUrlsIpc' });
@@ -23,7 +23,8 @@ export default function handleInternalUrlsIPC(): void {
       // handler 自己只在 `local://` 路径上读 sessionId,无 session 上下文时塞
       // 空串相当于"renderer 没给 session";`local://` handler 会因取不到
       // session 友好报错。
-      const ctx = {
+      const ctx: ResolveContext = {
+        mode: 'agent',
         profileId: profile.id,
         agentId: input.agentId,
         sessionId: input.sessionId ?? '',

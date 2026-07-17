@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-15 (JobRunChat 将已结束的 schedule run 派生为 regular continuation) -->
+<!-- Last verified: 2026-07-17 (subagent lookup failures 精简) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -29,17 +29,18 @@
 | `message/AttachmentList.tsx` | 用户消息附件列表（图片 / 文件 / Office / 其它）；sandbox 大图(`local://`+fileRef / opaque)经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) 构造 `media://` URL 由 `<img loading=lazy>` 字节直供（不读 base64），小图内联 dataURL；点击图片走 `ImageViewerAtom.open`（`ui/OverlayImageViewer`），点击文件走 `useOpenFilePreview()`（就近作用域路由，聊天页 inline 预览） | ~215 LOC |
 | `message/CopyButton.tsx` | 复制到剪贴板按钮；`text` 支持字符串或惰性 getter | ~60 LOC |
 | `tool/ToolCallsSection.tsx` | 工具调用章节;两套视图共享同一外壳 + CSS transition(220ms): **collapsed** 紧凑 600px 卡片(chip 行 + 单选 detail);**expanded** (view all) 贴边浅灰条 max-h 60vh 内滚,所有工具纵向列出(每张白卡片复用 `ToolDetailView`)。水平 inset 模式:`!px-0` 这层豁免 `.chat-message-flow-reverse > *` 的默认 `--chat-pad-x` padding,由本组件正向控制 margin(collapsed 推内容对齐其他消息)或 padding(expanded bg 撑满 wrapper + 内 padding 拉回对齐) — **不用负 margin breakout**,bg 天然占满 chat 全宽;高度切换由 `AnimatedHeight` 平滑过渡,避免 column-reverse 上方兄弟闪动。`selectedId` 切 mode 时保留 | ~350 LOC |
-| `tool/ToolChip.tsx` | 单个工具胶囊；状态点 executing(琥珀脉动) / failed(红实心) / completed(无点)；选中态深色填充；MCP 工具额外以 Plug 图标与低饱和紫色表面标识,并在 hover 时经 shadcn `Tooltip` 展示 `MCP · {serverName}`(Provider 由 `ToolCallsSection` 顶层挂载);接收 `label` props 由 ToolCallsSection 计算（renderer 的 `chipLabel` 覆盖优先） | ~115 LOC |
+| `tool/ToolChip.tsx` | 通用工具胶囊；状态点 executing(琥珀脉动) / failed(红实心) / completed(无点)；选中态深色填充。MCP 用低饱和 violet 表面 + tooltip 标识 server；其它顶层工具若需定制，必须由自己的 `ToolRenderer.Chip` override 承担，不向通用 chip 增加 tool-specific 分支 | ~115 LOC |
 | `tool/ToolDetailView.tsx` | 唯一的两段式详情容器(input/output)；按 slot 优先级（粗 InputBlock/OutputSuccessBlock/OutputExecutingBlock > 细 inputArgsText/outputResultText > 默认）注入 renderer 覆盖。一个 renderer 一旦提供粗粒度 block,就**完全接管**该 slot,不会再回到细粒度 —— 多层兜底由 renderer 自己内部完成(典型例子:`renderers/app/`)。`verticallyUnbounded?: boolean` prop:默认 false → 默认 pre 限高 220px + 内滚(单 detail 展开);true → pre 不限高,由调用方外层统一滚动(view-all 模式由 `ToolCallsSection` 的 ExpandedView 传入,避免嵌套滚动条) | ~165 LOC |
 | `tool/types.ts` | `ToolCallExecutionStatus`、`ToolRenderer`（slot-only,无 id/match）、`ToolSlotProps` / `ToolChipSlotProps` / `ToolOutputSuccessSlotProps`，复导出 shared 的 ShellToolArgs/Result、WriteToolArgs/Result | ~85 LOC |
 | `tool/toolRendererRegistry.ts` | `Map<toolName, ToolRenderer>`：`registerToolRenderer(toolName, renderer)` / `resolveToolRenderer(toolName)`；一个工具一个坑，O(1) 查询，幂等去重 | ~40 LOC |
-| `tool/registerBuiltins.ts` | 集中注册三个内置 renderer（`app` / `shell` / `write`）。子命令分派由各 renderer 自己负责，不在本表 | ~25 LOC |
+| `tool/registerBuiltins.ts` | 集中注册五个内置 renderer（`app` / `shell` / `write` / `web` / `subagent`）。子命令分派由各 renderer 自己负责，不在本表 | ~30 LOC |
 | `tool/index.ts` | barrel；import 副作用触发 `registerBuiltinToolRenderers()`；导出 ToolCallsSection / ToolDetailView / registry helpers | ~25 LOC |
 | `tool/renderers/shell/index.tsx` | `shellRenderer` —— `chipLabel` (`shell: <cmd>`) + `InputBlock`（终端 prompt+command）+ `OutputSuccessBlock`（stdout/stderr/exit 终端块） | ~110 LOC |
 | `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，图片走 `ImageViewerAtom.open`、其余走 `useOpenFilePreview()`） | ~110 LOC |
-| `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；内部 `pickSubRenderer` 调子命令路由（subagent → spawn / spawn-many；未来 mcp / skill / web ...）；不命中时给出朴素兜底（chip = `app:<sub>`，input = cmd 字符串，output = result 文本） | ~95 LOC |
-| `tool/renderers/app/cmdline.ts` | App 子命令分派的 cmdline 工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
-| `tool/renderers/app/subagent/` | `app subagent spawn` / `spawn-many` 子命令的 renderer 实现包：`index.ts`（路由 spawn/spawn-many）+ `parse.ts`（cmdline 字段抽取）+ `helpers.tsx`（共享 timer / progress bar / steps list）+ `spawn.tsx`（单 task 三 slot）+ `spawnMany.tsx`（并行 task 三 slot）。订阅 `subAgent:stateUpdate` IPC 渲染实时进度 | — |
+| `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；所有 app 子命令走稳定的通用 cmdline/result fallback | ~45 LOC |
+| `tool/renderers/app/cmdline.ts` | App 命令展示工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
+| `tool/renderers/subagent/{parse,RunCard,RunResultDetails,index}.tsx` + `message/{RunMessagesDialog,RunMessagesHeader,RunMessagesContent,UserMessage,AssistantMessage,MessageCard,useRunMessages}.tsx` | 顶层 `subagent` renderer：只做 `{ outcome }` 展示解析；单 run 卡片关联 live state、查询 metadata、显示 formal result并发起单次 cancel；transcript 子模块由 Dialog 外壳、摘要头部、状态内容、直接按 role 分发的 user/assistant 专用渲染、共享消息卡片与惰性查询 hook 分层组成。UserMessage 在进入 MarkdownView 前剔除 `system-reminder` 块，reminder-only 且无附件的消息不渲染。Assistant 默认只渲染 tool chip 列表，点击 chip 后复用 `ToolDetailView` 单选展开。查询 state 由 `DialogContent` 内部子组件持有：Radix Presence 在 200ms 退场期间保持其挂载，内容不会先清空；退场结束自动卸载并释放 transcript，不用 `onOpenChange` 抢先 clear。`story/tools/subagent-run.stories.tsx::Transcript` 覆盖双 tool chip 与真实关闭动画 | ~700 LOC |
+| `agent-editor/AgentDelegationTab.tsx` | 普通 Agent delegates 选择器：hot `agents.atom` 候选、cold delegates、dangling 可移除行，以及 Agent 创建/设置导航 | ~205 LOC |
 | `message/MermaidDiagram.tsx` | 延迟加载的 Mermaid 图表渲染器，支持全屏 | — |
 | `message/ImageGallery.tsx` | `<IMAGE_REGISTRY>` 分段解析 + `ImageGalleryNew` 渲染；图 src 经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) `toImageDisplaySrc` 同步解析（`local://`/`knowledge://`→media://、远程 http(s) 原样），**不再** `fetch`+base64 缓存 | — |
 | `interactive/RequestCard.tsx` | 时间线原生渲染器，用于待处理的 `approval`、`choice` 和 `form` 交互；Tailwind className 直接内联，无独立样式模块 | — |
@@ -57,8 +58,8 @@
 | `chat-side.atom.ts` | `WorkspaceExplorerAtom`（右侧工作区侧栏可见性 + reveal）的 atom；`effectiveToggle` 打开侧栏时顺带 `ChatFilePreviewAtom.cancel()`。文件预览状态已迁到 `filePreview/filePreview.atom.ts` | — |
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
-| `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（基本信息、上下文增强、知识库、MCP 服务器、技能、子 agent、系统提示词） | — |
-| `agent-area/AgentEditingView.tsx` | Agent 设置页外壳：顶栏（返回 / agent 头像 / Save All + 未保存计数）、左侧 `AgentSettingsNav`、按 activeTab 渲染对应 Tab；管理跨 Tab 的 pending changes 缓存与统一保存 | ~770 LOC |
+| `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（Basic 的 description、Delegation、上下文增强、知识库、MCP 服务器、技能、系统提示词） | — |
+| `agent-area/AgentEditingView.tsx` + `useAgentEditorState.ts` + `AgentEditorTabs.tsx` | 设置页外壳、跨 tab dirty/save-all 状态和 tab 分发；三者分离以保持组件文件小于 500 行 | — |
 | `agent-editor/AgentSettingsNav.tsx` | 设置页左侧导航；数据驱动的 `NAV_ITEMS`（key/label/Lucide 图标），每项带未保存改动小圆点。**新增 Tab 时在此加一项** | 小 |
 | `agent-editor/AgentPresetsTab.tsx` + `PresetEditorDialog.tsx` | 「Quick Prompts」标签页：编辑聊天空态的预设提示词（增删改）。**已接持久化** —— 读写走 `zero/presetPrompts.ts`，落 AGENT.md front-matter `zero.preset_prompts`（cold 字段，`agentDetail.atom` 后端），与 `zero/index.tsx` 空态经 `agent:updated` 事件实时同步。CRUD 即时生效，不进 Save All 管线。新建/编辑走 `PresetEditorDialog`（含图标选择器），删除走 `AlertDialog` 二次确认 | 中 |
 | `zero/index.tsx` + `zero/PresetPromptCard.tsx` | 聊天空态：渲染预设提示词卡片。点击卡片**不发送**，而是把 `prompt` 写入 `composeTextAtom`（ComposeInput 草稿真值）填入输入框；输入框已有内容时弹 `AlertDialog` 确认覆盖。插图区为占位待填 | 中 |
@@ -153,6 +154,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 |------|---------------|------|
 | 修改 markdown 渲染（代码块、链接、表格、Mermaid） | `message/MarkdownView.tsx` — `markdownComponents` 对象 | 全部消息（assistant / user）共享同一渲染器，一处修改全局生效 |
 | 添加新的工具调用展示 | 顶层工具：新建 `tool/renderers/<tool>/index.tsx`（export `<tool>Renderer: ToolRenderer`）+ `tool/registerBuiltins.ts` 加一行 `registerToolRenderer('<tool>', <tool>Renderer)`。子命令域（如 `app mcp`）：新建 `tool/renderers/app/<sub>/`（export 子 renderer + `resolve<Sub>Renderer(tokens)` 路由），在 `tool/renderers/app/index.tsx` 的 `pickSubRenderer` 加一行委派 | 三个点位 chip / input / output 每个可细（label / argsText / resultText）或粗（Chip / InputBlock / OutputSuccessBlock）二选一覆盖；output 额外允许 OutputExecutingBlock。**注意**：粗粒度 block 一旦提供就完全接管该 slot，多层兜底由 renderer 自己内部承担 |
+| 修改委派 run 卡片 / IPC | `tool/renderers/subagent/`、`renderer/ipc/subagentRun.ts`、`shared/ipc/subagentRun.ts`、main/preload bridge | live `stateUpdate` 与重载 `getRunState` 共用 `SubAgentRuntimeState`；事件必须匹配 profile + parent Agent/session + correlationId，已知结果后再核对 subrunId；terminal 优先使用对应 tool formal result，messages 仅由详情 Dialog 按需查询、关闭即释放 |
 | 区分 MCP 工具调用 | `shared/persist/types/message.ts` 的 `ToolCall.mcp` 是 Domain / 历史真值，值为 MCP server 名称；`session/regular.ts` 从本轮 catalog 投影，`streamingTypes.ts` / `session-manager.ts` 保持流式首帧一致；`ToolChip.tsx` 用字段是否存在展示 Plug + 紫色变体,并把 server 名称放进 hover tooltip | 旧历史无 `mcp`，按本地工具样式兼容 |
 | 添加新的渲染项类型 | `lib/chat/render-items-manager.ts`（`ChatRenderItem` 联合类型 + `computeRenderItems` + `isSameRenderItem`） + `ChatRenderItem.tsx`（`ChatRenderItemComponent` 分发） | derived 字段一并加入 `MessageDerived` + `reuseUnchangedItems` 复用判定 |
 | 修改主聊天输入行为 | `chat-input/ComposeInput.tsx` + `ribbon/ErrorBar.tsx` | 涉及发送、取消生成、模型选择和会话错误展示 |
@@ -160,7 +162,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 修改两种输入共享的附件/截图逻辑 | `chat-input/shared/useFileHandling.ts` + `chat-input/Attachments.tsx`(atom) | 同时影响 compose 和 inline edit,两边都要回归。物化推迟到发送:新增 attach 路径(自定义来源等)只需把原始 `File` 交给 `attachmentManager.addXxx`,`createMessage` 发送时统一走 `copyFileToSandbox` 落盘;**切勿在 attach 阶段调 `copyFileToSandbox`**,否则又会未发送先落盘 |
 | 修改用户消息附件展示 | `message/AttachmentList.tsx` | image / file / office / others 共用 |
 | 更改 approval / choice / form 交互 | `interactive/RequestCard.tsx`、`ChatRenderItem.tsx`、`agentSessionCacheManager.ts` | 待处理请求经 `render-items-manager` 进入渲染流水线，由 `ChatRenderItemComponent` 分发 |
-| 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`entries/main.routes.tsx` 中的路由、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS`、`agent-area/AgentEditingView.tsx` 的 Tab 渲染分支 | 遵循现有标签页外壳模式 |
+| 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`agent-area/useAgentEditorState.ts` 的 route/cache/save-all、`agent-area/AgentEditorTabs.tsx` 的分发、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS` | 遵循现有标签页外壳模式 |
 | 修改滚动行为 | `useChatAutoScroll.ts` hook（由 `ChatContainer.tsx` 消费） | 始终验证基于 `chatSessionId` 的重置；流式跟随由 `streamingMessageTextLength` effect 驱动 |
 | 修改 regular / job-run capability | `ChatView.tsx` + `ChatViewContent.tsx` + `ribbon/index.tsx` | job-run 的写入限制由 UI 实现；不支持取消 |
 
@@ -171,7 +173,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 新渲染项类型 | `lib/chat/render-items-manager.ts`（类型联合 + `computeRenderItems` + `isSameRenderItem` + `getChatRenderItemStableKey`）+ `ChatRenderItem.tsx`（分发） |
 | 聊天输入中的新附件类型 | `chat-input/shared/useFileHandling.ts` + `contentUtils.ts`(`ContentPartFactory`)+ `@shared/types/chatTypes`(`UnifiedContentPart`)+ shared constants 中的 `FILE_ATTACHMENT_LIMITS` + `message/AttachmentList.tsx`(渲染分支)+ [`src/main/lib/attachment/`](../../../main/lib/attachment/ai.prompt.md)(若新来源需要新的 main 端 attach 入口) |
 | 新交互式请求控件类型 | `interactive/RequestCard.tsx` 或专用卡片 + `@shared/types/interactiveRequestTypes` + `agentSessionCacheManager.ts` + `ChatViewContent.tsx` 分发 |
-| 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `entries/main.routes.tsx`（嵌套路由）+ `agent-editor/AgentSettingsNav.tsx`（`NAV_ITEMS`）+ `agent-area/AgentEditingView.tsx`（Tab 渲染分支） |
+| 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `agent-area/useAgentEditorState.ts`（路由/cache/save）+ `agent-area/AgentEditorTabs.tsx`（分发）+ `agent-editor/AgentSettingsNav.tsx`（`NAV_ITEMS`） |
 | 会话滚动/布局变更 | `ChatContainer.tsx`(容器几何已 Tailwind 化) + `styles/biz/_chat.scss`(scrollbar/inset/data-mode/`:has()` 等无法 Tailwind 化的规则,原 `ChatContainer.scss` 已删,曾暂存于 `globals.css` 尾部,现归入 biz 层) — 始终验证基于 `chatSessionId` 的重置，而非基于 `agentId` |
 | Markdown 渲染变更 | `message/MarkdownView.tsx` + `message/MarkdownView.scss`（全局生效） |
 | 发送门控逻辑 | `chat-input/ComposeInput.tsx` + `chat-input/EditInlineInput.tsx`（显式 `chatStatus === 'idle'` 守卫）+ 渲染进程发送入口点缓存状态重新检查 |
@@ -199,6 +201,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 8. 在流式生成中向上滚动，确认不会被拉回底部；向下滚到底部后流式应自动跟随。
 9. 打开 ContextBadge，确认累计 token 消耗等于当前 assistant 消息的 `usage` 之和；完成一轮流式回复后应立即更新，无需切换会话。
 10. 打开 job run：确认输入区显示只读提示、user message 无编辑入口、ribbon 无 Retry；切回 sessions 后 URL 是 `/agent/:agentId`，不会复用 run ID。
+11. 无法启动完整聊天流程时，运行 `npm run ladle` 打开 `Chat / Tools` stories：覆盖高度动画、chip、detail、calls section、五个 renderer 与 subagent running/final card；bridge mock 只在 `story/tools/`，不修改生产组件。
 
 ## 注意事项
 

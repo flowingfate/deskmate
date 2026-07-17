@@ -9,7 +9,7 @@
  * Phase 3 一并删。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime'
+import { mcpClientManager } from '@main/lib/mcpRuntime';
 
 export interface McpToolDef {
   name: string;
@@ -22,7 +22,6 @@ export interface McpToolDef {
 export async function listAllMcpTools(): Promise<McpToolDef[]> {
   return mcpClientManager.getAllTools();
 }
-
 /**
  * Server-scoped tool execution。catalog route 必须把 server 一并带出来 ——
  * 全局裸 toolName 路由已知存在同名覆盖 bug(见 task.md §1)。

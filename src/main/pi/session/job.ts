@@ -22,6 +22,7 @@ import { Tracer } from '@shared/log/trace';
 
 import { deriveToolTracer, executeToolCall, ToolCatalog } from '../tool';
 import type { ToolContext } from '../tools/types';
+import { buildDelegationPrompt } from '../subagent/prompt';
 import { classifyError } from '../utils/errors';
 import {
   BaseSession,
@@ -59,6 +60,18 @@ export class JobRun extends BaseSession {
       this.running = false;
       this.abortor = null;
     }
+  }
+
+  protected override async prepareRunEnvironment(): Promise<import('./base').RunEnvironment> {
+    const environment = await super.prepareRunEnvironment();
+    if (!environment.catalog.specs.some((tool) => tool.name === 'subagent')) return environment;
+
+    const delegationPrompt = await buildDelegationPrompt({
+      profileId: this.profileId,
+      parentAgentId: this.agentId,
+    });
+    if (!delegationPrompt) return environment;
+    return { ...environment, systemPrompt: `${environment.systemPrompt}\n\n---\n\n${delegationPrompt}` };
   }
 
   protected async streamOneRound(args: StreamOneRoundArgs): Promise<PiAssistantMessage> {
@@ -134,17 +147,16 @@ export class JobRun extends BaseSession {
       toolCalls.map((tc) => {
         const call = { id: tc.id, name: tc.name, arguments: tc.arguments ?? {} };
         const ctx: ToolContext = {
+          mode: 'agent',
           profileId: this.profileId,
           agentId: this.agentId,
           sessionId: this.id,
           signal,
           eventSender: null,
           tracer: deriveToolTracer(parent, call, { profileId: this.profileId, agentId: this.agentId, sessionId: this.id }),
-          isSubAgent: false,
           callId: call.id,
           chunkStream: null,
           catalog,
-          getSubAgentConfig: (name) => this.getSubAgentConfigByName(name),
           getParentContextSummary: () => this.getContextSummary(),
         };
         return executeToolCall(call, catalog, ctx);

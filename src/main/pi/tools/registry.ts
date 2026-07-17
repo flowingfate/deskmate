@@ -17,6 +17,29 @@ import type { Tool as PiTool } from '@earendil-works/pi-ai';
 
 import type { LocalTool, ToolContext, ToolResult } from './types';
 
+/**
+ * 执行 catalog 已选中的 LocalTool。registry 与 catalog-private tool 复用完全相同的
+ * 取消和异常收敛语义；后者不必为了执行而污染全局注册表。
+ */
+export async function executeLocalTool(
+  tool: LocalTool,
+  args: unknown,
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const name = tool.spec.name;
+  if (ctx.signal.aborted) {
+    return { ok: false, error: `Tool execution aborted: ${name}` };
+  }
+  try {
+    return await tool.handler(args as never, ctx);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export class ToolsRegistry {
   private readonly entries = new Map<string, LocalTool>();
 
@@ -53,31 +76,6 @@ export class ToolsRegistry {
     return Array.from(this.entries.keys());
   }
 
-  /**
-   * 执行入口。handler throw 会被收敛为 `{ ok: false, error }`;参数类型在
-   * registry 边界擦除(`unknown`),具体工具的 schema 验证留给 pi-ai stream
-   * 层(`validateToolCall`)与 handler 自身。
-   */
-  async execute(name: string, args: unknown, ctx: ToolContext): Promise<ToolResult> {
-    const tool = this.entries.get(name);
-    if (!tool) {
-      return { ok: false, error: `Local tool not found: ${name}` };
-    }
-    if (ctx.signal.aborted) {
-      return { ok: false, error: `Tool execution aborted: ${name}` };
-    }
-    try {
-      // 强类型 args 已由 pi-ai 在 stream 层按 spec.parameters 解析,这里直接
-      // 透传给 handler;handler 签名上的 Static<TParams> 是给开发者看的契约,
-      // 边界擦除是接受的设计代价。
-      return await tool.handler(args as never, ctx);
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
-  }
 }
 /** 生产单例。启动注册由 `pi/tools/index.ts` 的副作用完成。 */
 export const tools = new ToolsRegistry();

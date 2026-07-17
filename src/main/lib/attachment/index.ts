@@ -109,6 +109,7 @@ export async function attachFromBytes(
 async function resolveUploadsDir(profileId: string, ctx: AttachContext): Promise<string> {
   const router = InternalUrlRouter.get();
   const dir = await router.resolveToPath(`local://${UPLOADS_DIR}`, {
+    mode: 'agent',
     profileId,
     agentId: ctx.agentId,
     sessionId: ctx.sessionId,

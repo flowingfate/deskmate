@@ -18,8 +18,6 @@ export type {
   ModelConfig,
   SkillConfig,
   StarredChatSessionIndexItem,
-  SubAgentConfig,
-  SubAgentContextAccess,
 } from '@shared/persist/types';
 export type { SchedulerJob } from '@shared/ipc/scheduler'
 

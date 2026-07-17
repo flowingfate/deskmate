@@ -12,7 +12,6 @@ const AgentSystemPromptTab: React.FC<TabComponentProps> = ({
   mode,
   agentId,
   agentData,
-  onSave,
   onDataChange,
   cachedData,
   readOnly = false

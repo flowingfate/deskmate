@@ -1,25 +1,49 @@
 /**
  * `web` LocalTool —— Web 抓取与搜索能力的一等 shell 入口。
  *
- * web 对 AI agent 是比重最高的能力域之一,因此与 `app` 同级,作为顶层工具:
- * `web("search ...")` / `web("fetch ...")` 直接调用。
- *
- * **与 `app` 工具完全对等**:同一条 `makeCommandFacade(makeRouterCommand(...))`
- * 构建路径,唯一区别是路由的注册表是 `webCommands`(成员 search / image / fetch /
- * download)而非全局 `appCommands`。使用机制 100% 一致 —— 单个 shell-style
- * `cmd` 字符串、`--help` 渐进披露、`--json` 结构化输出、exit code 语义全部共享。
- *
- * 设计文档:[`ai.prompt/tool-system.md`](../../../../ai.prompt/tool-system.md)
+ * LLM 通过单个 cmdline 进入 webCommands registry；路由、help 和命令索引由
+ * makeRouterCommand 保持唯一实现，LocalTool 的 schema 与调用边界则在此可见。
  */
-
-import { makeCommandFacade } from '../appcmd/_facade';
-import { makeRouterCommand } from '../appcmd/makeRouterCommand';
 import { webCommands } from '../appcmd/builtins/web';
+import { executeCommandFacade } from '../appcmd/executeCommandFacade';
+import { makeRouterCommand } from '../appcmd/makeRouterCommand';
+import { jsonSchema } from './schema';
+import type { LocalTool } from './types';
 
-export const web = makeCommandFacade(
-  makeRouterCommand({
-    name: 'web',
-    synopsis: 'Search / image-search the web, fetch URLs, download files',
-    registry: webCommands,
-  }),
-);
+interface WebArgs {
+  cmd: string;
+}
+
+const WebParams = jsonSchema({
+  type: 'object',
+  properties: {
+    cmd: {
+      type: 'string',
+      description:
+        'Shell-style command line for the "web" tool. ' +
+        'Run "--help", or call with empty cmdline, to see usage and the available first-token list. ' +
+        'Add --json for structured output when supported, --dry-run / --yes for destructive ops. ' +
+        'Example: web("...")',
+    },
+  },
+  required: ['cmd'],
+});
+
+const webCommand = makeRouterCommand({
+  name: 'web',
+  synopsis: 'Search / image-search the web, fetch URLs, download files',
+  registry: webCommands,
+});
+
+export const web: LocalTool<typeof WebParams> = {
+  spec: {
+    name: webCommand.name,
+    get description() {
+      return webCommand.toolDescription ? webCommand.toolDescription() : webCommand.synopsis;
+    },
+    parameters: WebParams,
+  },
+  async handler(args, ctx) {
+    return executeCommandFacade(webCommand, (args as WebArgs).cmd, ctx);
+  },
+};

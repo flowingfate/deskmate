@@ -3,25 +3,25 @@
  *
  * 测点:
  *   - register 重名 throw,杜绝静默覆盖。
- *   - execute 未注册名字 / handler throw / signal aborted 收敛成
- *     `{ ok: false, error }`,turn loop 上游靠这个稳定形态写 tool_result。
- *   - execute 把 caller 给的 ctx 原样透传给 handler(handler 看到的
+ *   - executeLocalTool 将 handler throw / signal aborted 收敛成 `{ ok: false, error }`，
+ *     turn loop 上游靠这个稳定形态写 tool_result。
+ *   - executeLocalTool 把 caller 给的 ctx 原样透传给 handler(handler 看到的
  *     signal / callId / chunkStream 与 caller 完全一致 —— "handler 显式
  *     拿 ctx,不读全局"的核心 invariant)。
  *   - `lazy(spec, loader)`:spec 立刻可见;handler 首次调用才走 loader;
- *     并发首调共享同一 inflight promise;loader 抛错被 registry 统一
+ *     并发首调共享同一 inflight promise;loader 抛错被执行 helper 统一
  *     收敛成 `{ ok: false }`。
  */
 
 import { describe, it, expect, vi } from 'vitest';
 
-import { ToolsRegistry } from '../registry';
+import { executeLocalTool, ToolsRegistry } from '../registry';
 import { lazy } from '../lazy';
-import type { LocalTool, ToolContext } from '../types';
+import type { AgentToolContext, LocalTool, ToolContext } from '../types';
 import { Tracer } from '@shared/log/trace';
 
 /** 构造一个最小可用 ToolContext。caller 可按需 override 单个字段。 */
-function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
+function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
     profileId: 'p',
     agentId: 'a',
@@ -29,10 +29,10 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     signal: new AbortController().signal,
     eventSender: null,
     tracer: Tracer.noop,
-    isSubAgent: false,
     callId: 'c',
     chunkStream: null,
     ...overrides,
+    mode: 'agent',
   };
 }
 
@@ -66,44 +66,33 @@ describe('ToolsRegistry', () => {
     expect(r.listNames()).toEqual(['a', 'b']);
   });
 
-  it('execute 未注册名字回成 { ok: false }', async () => {
-    const r = new ToolsRegistry();
-    const result = await r.execute('absent', {}, makeCtx());
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatch(/not found/);
-  });
-
-  it('execute handler throw 被收敛为 { ok: false, error: message }', async () => {
-    const r = new ToolsRegistry();
-    r.register(makeTool('boom', async () => { throw new Error('kaboom'); }));
-    const result = await r.execute('boom', {}, makeCtx());
+  it('executeLocalTool handler throw 被收敛为 { ok: false, error: message }', async () => {
+    const result = await executeLocalTool(
+      makeTool('boom', async () => { throw new Error('kaboom'); }),
+      {},
+      makeCtx(),
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe('kaboom');
   });
 
-  it('execute 在 signal 已 aborted 时不调 handler,直接 { ok: false }', async () => {
-    const r = new ToolsRegistry();
+  it('executeLocalTool 在 signal 已 aborted 时不调 handler,直接 { ok: false }', async () => {
     const handler = vi.fn(async () => ({ ok: true as const, content: '' }));
-    r.register(makeTool('x', handler));
-
     const aborter = new AbortController();
     aborter.abort();
-    const result = await r.execute('x', {}, makeCtx({ signal: aborter.signal }));
+    const result = await executeLocalTool(
+      makeTool('x', handler),
+      {},
+      makeCtx({ signal: aborter.signal }),
+    );
 
     expect(handler).not.toHaveBeenCalled();
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/aborted/);
   });
 
-  it('execute 把 caller 给的 ctx 原样透传给 handler(displays / signal / callId / chunkStream)', async () => {
-    const r = new ToolsRegistry();
-
+  it('executeLocalTool 原样透传 caller ctx', async () => {
     let seenCtx: ToolContext | null = null;
-    r.register(makeTool('echo', async (_args, ctx) => {
-      seenCtx = ctx;
-      return { ok: true, content: 'ok' };
-    }));
-
     const callerSignal = new AbortController().signal;
     const callerCtx = makeCtx({
       callId: 'tc_real',
@@ -111,11 +100,16 @@ describe('ToolsRegistry', () => {
       chunkStream: null,
     });
 
-    const result = await r.execute('echo', { foo: 1 }, callerCtx);
+    const result = await executeLocalTool(
+      makeTool('echo', async (_args, ctx) => {
+        seenCtx = ctx;
+        return { ok: true, content: 'ok' };
+      }),
+      { foo: 1 },
+      callerCtx,
+    );
     expect(result.ok).toBe(true);
     expect(seenCtx).toBeTruthy();
-    // 关键 invariant:handler 看到的 ctx 是 caller 给的 same reference 上
-    // 的字段 —— 不允许 registry 中间替换/克隆/包装。
     expect(seenCtx!.callId).toBe('tc_real');
     expect(seenCtx!.signal).toBe(callerSignal);
     expect(seenCtx!.chunkStream).toBeNull();
@@ -176,10 +170,12 @@ describe('lazy(spec, loader)', () => {
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
-  it('loader 抛错被 registry.execute 统一收敛为 { ok: false, error }', async () => {
-    const r = new ToolsRegistry();
-    r.register(lazy(specA, async () => { throw new Error('import failed'); }));
-    const result = await r.execute('heavy', {}, makeCtx());
+  it('loader 抛错被 executeLocalTool 统一收敛为 { ok: false, error }', async () => {
+    const result = await executeLocalTool(
+      lazy(specA, async () => { throw new Error('import failed'); }),
+      {},
+      makeCtx(),
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/import failed/);
   });

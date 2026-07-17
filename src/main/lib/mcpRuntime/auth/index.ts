@@ -113,6 +113,12 @@ function makeRequestId(kind: 'consent' | 'clientid'): string {
   return `mcp-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+interface McpTokenOptions {
+  forceRefresh?: boolean;
+  cfg?: McpServerConfig;
+  signal?: AbortSignal;
+}
+
 export class McpAuthService {
   private readonly interactionListeners = new Set<McpAuthInteractionListener>();
   /**
@@ -150,7 +156,7 @@ export class McpAuthService {
   async getTokenForServer(
     serverName: string,
     metadata: McpResolvedAuthMetadata,
-    options?: { forceRefresh?: boolean; cfg?: McpServerConfig; signal?: AbortSignal },
+    options?: McpTokenOptions,
   ): Promise<string | undefined> {
     const cfg = options?.cfg;
     if (!cfg) {
@@ -179,7 +185,7 @@ export class McpAuthService {
     serverName: string,
     metadata: McpResolvedAuthMetadata,
     cfg: McpServerConfig,
-    options?: { forceRefresh?: boolean; signal?: AbortSignal },
+    options?: McpTokenOptions,
   ): Promise<string | undefined> {
     const provider = new DeskmateOAuthProvider(serverName, cfg);
     const { signal, forceRefresh } = options ?? {};

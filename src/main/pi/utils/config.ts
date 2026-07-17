@@ -29,7 +29,6 @@ export interface AgentConfig {
   tools?: string[];
   mcpServers: Array<{ name: string; tools: string[] }>;
   systemPrompt: string;
-  subAgents?: string[];
   skills?: SkillBindings;
 }
 
@@ -56,7 +55,6 @@ export async function readAgentConfig(profileId: string, agentId: string): Promi
     // mcpServers 在新 schema 里 tools 是 optional;pi 下游期望 string[],缺席补空
     mcpServers: (c.mcpServers ?? []).map((s) => ({ name: s.name, tools: s.tools ?? [] })),
     systemPrompt: agent.systemPrompt,
-    subAgents: c.subAgents,
     skills: c.skills,
   };
 }

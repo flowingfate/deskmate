@@ -34,13 +34,13 @@ function makeCtx(call: ToolCallInput, tracer: Tracer): ToolContext {
     callId: call.id,
   });
   return {
+    mode: 'agent',
     profileId: 'p_test',
     agentId: 'a_test',
     sessionId: 's_test',
     signal: new AbortController().signal,
     eventSender: null,
     tracer: toolTracer,
-    isSubAgent: false,
     callId: call.id,
     chunkStream: null,
   };
@@ -103,6 +103,7 @@ describe('executeToolCall — chat.tool span', () => {
     // 日志仍要写,只是没有 tid/sid/psid/dur 字段。
     const call: ToolCallInput = { id: 'c', name: 'noop', arguments: {} };
     const noopCtx: ToolContext = {
+      mode: 'agent',
       profileId: 'p',
       agentId: 'a',
       sessionId: 's',
@@ -116,7 +117,6 @@ describe('executeToolCall — chat.tool span', () => {
         toolName: call.name,
         callId: call.id,
       }),
-      isSubAgent: false,
       callId: call.id,
       chunkStream: null,
     };

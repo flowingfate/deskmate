@@ -33,13 +33,13 @@ const HTML = `<!DOCTYPE html>
 
 function makeCtx(): ToolContext {
   return {
+    mode: 'agent',
     profileId: 'p_TEST',
     agentId: 'a',
     sessionId: 's',
     signal: new AbortController().signal,
     eventSender: null,
     tracer: Tracer.noop,
-    isSubAgent: false,
     callId: 'c',
     chunkStream: null,
   };

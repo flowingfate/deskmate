@@ -83,6 +83,7 @@ afterEach(() => {
 
 function makeCtx(): ResolveContext & WriteContext {
   return {
+    mode: 'agent',
     profileId,
     agentId,
     sessionId,
@@ -227,6 +228,7 @@ describe('LocalProtocolHandler', () => {
     const agent = await profile.getAgent(agentId);
     const sessionB = await agent!.createSession({ title: 'B' });
     const ctxB: ResolveContext = {
+      mode: 'agent',
       profileId,
       agentId,
       sessionId: sessionB.id,
@@ -364,6 +366,7 @@ describe('LocalProtocolHandler × JobRun', () => {
 
   function ctxFor(runId: string): ResolveContext & WriteContext {
     return {
+      mode: 'agent',
       profileId,
       agentId,
       sessionId: runId,
@@ -440,6 +443,7 @@ describe('LocalProtocolHandler × JobRun', () => {
 
     await expect(
       router.resolve('local://x.md', {
+        mode: 'agent',
         profileId,
         agentId,
         sessionId: 's_nonexistent_xxx',

@@ -4,8 +4,8 @@
  *   - 检查某个名字是否已注册
  *   - (rare)直接 invoke 一个工具(debug / e2e)
  *
- * chat 主链路**不走本 IPC** —— pi/tool.ts 直接在主进程内调
- * `localTools.execute(name, args, ctx)`,IPC 仅服务 UI / 测试。
+ * chat 主链路**不走本 IPC** —— pi/tool.ts 从 catalog local route 直接取得 tool，
+ * 经 `executeLocalTool(tool, args, ctx)` 执行；IPC 仅服务 UI / 测试。
  */
 
 import { ipcMain } from 'electron';
@@ -34,13 +34,13 @@ export default function setUpToolsIPC(_ctx: Context) {
       // chat 工具(executeCommand / spawn / 等)会因 ctx 不全在 handler 内抛错。
       const controller = new AbortController();
       const result = await tool.handler(args as never, {
+        mode: 'agent',
         profileId: '',
         agentId: '',
         sessionId: '',
         signal: controller.signal,
         eventSender: null,
         tracer: Tracer.noop,
-        isSubAgent: false,
         callId: `ipc_${Date.now()}`,
         chunkStream: null,
       });
