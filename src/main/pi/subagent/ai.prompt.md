@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (Step 13：唯一生产委派路径与残留清理已复核) -->
+<!-- Last verified: 2026-07-17 -->
 # pi/subagent 模块 — Agent 委派运行时
 
 > 普通 Agent 在父 session 中被委派执行一次任务的运行时边界。Sub-Agent 是运行角色，不是第二种配置实体。
@@ -9,7 +9,7 @@
 | 文件 | 职责 | 规模 |
 |---|---|---|
 | `types.ts` | request/result 运行时归一化、policy 默认值与上限 | 小 |
-| `../../lib/delegateExecutionScope.ts` | 仅在 delegated run 外层建立的 AsyncLocalStorage delegateId；Step 8 将使用 | 极小 |
+| `../../lib/delegateExecutionScope.ts` | 仅在 delegated run 外层建立的 AsyncLocalStorage delegateId | 极小 |
 | `../../../shared/persist/types/subrun.ts` | 所有会写入 `data.json` 的 Subrun ID/request/result/data union；经 `@shared/persist/types` 导入 | 中 |
 | `../../persist/subrun.ts` | `@main/persist` 导出的 `Subrun` store：allocator/reservation、data/message persistence 与 `PersistSessionLike` | 大 |
 | `commands/types.ts` | command scope、result/rejected outcomes、list/describe 安全 view types | 中 |
@@ -71,27 +71,27 @@ tools/subagent facade → LocalTool registry → parent RegularSession/JobRun
 - construction：commands 与 `createSubAgentCommand(manager)` 直接接收真实 `SubAgentManager`；`tools/subagent.ts` 以 `WeakMap<Profile, AppCommand>` 缓存每个 Profile 的 immutable command facade，只复用 cmdline parse/dispatch/format；同一 `LocalTool` 对象加入 delegated catalog blacklist；
 - formal-result seam：`SubmitResultController`、`createSubmitResultTool(controller)`、`buildFormalResult(input)`、`decideMissingSubmit(input)`；`ToolCatalog.withSubmitResult(tool)` 是唯一私有路由，普通 catalog/global registry 均不可见。
 - session seam：`SubAgentSession({ subrun, signal, parentTracer?, callbacks? })`，`run()` 返回 `{ kind:'result', result } | { kind:'not_pending', status }`。它在最外层建立 delegate scope，使用执行 Agent config/catalog/prompt，局部收集 usage/deliverables；每次调用 BaseSession 都是完整、自然结束的 ReAct user turn，未提交时只追加/flush 一条真实 reminder user message 后再跑一次完整 turn。
-- Step 12 IPC：`subagentRun` 的 query/cancel 都先沿 active Profile → parent Agent → parent Session → Subrun 解析；`getRunData` 只返回 metadata，`getRunMessages` 仅在 renderer Dialog 打开后调用 `Subrun.loadDomainMessages()` 并返回同 owner 的 Domain `Message[]`。manager 的 process-level state subscription 转发所有 profile-bound manager event；renderer 以完整 profile/parent identity + correlation 关联 live card，final tool result/persisted data 是终态事实。
+- IPC：`subagentRun` 的 query/cancel 都先沿 active Profile → parent Agent → parent Session → Subrun 解析；`getRunData` 只返回 metadata，`getRunMessages` 仅在 renderer Dialog 打开后调用 `Subrun.loadDomainMessages()` 并返回同 owner 的 Domain `Message[]`。manager 的 process-level state subscription 转发所有 profile-bound manager event；renderer 以完整 profile/parent identity + correlation 关联 live card，final tool result/persisted data 是终态事实。
 
 ## 常见变更
 
 | 场景 | 必须同步 |
 |---|---|
-| 修改 request/context/policy | `types.ts`、顶层 command parser、persist request snapshot、manager、`refactor/unit-test.md` |
+| 修改 request/context/policy | `types.ts`、顶层 command parser、persist request snapshot、manager 与相关测试 |
 | 修改 result status/字段 | submit controller、subrun data union、tool result JSON、renderer card、IPC、累积测试计划 |
 | 修改 runtime state/step | manager event sink、renderer IPC/card；key 始终保留完整 parent identity |
 | 修改 `SubrunId` 规则 | allocator、persist 路径、IPC 参数、renderer 显示及测试候选 |
 | 新增 delegated capability | 真实 handler/router/auth 执行点 + delegate context；不能只改 prompt，也不新增 policy facade |
-| 修改 delegate context | `lib/delegateExecutionScope.ts`、Pi tool、Internal URL、appcmd、MCP Auth、所有下游 step 文档 |
+| 修改 delegate context | `lib/delegateExecutionScope.ts`、Pi tool、Internal URL、appcmd、MCP Auth 与相关模块文档 |
 | 修改 runtime card / IPC | `shared/ipc/subagentRun.ts`、startup/preload/renderer bridge、`tool/renderers/subagent/`；所有 query/cancel 先验证 parent ownership，messages 只在 Dialog lazy load，state 不得以裸 subrunId 或裸 correlationId 关联 |
 
 ## 注意事项
 
 - `SubrunId` 是普通字符串语义名，禁止把 `001` 当全局 map key、日志 identity 或全局查询参数。
 - request normalization 只处理已类型化输入；cmdline 的 flag/positional 解析先完成类型收窄，再调用唯一 normalizer。
-- Step 1 不预建 result/usage/list 的通用 normalizer；真实不可信输入与权限边界由 Step 7 submit/result reducer 在单一入口校验。模型只能提交 completed/partial/blocked；runtime metadata、failed/cancelled 继续由 Step 8/9 生成。
+- 不预建 result/usage/list 的通用 normalizer；真实不可信输入与权限边界由 submit/result reducer 在单一入口校验。模型只能提交 completed/partial/blocked；runtime metadata、failed/cancelled 由 session/manager 生成。
 - policy 默认 `maxTurns=25`；未显式给 timeout 时按每 turn 60 秒推导，最大 60 分钟。显式 `maxTurns` 最大 clamp 为 100，timeout 最大 clamp 为 60 分钟。
-- 不为未来文件创建空壳、no-op 或 fake manager。
+- 不创建空壳、no-op 或 fake manager。
 - `run` JSON 输出为 `{ outcome }`；顶层与 subcommand help 均提示通过同一 response 多次调用实现并行，manager 的共享 admission/allocator 必须并发安全。
 - `list` 只消费 resolver hot records；`describe` 才按需读取一个 authorized AgentDetail，避免列表 fan-out，也避免泄漏 systemPrompt/delegates/zero。
 - normal Agent 不创建 AsyncLocalStorage context；只有 SubAgentSession 建立 `{ delegateId }`。
@@ -105,7 +105,7 @@ tools/subagent facade → LocalTool registry → parent RegularSession/JobRun
 
 | 改动 | 协变模块 |
 |---|---|
-| persisted request/result/data | `src/shared/persist/types/subrun.ts`、本目录、main persist store、future run IPC、renderer tool card；runtime state/step 仍在 `src/shared/types/subAgentRunTypes.ts` |
+| persisted request/result/data | `src/shared/persist/types/subrun.ts`、本目录、main persist store、run IPC、renderer tool card；runtime state/step 仍在 `src/shared/types/subAgentRunTypes.ts` |
 | Agent graph / delegates | `src/shared/persist/types/agent.ts`、`src/main/persist/agent.ts`、prompt、manager authorization |
 | session ownership | `pi/tools/types.ts`、internal URL resolve context、persist session adapter、本目录 policy/store |
 | tool command grammar | `pi/subagent/commands/`、`pi/tools/subagent.ts`、renderer parser、tool-system 文档 |
@@ -116,4 +116,3 @@ tools/subagent facade → LocalTool registry → parent RegularSession/JobRun
 - turn loop：[`../../../../ai.prompt/agent-loop.md`](../../../../ai.prompt/agent-loop.md)
 - 持久化架构：[`../../../../ai.prompt/persist.md`](../../../../ai.prompt/persist.md)
 - 工具系统：[`../../../../ai.prompt/tool-system.md`](../../../../ai.prompt/tool-system.md)
-- 重构共享契约：[`../../../../refactor/context.md`](../../../../refactor/context.md)

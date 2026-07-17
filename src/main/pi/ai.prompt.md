@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (Step 13：唯一 subagent production path 已复核) -->
+<!-- Last verified: 2026-07-17 -->
 # pi 模块 — Chat 引擎（pi-ai 底座）
 
 > Deskmate 的 chat orchestrator，基于 `@earendil-works/pi-ai` 适配多 provider。

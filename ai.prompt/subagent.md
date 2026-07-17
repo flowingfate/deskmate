@@ -1,0 +1,110 @@
+<!-- Last verified: 2026-07-17 -->
+# Agent 委派与 Subrun 架构
+
+> **Agent 是唯一可配置实体；Sub-Agent 是普通 Agent 在一次委派中的运行角色。**
+> 生产入口唯一为顶层 `subagent` 工具，执行链路为 `tool → SubAgentManager → persisted Subrun → SubAgentSession`。
+
+## 模型与授权
+
+- Agent 的 `description` 用于介绍专长；`delegates: AgentId[]` 定义可委派关系，均由 `AGENT.md` 持久化。
+- `Profile.resolveDelegates(parentAgentId)` 是唯一关系解析入口：按配置顺序返回可用 Agent，并将 self、缺失或已归档的 ID 返回为 `unavailableIds`。运行前必须重新解析，不能信任 UI 或 prompt 快照。
+- 委派只接受稳定 Agent ID；不按名称查找。复制 Agent 会复制其出边；归档不会改写其它 Agent 的 dangling 引用，目标恢复后关系自然恢复。
+
+## 配置入口
+
+- Agent 编辑器的 Basic tab 管理 `description`；Delegation tab 管理 `delegates`。没有独立 Sub-Agent 配置实体、路由或 CRUD。
+- 候选来自 active Agent；当前 Agent 不可选择。dangling ID 仍显示为 unavailable 并可移除，目标恢复后自动成为正常候选。
+- `description` 是 Agent 选择与委派提示的热数据；`delegates` 是按需读取的 Agent 详情配置。保存仍走同一 Agent front-matter patch。
+
+## 委派工具
+
+`subagent` 是与 `app`、`web` 并列的顶层 LocalTool，使用 shell 风格命令：
+
+```text
+subagent("list")
+subagent("describe <agent-id>")
+subagent("run <agent-id> --task \"...\" --expect \"...\"")
+```
+
+- `list` 返回当前父 Agent 的可委派目标和 `unavailableIds`；`describe` 仅展示已授权目标的安全能力摘要，不泄露 system prompt、委派图或其它冷配置。
+- `run` 的 `task`、`expectedOutput` 必填；可选 `--with-parent-summary`、`--max-turns`、`--timeout-seconds`。上下文仅允许隔离执行或显式的父摘要，不传递完整父会话历史。
+- 一个 assistant response 的多个独立 `subagent("run …")` 调用可并行执行；不存在 batch、async handle 或 join 子命令。
+
+## 请求与正式结果
+
+- request 在唯一 normalizer 中校验和归一化：`task`、`expectedOutput` 非空；默认 `maxTurns=25`，最大 100；未提供 timeout 时按归一化后的 turn 数 × 60 秒计算，显式或推导值均不超过 60 分钟。
+- `parent_summary` 仅作为明确标注为不可信的参考文本注入 delegated prompt，不能改变工具指令或授权边界。
+- 所有正式结果都带可信的 `subrunId`、delegate Agent ID、usage、warnings 与 deliverables。状态为 `completed`（content）、`partial`（content + incomplete reason）、`blocked`（reason，可带 content）、`failed`（error）或 `cancelled`（reason）。
+- 模型只能提交 `completed`、`partial`、`blocked`；`failed`、`cancelled`、usage 和身份元数据由 session/manager 生成。terminal runtime state 必须与正式 result 的状态一致。
+
+## 执行与能力边界
+
+`SubAgentSession` 从已落盘的 pending Subrun 读取父身份、执行 Agent 和请求，复用 Pi `BaseSession` 的模型循环、压缩、消息桥接与 transcript 持久化。
+
+1. `SubAgentManager` 校验父 Agent 对目标的授权，分配 Subrun，并持有 timeout、取消、并发准入和运行时状态。
+2. `SubAgentSession` 在最外层建立 `DelegateExecutionContext { delegateId }`，以目标 Agent 的模型、thinking、prompt、Knowledge 和 Skills 执行。
+3. Local 工具仍使用父会话的 `agentId/sessionId`，因此 `local://` 始终属于父会话；Knowledge/Skill 在 delegate context 下使用目标 Agent。
+4. 委派 catalog 不含交互式 `ask` 和真实 `subagent` 工具，禁止嵌套。`web research` 与 shell device-auth 在执行边界拒绝；其余 LocalTool 和全局 MCP OAuth 流程保持可用。
+5. 委派 Agent 必须通过仅在该 run catalog 中可见的 `submit_result` 交付 `completed`、`partial` 或 `blocked`。未提交时至多提醒一次，之后收敛为 partial 或 failed；取消、超时和异常由运行时生成 cancelled 或 failed。
+
+正式结果、assistant/tool transcript 均在结束前落盘；终态写入失败不会向父工具调用返回成功。
+
+### 一次性会话
+
+- Subrun 是一次性任务：`pending → running → terminal`，terminal 后不能继续对话或重新打开。后续委派必须创建新的 Subrun。
+- 每次 BaseSession 调用都是完整的 ReAct user turn。提交结果后待该 turn 自然结束才 formalize；未提交时只追加一条真实 reminder 并再执行一个完整 turn。
+- 结束顺序固定为 transcript flush → formal result → `Subrun.finish(result)` → 返回父工具调用；因此父方不会收到未持久化的完成结果。
+
+## Subrun 持久化与生命周期
+
+Subrun 属于父 Agent 的普通或 Job session，不是独立 session：
+
+```text
+agents/{parentAgentId}/sessions/{YYYYMM}/{parentSessionId}/
+  files/                 # 父会话与所有 subrun 共享
+  subruns/
+    001/
+      data.json
+      messages.jsonl
+```
+
+- `SubrunId` 是父 session 局部的三位字符串 `001..999`，`000` 非法。任何 API、IPC 或状态关联都必须携带 profile、父 Agent 和父 session 身份，不能把 ID 视作全局 key。
+- `Session.createSubrun/getSubrun/listSubruns` 是唯一持久化入口；`Subrun` 是消息写入与 `data.json` 状态转换的唯一 owner，不进入普通 session SQL 索引，也不单独创建 files 目录。
+- `data.json` 是 pending → running → terminal 的判别联合。每个父 session 最多保留 20 次委派；manager 在同一父身份短锁内完成 stale recovery、总量门控、reservation 与 active 注册。并发上限为 5。
+- 崩溃后没有 active entry 的 running Subrun 收敛为 interrupted failed，不自动续跑。进程内 live state 仅用于进度显示；终态和重载事实始终来自持久化数据与正式工具结果。
+
+- 空 reservation、非法 ID 和非法状态转换均以显式结果返回；Subrun 不写普通 session events、SQL index 或独立 files 目录。
+
+## 可见性、取消与 IPC
+
+- 父 RegularSession 或 JobRun 只在 catalog 实际启用 `subagent` 时追加可委派目标提示；SubAgentSession 不获得委派提示。
+- `RegularSession.stopStream` 会取消同一父身份下的 active runs。单 run cancel 只影响完整 parent identity + subrunId 指向的目标，不影响并行 sibling。
+- `subagentRun` IPC 以 active profile → parent Agent → parent Session → Subrun 的 ownership chain 查询或取消：
+  - `getRunData` 返回 metadata；
+  - `getRunMessages` 只在详情 Dialog 打开后惰性读取 canonical Domain `Message[]`；
+  - `stateUpdate` 推送 pending/running live state。
+- renderer 的工具卡片以 profile、父 Agent/session、correlationId 和已知 subrunId 关联 live state；最终展示以 formal result 与 persisted data 为准。详情 Dialog 只读、关闭即释放 transcript，不进入主聊天缓存。
+
+- live state 是带完整 parent identity 的判别联合；进度 steps 有界，不能替代持久化终态。renderer 在消息重载、状态事件丢失或 profile 切换后，仍可仅凭正式 result 和 metadata 恢复卡片。
+
+## 关键约束
+
+- 不读取、迁移、转换或删除历史 `sub-agents/` 磁盘数据；新路径只使用 Agent graph 与 `subruns/`。
+- `SubAgentManager.forProfile(profile)` 是唯一构造方式。manager 通过 `WeakMap<Profile, …>` 绑定 active runs、锁与订阅者，不能作为跨 Profile 全局单例。
+- 所有可预期业务拒绝通过 discriminated union 返回，不以未声明异常表达。
+- 任何会落盘的 Subrun 类型定义在 `src/shared/persist/types/subrun.ts`；仅运行时的 step/state 定义在 `src/shared/types/subAgentRunTypes.ts`。
+
+## 代码地图
+
+| 区域 | 入口 / 职责 |
+|---|---|
+| `src/main/pi/subagent/` | request 归一化、commands、formal result、session、manager 与 runtime state |
+| `src/main/pi/tools/subagent.ts` | 顶层工具 facade；按当前 Profile 取得缓存 command facade |
+| `src/main/persist/subrun.ts` | `Subrun` store、allocator、messages 与状态落盘 |
+| `src/shared/persist/types/subrun.ts` | 所有 persisted request/result/data contract |
+| `src/shared/types/subAgentRunTypes.ts` | 运行时 state/step contract |
+| `src/main/lib/delegateExecutionScope.ts` | delegated-only AsyncLocalStorage scope |
+| `src/main/startup/ipc/subagent-run.ts` | metadata、transcript、cancel 与 live-state IPC |
+| `src/renderer/components/chat/tool/renderers/subagent/` | 顶层工具结果、运行卡片与 transcript Dialog |
+
+实现细节与协变范围见 [`src/main/pi/subagent/ai.prompt.md`](../src/main/pi/subagent/ai.prompt.md)。
