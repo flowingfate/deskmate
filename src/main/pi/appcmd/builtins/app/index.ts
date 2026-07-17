@@ -36,4 +36,3 @@ appCommands.register(mcpCommand);
 appCommands.register(skillCommand);
 appCommands.register(timeCommand);
 appCommands.register(scheduleCommand);
-

@@ -73,4 +73,3 @@ ${skillsList}
 
   return wrapInSystemReminder(content);
 }
-

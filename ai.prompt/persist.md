@@ -213,7 +213,7 @@ AGENT.md 是源真值;`AgentRecord` 是其同名字段的派生缓存。
 
 | 视图 | 类型 | 字段 | renderer 用法 |
 |---|---|---|---|
-| Hot | `AgentRecord`(`agents.json#items` 行) | `id / name / description? / version / model / emoji? / avatar? / locked? / createdAt / updatedAt` | sidebar / chat header / model selector / delegation picker 直接持 `agents.atom`；description 放 hot 避免候选列表 fan-out 读 AGENT.md | 
+| Hot | `AgentRecord`(`agents.json#items` 行) | `id / name / description? / version / model / emoji? / avatar? / locked? / createdAt / updatedAt` | sidebar / chat header / model selector / delegation picker 直接持 `agents.atom`；description 放 hot 避免候选列表 fan-out 读 AGENT.md |
 | Cold | `AgentDetail`(AGENT.md 解析) | `agentId / systemPrompt / thinkingLevel? / tools? / mcpServers? / skills? / delegates? / zero?` | agent editor 按 agentId lazy fetch；delegates 保留配置顺序与 dangling ID |
 
 ### Agent graph resolver

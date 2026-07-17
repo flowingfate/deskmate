@@ -23,4 +23,3 @@ export function useSkills() {
     isLoading: false,
   }
 }
-
