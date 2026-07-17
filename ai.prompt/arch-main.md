@@ -1,6 +1,6 @@
 # DESKMATE AI Studio — 主进程架构
 
-<!-- Last verified: 2026-07-17 -->
+<!-- Last verified: 2026-07-18 (explicit Profile routing and defaultProfileId) -->
 ## 1. 范围
 
 本文档覆盖**主进程**（`src/main/`）和**预加载脚本**（`src/preload/`）。渲染进程架构见 [arch-render.md](arch-render.md)。
@@ -21,7 +21,7 @@
 | 模块 | 路径 | 简介 | 文档 |
 |------|------|------|------|
 | Chat 引擎（pi） | `src/main/pi/` | **生产路径**：基于 `@earendil-works/pi-ai` 的多 provider chat orchestrator + auth + 压缩 + tool 适配 | [agent-loop.md](agent-loop.md)（架构总览） + [模块 ai.prompt.md](../src/main/pi/ai.prompt.md) |
-| **持久化（persist）** | `src/main/persist/` + `src/shared/persist/` | **生产路径**：`~/.deskmate/` 全部用户态数据。Agent 一等公民、`p_{ulid}` profile 目录、AGENT.md / sessions/{ym}/ 双层、parent-scoped hidden `subruns/001..999/`，12 条细粒度 IPC 通道 | [persist.md](persist.md)（架构总览） + [模块 ai.prompt.md](../src/main/persist/ai.prompt.md) |
+| **持久化与 Profile runtime** | `src/main/persist/` + `src/main/profile.ts` + `src/main/profileRegistry.ts` | `ProfileStore` 管单 profile 磁盘数据；app-scoped `ProfileRegistry` 同时管 `profiles.json` index 与所有 runtime Profile 的并发 load、按 ID 查询与关闭，不提供 ambient selected accessor；`defaultProfileId` 仅是只读启动候选。每个 `Profile` 自己拥有 Pi、MCP、scheduler、Doctor 和至多一个 owner 主窗口。Doctor 每 Profile 仅允许一个 task；关闭 owner window 或 Profile 停止会 abort task，绝不把交互请求转发到其他 Profile。Doctor 的 session/schedule store 直接由 owner 注入，日志查询读取应用级 SQLite 日志；Doctor 也可读取应用级 CrashCapture 的 status 与 crash bundle。`startup/wins.ts` 是应用级窗口注册表，以 `Map<ProfileId, BrowserWindow>` 集中管理全部主窗口；主窗口按 Profile 建立、由 `additionalArguments` 注入不可变 identity；sender IPC 与 runtime event 均按 owner 精确路由。 | [persist.md](persist.md)（架构总览） + [模块 ai.prompt.md](../src/main/persist/ai.prompt.md) |
 | MCP 运行时（external-only） | `src/main/lib/mcpRuntime/` | external MCP server 连接 / OAuth / 执行入口（`executeToolOnServer`，server-scoped）。**不再有"内置 server"**——本地工具已独立到 `pi/tools/` | [ai.prompt.md](../src/main/lib/mcpRuntime/ai.prompt.md) |
 | 本地工具（pi/tools + pi/appcmd） | `src/main/pi/tools/` + `src/main/pi/appcmd/` | `LocalTool` registry + `ToolContext`（chat 主链路直接调）+ 全部本地工具实现 / 启动注册 / lazy 重依赖。**与 MCP 平级,不是 MCP**。`appcmd/` 是新引入的 **`app` 伪 shell** 基础设施(synopsis + help 双轨自描述、shell 范式调用、命令注册表) | [tool-system.md](tool-system.md)（总体设计 + 落地路径） + [模块 ai.prompt.md](../src/main/pi/tools/ai.prompt.md)（LocalTool 细节） |
 | Agent 委派运行时（pi/subagent） | `src/main/pi/subagent/` + `src/shared/persist/types/subrun.ts` + `src/main/startup/ipc/subagent-run.ts` | **唯一生产路径**：顶层 `subagent` tool 注入 manager；manager 以 Agent graph 授权、parent-scoped persisted Subrun 实现 limits/cancel/state/stale recovery，SubAgentSession 产出正式结果；`subagentRun` IPC 提供 metadata、lazy transcript、cancel 与 live state | [subagent.md](subagent.md)（架构） + [模块 ai.prompt.md](../src/main/pi/subagent/ai.prompt.md)（实现细节） |
@@ -36,7 +36,7 @@
 | 后台进程管理器 | `src/main/lib/backgroundProcessManager/` | 异步后台进程执行，环形缓冲区输出 | [ai.prompt.md](../src/main/lib/backgroundProcessManager/ai.prompt.md) |
 | 运行时管理器 | `src/main/lib/runtime/` | 内嵌 bun + uv，Python shim，内部/外部模式 | — |
 | 上下文压缩 | `src/main/lib/compression/` | 基于 LLM 的压缩，截断兜底 | — |
-| 日志系统 | `src/main/log/`、`src/shared/log/` | pino + worker_thread 异步 sqlite 落盘，DB 位于 `{userData}/logs/{dev,app}.db`；renderer 通过 `log:write` IPC 转发 | — |
+| 日志系统 | `src/main/log/`、`src/shared/log/` | pino + worker_thread 异步 sqlite 落盘，DB 位于 `{userData}/logs/{dev,app}.db`；renderer 通过 `log:write` IPC 转发，main 端覆写 renderer 的进程类型与 webContents ID。 | — |
 | 安全 | `src/main/lib/security/` | 路径遍历防护、工作区限制、CommandParser | — |
 | Token 计数 | `src/main/lib/token/` | js-tiktoken，视觉 tiling，LRU 缓存；驱动压缩门控 | — |
 | 快速启动缓存 | `src/main/lib/cache/` | CDN agent 卡片图片离线缓存 | — |
@@ -44,7 +44,7 @@
 | 共享类型/工具 | `src/main/lib/types/`，`lib/utilities/`，`lib/utils/` | 跨模块类型、错误类、Sharp 辅助函数、CDN 缓存清除 | — |
 | 评估框架 | `src/main/lib/evalHarness/` | AgenticEval HTTP 服务器；`--eval-mode` 无头 Agent 执行 | [ai.prompt.md](../src/main/lib/evalHarness/ai.prompt.md) |
 | 崩溃捕获 | `src/main/lib/crash/` | 崩溃包、运行标记、面包屑、最近日志/dump | [crash-bundle.md](../docs/crash-bundle.md) |
-| 调度器 | `src/main/lib/scheduler/` | Cron 和一次性任务，cold-start catch-up 经 `persist/schedulerState.ts` 接通；job/run 落 `agents/{a}/schedules/{j}/` | [ai.prompt.md](../src/main/lib/scheduler/ai.prompt.md) |
+| 调度器 | `src/main/lib/scheduler/` | 每个 runtime Profile 一个 `SchedulerManager`；Cron 和一次性任务独立登记，cold-start catch-up 经 `persist/schedulerState.ts` 接通；manager 统一跟踪、取消并等待 in-flight `JobRun` 后再允许 ProfileStore 关闭；完成通知与点击导航只选址 owning Profile 窗口 | [ai.prompt.md](../src/main/lib/scheduler/ai.prompt.md) |
 | Research window | `src/main/lib/research/` | `web research` 的 human-in-the-loop 网页研究：lazy-open + 串行单飞的 research `BrowserWindow` + 外部网页 `WebContentsView`（沙箱隔离）+ live DOM 抽取用户确认的来源 | [ai.prompt.md](../src/main/lib/research/ai.prompt.md) |
 | 网页内容提取 | `src/main/lib/research/extract/` | 共享「网页 → Markdown」提取链：Readability + turndown 注入产物（独立 IIFE 子构建），`web research` live view 与 `web fetch` headless 渲染共用 | [ai.prompt.md](../src/main/lib/research/extract/ai.prompt.md) |
 
@@ -135,8 +135,10 @@
 
 ## 8. 关键技术决策（主进程）
 
-**单例模式**：大多数主进程管理器（auth、profile cache、MCP、runtime、update、feature flags、screenshot、terminal、skills 等）遵循 `private static instance` + `getInstance()` 模式。`SubAgentManager` 是例外：它通过 `forProfile(profile)` 绑定 Profile 并由 WeakMap 缓存。新增长期服务时默认使用此模式。
+**所有权模式**：遗留应用级管理器可使用 `private static instance` + getter；`ProfileRegistry` 使用模块闭包并同时拥有 profile index 与 runtime Profile，Profile-bound 服务由 runtime `Profile` 直接持有。`DoctorManager`、`MCPClientManager`、`SchedulerManager` 均按 Profile 实例化；`SubAgentManager` 由 `Profile.getSubAgentManager()` 直接构造并缓存，不使用静态 WeakMap；新服务应按资源的实际生命周期选择所有权，而非默认单例。
 
 **非致命错误策略**：每个子系统都用 try/catch 包裹并记录日志。一个失败的组件永远不会崩溃整个应用 — 对于 feature flags、原生模块尤其重要。
 
 **启动性能**：`bootstrap.ts` 最先执行（在任何 import 之前）；`main.ts` 使用懒 getter（import 时零初始化）；重量级模块仅作为 `import type`；开发模式下 `dotenv`/`electron-reload` 通过 `setImmediate` 加载；`screenshot://` 在 `app.ready` 之前注册。
+
+**多主窗口纪律**：`main.ts` 对同一 Profile 的主窗口创建实行 single-flight；`startup/wins.ts` 仅在关闭的窗口仍是该 Profile 当前 map entry 时移除注册。来自 UI 的窗口操作（缩放、菜单导航）必须按 IPC sender 或 Electron 菜单提供的 target window 选址，不得复用“最近创建的主窗口”。应用退出仅由 `ElectronApp` 的唯一 `before-quit` handler 编排 Profile 停止、persist/SQLite close 与 logger close。

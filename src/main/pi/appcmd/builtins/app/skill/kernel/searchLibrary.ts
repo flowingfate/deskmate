@@ -10,7 +10,7 @@
  * 保留是为了不破坏调用方(`search.ts`)对结果 shape 的既有假设。
  */
 
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 
 export type SkillSearchSource = 'installed';
 
@@ -40,15 +40,15 @@ export interface SearchLibraryArgs {
 }
 
 async function searchInstalled(
+  store: ProfileStore,
   queryLower: string,
   currentAgentId: string,
 ): Promise<SkillSearchResultItem[]> {
-  const profile = await Profiles.get().active();
-  const installedSkills = profile.skills.items;
+  const installedSkills = store.skills.items;
 
   const appliedSkillNames = new Set<string>();
   if (currentAgentId) {
-    const agent = await profile.getAgent(currentAgentId);
+    const agent = await store.getAgent(currentAgentId);
     const bindings = agent?.config.skills;
     if (bindings) {
       for (const s of Object.keys(bindings)) appliedSkillNames.add(s);
@@ -73,6 +73,7 @@ async function searchInstalled(
 }
 
 export async function searchLibraryInternal(
+  store: ProfileStore,
   args: SearchLibraryArgs,
 ): Promise<SearchLibraryResult> {
   const raw = args.query;
@@ -95,7 +96,7 @@ export async function searchLibraryInternal(
   // 仍然吞掉异常写入 warnings(而非直接抛出),保持“查询失败也返回 success=true”的既有契约。
   let results: SkillSearchResultItem[] = [];
   try {
-    results = await searchInstalled(queryLower, currentAgentId);
+    results = await searchInstalled(store, queryLower, currentAgentId);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     warnings.push(`Installed skills check failed: ${detail}`);

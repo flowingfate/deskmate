@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { piApi, piEvents } from '@/ipc/pi';
 import { log } from '@/log';
 
+
 const logger = log.child({ mod: 'useAuthSession' });
 
 export type AuthStage =
@@ -90,11 +91,11 @@ export function useAuthSession(): AuthSession {
   }, [clearListeners]);
 
   const subscribeAll = useCallback((sessionId: string, providerId: string) => {
-    // 只处理当前 session 的事件；其他 session 一律丢弃（main 也只会发当前的，这一层是双保险）
-    const match = <T extends { sessionId: string }>(handler: (p: T) => void) =>
-      (_event: IpcRendererEvent, p: T) => {
-        if (p.sessionId !== sessionIdRef.current) return;
-        handler(p);
+    // 事件只从发起登录的 owner window 返回；sessionId 防止同一窗口旧会话驱动当前 UI。
+    const match = <T extends { sessionId: string }>(handler: (payload: T) => void) =>
+      (_event: IpcRendererEvent, payload: T) => {
+        if (payload.sessionId !== sessionIdRef.current) return;
+        handler(payload);
       };
 
     cleanupsRef.current.push(

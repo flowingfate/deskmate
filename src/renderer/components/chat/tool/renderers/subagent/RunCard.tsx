@@ -4,7 +4,6 @@ import type { SubAgentRunResult, ToolCall } from '@shared/persist/types';
 import type { SubAgentRunStep, SubAgentRuntimeState } from '@shared/types/subAgentRunTypes';
 import { subagentRunApi, useSubagentRunState } from '@/ipc/subagentRun';
 import { useAgentById } from '@/states/agents.atom';
-import { useProfileId } from '@/states/profile.atom';
 import { useCurrentSession } from '@/states/currentSession.atom';
 import { Button } from '@/shadcn/button';
 import { AgentAvatar } from '../../../../common/AgentAvatar';
@@ -93,8 +92,7 @@ function cancelError(result: Awaited<ReturnType<typeof subagentRunApi.cancelRun>
 
 export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
   const { agentId, chatSessionId } = useCurrentSession();
-  const profileId = useProfileId();
-  const liveState = useSubagentRunState(toolCall.id, profileId, agentId, chatSessionId, result?.subrunId);
+  const liveState = useSubagentRunState(toolCall.id, agentId, chatSessionId, result?.subrunId);
   const subrunId = result?.subrunId ?? liveState?.subrunId;
   const [audit, setAudit] = useState<AuditState>({ kind: 'idle' });
   const auditState = audit.kind === 'found' ? audit.state : null;

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 -->
+<!-- Last verified: 2026-07-18 (tool runtime Profile propagation) -->
 # pi 模块 — Chat 引擎（pi-ai 底座）
 
 > Deskmate 的 chat orchestrator，基于 `@earendil-works/pi-ai` 适配多 provider。
@@ -10,15 +10,14 @@
 | 文件 | 职责 | 规模 |
 |------|------|------|
 | `index.ts` | **pi 子树唯一外部入口**。`src/main/pi/` 之外只能从 `@main/pi` 导入；使用显式 named export，只暴露仓库中真实存在的外部消费面。子树内部仍按依赖方向直接引用具体模块，避免 barrel 自引用；工具注册仍由 `ensureToolsRegistered()` 动态触发，根入口不得静态导入 `tools/index.ts` | 小 |
-| `agent.ts` | Agent 注册表 + getOrCreateSession | 小 |
-| `prompt.ts` | 通用 system prompt 拼装(identity + knowledge + skills + global)，默认绝不含委派指导；RegularSession/JobRun 仅在 catalog 已启用 `subagent` 时于通用 prompt 后追加新 Agent graph guidance | 小 |
-| `session/` | turn loop 单一权威。RegularSession/JobRun 维持无 scope 行为；RegularSession stop 先从所属 active Profile 取得 manager 并取消同一 parent 的 delegated runs；SubAgentSession 仅通过 additive seam 复用它，并在外层编排完整 delegated user turns | 中 |
+| `agent.ts` | 由 owning runtime `Profile` 创建的 Pi Agent；持有其 `ProfileStore` 与 session cache，不再存在模块级注册表 | 小 |
+| `prompt.ts` | 通用 system prompt 拼装(identity + knowledge + skills + global)，只按调用方 `profileId` 路由；RegularSession/JobRun 仅在 catalog 已启用 `subagent` 时于通用 prompt 后追加新 Agent graph guidance | 小 |
+| `session/` | turn loop 单一权威。RegularSession/JobRun 维持无 scope 行为；RegularSession stop 从 owning runtime Profile 取得 manager 并取消同一 parent 的 delegated runs；JobRun 可在 abort controller 建立后、进入 loop 前消费 scheduler 的 `shouldStart` gate，覆盖 dispose 与 run 启动竞态；SubAgentSession 仅通过 additive seam 复用 turn loop | 中 |
 | `tool.ts` | **catalog + 执行**两段同住一文件。catalog local route 直接持有 `LocalTool` snapshot，经统一 helper 执行；delegate context 存在时排除 `ask` 与真实 `subagent` 对象，单次 delegated catalog 可附未注册 `submit_result` | 中 |
 | `tools/` | **本地工具子系统** —— `LocalTool` registry + `ToolContext` + 所有具体工具。生产注册 app/web/subagent 三个顶层 facade；subagent handler 再按 profile 取得 manager | 见子目录 |
-| `subagent/` | **唯一生产 Agent 委派运行时**。`SubAgentManager.forProfile(profile)` 绑定 persisted Subrun 的授权、limits/cancel/state/recovery，并通过唯一 process-level state bridge 供 `subagentRun` IPC 推送 live card | 中 |
+| `subagent/` | **唯一生产 Agent 委派运行时**。runtime `Profile` 直接构造并持有唯一 `SubAgentManager`，管理 persisted Subrun 的授权、limits/cancel/state/recovery；Profile 注入唯一 owner-window callback，供 manager 直发 `subagentRun` live card | 中 |
 | `auth.ts` | PiAuthManager:OAuth + apiKey 存取 + expires-based refresh + inflight dedup | 中 |
 | `compression.ts` | 压缩决策(usage = pi.usage.totalTokens,含 output,与 badge 同口径)+ 内置 compressWithFullMode 调用 | 小 |
-| `mcp.ts` | external MCP 工具薄包装:`listAllMcpTools()`(给 catalog 列举外部工具)/ `executeMcpToolOnServer(serverName, toolName, args, signal)`(server-scoped 执行,**不再**有按裸 toolName 查全局 map 的路径) | 小 |
 | `utils/messageBridge.ts` | Domain `Message`(`@shared/persist/types`)↔ `pi.Message` **唯一翻译点**:入境 `fromPiAssistantMessage(final, catalog)`(把 ThinkingPart / TextPart / ToolCallPart 折成单串 `think` + `content` + `tool_calls[]`；MCP 的 LLM 限定名经 `catalog.resolveIdentity` 精确 demux 回自然 `name` + `mcp` server，与出境 `toLlmToolName` 对称)，出境以 `ToolCall.mcp` 重新组装 MCP LLM 名称，1→N 展开每个 `assistant.tool_calls[i].response` 为 `pi.toolResult` 行；内部把首个 user message 的持久化 `time` 投影为固定 reminder，`transientReminder` 仅附本次请求尾部，二者均不落盘 | 中 |
 | `utils/fileAnnotation.ts` | 附件文本渲染 | 小 |
 | `utils/localTime.ts` | 客户端本地 ISO 时间、IANA timezone 与 UTC offset 的共享格式化；`app time` 和会话时间锚点复用 | 小 |
@@ -43,7 +42,7 @@
 **依赖规则**:
 
 ```
-agent → session → prompt / tool / mcp / compression → utils/internal
+agent → session → prompt / tool / compression → utils/internal
 ```
 
 无环、无双向回调、按需注入纯函数 hook。
@@ -61,6 +60,10 @@ agent → session → prompt / tool / mcp / compression → utils/internal
 **Resume**:`BaseSession.restore()` 在 `SessionDataFile.turn?.status === 'running'` 时调 `resume.ts:planResume` 算出 `pendingResume` 缓存到自身。下次 entry(`startStream` 等)在常规工作前消化它,把所有非平凡分支(runMissingTools / continueLoop / startTurn)统一收敛为 `aborted + idle`(终态设计,不再扩展自动续跑)。异常状态由 `loadChatSessionSnapshot` 在 `turn=running` 时填 `errorMessage` 透到 UI,渲染端 ErrorBar + Retry 让用户手动重试。详见 [`agent-loop.md` §4.5](../../../ai.prompt/agent-loop.md#45-resume崩溃后续跑)。
 
 **Auth 隔离**:每个 `profileId` 一个 `PiAuthManager`,绑定 `{userData}/profiles/{profileId}/auth.pi.json`(磁盘文件名 `auth.pi.json`,目录名 `p_{ulid}`)。同 provider 并发 refresh 用 inflightRefresh Map 去重。
+
+**Profile runtime ownership**:`agent-chat` 入口先从 IPC sender 解析 owning runtime `Profile`，再用 `Profile.getOrCreateAgent()` 创建或取回 Pi Agent。此后 Agent 直接持有该 ProfileStore，`prompt.ts` / `utils/config.ts` 用 session 的 `profileId` 调 `ProfileRegistry.require()`；每批 tool call 在 turn root 只解析一次同一 runtime `Profile` 并注入所有 `ToolContext.profile`。AppCommand kernel、MCP 执行与 Internal URL handler 均沿上下文继续使用该对象，不再按 ID 反查 registry。stream 生命周期内不再重新读取 selection；切换 UI 不影响已启动 stream；取消或 snapshot 回到其所属 profile 时命中同一个 runtime Agent。
+
+**MCP ownership**：`buildToolCatalogForAgent(agentCfg, profile)` 只列 owning Profile 已连接 manager 的 tools；`executeToolCall` 直接使用 `ToolContext.profile.mcpManager` 执行 MCP route。因此 UI selection 在 stream 中切换后，原 session 的 MCP catalog 与实际调用始终留在原 Profile。
 
 **主链路 tracer**:`BaseSession.sessionTracer: Tracer`(不是裸 tid)。IPC handler 在 `agent-chat.ts` 用 `Tracer.deserialize(msgTrace).derive().bind({mod:'chat.ipc',...})` 起 chat.ipc tracer,整个 tracer 透传给 `session.startStream / retryStream / editUserMessage / JobRun.run`。`BaseSession.prepareSessionTracer(parent?: Tracer)` 把 chat.ipc tracer 挂到 sessionTracer;`runTurnLoop` 起 chat.turn = `sessionTracer.derive()`;`streamOneRound` 起 chat.llm span;`executeToolCall` 起 chat.tool span(`ToolExecutionScope.tracer?: Tracer`);`checkAndCompress({tracer})` 让 chat.compress / chat.compress.summary 共链。tid / sid 仅运行时使用,**不入 persist**。
 
@@ -101,7 +104,7 @@ agent → session → prompt / tool / mcp / compression → utils/internal
 - **不要在 messageBridge 之外 `import '@earendil-works/pi-ai'`**。一旦泄漏,Domain Message 是事实源的设计就破了。例外:`session/{base,regular,job}.ts` / `model.ts` / `tool.ts` / `auth.ts` / `utils/utilityCompletion.ts` 是 pi 适配器自身,必须 import。
 - **`ContextState.compressions` 由 session 持久化,buildLlmContext 回放**。修改 compression schema 时务必同步两侧。
 - **tool schema 用 `Type.Unsafe(jsonSchema)` 包装**,参数校验责任留给 MCP 服务端。
-- **取消语义**:`RegularSession.stopStream` 先从所属 active Profile 取得 profile-bound manager，取消同一完整 parent identity 下的 delegated runs，再 abort parent turn；turn loop 仍自然收尾并推回 IDLE，不能提前 close stream。
+- **取消语义**：`RegularSession.stopStream` 按自身 `profileId` 从 `ProfileRegistry.require()` 取得 profile-bound manager，取消同一完整 parent identity 下的 delegated runs，再 abort parent turn；turn loop 仍自然收尾并推回 IDLE，不能提前 close stream。Scheduler 的 `JobRun` 由 `SchedulerManager` 跟踪；`BaseSession.runTurnLoop(shouldStart?)` 在创建 abort controller 后立即检查 gate，使 dispose 即使发生在 `JobRun.run()` 真正进入 loop 前也能可靠取消。
 - **`getOrCreateSession` 走 lazy create**：persist 找不到该 sessionId 时调 `persistAgent.createSession({ id: sessionId })` 用 renderer 持有的 id 首次落盘。若该 id 已存在于 `job_runs`，必须拒绝而不能同 ID 创建 regular session；用户只能先通过 persist 的 schedule-run conversion 取得新 regular id。renderer 端 “New Chat” 不再触发 IPC，仅 `newEntityId('s')` 本地生成 id 后 navigate；首次 `streamMessage` / `retryChat` / `editUserMessage` 才落盘 data.json + sessions 索引，避免反复点新建却不发消息留下空壳 session。
 - **`pi-ai` 用动态 import**:electron-vite 把 dependencies 默认 external,pi-ai 又是 ESM-only 包,静态 `import` 在生产 main bundle 里会触发 ESM/CJS interop 问题。`scripts/check-mixed-imports.js` 会拦"同模块静态+动态混用"(以及测试期间常见的 mock 漂移),所以 pi-ai 必须**全仓库统一用 dynamic import**(根包 + `@earendil-works/pi-ai/oauth` 子路径都一样)。
 - **`OAuth provider` 从子路径 `@earendil-works/pi-ai/oauth` 引入**,根 index 只 re-export 了 *types*。

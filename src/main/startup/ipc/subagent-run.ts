@@ -1,15 +1,13 @@
 import type { IpcMain } from 'electron';
 import {
-  mainToRender,
   renderToMain,
   type SubagentRunLookupFailure,
   type SubagentRunParent,
   type SubagentRunStateResult,
 } from '@shared/ipc/subagentRun';
-import type { Profile, Subrun } from '@main/persist';
-import { Profiles } from '@main/persist';
-import { SubAgentManager } from '@main/pi/subagent/manager';
-import { mainWindow } from '@main/startup/wins';
+import type { Profile } from '@main/profile';
+import type { Subrun } from '@main/persist';
+import { requireProfileForSender } from './profileContext';
 
 type LoadedSubrun =
   | { kind: 'found'; profile: Profile; subrun: Subrun }
@@ -17,9 +15,8 @@ type LoadedSubrun =
 
 let registered = false;
 
-async function loadSubrun(parent: SubagentRunParent): Promise<LoadedSubrun> {
-  const profile = await Profiles.get().active();
-  const agent = await profile.getAgent(parent.parentAgentId);
+async function loadSubrun(profile: Profile, parent: SubagentRunParent): Promise<LoadedSubrun> {
+  const agent = await profile.store.getAgent(parent.parentAgentId);
   if (!agent) {
     return {
       kind: 'parent_not_found',
@@ -53,7 +50,7 @@ async function stateResult(
   parent: SubagentRunParent,
 ): Promise<SubagentRunStateResult> {
   if (loaded.kind !== 'found') return loaded;
-  const state = await SubAgentManager.forProfile(loaded.profile).getRuntimeState({
+  const state = await loaded.profile.getSubAgentManager().getRuntimeState({
     profileId: loaded.profile.id,
     parentAgentId: parent.parentAgentId,
     parentSessionId: parent.parentSessionId,
@@ -69,60 +66,43 @@ export function registerSubagentRunIpc(ipc: IpcMain): void {
   registered = true;
 
   const handle = renderToMain.bindMain(ipc);
-  handle.getRunState(async (_event, parent) => {
+  handle.getRunState(async (event, parent) => {
     try {
-      return await stateResult(await loadSubrun(parent), parent);
+      return await stateResult(await loadSubrun(requireProfileForSender(event), parent), parent);
     } catch (error) {
-      return {
-        kind: 'error',
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return { kind: 'error', error: error instanceof Error ? error.message : String(error) };
     }
   });
 
-  handle.getRunMessages(async (_event, parent) => {
+  handle.getRunMessages(async (event, parent) => {
     try {
-      const loaded = await loadSubrun(parent);
+      const loaded = await loadSubrun(requireProfileForSender(event), parent);
       if (loaded.kind !== 'found') return loaded;
       const { messages } = await loaded.subrun.loadDomainMessages();
       return { kind: 'found', messages };
     } catch (error) {
-      return {
-        kind: 'error',
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return { kind: 'error', error: error instanceof Error ? error.message : String(error) };
     }
   });
 
-  handle.cancelRun(async (_event, parent) => {
+  handle.cancelRun(async (event, parent) => {
     try {
-      const loaded = await loadSubrun(parent);
+      const loaded = await loadSubrun(requireProfileForSender(event), parent);
       if (loaded.kind !== 'found') return loaded;
-
-      if (loaded.subrun.status !== 'pending' && loaded.subrun.status !== 'running') {
-        return { kind: 'terminal', status: loaded.subrun.status };
+      const status = loaded.subrun.status;
+      if (status !== 'pending' && status !== 'running') {
+        return { kind: 'terminal', status };
       }
-
-      const cancelled = SubAgentManager.forProfile(loaded.profile).cancelRun({
+      const cancelled = loaded.profile.getSubAgentManager().cancelRun({
         profileId: loaded.profile.id,
         parentAgentId: parent.parentAgentId,
         parentSessionId: parent.parentSessionId,
         subrunId: parent.subrunId,
       });
-      return cancelled
-        ? { kind: 'cancel_requested' }
-        : { kind: 'not_active', status: loaded.subrun.status };
+      return cancelled ? { kind: 'cancel_requested' } : { kind: 'not_active', status };
     } catch (error) {
-      return {
-        kind: 'error',
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return { kind: 'error', error: error instanceof Error ? error.message : String(error) };
     }
   });
 
-  SubAgentManager.subscribeStateUpdates((state) => {
-    const window = mainWindow();
-    if (!window || window.isDestroyed()) return;
-    mainToRender.bindWebContents(window.webContents).stateUpdate(state);
-  });
 }

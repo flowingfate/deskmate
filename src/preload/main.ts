@@ -25,11 +25,16 @@ import invokeAttachment from './attachment/invoke';
 import invokeInternalUrls from './internalUrls/invoke';
 import invokeResearch from './research/invoke';
 import invokeSubagentRun from './subagentRun/invoke';
+import { profile } from './windowProfile';
 
 // Define the API that will be exposed to the renderer process
 export interface ElectronAPI {
   // Platform information (static, set at preload time)
   platform: string;
+  /** 当前 BrowserWindow 在构造时绑定的不可变 Profile ID。 */
+  profile: {
+    id: string;
+  };
 
   // Persist APIs (新持久化层 — 取代了老 profile 通道)
   persist: {
@@ -222,6 +227,7 @@ const ipcOff: OnOff = ipcRenderer.off.bind(ipcRenderer);
 
 export const electronAPI: ElectronAPI = {
   platform: process.platform,
+  profile,
 
   persist: {
     invoke: invokePersist,

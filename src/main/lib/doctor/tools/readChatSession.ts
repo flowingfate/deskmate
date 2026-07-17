@@ -7,8 +7,8 @@
 
 import type { Tool } from '@earendil-works/pi-ai';
 import { jsonSchema } from '@main/pi';
+import type { ProfileStore } from '@main/persist';
 import type { DoctorSessionFile } from '../chatSession/types';
-import { Profiles } from '../../../persist';
 import { formatSkeleton } from '../chatSession/skeletonFormatter';
 
 export const readChatSessionToolDef: Tool = {
@@ -30,10 +30,10 @@ export const readChatSessionToolDef: Tool = {
   }),
 };
 
-export async function executeReadChatSession(args: {
-  agentId: string;
-  chatSessionId: string;
-}): Promise<string> {
+export async function executeReadChatSession(
+  store: ProfileStore,
+  args: { agentId: string; chatSessionId: string },
+): Promise<string> {
   const { agentId, chatSessionId } = args;
 
   if (!agentId || !chatSessionId) {
@@ -41,7 +41,7 @@ export async function executeReadChatSession(args: {
   }
 
   try {
-    const file = await loadSessionFile(agentId, chatSessionId);
+    const file = await loadSessionFile(store, agentId, chatSessionId);
     if (!file) {
       return errorBlock(`Chat session "${chatSessionId}" not found under agent "${agentId}".`);
     }
@@ -51,9 +51,8 @@ export async function executeReadChatSession(args: {
   }
 }
 
-async function loadSessionFile(agentId: string, chatSessionId: string): Promise<DoctorSessionFile | null> {
-  const profile = await Profiles.get().active();
-  const agent = await profile.getAgent(agentId);
+async function loadSessionFile(store: ProfileStore, agentId: string, chatSessionId: string): Promise<DoctorSessionFile | null> {
+  const agent = await store.getAgent(agentId);
   if (!agent) return null;
   const session = await agent.getSession(chatSessionId);
   if (!session) return null;

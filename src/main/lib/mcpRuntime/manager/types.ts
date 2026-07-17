@@ -22,7 +22,7 @@ export interface Tool {
 }
 
 
-/** 单个 MCP 工具的运行时描述,对齐 `pi/mcp.ts::McpToolDef` 的字段契约。 */
+/** 单个 MCP 工具的运行时描述，供 `MCPClientManager.getAllTools()` 与 `pi/tool.ts` 直接使用。 */
 export interface McpTool {
   name: string;
   description?: string;

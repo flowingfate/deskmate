@@ -4,13 +4,13 @@
  * 角色:被 `appcmd/builtins/app/skill/status.ts` 调用,与 `agent/kernel/getStatus.ts` 对称。
  *
  * 状态枚举:
- *   - NotInstalled —— 不在 active profile 的 skills.items 里
+ *   - NotInstalled —— 不在 owning Profile 的 skills.items 里
  *   - Installed    —— 已装,附 version / source / 当前 agent 是否绑定该 skill
  *
  * `signal` 仅做契约形状对齐。
  */
 
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 
 export type SkillStatus = 'NotInstalled' | 'Installed';
 
@@ -34,6 +34,7 @@ export interface GetSkillStatusResult {
 }
 
 export async function getSkillStatusInternal(
+  store: ProfileStore,
   args: GetSkillStatusArgs,
   _opts?: { signal?: AbortSignal },
 ): Promise<GetSkillStatusResult> {
@@ -49,9 +50,7 @@ export async function getSkillStatusInternal(
       };
     }
     const skillName = raw.trim();
-
-    const profile = await Profiles.get().active();
-    const installed = profile.skills.get(skillName);
+    const installed = store.skills.get(skillName);
 
     if (!installed) {
       return {
@@ -64,7 +63,7 @@ export async function getSkillStatusInternal(
 
     let appliedToCurrent: boolean | undefined;
     if (args.current_agent_id && args.current_agent_id.trim()) {
-      const agent = await profile.getAgent(args.current_agent_id.trim());
+      const agent = await store.getAgent(args.current_agent_id.trim());
       appliedToCurrent = (agent?.config.skills ?? {})[skillName] !== undefined;
     }
 

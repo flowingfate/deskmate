@@ -20,6 +20,7 @@
 import { vi } from 'vitest';
 
 import type { AgentToolContext } from '@main/pi/tools/types';
+import { testProfile } from '../../../tools/__tests__/profileFixture';
 
 // ---------------------------------------------------------------------------
 // 被 mock 模块的 stub state(必须 hoisted)
@@ -33,8 +34,8 @@ const webMocks = vi.hoisted(() => ({
 
 export { webMocks };
 
-// `web search` 从 settings / env 解析 Tavily key。测试无 active profile,
-// 模块加载即兜底设置环境变量,覆盖没有 `resetWebMocks` beforeEach 的套件。
+// `web search` 从 owning Profile settings / env 解析 Tavily key。
+// 模块加载即设置环境变量,覆盖没有 `resetWebMocks` beforeEach 的套件。
 process.env.TAVILY_API_KEY = 'tvly-test-key';
 
 vi.mock('@main/pi/appcmd/builtins/web/kernel/tavilySearch', () => ({
@@ -70,6 +71,7 @@ const webRouter = makeRouterCommand({
 export function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   const base: AgentToolContext = {
     mode: 'agent',
+    profile: testProfile,
     profileId: 'profile-1',
     agentId: 'agent-1',
     sessionId: 'session-1',
@@ -119,8 +121,7 @@ export async function runWeb(
 
 /** beforeEach 默认:所有 mock reset 到 undefined return。test 自己 set return value。 */
 export function resetWebMocks(): void {
-  // `web search` 从 settings / env 解析 Tavily key;测试无 active profile,
-  // 设置 env 让 search.ts 走到(被 mock 的)kernel。
+  // 设置 env 让 search.ts 在 owning Profile 未配置 key 时走到(被 mock 的)kernel。
   process.env.TAVILY_API_KEY = 'tvly-test-key';
   webMocks.tavilyExecute.mockReset();
   webMocks.fetchWebContentExecute.mockReset();

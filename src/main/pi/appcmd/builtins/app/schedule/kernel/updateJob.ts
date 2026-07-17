@@ -2,7 +2,7 @@
  * Schedule "update" 内核 —— 更新一条 job 的配置。
  * schedule 是 discriminated union：切换类型时必须同时给出该类型的完整触发值。
  */
-import { schedulerManager } from '@main/lib/scheduler';
+import type { Profile } from '@main/profile';
 import type { SchedulerJobUpdate } from '@shared/ipc/scheduler';
 
 import { jobToView, type JobView } from './types';
@@ -24,7 +24,7 @@ export type UpdateJobResult =
 
 export async function updateJobInternal(
   args: UpdateJobArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { profile: Profile; signal?: AbortSignal },
 ): Promise<UpdateJobResult> {
   try {
     const hasConfigUpdate =
@@ -73,6 +73,7 @@ export async function updateJobInternal(
       updates = common;
     }
 
+    const schedulerManager = opts.profile.scheduler;
     const success = await schedulerManager.updateJob(args.job_id, updates);
     if (!success) {
       return {

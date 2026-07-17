@@ -143,7 +143,7 @@ export async function runAdd(argv: string[], ctx: AppCmdContext): Promise<void> 
     return;
   }
 
-  const result: CreateAgentResult = await createAgentInternal(createArgs, { signal: ctx.signal });
+  const result: CreateAgentResult = await createAgentInternal(ctx.profile.store, createArgs, { signal: ctx.signal });
   if (!result.success) {
     ctx.printErr(`agent add: ${result.message}\n`);
     ctx.setExitCode(1);

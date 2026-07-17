@@ -4,16 +4,14 @@
  * 角色:被 `appcmd/builtins/app/mcp/install.ts`(library 装)与 `add.ts`(custom)
  * 调用,业务逻辑的真家。
  *
- * 注意:renderer 端的 MCP CRUD 走 `mcpApi.addServer` IPC 直通
- * `mcpClientManager.add`,**不**消费本函数 —— 本函数只服务 `app mcp ...`
- * CLI 路径。
+ * 注意:renderer 端的 MCP CRUD 走 `mcpApi.addServer` IPC，按 profileId 路由
+ * 到对应 runtime manager；本函数只服务 `app mcp ...` CLI 路径。
  *
- * 与 `mcpClientManager.add` 的边界:本函数只做"参数校验 + 字段补全 + 调
- * mcpClientManager.add",**不**做 connect / status 查询;运行时状态由
- * mcpClientManager 自己异步推进。
+ * 本函数只做参数校验 + 字段补全 + 调 Profile.mcpManager.add；连接和状态由
+ * manager 异步推进。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime'
+import type { Profile } from '@main/profile';
 import type { McpServerConfig } from '@shared/persist/types'
 
 export interface CreateServerArgs {
@@ -45,13 +43,12 @@ export interface CreateServerResult {
 /**
  * 校验 + 落盘 + 触发连接。失败统一通过 `{ success: false, ... }` envelope 回流,
  * 不抛 —— caller(appcmd 或 ipc wrapper)按 success 字段分支处理。
- *
- * `signal` 仅做契约形状对齐,该路径下没有可取消的底层 I/O(mcpClientManager.add
- * 内部同步写盘 + 异步触发连接,后者不挂在 signal 上)。
+ * `signal` 仅做契约形状对齐,该路径下没有可取消的底层 I/O；manager 写盘
+ * 后异步启动连接。
  */
 export async function createServerInternal(
   args: CreateServerArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { profile: Profile; signal?: AbortSignal },
 ): Promise<CreateServerResult> {
   try {
     // Validate input arguments
@@ -116,8 +113,7 @@ export async function createServerInternal(
       version: finalVersion,
     };
 
-    // mcpClientManager 内部会更新 ProfileCacheManager + 启动连接
-    await mcpClientManager.add(mcpConfig.name, mcpConfig);
+    await opts.profile.mcpManager.add(mcpConfig.name, mcpConfig);
 
     return {
       success: true,

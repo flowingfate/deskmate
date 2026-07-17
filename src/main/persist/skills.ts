@@ -49,8 +49,9 @@ export class Skills extends PersistBase {
 
   protected async doPersist(): Promise<void> {
     await writeJson(this.indexFile(), this.toFile());
-    emit('agent:registry:updated', {
-      profileId: this.profileId, kind: 'skills', items: this.items,
+    emit(this.profileId, 'agent:registry:updated', {
+      kind: 'skills',
+      items: this.items,
     });
   }
 

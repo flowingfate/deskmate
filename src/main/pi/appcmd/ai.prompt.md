@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 9：顶层 subagent 按 Profile 动态取 manager；独立 tool 已注册) -->
+<!-- Last verified: 2026-07-18 (AppCmdContext owning Profile routing) -->
 # pi/appcmd — `app` shell 风格的应用内能力调度
 
 > 主进程**伪 shell** 子系统:LLM 通过单个 `app` LocalTool 调用一行 cmdline
@@ -48,9 +48,9 @@ interface AppCommand {
 - `run` 抛错由 dispatcher **收敛**成 `stderr + (exit 1)`,**不**重新抛 ——
   "命令崩溃" ≠ "工具调用失败"。后者由 LocalTool registry 在更外层处理。
 
-### AppCmdContext = ToolContext legacy ingress + stdio helpers
+### AppCmdContext = ToolContext 精确子集 + stdio helpers
 
-`AppCmdContext` 保持既有 parent identity union。正常 execution 没有 delegate context；delegated run 只让 router 隐藏/拒绝 `web research`。其余 app/web 命令保持原有行为；新命令不得通过 `ctx.mode/delegateId` 推导权限。
+`AppCmdContext.profile` 是命令执行的 runtime owner。Agent / Skill / Web 命令及其 kernel 必须显式接收 `ctx.profile` 或 `ctx.profile.store`，禁止回读 Registry 默认候选。正常 execution 没有 delegate context；delegated run 只让 router 隐藏/拒绝 `web research`。其余 app/web 命令保持原有行为；新命令不得通过 `ctx.mode/delegateId` 推导权限。
 
 ### 退出码语义
 

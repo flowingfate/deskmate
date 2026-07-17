@@ -64,6 +64,7 @@ export async function runSetPrimary(argv: string[], ctx: AppCmdContext): Promise
   const { name } = nameResult;
 
   const result: SetPrimaryResult = await setPrimaryInternal(
+    ctx.profile.store,
     { agent_name: name },
     { signal: ctx.signal },
   );

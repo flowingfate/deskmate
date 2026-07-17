@@ -6,7 +6,7 @@
  * 文件里,**不**外溢到 _shared.ts。
  */
 
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 import type { SkillAgentTarget } from '@main/lib/skill';
 
 /**
@@ -65,6 +65,7 @@ export function normalizeSkillNames(
  *   - ctx.agentId 非空 → 返回 [{ agentId, agentName }] 单元素数组。
  */
 export async function resolveDefaultAgentTarget(
+  store: ProfileStore,
   currentAgentId: string,
 ): Promise<{ ok: true; targets: SkillAgentTarget[] } | { ok: false; error: string }> {
   if (!currentAgentId) {
@@ -75,17 +76,7 @@ export async function resolveDefaultAgentTarget(
     };
   }
 
-  let profile;
-  try {
-    profile = Profiles.get().activeSync();
-  } catch {
-    return {
-      ok: false,
-      error: 'No current user session found. Please ensure you are logged in.',
-    };
-  }
-
-  const agent = await profile.getAgent(currentAgentId);
+  const agent = await store.getAgent(currentAgentId);
   if (!agent) {
     return { ok: false, error: 'Current chat not found.' };
   }

@@ -22,9 +22,11 @@ import { AppCommandRegistry } from '../registry';
 import type { AppCommand, AppCmdContext } from '../types';
 import type { AgentToolContext, DelegateToolContext } from '../../tools/types';
 import { Tracer } from '@shared/log/trace';
+import { testProfile } from '../../tools/__tests__/profileFixture';
 
 function makeToolCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
+    profile: testProfile,
     profileId: 'p',
     agentId: 'a',
     sessionId: 's',
@@ -42,6 +44,7 @@ function makeDelegateToolCtx(
   overrides: Partial<DelegateToolContext> = {},
 ): DelegateToolContext {
   return {
+    profile: testProfile,
     profileId: 'p',
     agentId: 'a',
     sessionId: 's',

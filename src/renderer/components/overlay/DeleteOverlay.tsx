@@ -4,7 +4,6 @@ import { agentSessionCacheManager } from '@renderer/lib/chat/agentSessionCacheMa
 import { deleteAgentConfig } from '@renderer/lib/chat/agentOps';
 import { deleteChatSession } from '@renderer/lib/chat/chatSessionOps';
 import { newEntityId } from '@shared/persist/id';
-import { getProfileId } from '@/states/profile.atom';
 import { getAgents, getPrimaryAgentId } from '@/states/agents.atom';
 import { log } from '@/log';
 import { agentChatApi } from '@/ipc/agentChat';
@@ -134,12 +133,6 @@ export const DeleteConfirmAtom = atom<State, DeleteActions>(zeroState, (get, set
           return;
         }
 
-        const profileAlias = getProfileId();
-
-        if (!profileAlias) {
-          showError('No profile alias available');
-          return;
-        }
 
         // Navigate away before deleting the current session; the route is the active-session source of truth.
         if (isCurrentSession) {

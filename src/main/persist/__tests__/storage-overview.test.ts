@@ -30,13 +30,13 @@ async function freshModules() {
   vi.resetModules();
   const root = await import('../lib/root');
   root.setRootForTesting(tmpRoot);
-  const profiles = await import('../profiles');
-  profiles.Profiles.resetForTesting();
+  const registry = await import('../../profileRegistry');
+  registry.ProfileRegistry.resetForTesting();
   const dbMod = await import('../lib/db/db');
   dbMod.ProfileDb.resetForTesting();
   const storage = await import('../storageOverview');
   return {
-    Profiles: profiles.Profiles,
+    ProfileRegistry: registry.ProfileRegistry,
     computeStorageOverview: storage.computeStorageOverview,
     resolveRevealTarget: storage.resolveRevealTarget,
   };
@@ -55,13 +55,12 @@ afterEach(async () => {
 describe('computeStorageOverview', () => {
   it('空 profile：无 agent 分组，Σ(agents + shared) == totalBytes，计数全 0', async () => {
     const fresh = await freshModules();
-    const profiles = fresh.Profiles.get();
-    await profiles.bootstrap();
-    const profile = await profiles.active();
+    const profiles = fresh.ProfileRegistry;
+    await fresh.ProfileRegistry.bootstrap();
+    const store = fresh.ProfileRegistry.require(profiles.defaultProfileId).store
 
-    const overview = await fresh.computeStorageOverview(profile, profiles);
+    const overview = await fresh.computeStorageOverview(store, profiles);
 
-    expect(overview.profileId).toBe(profile.id);
     expect(overview.totalBytes).toBeGreaterThan(0);
     expect(overview.agents).toHaveLength(0);
     expect(overview.agentsTotalBytes).toBe(0);
@@ -76,18 +75,18 @@ describe('computeStorageOverview', () => {
 
   it('有 agent + 会话：按 agent 分组，子项 count/bytes 正确，两级总和守恒', async () => {
     const fresh = await freshModules();
-    const profiles = fresh.Profiles.get();
-    await profiles.bootstrap();
-    const profile = await profiles.active();
+    const profiles = fresh.ProfileRegistry;
+    await fresh.ProfileRegistry.bootstrap();
+    const store = fresh.ProfileRegistry.require(profiles.defaultProfileId).store
 
-    const agent = await profile.createAgent({ name: 'Scout', version: '1', emoji: '🛰️' });
+    const agent = await store.createAgent({ name: 'Scout', version: '1', emoji: '🛰️' });
     const s = await agent.createSession({ title: 'hello' });
     s.appendMessage(msg('user', 'hi there'));
     s.appendMessage(msg('assistant', 'hey back'));
     await s.flushMessages();
     await s.persist();
 
-    const overview = await fresh.computeStorageOverview(profile, profiles);
+    const overview = await fresh.computeStorageOverview(store, profiles);
 
     expect(overview.stats.agents).toBe(1);
     expect(overview.stats.conversations).toBe(1);
@@ -122,12 +121,12 @@ describe('computeStorageOverview', () => {
 
   it('多 agent 按 totalBytes 倒序排列', async () => {
     const fresh = await freshModules();
-    const profiles = fresh.Profiles.get();
-    await profiles.bootstrap();
-    const profile = await profiles.active();
+    const profiles = fresh.ProfileRegistry;
+    await fresh.ProfileRegistry.bootstrap();
+    const store = fresh.ProfileRegistry.require(profiles.defaultProfileId).store
 
-    const a1 = await profile.createAgent({ name: 'Light', version: '1' });
-    const a2 = await profile.createAgent({ name: 'Heavy', version: '1' });
+    const a1 = await store.createAgent({ name: 'Light', version: '1' });
+    const a2 = await store.createAgent({ name: 'Heavy', version: '1' });
     // 给 a2 塞更多会话内容，使其占盘更大。
     for (let i = 0; i < 4; i++) {
       const s = await a2.createSession({ title: `s${i}` });
@@ -141,7 +140,7 @@ describe('computeStorageOverview', () => {
     await s1.flushMessages();
     await s1.persist();
 
-    const overview = await fresh.computeStorageOverview(profile, profiles);
+    const overview = await fresh.computeStorageOverview(store, profiles);
     expect(overview.agents).toHaveLength(2);
     expect(overview.agents[0].agentId).toBe(a2.id);
     expect(overview.agents[0].totalBytes).toBeGreaterThanOrEqual(overview.agents[1].totalBytes);
@@ -151,11 +150,11 @@ describe('computeStorageOverview', () => {
 describe('resolveRevealTarget', () => {
   it('放行 profile 目录内路径，拒绝越界 / 不存在路径', async () => {
     const fresh = await freshModules();
-    const profiles = fresh.Profiles.get();
-    await profiles.bootstrap();
-    const profile = await profiles.active();
+    const profiles = fresh.ProfileRegistry;
+    await fresh.ProfileRegistry.bootstrap();
+    const store = fresh.ProfileRegistry.require(profiles.defaultProfileId).store
 
-    const profileRoot = path.join(tmpRoot, 'profiles', profile.id);
+    const profileRoot = path.join(tmpRoot, 'profiles', store.id);
     const dataRoot = tmpRoot;
 
     // profile 根目录本身放行（是目录）。

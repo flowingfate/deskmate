@@ -18,13 +18,12 @@ import { ChatStatus } from '@shared/types/agentChatTypes';
 import Stream from '@shared/stream-iterator';
 
 import { log } from '@main/log';
-import { Profiles } from '@main/persist';
+import { ProfileRegistry } from '@main/profileRegistry';
 import { Tracer } from '@shared/log/trace';
 
 import { deriveToolTracer, executeToolCall, ToolCatalog } from '../tool';
 import type { ToolContext } from '../tools/types';
 import { buildDelegationPrompt } from '../subagent/prompt';
-import { SubAgentManager } from '../subagent/manager';
 import { classifyError } from '../utils/errors';
 import {
   BaseSession,
@@ -104,14 +103,11 @@ export class RegularSession extends BaseSession {
   }
 
   async stopStream(): Promise<void> {
-    const profile = await Profiles.get().active();
-    if (profile.id === this.profileId) {
-      SubAgentManager.forProfile(profile).cancelByParentSession({
-        profileId: this.profileId,
-        parentAgentId: this.agentId,
-        parentSessionId: this.id,
-      });
-    }
+    ProfileRegistry.require(this.profileId).getSubAgentManager().cancelByParentSession({
+      profileId: this.profileId,
+      parentAgentId: this.agentId,
+      parentSessionId: this.id,
+    });
     // 只 abort。turn loop 自然走到 stopReason='aborted' 分支 → setStatus(IDLE)
     // → 推 status_changed → 自行 close stream。在这里 close stream 会让 status
     // chunk 发不出去，UI 按钮卡在"取消"形态。
@@ -303,6 +299,7 @@ export class RegularSession extends BaseSession {
   ): Promise<void> {
     const stream = this.requireActiveStream();
     const eventSender = this.requireActiveEventSender();
+    const profile = ProfileRegistry.require(this.profileId);
 
     // 并行发起所有 toolCall;回填用下标顺序的 for-of 消费,确保
     // assistant/tool 配对的回放顺序稳定。每个 tool 各自一个 chat.tool span。
@@ -311,6 +308,7 @@ export class RegularSession extends BaseSession {
         const call = { id: tc.id, name: tc.name, arguments: tc.arguments ?? {} };
         const ctx: ToolContext = {
           mode: 'agent',
+          profile,
           profileId: this.profileId,
           agentId: this.agentId,
           sessionId: this.id,

@@ -19,6 +19,7 @@
 import type { Tracer } from '@shared/log/trace';
 import type { ChunkStream } from '@shared/types/streamingTypes';
 import type { WebContents } from 'electron';
+import type { Profile } from '@main/profile';
 import type { AgentExecution, DelegateExecution } from '../tools/types';
 
 /**
@@ -36,6 +37,7 @@ import type { AgentExecution, DelegateExecution } from '../tools/types';
  * 上下文",一律走 `ctx` 参数 —— 与 ToolContext 同纪律。
  */
 interface AppCmdContextBase {
+  profile: Profile;
   profileId: string;
   sessionId: string;
   signal: AbortSignal;

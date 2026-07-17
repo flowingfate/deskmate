@@ -168,7 +168,7 @@ async function fetchStatus(
   waitSeconds: number,
   ctx: AppCmdContext,
 ): Promise<{ result: GetStatusResult; timedOut: boolean }> {
-  let result = await getStatusInternal({ mcp_name: name }, { signal: ctx.signal });
+  let result = await getStatusInternal({ mcp_name: name }, { profile: ctx.profile, signal: ctx.signal });
   if (waitSeconds === 0) return { result, timedOut: false };
 
   const deadline = Date.now() + waitSeconds * 1000;
@@ -178,7 +178,7 @@ async function fetchStatus(
     }
     await sleep(POLL_INTERVAL_MS, ctx.signal);
     if (ctx.signal.aborted) return { result, timedOut: false };
-    result = await getStatusInternal({ mcp_name: name }, { signal: ctx.signal });
+    result = await getStatusInternal({ mcp_name: name }, { profile: ctx.profile, signal: ctx.signal });
   }
   return { result, timedOut: false };
 }

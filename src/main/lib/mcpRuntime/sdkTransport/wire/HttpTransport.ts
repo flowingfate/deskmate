@@ -3,10 +3,11 @@
  */
 
 import { EventEmitter } from 'events';
-import { McpAuthMetadataService, mcpAuthService, type McpResolvedAuthMetadata } from '../../auth';
+import { McpAuthMetadataService, type McpAuthTokenProvider, type McpResolvedAuthMetadata } from '../../auth';
 import type { McpServerConfig } from '@shared/persist/types'
 
 export interface HttpTransportConfig {
+  authService: McpAuthTokenProvider;
   serverName: string;
   url: string;
   headers?: Record<string, string>;
@@ -724,11 +725,15 @@ export class HttpTransport extends EventEmitter {
     }
   }
 
-  private async _requestToken(metadata: McpResolvedAuthMetadata, options?: { forceRefresh?: boolean }): Promise<string | undefined> {
+  private async _requestToken(
+    metadata: McpResolvedAuthMetadata,
+    options?: { forceRefresh?: boolean },
+  ): Promise<string | undefined> {
     this.emit('log', 'info', `Requesting token for ${this.config.serverName}: forceRefresh=${options?.forceRefresh ? 'true' : 'false'}, scopes=${JSON.stringify(metadata.scopes)}`);
-    return mcpAuthService.getTokenForServer(this.config.serverName, metadata, {
+    return this.config.authService.getTokenForServer(this.config.serverName, metadata, {
       ...options,
       cfg: this.config.mcpServerConfig,
+      signal: this._abortCtrl.signal,
     });
   }
 

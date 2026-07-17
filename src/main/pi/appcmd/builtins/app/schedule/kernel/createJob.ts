@@ -13,7 +13,7 @@
  * 没有可中止的长任务。
  */
 
-import { schedulerManager } from '@main/lib/scheduler';
+import type { Profile } from '@main/profile';
 import type { SchedulerJobCreateInput } from '@shared/ipc/scheduler';
 
 export interface CreateJobArgs {
@@ -38,7 +38,7 @@ export type CreateJobResult =
 export async function createJobInternal(
   args: CreateJobArgs,
   fallbackAgentId: string,
-  _opts?: { signal?: AbortSignal },
+  opts: { profile: Profile; signal?: AbortSignal },
 ): Promise<CreateJobResult> {
   try {
     const agentId = args.agent_id || fallbackAgentId;
@@ -77,7 +77,7 @@ export async function createJobInternal(
 
     let jobId: string;
     try {
-      jobId = await schedulerManager.createJob(input);
+      jobId = await opts.profile.scheduler.createJob(input);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       return {

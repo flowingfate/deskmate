@@ -1,5 +1,5 @@
 import { log } from '@main/log';
-import { Profiles } from '../../persist';
+import type { ProfileStore } from '@main/persist';
 import type { Agent } from '../../persist/agent';
 import { setSkillTier } from '@shared/types/profileTypes';
 
@@ -76,6 +76,7 @@ function resolveTargets(agents: Agent[], options: ApplySkillToAgentsOptions): Sk
 }
 
 export async function applySkillToAgents(
+  store: ProfileStore,
   options: ApplySkillToAgentsOptions,
 ): Promise<ApplySkillToAgentsResult> {
   const skillName = options.skillName?.trim();
@@ -93,27 +94,7 @@ export async function applySkillToAgents(
     };
   }
 
-  let profile;
-  try {
-    profile = await Profiles.get().active();
-  } catch {
-    profile = null;
-  }
-  if (!profile) {
-    return {
-      success: false,
-      skillName,
-      message: 'User profile not found or does not support skills',
-      appliedCount: 0,
-      alreadyAppliedCount: 0,
-      failedCount: 0,
-      appliedTargets: [],
-      skippedTargets: [],
-      error: 'PROFILE_NOT_FOUND',
-    };
-  }
-
-  const installedSkill = profile.skills.get(skillName);
+  const installedSkill = store.skills.get(skillName);
   if (!installedSkill) {
     return {
       success: false,
@@ -128,10 +109,10 @@ export async function applySkillToAgents(
     };
   }
 
-  const records = profile.listAgents();
+  const records = store.listAgents();
   const allAgents: Agent[] = [];
   for (const rec of records) {
-    const a = await profile.getAgent(rec.id);
+    const a = await store.getAgent(rec.id);
     if (a) allAgents.push(a);
   }
 

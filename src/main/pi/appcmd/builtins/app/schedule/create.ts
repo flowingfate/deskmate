@@ -153,7 +153,7 @@ export async function runCreate(argv: string[], ctx: AppCmdContext): Promise<voi
       agent_id: agent,
     },
     ctx.agentId,
-    { signal: ctx.signal },
+    { profile: ctx.profile, signal: ctx.signal },
   );
 
   if (!result.success) {

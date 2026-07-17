@@ -14,7 +14,6 @@ const statesByCorrelationId = new Map<string, SubAgentRuntimeState>();
 const listeners = new Set<() => void>();
 export interface SubagentRunStateIdentity {
   correlationId: string;
-  profileId: string | null;
   parentAgentId: string | null;
   parentSessionId: string | null;
   subrunId: SubrunId | undefined;
@@ -25,7 +24,6 @@ export function matchesSubagentRunState(
   identity: SubagentRunStateIdentity,
 ): boolean {
   return state.correlationId === identity.correlationId
-    && state.profileId === identity.profileId
     && state.parentAgentId === identity.parentAgentId
     && state.parentSessionId === identity.parentSessionId
     && (identity.subrunId === undefined || state.subrunId === identity.subrunId);
@@ -49,7 +47,6 @@ function subscribe(listener: () => void): () => void {
 
 export function useSubagentRunState(
   correlationId: string,
-  profileId: string | null,
   parentAgentId: string | null,
   parentSessionId: string | null,
   subrunId: SubrunId | undefined,
@@ -61,7 +58,6 @@ export function useSubagentRunState(
       if (!state) return null;
       return matchesSubagentRunState(state, {
         correlationId,
-        profileId,
         parentAgentId,
         parentSessionId,
         subrunId,

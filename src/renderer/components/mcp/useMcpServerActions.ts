@@ -63,6 +63,10 @@ export function useMcpServerActions(): McpServerActions {
 
   const performOperation = useCallback(
     async (serverName: string, operation: McpServerOperation): Promise<void> => {
+      if (!serverName) {
+        showError('Server name is required');
+        return;
+      }
       setOperationStates((states) => ({
         ...states,
         [serverName]: { isOperating: true, operation },

@@ -9,10 +9,8 @@
  * `signal` 仅做契约形状对齐 —— profile 写盘没有 abort 中断点。
  */
 
-import { Profiles } from '@main/persist';
-import type { Agent } from '@main/persist/agent';
-import type { AgentMcpServer } from '@shared/persist/types';
-import type { SkillBindings } from '@shared/persist/types'
+import type { ProfileStore } from '@main/persist';
+import type { AgentMcpServer, SkillBindings } from '@shared/persist/types';
 
 interface AgentMcpServerInput {
   name: string;
@@ -54,6 +52,7 @@ function incrementPatchVersion(version: string): string {
 
 
 export async function updateAgentInternal(
+  store: ProfileStore,
   args: UpdateAgentArgs,
   _opts?: { signal?: AbortSignal },
 ): Promise<UpdateAgentResult> {
@@ -77,9 +76,7 @@ export async function updateAgentInternal(
     }
 
     const agentName = config.name.trim();
-
-    const profile = await Profiles.get().active();
-    const records = profile.listAgents();
+    const records = store.listAgents();
     const target = records.find((r) => r.name === agentName);
     if (!target) {
       return {
@@ -89,7 +86,7 @@ export async function updateAgentInternal(
       };
     }
 
-    const agent = (await profile.getAgent(target.id)) as Agent | undefined;
+    const agent = await store.getAgent(target.id);
     if (!agent) {
       return {
         success: false,

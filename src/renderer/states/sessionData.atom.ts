@@ -9,7 +9,6 @@
  *  - 本 atom 是"某 session 的磁盘 data.json 内容"的缓存。
  *
  * 订阅通道：
- *   - persist:profile:switched → 清空整张表
  *   - persist:session:updated  → upsert（id 主键）
  *
  * 加载策略：按需 hydrate 单 session（首次 `useSession(id)` 时调 `getSession`），并发共享 promise；
@@ -24,6 +23,7 @@
 import { useEffect, useState } from 'react';
 import { unit } from '@/atom/unit';
 import { persistApi, persistEvents } from '@/ipc/persist';
+
 import type { SessionDataFile, RegularSessionDataFile } from '@shared/persist/types';
 import { log } from '@/log';
 
@@ -76,9 +76,7 @@ function ensureLoaded(agentId: string, sessionId: string): Promise<void> {
 
 // ────────── 通道订阅 ──────────
 
-persistEvents['profile:switched'](() => {
-  change({ byId: {}, loading: {} });
-});
+
 
 persistEvents['session:updated']((_e, payload) => {
   change((s) => ({ ...s, byId: { ...s.byId, [payload.sessionId]: payload.data } }));

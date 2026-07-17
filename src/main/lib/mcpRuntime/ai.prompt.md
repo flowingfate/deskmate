@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (MCP OAuth 不受 delegate context 限制；catalog local route 直持 LocalTool) -->
+<!-- Last verified: 2026-07-18 (Profile-bound OAuth prompt, cancellation, and credential lifecycle) -->
 # MCP Runtime
 
 > 仅管理 **外部 MCP server** 的连接生命周期、OAuth、工具元数据缓存与
@@ -9,20 +9,18 @@
 
 | 文件 | 职责 | 大小 |
 |------|------|------|
-| `mcpClientManager.ts` | 单例。**编排层** —— 组合 `manager/*` 下的 store / lock / config / reaper,负责 client 实例的生命周期、`connect/disconnect/reconnect/add/update/delete` 与 `executeToolOnServer` 的对外入口。runtime 状态由 `RuntimeStateStore` 承担;不再直接持 `runtimeStates` map。 | ~530 LOC |
-| `manager/types.ts` | 共享类型:`Tool` / `McpTool` / `MCPServerStatus` / `MCPServerRuntimeState`;以及 `transformTools()` 与 `normalizeInputSchema()` —— 把 SDK 侧 `unknown` inputSchema 收窄到 store 的 `Record<string, unknown>`。 | ~90 LOC |
-| `manager/runtimeStateStore.ts` | 运行时状态 store + 50ms debounce IPC 广播(`mcpMainToRender.serverStatesUpdated`)。暴露 `setStatus / setTools / setError`(细粒度)与 `markConnecting / markConnected / markError / markDisconnected`(复合三元)。Error 到 string 的序列化在这里做。 | ~140 LOC |
-| `manager/operationLock.ts` | Per-server 操作互斥。同 server 上的 connect/disconnect/reconnect 三种操作**不可并发**;第二个调用抛 `"is currently ${kind}ing"` —— 保持字符串以让后台自动连接的 catch 路径静默去重。`forceRelease` 让 disconnect 撬掉正在跑的 connect。 | ~65 LOC |
-| `manager/configStore.ts` | 薄门面:`activeMcp()` 拿 `Profiles.get().active().mcp`;`patchServerConfig()` merge-update。**不承担运行时状态**。 | ~30 LOC |
-| `mcpClient.ts` | Adapter,面向 manager 的稳定 seam。**内部实现走 `@modelcontextprotocol/sdk` 的 `Client`(1.29)** —— 协议大脑(initialize / request 关联 / pending map / timeout / AbortSignal / 通知分发)全部由 SDK `Protocol` 承担。构造时按 `server.transport` 选择 `DeskmateStdioSdkTransport` / `DeskmateHttpSdkTransport`,并把 `callTool` 结构化结果折叠回上层期望的字符串。 | ~230 LOC |
-| `../delegateExecutionScope.ts` | delegated run 的 delegateId context；MCP Auth 不读取它，OAuth 始终通过同一全局交互流 | 极小 |
+| `index.ts` | `MCPClientManager` 实例，**由 runtime `Profile` 创建和持有**；绑定一个 `ProfileStore` 与一个 `McpAuthService`，独立维护 clients / locks / runtime states / OAuth flow。`cleanup()` 会先关闭 lifecycle gate，再中止已有连接；负责 connect/disconnect/reconnect/add/update/delete 与 executeToolOnServer | ~590 LOC |
+| `manager/types.ts` | 共享类型:`Tool` / `McpTool` / `MCPServerStatus` / `MCPServerRuntimeState`;以及 `transformTools()` 与 `normalizeInputSchema()` | ~90 LOC |
+| `manager/runtimeStateStore.ts` | 单 Profile 运行时状态 store + 50ms debounce IPC 广播；按 owner window 发送状态数组 | ~140 LOC |
+| `manager/operationLock.ts` | 每 manager 的 per-server 操作互斥；同名 server 只在所属 Profile 内互斥。`disconnect` 先中止并等待连接收尾，再取得 disconnect 锁 | ~55 LOC |
+| `mcpClient.ts` | Adapter；构造时接收 server config 与 Profile-bound auth service，并把后者注入 HTTP OAuth transport | ~230 LOC |
+| `../delegateExecutionScope.ts` | delegated run 的 delegateId context；MCP Auth 不读取它，每个 runtime Profile 的 manager 持有自己的 OAuth flow | 极小 |
 | `sdkTransport/DeskmateStdioSdkTransport.ts` | SDK `Transport` 适配器,包住自研 `wire/StdioTransport`。JSON-RPC 对象 ↔ `\n` 分帧字符串的边界翻译 + EventEmitter → SDK `onmessage/onclose/onerror` 回调的桥接。暴露 `getStderrPreview()` 让 `mcpClient` 在连接失败时补根因。 | — |
 | `sdkTransport/DeskmateHttpSdkTransport.ts` | 同上,包 `wire/HttpTransport`。保留 Deskmate 的 OAuth 编排/SSE fallback/redirect 处理不动,只做 SDK 边界翻译。 | — |
 | `sdkTransport/wire/StdioTransport.ts` | Deskmate stdio 运行时基建的薄协议层 —— `terminalManager.createTransport()` 的门面,承载 PATH 注入(node-shims / runtime-bin / pyenv)、shim 命令映射、首次 spawn 的 runtime lazy-install(JS→bun / Python→uv)、envFile 加载、Windows-ARM 内置 shim bypass。stderr 环形缓冲(50 行)。 | ~385 LOC |
-| `sdkTransport/wire/HttpTransport.ts` | Streamable HTTP / legacy SSE 传输 + 桌面 OAuth 编排入口。401/403 → `WWW-Authenticate` 解析 → `McpAuthService.getTokenForServer` → 重试;forced-refresh retry;GET backchannel 与 SSE 独立 AbortController 防泄漏。 | ~770 LOC |
-| `auth/index.ts` | MCP 在线认证门面(`McpAuthService`)。所有 issuer 走 SDK 通用 OAuth(`DeskmateOAuthProvider` + `performOAuthFlow`)。 | — |
-| `auth/McpAuthMetadataService.ts` | 解析 `WWW-Authenticate` + 发现 OAuth resource/server metadata。识别 7 个常见 provider(GitHub / GitLab / Slack / Google / Atlassian / Notion / Discord)。 | — |
-| `auth/DeskmateOAuthProvider.ts` | 实现 MCP SDK `OAuthClientProvider` 接口,对接 Deskmate 安全 token 缓存。用于 MCP OAuth 流程。 | ~280 LOC |
+| `sdkTransport/wire/HttpTransport.ts` | Streamable HTTP / legacy SSE 传输 + 桌面 OAuth 编排入口；构造时注入所属 Profile 的 auth service | ~770 LOC |
+| `auth/index.ts` | `McpAuthService(profileId)`：由所属 `MCPClientManager` 构造；独立维护 OAuth dedup、共享的 profile-bound token cache、prompt registry 与 interaction listener。callback port 仍是应用级路由基础设施。 |
+| `auth/DeskmateOAuthProvider.ts` | SDK OAuth provider；使用所属 `McpAuthService` 注入的 profile-bound `DeskmateTokenCache` | ~280 LOC |
 | `auth/CallbackServer.ts` | OAuth 2.0 重定向本地 server。**按端口单例**(默认 33420)—— 不同 MCP server 可通过 `oauth.callbackPort` 绑定不同端口,内部 `Map<port, CallbackServer>` 每端口一实例。`state` 路由支持同端口并发流。 | ~280 LOC |
 | `auth/performOAuthFlow.ts` | 驱动 SDK 两步 `auth()`:discover + DCR + 浏览器重定向 → code → tokens。需要用户提供 clientId 时抛 `MCP_DCR_REQUIRES_USER_CLIENT_ID`。 | — |
 | `auth/serverKey.ts` | `name + sha256(transport+url+headers+oauth.clientId+callbackPort).slice(0,16)` —— 在 `DeskmateTokenCache.mcpOAuth` 中给 OAuth 凭据槽生成 key。 | — |
@@ -30,44 +28,18 @@
 | `auth/errors.ts` | 共享 MCP 认证错误标记(cancelled / oauth-flow-failed / dcr-requires-clientId),提供构造 + 判定 helper。 | — |
 ## 架构
 
-```
-pi/session/ (RegularSession / JobRun)
-        │
-        ▼
-pi/tool.ts::executeToolCall(call, catalog, ctx)
-        │
-        ├─── route.kind === 'local'  ─→  pi/tools/registry.ts::executeLocalTool(route.tool, args, ctx)
-        │
-        └─── route.kind === 'mcp'    ─→  mcpClientManager.executeToolOnServer({ serverName, toolName, ... })
-                                                  │
-                                                  ▼
-                                            McpClient(serverName)
-                                                  │
-                                        ┌─────────┼─────────┐
-                                      stdio      SSE       HTTP
-                                   (子进程)    (远程)    (可流式)
+```text
+Pi ToolContext.profile
+  → Profile.mcpManager
+  → McpClient(server config, auth service)
+  → stdio / SSE / HTTP transport
 ```
 
-**没有 builtin/伪 server**。MCPClientManager 维护的 `clients: Map<serverName, McpClient>`
-只装外部 server;`connect / disconnect / reconnect / add / update / delete` 全部
-按用户配置的 server name 走,**无"是否 builtin"分支**。
+**Profile ownership**：每个 runtime `Profile` 有自己的 MCPClientManager；同名 server 在不同 profile 的 client、lock、runtime state 和 OAuth flow 完全独立。`executeToolOnServer` 仍以 serverName + toolName 精确路由，但只能在已绑定的 manager 内查找。
 
-**Server-scoped 执行**：`executeToolOnServer({ serverName, toolName, toolArgs, signal })` 直接按 server name 查 client。MCP Auth 对 regular 与 delegated run 一律走同一全局 OAuth consent/client-id/browser flow；LLM-facing 名称仍由 `pi/tool.ts` 组合为 `serverName/toolName`，执行前由 `ToolCatalog.getRoute` 精确恢复原始 server/tool，绝不按 `/` 反解。
+**在线认证(HTTP / SSE)**：每个 `MCPClientManager` 创建一个绑定自身 Profile ID 的 `McpAuthService`，并将其注入该 Profile 的 HTTP transports。dedup key 在该 service 内仅需 `serverKey`；跨 Profile 的 flow 自然隔离。每个 service 复用一个 token cache，因而同 Profile 多个 server 并发写入不会丢槽位。prompt registry 也是 service 实例；renderer response 先按 sender 找到 owner manager，再消费该 manager 的 request。callback server port 可以共享，但 consent/client-id prompt 只发送至该 runtime Profile 的 owner main window；owner window 销毁时立即取消本 Profile 的 pending prompt，绝不 fallback 到其它窗口。
 
-**在线认证(HTTP / SSE 传输)**:401/403 时 transport 解析 `WWW-Authenticate`,
-通过 `McpAuthMetadataService` 发现 OAuth metadata,在重试前向
-`McpAuthService.getTokenForServer` 取 Bearer token。所有 issuer 走统一的
-`DeskmateOAuthProvider`(实现 SDK `OAuthClientProvider`,对接
-`DeskmateTokenCache.mcpOAuth`):标准 PKCE Authorization-Code,支持 DCR
-(RFC 7591),token 加密持久化在 profile 级缓存。`CallbackServer` 在按 server
-配置的端口监听(默认 33420)。token 刷新与 5min refresh 窗口在 provider 内
-处理。**同 server 并发调用 dedup** —— 通过 `inflightTokenRequests` +
-`getMcpOAuthServerKey`,确保两个并发 transport 不会弹两个 consent 或开两个
-浏览器 tab。**主动 refresh**:`expires_in <= 300s` 且存在 refresh token 时,
-`runOAuthFlow` 内联驱动 `runRefreshOnly`(无 consent 提示,用户
-已授权;失败才 fall-through 到交互流)。
-
-**Delegated execution**：MCP OAuth 没有委派专用降级。授权 UI 是应用全局流程，不依赖 parent/delegate session identity；token、refresh、consent、client-id prompt 与浏览器回调均复用普通 Agent 行为。
+Renderer 把同 Profile 的 consent 与 client-id prompt 分别按到达顺序串行展示，不能让后来的 server 覆盖当前 request。HTTP transport 将自己的 abort signal 传到 OAuth flow；`disconnect` 先中止并等待 in-flight connect，随后 reset/delete 才清凭据或配置；Profile stop 先关闭 manager 的 lifecycle gate，再取消已启动连接、prompt 与 callback，禁止关闭期间重建 client。
 
 Renderer 侧 prompt(`requestConsent` / `requestClientIdFromUser`)受
 `MCP_AUTH_PROMPT_TIMEOUT_MS`(5min,与 `CallbackServer.waitForCode` 匹配)限制,
@@ -80,21 +52,9 @@ Renderer 侧 prompt(`requestConsent` / `requestClientIdFromUser`)受
 带 provider 帮助文案。用户提供的 `clientId`(+可选 secret)通过 provider 的
 `saveClientInformation` 持久化,流程重试一次。
 
-**OAuth 凭据存储**:`DeskmateTokenCache.mcpOAuth` 通过 `getMcpOAuthServerKey(name, cfg)`
-生成槽 key —— `name + transport + url + headers + oauth.clientId + callbackPort`
-的稳定 hash。重命名 server、改 URL、调整 auth-related headers 都会自动失效旧槽。
-Token 条目存 `accessToken / refreshToken / expiresAt / scope` + 可选
-`clientId / clientSecret`(让 DCR 颁发的 client 跨会话保持)。缓存文件位于
-profile 级 `{profile}/credentials/mcp.auth.json`(明文,与 `auth.json`
-主身份凭据落盘形态一致)—— 切 profile 就是
-干净缓存。删 MCP server / 卸载插件触发 `MCPClientManager.delete()`,内部调
-`McpAuthService.clearOAuthForServer(name, cfg, 'all')` 清整槽(token + DCR client
-info),保证后续重新添加同名 server 走干净 OAuth。
+**OAuth 凭据存储**：`DeskmateTokenCache` 是 `McpAuthService` 的 profile-bound 共享实例，文件固定写至 `{profile}/credentials/mcp.auth.json`。server key 只表达 server config identity；Profile identity 由独立 service、token cache 与 prompt registry instance 共同提供，避免同名、同配置 server 跨 profile 复用 token 或 DCR client。server 的 auth-relevant config 变更或删除时，manager 会清除该 Profile 内该 serverName 的所有历史 slot，避免旧 refresh token / DCR client 变为不可达孤儿记录。
 
-**运行时状态**(`MCPServerRuntimeState`: status / tools / lastError)由
-MCPClientManager 内存管理,每次变更通过 IPC 推 renderer。永不持久化。在
-MCP consent 分发期间 server 临时进 `needs-user-interaction` 状态。用户关闭
-consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
+**运行时状态**：每个 manager 的 RuntimeStateStore 仅保存所属 profile 的 states。main 已按 owning window 精确发送状态数组，renderer cache 不做第二次 Profile filter。
 
 ## Common Changes
 
@@ -102,9 +62,9 @@ consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
 |------|----------|------|
 | 添加新的 MCP 传输类型 | `sdkTransport/wire/` + 新 `Deskmate*SdkTransport` adapter | 所有 wire 实现 `McpTransport` 事件形态;adapter 实现 SDK `Transport`。**协议层不改** —— SDK `Client` 自动接管 initialize / request / timeout。 |
 | 扩展在线 MCP 认证 | `auth/` + `sdkTransport/wire/HttpTransport.ts` + renderer 认证对话框 | 标准 OAuth 2.0 / PKCE + DCR challenge |
-| 调整执行入口 | `mcpClientManager.executeToolOnServer` | 必须 server-scoped；授权 UI 维持单一全局路径，禁止按 execution role 分叉或从 eventSender/transport mutable state 推断 |
-| 向 UI 暴露 server 状态 | `mcpClientManager.ts` IPC notify | runtime state 由 `MCPServerRuntimeState` 定义 |
-| 从其它 MCP 客户端导入配置 | `mcpClientManager.ts` MCP 配置导入辅助 | 支持从 VS Code、Cursor、Claude Desktop 等 MCP 客户端的 `mcp.json` / `settings.json` 读取条目;配置转 ProfileCacheManager 持久化 |
+| 调整执行入口 | `Profile.mcpManager.executeToolOnServer` + `pi/tool.ts` | 必须直接使用 `ToolContext.profile` 的 manager；仍按 server-scoped route 执行 |
+| 向 UI 暴露 server 状态 | `runtimeStateStore.ts` + `shared/ipc/mcp.ts` + renderer MCP cache | pull request 由 sender 路由；push event 按 owner window 发送，payload 不重复 profileId |
+| 从其它 MCP 客户端导入配置 | owning `Profile.mcpManager` | 导入配置和连接只作用于明确的 Profile runtime |
 | 添加新的本地(deskmate-native)工具 | **见 [`src/main/pi/tools/ai.prompt.md`](../../pi/tools/ai.prompt.md)**;本子系统不再涉及 | — |
 
 ## 注意事项
@@ -135,13 +95,10 @@ consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
   ?? 60000ms`,**`timeout: 0` 不是"无超时"** —— 会秒超时。initialize /
   listTools / callTool 全部显式传 `3_600_000ms` 覆盖(见 `mcpClient.ts`
   `REQUEST_TIMEOUT_MS`)。真正的取消由调用方 `AbortSignal` 走。
-- **executeToolOnServer 必须 server-scoped。** caller 通过 `ToolCatalog.getRoute(llmName)`
-  按 LLM 限定名精确取得 `{ kind: 'mcp', serverName, toolName }` 后调入。**不要**
-  新加按裸 toolName 查 global map 的 API —— 否则"多 server 同名工具静默覆盖"bug 会复现。
-- **MCP OAuth 是全局交互流程。** 不读取 delegate context；禁止按 execution role、新的 AsyncLocalStorage 或 manager/transport mutable boolean 分叉授权行为。
-- **运行时状态仅在内存。** `MCPServerRuntimeState` 永不写盘;应用重启所有 server 一律
-  `disconnected`,与上次会话无关。
-- **OAuth 凭据明文写盘**(`DeskmateTokenCache` 产出 `.json`,与 `auth.json` 一致),profile 级隔离。
+- **executeToolOnServer 必须同时 profile-scoped 和 server-scoped。** caller 直接使用 ToolContext.profile 的 manager，再由 catalog route 提供 `{ serverName, toolName }`；不要新增全局 manager 或裸 toolName 查找。
+- **OAuth callback port 是应用级，OAuth state 不是。** 每个 Profile 的 `McpAuthService`、token cache、dedup key、prompt registry 与 interaction listener 独立；renderer response 先按 sender window 路由到该 Profile 的 manager，不能消费其它 Profile 的一次性请求。
+- **运行时状态仅在内存。** 但每个 Profile 独立持有一份；main 只向 owner window 发送对应状态，renderer 不再依赖 payload filter。
+- **OAuth 凭据明文写盘**，但只落入 owning profile 的 credentials 目录。
 - **`tool_result` 并非总是终态。** 本地工具 `shell` 在
   命令退出前可推 `isPartial: true` chunk(详见
   [`pi/tools/ai.prompt.md`](../../pi/tools/ai.prompt.md))。MCP runtime 本身不发
@@ -152,8 +109,7 @@ consent 弹窗的取消映射为 `error`,防止 server 卡在 pending login。
 ## 相关模块
 
 - 依赖:[Terminal Manager](../terminal/) —— stdio MCP server 作为受管终端进程生成。
-- 被依赖:[`src/main/pi/`](../../pi/ai.prompt.md) —— `pi/mcp.ts::executeMcpToolOnServer`
-  调本子系统;`pi/tool.ts` 的 catalog 段用 `getAllTools()` 列举 external MCP server 工具。
+- 被依赖:[`src/main/pi/`](../../pi/ai.prompt.md) —— `pi/tool.ts` 直接调用 Profile-bound manager 的 `getAllTools()` 列举 external MCP server 工具，并通过 `ToolContext.profile.mcpManager.executeToolOnServer()` 执行。
 - 被依赖:[`src/main/pi/tools/`](../../pi/tools/ai.prompt.md) —— 本地工具子系统
   独立,仅在文档层引用本模块。
 - 被依赖:[Renderer MCP UI](../../../renderer/components/mcp/) —— 通过 `mcp:*` IPC

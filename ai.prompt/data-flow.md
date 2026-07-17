@@ -1,8 +1,8 @@
 # 数据流
 
-<!-- Last verified: 2026-07-17 (subagentRun query/push 统一 RuntimeState) -->
+<!-- Last verified: 2026-07-17 (sender-bound multi-window Profile routing) -->
 
-参考：`src/shared/ipc/base.ts`、`src/main/pi/`、`src/main/persist/`、`src/main/lib/mcpRuntime/mcpClientManager.ts`
+参考：`src/shared/ipc/base.ts`、`src/main/pi/`、`src/main/persist/`、`src/main/lib/mcpRuntime/`
 
 ---
 
@@ -70,7 +70,7 @@ src/renderer/components/...       ← 业务代码通过 `import { xxxApi } from
 从用户输入到消息持久化，一共经过七步：
 
 1. 用户发送消息 → Renderer 调用 `sendChatMessage` IPC
-2. 主进程 `pi.Session`（生产路径，老 `lib/chat/AgentChat` 已归档）通过 `Profiles.get().active() → Profile.getAgent() → Agent.getSession()` 取得 agent + session，拼装 prompt + system reminders + MCP tool 定义
+2. `agentChat` IPC 从 sender 所属主窗口解析 runtime `Profile`，再经 `Profile.getOrCreateAgent()` 取得 Pi Agent；Pi Session 后续以绑定的 `profileId` 精确访问 store / subagent manager，不重新读取 selection
 3. `pi.complete` / `pi.stream` 调用 LLM，启用流式输出
 4. 流式 chunk 通过 `onStreamingChunk` IPC 事件转发到 renderer
 5. `AgentIpc` → `AgentSessionCacheManager` → 直接回调 → `AgentPage` 状态更新
@@ -94,18 +94,17 @@ src/renderer/components/...       ← 业务代码通过 `import { xxxApi } from
 ```
 Renderer 触发写操作（如 agentOps.updateAgent）
   → 老 invoke 通道到 main（IPC 写路径短期内不重做）
-  → Profiles.get().active() → Profile.getAgent(id) → agent.patchFront(...) + agent.persist()
+  → 当前 UI selection 对应的 ProfileStore → ProfileStore.getAgent(id) → agent.patchFront(...) + agent.persist()
   → persist/lib/emit.ts 按写入域 emit 对应通道（150ms 防抖，按 id 维度）
   → mainWindow webContents 收到 persist:* 事件
   → 对应 src/renderer/states/<domain>.atom.ts 增量 reconcile
   → useXxx() hook 通过 useSyncExternalStore 触发组件重渲染
 ```
 
-### 13 条细粒度通道
+### 12 条细粒度通道
 
 | 通道 | payload | 写入触发点 |
 |---|---|---|
-| `persist:profile:switched` | `{profileId, previous}` | `Profiles.setActive()` |
 | `persist:agent:registry:updated` | `{profileId, kind, items, primaryAgentId?}` | agents.json (含 primaryAgentId) / skills / mcp 注册表写盘 |
 | `persist:agent:updated` | `{profileId, agentId, record, detail}` | `Agent.persist()`（按 agentId 防抖）；record 含 hot description，detail 含 cold delegates，两层同时下推 |
 | `persist:agent:removed` | `{profileId, agentId}` | `Agent.archive()` |
@@ -119,14 +118,13 @@ Renderer 触发写操作（如 agentOps.updateAgent）
 | `persist:settings:updated` | `{profileId, settings}` | `Profile.settings` 写盘 |
 | `persist:starred:updated` | `{profileId, items}` | `Starred.doPersist()` |
 
-profile 切换瞬间所有非 `profile:switched` 通道禁用至 bootstrap 完成，避免新旧数据竞态。
+每个 renderer window 在创建时由 preload 注入固定 Profile ID，不存在 profile 切换时的新旧数据竞态。
 
 ### Renderer atom 一览
 
 每个域一个 `src/renderer/states/<domain>.atom.ts`，订阅对应通道并维护只读视图。`atom/unit.ts` 提供 `get / use / listen / change`（只在 atom 文件内部用 `change` 写）：
 
 ```
-profile.atom            ← profile:switched
 agents.atom             ← agent:registry:updated[kind=agents] / agent:updated / agent:removed
                          （只持 `AgentRecord` hot 字段；description 供批量 delegation picker，含 primaryAgentId）
 agentDetail.atom        ← agent:updated（拿 payload.detail 刷 cache） / agent:removed
@@ -156,7 +154,7 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 2. `pi/tool.ts::executeToolCall(call, catalog, ctx)` 用 `catalog.getRoute(toolName)` 取 route
 3. 按 route 分发:
    - `route.kind === 'local'` → route 直接持有的 `LocalTool` 经 `pi/tools/registry.ts::executeLocalTool(tool, args, ctx)` 执行
-   - `route.kind === 'mcp'` → `mcpClientManager.executeToolOnServer({ serverName: route.serverName, toolName, ... })` 经 `VscMcpClient` 执行(stdio / SSE / HTTP transport)
+   - `route.kind === 'mcp'` → `ToolContext.profileId → ProfileRegistry.require() → Profile.mcpManager.executeToolOnServer({ serverName, toolName, ... })`；client、OAuth cache / dedup 和 runtime state 均属于该 Profile
 4. 工具结果返回给 LLM，继续生成后续回复
 5. 需要路径访问的文件 / 命令类工具会先经过 `SecurityValidator`，并在必要时请求用户批准
 
@@ -167,11 +165,11 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 ## 子智能体执行流
 
 1. 父 Agent 的 LLM 请求调用顶层 `subagent` LocalTool，并以同一 response 的多个 call 表达并行。
-2. tool handler 按当前 Profile 取得 `SubAgentManager.forProfile(profile)` 的 command facade；`list` / `describe` 复用 `Profile.resolveDelegates`，`run` 创建新 subrun，`continue` 从 parent-owned terminal subrun 取得 delegate 后重新授权。
+2. tool handler 以 `ToolContext.profileId` 精确取得 runtime `Profile`，再经 `Profile.getSubAgentManager()` 取得 command facade；`list` / `describe` 复用 `ProfileStore.resolveDelegates`，`run` 创建新 subrun，`continue` 从 parent-owned terminal subrun 取得 delegate 后重新授权。
 3. manager 以完整 parent identity 短锁完成 stale recovery、parallel gate、initial reservation 或 continuation 的 terminal→running transition，再注册 active run。
 4. `SubAgentSession` 在 delegate scope 内使用执行 Agent 的 config/catalog/prompt，初始 task 或 continuation message 都写入同一 hidden transcript，并以 `submit_result` 收敛当前 execution 的正式结果。
 5. manager timeout/parent cancel 直接 abort 实际 run；`PersistSubrunDataFile.histories` 与 parent tool formal result 是 reload 事实源，`Subrun` getter 在内存中补回身份与状态语义。
-6. `subagentRun` IPC 将所有 profile-bound manager 的 live state 推到对应卡片；`getRunState` 沿相同 owner chain 把磁盘状态投影为同一个 `SubAgentRuntimeState`，`getRunMessages` 只在 Dialog 打开后读取 Domain transcript，`cancelRun` 只取消完整 parent identity 下的单一 active run。Dialog 关闭释放 transcript，renderer live cache 与主聊天 cache 都不持有它。
+6. `subagentRun` IPC 的 query / cancel 只携带 parent identity；main 从 sender-owned Profile 补齐完整 owner identity 后定位 manager、磁盘 subrun 与对应卡片。live state 按 owner window 推送；`getRunState` 将磁盘状态投影为同一个 `SubAgentRuntimeState`，`getRunMessages` 只在 Dialog 打开后读取 Domain transcript，`cancelRun` 只取消完整 parent identity 下的单一 active run。Dialog 关闭释放 transcript，renderer live cache 与主聊天 cache 都不持有它。
 
 ---
 

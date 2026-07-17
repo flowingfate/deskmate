@@ -13,7 +13,7 @@
  */
 
 import { mcpMainToRender } from '@shared/ipc/mcp';
-import { mainWebContents } from '@main/startup/wins';
+import { mainWindowForProfile } from '@main/startup/wins';
 import type { MCPServerRuntimeState, MCPServerStatus, McpTool } from './types';
 
 /** 序列化后推给 renderer 的 payload 形态,与 `shared/ipc/mcp.ts` 对齐。 */
@@ -29,6 +29,8 @@ const NOTIFY_DEBOUNCE_MS = 50;
 export class RuntimeStateStore {
   private readonly states = new Map<string, MCPServerRuntimeState>();
   private notifyTimer: NodeJS.Timeout | null = null;
+
+  public constructor(private readonly profileId: string) {}
 
   /** 只读快照 —— 供 IPC `getServerStatus` / `getAllTools` 聚合使用。 */
   getAll(): MCPServerRuntimeState[] {
@@ -133,13 +135,14 @@ export class RuntimeStateStore {
   }
 
   private broadcast(): void {
-    const payload: SerializedRuntimeState[] = this.getAll().map((s) => ({
+    const states: SerializedRuntimeState[] = this.getAll().map((s) => ({
       serverName: s.serverName,
       status: s.status,
       tools: s.tools,
       lastError: s.lastError ? s.lastError.message : null,
     }));
-    const wc = mainWebContents();
-    if (wc) mcpMainToRender.bindWebContents(wc).serverStatesUpdated(payload);
+    mainWindowForProfile(this.profileId, (win) => {
+      mcpMainToRender.bindWebContents(win.webContents).serverStatesUpdated(states);
+    });
   }
 }

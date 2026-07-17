@@ -8,6 +8,7 @@ import { persistEvents } from '@/ipc/persist';
 import { log } from '@/log';
 import { external } from '@/atom/external';
 
+
 import type { InteractiveMap } from '@shared/types/interactiveRequestTypes';
 import { EMPTY_CUMULATIVE_TOKEN_USAGE, SessionManager, liftToRender } from './session-manager';
 import type { ChatSessionCache, ChatStatus, PendingInteractiveRequest } from './session-manager';

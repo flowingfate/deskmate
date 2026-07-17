@@ -1,8 +1,7 @@
 import { app, BrowserWindow, Menu, shell, protocol, powerMonitor } from 'electron';
-import { createWindow } from './startup/wins';
+import { createWindow, getWindowMeta } from './startup/wins';
 import * as path from 'path';
 import * as fs from 'fs';
-import { execSync } from 'child_process';
 import JSZip from 'jszip';
 import { mainToRender as navigateMainToRender } from '@shared/ipc/navigate';
 
@@ -52,11 +51,9 @@ import { PRELOAD_PATH } from './lib/buildPaths';
 
 import { appCacheManager } from './lib/appCache';
 import { restoreBounds, trackBounds } from './startup/windowState';
-import { Profiles } from './persist/profiles';
+import { ProfileRegistry } from './profileRegistry'
 import { setUpIPC } from './startup/ipc';
 import { startEvalMode } from './startup/evalMode';
-import { schedulerManager } from './lib/scheduler';
-import { mcpClientManager } from "./lib/mcpRuntime"
 import { registerMediaProtocol } from './lib/media/mediaProtocol';
 import { getAppDataPath, getLogsDir, getProfileDirectoryPath } from "@main/persist/lib/path";
 
@@ -112,12 +109,14 @@ class ElectronApp {
   private isAgentChatReady: boolean = false;
   private powerMonitorLoggingRegistered: boolean = false;
   private lastSuspendAt: number | null = null;
+  private readonly openingMainWindows = new Map<string, Promise<BrowserWindow>>();
+  private readonly profileBootstrap: Promise<void>;
 
   private logSchedulerLifecycleState(event: string, extra?: Record<string, unknown>): void {
 
     Promise.resolve()
       .then(() => {
-        log.info({ msg: `scheduler.lifecycle.${event}`, mod: 'main:schedulerLifecycle', schedulerState: schedulerManager.getRuntimeDiagnostics(), ...extra });
+        log.info({ msg: `scheduler.lifecycle.${event}`, mod: 'main:schedulerLifecycle', schedulerStates: ProfileRegistry.getSchedulerDiagnostics(), ...extra });
       })
       .catch((error) => {
         log.warn({ msg: `scheduler.lifecycle.${event}.failed`, mod: 'main:schedulerLifecycle', err: error, ...extra });
@@ -160,6 +159,7 @@ class ElectronApp {
     }
 
     this.setupEventHandlers();
+    this.profileBootstrap = this.bootstrapProfiles();
 
     // 🚀 Optimization: deferred log initialization, non-blocking constructor
     setImmediate(() => {
@@ -169,6 +169,19 @@ class ElectronApp {
     });
 
     safeConsole.timeEnd('[Startup] ElectronApp constructor');
+  }
+
+  private async bootstrapProfiles(): Promise<void> {
+    const registry = ProfileRegistry;
+    const { warnings } = await registry.bootstrap();
+    for (const warning of warnings) {
+      log.warn({ msg: 'Profile runtime bootstrap warning', mod: 'main:profileBootstrap', warning });
+    }
+    log.info({
+      msg: 'scheduler.lifecycle.startup.complete',
+      mod: 'main:profileBootstrap',
+      schedulerStates: registry.getSchedulerDiagnostics(),
+    });
   }
 
   private setupEventHandlers(): void {
@@ -237,17 +250,15 @@ class ElectronApp {
         return Promise.resolve(manager);
       }
 
-      onBeforeQuit = host.onBeforeQuit.bind(host);
       getPersistedWindowZoomLevel = host.getPersistedWindowZoomLevel.bind(host);
       applyWindowZoomLevel = host.applyWindowZoomLevel.bind(host);
       stepWindowZoomLevel = host.stepWindowZoomLevel.bind(host);
       resetWindowZoomLevel = host.resetWindowZoomLevel.bind(host);
+      openProfileMainWindow = host.openProfileMainWindow.bind(host);
       getMenuTemplate = host.getMenuTemplate.bind(host);
     }
     setUpIPC(new Injection());
   }
-
-
 
   /**
    * Check if app is fully ready, if so, notify renderer process
@@ -311,7 +322,7 @@ class ElectronApp {
 
       if (suspendedAt && suspendedForMs && suspendedForMs > 0) {
         Promise.resolve()
-          .then(() => schedulerManager.handleSystemResume(suspendedAt, resumedAt))
+          .then(() => ProfileRegistry.handleSystemResume(suspendedAt, resumedAt))
           .catch((schedulerError) => {
             logger.warn({ msg: '[PowerMonitor] Scheduler resume catch-up failed', mod: 'main:powerMonitor', suspendedForMs, err: schedulerError });
           });
@@ -357,7 +368,7 @@ class ElectronApp {
       registerMediaProtocol();
 
       const crashStatus = crashCaptureManager.getStatus();
-      log.info({ msg: 'scheduler.lifecycle.startup-recovery-context', mod: 'main:onReady', previousSessionId: crashStatus.recoveredCrash?.previousSessionId ?? null, currentSessionId: crashStatus.currentSessionId, recoveredCrashDetected: crashStatus.hasRecoveredCrash, alias: Profiles.get().activeProfileId || null });
+      log.info({ msg: 'scheduler.lifecycle.startup-recovery-context', mod: 'main:onReady', previousSessionId: crashStatus.recoveredCrash?.previousSessionId ?? null, currentSessionId: crashStatus.currentSessionId, recoveredCrashDetected: crashStatus.hasRecoveredCrash, alias: ProfileRegistry.defaultProfileId || null });
       this.registerPowerMonitorLogging();
 
       // 🚀 Highest priority: warm up AppCacheManager (read app.json / migrate runtimeConfig.json)
@@ -365,6 +376,8 @@ class ElectronApp {
       appCacheManager.initialize().catch((e) => {
         safeConsole.warn('[Startup] AppCacheManager pre-warm failed:', e);
       });
+      // preload 的同步 owner handshake 只能读取已完成 bootstrap 的窗口 metadata。
+      await this.profileBootstrap;
 
       safeConsole.time('[Startup] createMainWindow');
       // 🚀 Optimization: start window creation task immediately
@@ -458,40 +471,6 @@ class ElectronApp {
       log.info({ msg: `[${exitId}] Application exiting - starting cleanup sequence...` });
       exitSafeLog('Added final exit log');
 
-      // Phase 0.5: stop all scheduled tasks
-      exitSafeLog('Phase 0.5: Stopping scheduled cron tasks');
-      try {
-        log.info({ msg: 'scheduler.lifecycle.shutdown-sequence', mod: 'main:onBeforeQuit', stage: 'before-dispose', reason: 'app-quit', schedulerState: schedulerManager.getRuntimeDiagnostics() });
-        await schedulerManager.dispose('app-quit');
-        log.info({ msg: 'scheduler.lifecycle.shutdown-sequence', mod: 'main:onBeforeQuit', stage: 'after-dispose', reason: 'app-quit', schedulerState: schedulerManager.getRuntimeDiagnostics() });
-        exitSafeLog('SchedulerManager disposed successfully');
-      } catch (schedulerError) {
-        log.warn({ msg: 'scheduler.lifecycle.shutdown-sequence', mod: 'main:onBeforeQuit', stage: 'dispose-failed', reason: 'app-quit', err: schedulerError });
-      }
-
-      // Phase 1: Clean up MCP clients and child processes
-      exitSafeLog('Phase 2: Cleaning up MCP clients and child processes');
-      try {
-
-        // Set timeout for MCP cleanup to prevent hanging
-        await Promise.race([
-          mcpClientManager.cleanup(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('MCP cleanup timeout')), 20000) // 20 second timeout
-          )
-        ]);
-
-        exitSafeLog('MCP cleanup completed successfully');
-      } catch (mcpError) {
-        const errorMessage = mcpError instanceof Error ? mcpError.message : String(mcpError);
-        safeConsole.warn(`MCP cleanup failed or timed out: ${errorMessage}`);
-
-        // If MCP cleanup timed out, try force cleanup
-        if (errorMessage.includes('timeout')) {
-          exitSafeLog('Attempting force cleanup of remaining child processes');
-          await this.forceCleanupChildProcesses(exitId);
-        }
-      }
 
       // Phase 3: Clean up update manager
       exitSafeLog('Phase 3: Cleaning up UpdateManager');
@@ -507,7 +486,7 @@ class ElectronApp {
       exitSafeLog('Phase 3.5: Flushing persist + closing SQLite');
       try {
         await Promise.race([
-          Profiles.get().shutdown(),
+          ProfileRegistry.shutdownAll(),
           new Promise<void>((resolve) =>
             setTimeout(() => {
               exitSafeLog('Persist shutdown timeout (5s)');
@@ -554,57 +533,36 @@ class ElectronApp {
     }
   }
 
-  /**
-   * Force cleanup of remaining child processes when normal cleanup fails
-   */
-  private async forceCleanupChildProcesses(exitId: string): Promise<void> {
-    try {
-      exitSafeLog(`[${exitId}] Starting force cleanup of child processes`);
+  private createMainWindow(
+    profileId: string = ProfileRegistry.defaultProfileId,
+  ): Promise<BrowserWindow> {
+    if (!profileId) return Promise.reject(new Error('Main window requires a default profile.'));
 
-      // Only attempt this on macOS/Linux where we have better process management
-      if (process.platform !== 'win32') {
-        const appPid = process.pid;
+    const pending = this.openingMainWindows.get(profileId);
+    if (pending) return pending;
 
-        try {
-          // Find and terminate any remaining child processes
-          const psCommand = `ps -eo pid,ppid,comm | grep -E "(npm|uvx|python|pip|uv|node)" | grep -v grep`;
-          const psResult = execSync(psCommand, { encoding: 'utf8', timeout: 5000 });
-
-          if (psResult.trim()) {
-            exitSafeLog(`[${exitId}] Found remaining processes:`, psResult);
-
-            const lines = psResult.trim().split('\n');
-            for (const line of lines) {
-              const [pid, ppid, comm] = line.trim().split(/\s+/);
-
-              // Kill direct children of our app
-              if (ppid && parseInt(ppid) === appPid) {
-                try {
-                  process.kill(parseInt(pid), 'SIGKILL');
-                  exitSafeLog(`[${exitId}] Force killed child process: ${comm} (PID: ${pid})`);
-                } catch (killError) {
-                  safeConsole.warn(`[${exitId}] Failed to kill process ${pid}:`, killError);
-                }
-              }
-            }
-          } else {
-            exitSafeLog(`[${exitId}] No remaining child processes found`);
-          }
-        } catch (psError) {
-          safeConsole.warn(`[${exitId}] Process search failed:`, psError);
-        }
-      } else {
-        exitSafeLog(`[${exitId}] Force cleanup not implemented for Windows`);
-      }
-    } catch (error) {
-      safeConsole.error(`[${exitId}] Force cleanup failed:`, error);
+    const profile = ProfileRegistry.require(profileId);
+    const existing = profile.getMainWindow();
+    if (existing) {
+      existing.show();
+      existing.focus();
+      return Promise.resolve(existing);
     }
+
+    const creating = this.createMainWindowImpl(profileId);
+    const clearOpening = (): void => {
+      if (this.openingMainWindows.get(profileId) === creating) this.openingMainWindows.delete(profileId);
+    };
+    this.openingMainWindows.set(profileId, creating);
+    creating.then(clearOpening, clearOpening);
+    return creating;
   }
 
-  private async createMainWindow(): Promise<void> {
+  private async createMainWindowImpl(profileId: string): Promise<BrowserWindow> {
+    const profile = ProfileRegistry.require(profileId);
 
     // Create the browser window
-    this.mainWindow = createWindow({
+    const window = createWindow({
       width: 1200,
       height: 800,
       // 展开上次记忆的几何（位置 + 尺寸）；无记忆或窗口已离屏时回退上面的默认值。
@@ -623,6 +581,7 @@ class ElectronApp {
         nodeIntegration: false,
         contextIsolation: true,
         preload: PRELOAD_PATH.main,
+        additionalArguments: [`--deskmate-profile-id=${profileId}`],
         webSecurity: false,
         allowRunningInsecureContent: true,
         experimentalFeatures: false,
@@ -634,17 +593,19 @@ class ElectronApp {
         webgl: false,
         plugins: false,
       },
-    }, { role: 'main' });
-    crashCaptureManager.attachToMainWindow(this.mainWindow);
+    }, { role: 'main', profileId });
+    profile.attachMainWindow(window);
+    this.mainWindow = window;
+    crashCaptureManager.attachToMainWindow(window);
     crashCaptureManager.recordBreadcrumb('window', 'main-window-created', {
-      windowId: this.mainWindow.id,
+      windowId: window.id,
     });
 
     // 挂载窗口几何记忆：move / resize 后防抖保存，下次启动恢复到同一屏幕与位置。
-    trackBounds(this.mainWindow);
+    trackBounds(window);
 
     // Native right-click context menu for editable fields (Cut/Copy/Paste/Select All)
-    this.mainWindow.webContents.on('context-menu', (_event, params) => {
+    window.webContents.on('context-menu', (_event, params) => {
       const { isEditable, selectionText, editFlags } = params;
       // Only show native context menu for editable areas (input, textarea, contenteditable)
       // or when text is selected (for copy)
@@ -672,33 +633,28 @@ class ElectronApp {
 
       if (menuTemplate.length > 0) {
         const contextMenu = Menu.buildFromTemplate(menuTemplate);
-        contextMenu.popup({ window: this.mainWindow || undefined });
+        contextMenu.popup({ window });
       }
     });
 
-    const applyPersistedZoomLevel = async () => {
+    const applyPersistedZoomLevel = async (): Promise<void> => {
       try {
-        if (!this.mainWindow || this.mainWindow.isDestroyed()) {
-          return;
-        }
+        if (window.isDestroyed()) return;
 
-        const zoomLevel = await this.getPersistedWindowZoomLevel();
-        this.applyWindowZoomLevel(zoomLevel);
+        window.webContents.setZoomLevel(await this.getPersistedWindowZoomLevel());
       } catch (e) {
         safeConsole.error('[Zoom] Failed to restore zoom level:', e);
       }
     };
 
-    const ensurePersistedZoomLevel = async () => {
+    const ensurePersistedZoomLevel = async (): Promise<void> => {
       try {
-        if (!this.mainWindow || this.mainWindow.isDestroyed()) {
-          return;
-        }
+        if (window.isDestroyed()) return;
 
         const persistedZoomLevel = await this.getPersistedWindowZoomLevel();
-        const actualZoomLevel = this.mainWindow.webContents.getZoomLevel();
+        const actualZoomLevel = window.webContents.getZoomLevel();
         if (actualZoomLevel !== persistedZoomLevel) {
-          this.applyWindowZoomLevel(persistedZoomLevel);
+          window.webContents.setZoomLevel(persistedZoomLevel);
         }
       } catch (e) {
         safeConsole.error('[Zoom] Failed to ensure zoom level:', e);
@@ -715,8 +671,8 @@ class ElectronApp {
     };
 
     const reapplyPersistedZoomLevelAfterWindowStateChange = (state: 'maximized' | 'normal') => {
-      if (this.mainWindow) {
-        windowMainToRender.bindWebContents(this.mainWindow.webContents).stateChanged(state);
+      if (!window.isDestroyed()) {
+        windowMainToRender.bindWebContents(window.webContents).stateChanged(state);
       }
 
       setTimeout(() => {
@@ -725,32 +681,32 @@ class ElectronApp {
     };
 
     // Listen for window state changes
-    this.mainWindow.on('maximize', () => {
+    window.on('maximize', () => {
       void persistMainWindowMaximized(true);
       reapplyPersistedZoomLevelAfterWindowStateChange('maximized');
     });
-    this.mainWindow.on('unmaximize', () => {
+    window.on('unmaximize', () => {
       void persistMainWindowMaximized(false);
       reapplyPersistedZoomLevelAfterWindowStateChange('normal');
     });
 
     // macOS fullscreen events — notify renderer so it can adjust traffic-light-aware layout
-    this.mainWindow.on('enter-full-screen', () => {
-      if (this.mainWindow) {
-        windowMainToRender.bindWebContents(this.mainWindow.webContents).fullScreenChanged(true);
+    window.on('enter-full-screen', () => {
+      if (!window.isDestroyed()) {
+        windowMainToRender.bindWebContents(window.webContents).fullScreenChanged(true);
       }
     });
-    this.mainWindow.on('leave-full-screen', () => {
-      if (this.mainWindow) {
-        windowMainToRender.bindWebContents(this.mainWindow.webContents).fullScreenChanged(false);
+    window.on('leave-full-screen', () => {
+      if (!window.isDestroyed()) {
+        windowMainToRender.bindWebContents(window.webContents).fullScreenChanged(false);
       }
     });
 
-    this.mainWindow.webContents.on('did-finish-load', () => {
+    window.webContents.on('did-finish-load', () => {
       void applyPersistedZoomLevel();
     });
 
-    this.mainWindow.webContents.on('did-stop-loading', () => {
+    window.webContents.on('did-stop-loading', () => {
       void ensurePersistedZoomLevel();
     });
 
@@ -758,26 +714,26 @@ class ElectronApp {
     await applyPersistedZoomLevel();
 
     // Set up window event handlers first
-    this.mainWindow.once('ready-to-show', async () => {
+    window.once('ready-to-show', async () => {
       safeConsole.timeEnd('[Startup] Total main.ts load');
       safeConsole.log('[Startup] 🎉 Window ready-to-show event fired!');
       crashCaptureManager.recordBreadcrumb('window', 'main-window-ready-to-show', {
-        windowId: this.mainWindow?.id,
+        windowId: window.id,
       });
 
-      if (this.mainWindow) {
+      if (!window.isDestroyed()) {
         try {
           await appCacheManager.initialize();
           const config = appCacheManager.getConfig();
           if (config.mainWindowMaximized) {
-            this.mainWindow.maximize();
+            window.maximize();
           }
         } catch (error) {
           safeConsole.error('[WindowState] Failed to restore maximized state:', error);
         }
 
         // 🚀 Optimization: show window immediately, move heavy initialization to background
-        this.mainWindow.show();
+        window.show();
         safeConsole.log('[Startup] 🎉 Window shown!');
 
         // 📸 Deferred registration of screenshot feature IPC handlers
@@ -796,14 +752,13 @@ class ElectronApp {
 
         if (this.isDev) {
           setTimeout(() => {
-            this.mainWindow?.webContents.openDevTools();
+            window.webContents.openDevTools();
           }, 2000); // Delay 1 second before opening DevTools, ensure window is fully loaded
 
           // Add keyboard shortcuts for development
-          this.mainWindow.webContents.on('before-input-event', (event, input) => {
-            // F5 or Ctrl+R to reload
+          window.webContents.on('before-input-event', (_event, input) => {
             if ((input.key === 'F5') || (input.control && input.key === 'r')) {
-              this.mainWindow?.webContents.reload();
+              window.webContents.reload();
             }
           });
         }
@@ -816,31 +771,19 @@ class ElectronApp {
 
     // macOS standard behavior: intercept close event, hide window instead of destroying
     if (process.platform === 'darwin') {
-      this.mainWindow.on('close', (event) => {
-        // Prevent window from closing
+      window.on('close', (event) => {
         event.preventDefault();
-        // Hide window instead of destroying
-        this.mainWindow?.hide();
+        window.hide();
       });
     }
 
-    this.mainWindow.on('closed', () => {
-      // macOS standard behavior: do not quit app when main window is closed
-      if (process.platform === 'darwin') {
-        // On macOS, only clean up window reference, keep app running
-        this.mainWindow = null;
-      } else {
-        // On non-macOS systems, quit program when main window is closed
-        try {
-          this.mainWindow = null;
-
-        } catch (error) {
-        }
-      }
+    window.on('closed', () => {
+      profile.detachMainWindow(window);
+      if (this.mainWindow === window) this.mainWindow = null;
     });
 
     // Handle external links
-    this.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    window.webContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith('http')) {
         shell.openExternal(url);
       }
@@ -857,7 +800,7 @@ class ElectronApp {
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
-            await this.mainWindow.loadURL(DEV_SERVER_URL);
+            await window.loadURL(DEV_SERVER_URL);
             lastError = null;
             break;
           } catch (err) {
@@ -879,19 +822,22 @@ class ElectronApp {
 
         if (!fs.existsSync(htmlPath)) {
           // Load a simple fallback page
-          await this.mainWindow.loadURL('data:text/html,<html><body><h1>' + encodeURIComponent(APP_NAME) + '</h1><p>HTML file not found. Please run: npm run build</p></body></html>');
+          await window.loadURL('data:text/html,<html><body><h1>' + encodeURIComponent(APP_NAME) + '</h1><p>HTML file not found. Please run: npm run build</p></body></html>');
         } else {
-          await this.mainWindow.loadFile(htmlPath);
+          await window.loadFile(htmlPath);
         }
       }
     } catch (error) {
       // Load error page
       const errorMessage = error instanceof Error ? error.message : String(error);
-      await this.mainWindow.loadURL('data:text/html,<html><body><h1>' + encodeURIComponent(APP_NAME) + ' - Error</h1><p>Failed to load: ' + errorMessage + '</p></body></html>');
+      await window.loadURL('data:text/html,<html><body><h1>' + encodeURIComponent(APP_NAME) + ' - Error</h1><p>Failed to load: ' + errorMessage + '</p></body></html>');
     }
+    return window;
   }
 
-
+  private async openProfileMainWindow(profileId: string): Promise<void> {
+    await this.createMainWindow(profileId);
+  }
   private normalizeWindowZoomLevel(level: number): number {
     const zoomStep = 0.5;
     const zoomMin = -3;
@@ -906,14 +852,12 @@ class ElectronApp {
     return typeof zoomLevel === 'number' ? this.normalizeWindowZoomLevel(zoomLevel) : 0;
   }
 
-  private applyWindowZoomLevel(level: number): number {
-    if (!this.mainWindow || this.mainWindow.isDestroyed()) {
-      return 0;
-    }
+  private applyWindowZoomLevel(window: BrowserWindow, level: number): number {
+    if (window.isDestroyed()) return 0;
 
     const next = this.normalizeWindowZoomLevel(level);
-    this.mainWindow.webContents.setZoomLevel(next);
-    windowMainToRender.bindWebContents(this.mainWindow.webContents).zoomChanged(next);
+    window.webContents.setZoomLevel(next);
+    windowMainToRender.bindWebContents(window.webContents).zoomChanged(next);
     return next;
   }
 
@@ -926,16 +870,16 @@ class ElectronApp {
     }
   }
 
-  private async stepWindowZoomLevel(delta: number): Promise<number> {
+  private async stepWindowZoomLevel(window: BrowserWindow, delta: number): Promise<number> {
     const current = await this.getPersistedWindowZoomLevel();
     const next = this.normalizeWindowZoomLevel(current + delta);
-    this.applyWindowZoomLevel(next);
+    this.applyWindowZoomLevel(window, next);
     void this.persistWindowZoomLevel(next);
     return next;
   }
 
-  private async resetWindowZoomLevel(): Promise<number> {
-    const next = this.applyWindowZoomLevel(0);
+  private async resetWindowZoomLevel(window: BrowserWindow): Promise<number> {
+    const next = this.applyWindowZoomLevel(window, 0);
     void this.persistWindowZoomLevel(next);
     return next;
   }
@@ -996,7 +940,7 @@ class ElectronApp {
     }
   }
 
-  private async exportDebugInfo(): Promise<{ success: boolean; filePath?: string; fileName?: string; error?: string }> {
+  private async exportDebugInfo(profileId: string | null): Promise<{ success: boolean; filePath?: string; fileName?: string; error?: string }> {
     try {
       // flushLogs 等 worker 把缓冲全部 INSERT 进 sqlite，否则导出包会漏最后一批日志。
       await flushLogs();
@@ -1014,7 +958,7 @@ class ElectronApp {
       }
 
       const zip = new JSZip();
-      const redact = createRedactor({ profileId: Profiles.get().activeProfileId || null });
+      const redact = createRedactor({ profileId });
       const exportedAt = new Date().toISOString();
       const crashStatus = crashCaptureManager.getStatus();
       const crashBundleNames = fs.existsSync(crashStatus.crashRootDir)
@@ -1041,7 +985,7 @@ class ElectronApp {
       for (const entry of getDebugInfoEntries(
         getAppDataPath(),
         app.getPath('crashDumps'),
-        Profiles.get().activeProfileId || null,
+        profileId,
       )) {
         await this.addPathToZip(zip, entry.sourcePath, entry.zipPath, redact);
       }
@@ -1067,15 +1011,20 @@ class ElectronApp {
     }
   }
 
-  private notifyDebugInfoDownload(result: { success: boolean; filePath?: string; fileName?: string; error?: string }): void {
-    if (!this.mainWindow || this.mainWindow.isDestroyed()) {
-      return;
-    }
-
-    appMainToRender.bindWebContents(this.mainWindow.webContents).debugInfoDownloaded(result);
+  private notifyDebugInfoDownload(
+    targetWindow: BrowserWindow | undefined,
+    result: { success: boolean; filePath?: string; fileName?: string; error?: string },
+  ): void {
+    if (!targetWindow || targetWindow.isDestroyed()) return;
+    appMainToRender.bindWebContents(targetWindow.webContents).debugInfoDownloaded(result);
   }
 
   private getMenuTemplate(): Electron.MenuItemConstructorOptions[] {
+    const mainWindowFromMenu = (window: Electron.BaseWindow | undefined): BrowserWindow | null => {
+      const target = window instanceof BrowserWindow ? window : BrowserWindow.getFocusedWindow();
+      return target && getWindowMeta(target)?.role === 'main' ? target : null;
+    };
+
     const template: Electron.MenuItemConstructorOptions[] = [
       {
         label: 'File',
@@ -1095,14 +1044,12 @@ class ElectronApp {
           },
           {
             label: 'Open Profile Folder',
-            click: async () => {
+            click: async (_menuItem, browserWindow) => {
+              const targetWindow = browserWindow instanceof BrowserWindow ? browserWindow : undefined;
               try {
-                const activeProfileId = Profiles.get().activeProfileId;
-                if (!activeProfileId) {
-                  // Show a message or dialog that no user is signed in
-                  return;
-                }
-                const profileDirectory = getProfileDirectoryPath(activeProfileId);
+                const profileId = targetWindow ? getWindowMeta(targetWindow)?.profileId : undefined;
+                if (!profileId) return;
+                const profileDirectory = getProfileDirectoryPath(profileId);
                 // Ensure profile directory exists
                 if (!fs.existsSync(profileDirectory)) {
                   fs.mkdirSync(profileDirectory, { recursive: true });
@@ -1124,9 +1071,11 @@ class ElectronApp {
           },
           {
             label: 'Download Debug Info',
-            click: async () => {
-              const result = await this.exportDebugInfo();
-              this.notifyDebugInfoDownload(result);
+            click: async (_menuItem, browserWindow) => {
+              const targetWindow = browserWindow instanceof BrowserWindow ? browserWindow : undefined;
+              const profileId = targetWindow ? getWindowMeta(targetWindow)?.profileId ?? null : null;
+              const result = await this.exportDebugInfo(profileId);
+              this.notifyDebugInfoDownload(targetWindow, result);
             },
           },
           ...(process.platform !== 'darwin'
@@ -1186,22 +1135,28 @@ class ElectronApp {
           {
             label: 'Actual Size',
             accelerator: 'CmdOrCtrl+0',
-            click: async () => {
-              await this.resetWindowZoomLevel();
+            click: async (_menuItem, browserWindow) => {
+              const window = mainWindowFromMenu(browserWindow);
+              if (!window) return;
+              await this.resetWindowZoomLevel(window);
             },
           },
           {
             label: 'Zoom In',
             accelerator: 'CmdOrCtrl+=',
-            click: async () => {
-              await this.stepWindowZoomLevel(0.5);
+            click: async (_menuItem, browserWindow) => {
+              const window = mainWindowFromMenu(browserWindow);
+              if (!window) return;
+              await this.stepWindowZoomLevel(window, 0.5);
             },
           },
           {
             label: 'Zoom Out',
             accelerator: 'CmdOrCtrl+-',
-            click: async () => {
-              await this.stepWindowZoomLevel(-0.5);
+            click: async (_menuItem, browserWindow) => {
+              const window = mainWindowFromMenu(browserWindow);
+              if (!window) return;
+              await this.stepWindowZoomLevel(window, -0.5);
             },
           },
           { type: 'separator' },
@@ -1246,9 +1201,9 @@ class ElectronApp {
           {
             label: 'Preferences…',
             accelerator: 'Cmd+,',
-            click: () => {
-              const win = this.mainWindow;
-              if (!win || win.isDestroyed()) return;
+            click: (_menuItem, browserWindow) => {
+              const win = mainWindowFromMenu(browserWindow);
+              if (!win) return;
               win.show();
               win.focus();
               navigateMainToRender.bindWebContents(win.webContents).to({ route: '/settings' });
@@ -1281,6 +1236,5 @@ class ElectronApp {
 // 不能 export default — main 是 electron entry，被 bootstrap 用 require() 加载，
 // 任何 export 会污染整个 bundle（rolldown 会把所有 reachable 的命名 export 都冒泡上来）。
 if (hasSingleInstanceLock) {
-  Profiles.get().bootstrap();
   new ElectronApp();
 }

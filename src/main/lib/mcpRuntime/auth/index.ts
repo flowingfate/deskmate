@@ -1,6 +1,5 @@
-import { BrowserWindow } from 'electron';
 import { log } from '@main/log';
-import { pickAuthUiWindow } from './authWindowSelector';
+import { ProfileRegistry } from '@main/profileRegistry';
 import { mcpAuthMainToRender } from '@shared/ipc/mcp';
 import type { McpResolvedAuthMetadata } from './types';
 import { createMcpAuthCancelledError, isMcpAuthCancelledError, isMcpDcrRequiresUserClientIdError } from './errors';
@@ -11,13 +10,14 @@ import { getProviderHelp } from './dcrFallbackInstructions';
 import { isKnownToNotSupportDcr } from './wellKnownOAuthProviders';
 import { getMcpOAuthServerKey } from './serverKey';
 import {
-  mcpAuthPromptRegistry,
+  McpAuthPromptRegistry,
   type ClientIdHandler,
   type ConsentHandler,
   type McpAuthConsentDecision,
 } from './mcpAuthPromptRegistry';
 import type { McpServerConfig } from '@shared/persist/types'
 import type { McpAuthClientIdRequestPayload, McpAuthClientIdResponse } from '@shared/types/mcpAuth';
+import { DeskmateTokenCache } from './DeskmateTokenCache';
 
 /** Renderer-prompt timeout matches `CallbackServer.waitForCode`. On
  *  timeout/abort we resolve as cancelled so the transport surfaces a
@@ -34,12 +34,14 @@ type McpAuthInteractionListener = (event: {
  * Generic renderer-prompt driver.
  *
  * The consent + client-id flows both need: settled-flag, registry hook,
- * 5min timeout, AbortSignal wiring, `pickAuthUiWindow` dispatch. They differ
- * only in registry API and IPC payload — captured via `register` + `dispatch`.
+ * 5min timeout, AbortSignal wiring, owner-Profile window dispatch. They
+ * differ only in registry API and IPC payload — captured via `register` +
+ * `dispatch`.
  * `onCancelled` is the outcome the caller wants when we time out / abort /
  * fail to find a target window.
  */
 function awaitRendererPrompt<H extends ConsentHandler | ClientIdHandler, R>(args: {
+  profileId: string;
   requestId: string;
   serverName: string;
   timeoutMs: number;
@@ -47,11 +49,27 @@ function awaitRendererPrompt<H extends ConsentHandler | ClientIdHandler, R>(args
   onCancelled: () => R;
   register: (requestId: string, handler: H) => void;
   cancel: (requestId: string) => void;
+  registerCancellation: (requestId: string, cancelPrompt: () => void) => void;
+  clearCancellation: (requestId: string) => void;
   makeHandler: (resolve: (value: R) => void) => H;
   dispatch: (webContents: Electron.WebContents) => void;
   timeoutLabel: string;
 }): Promise<R> {
-  const { requestId, serverName, timeoutMs, signal, onCancelled, register, cancel, makeHandler, dispatch, timeoutLabel } = args;
+  const {
+    profileId,
+    requestId,
+    serverName,
+    timeoutMs,
+    signal,
+    onCancelled,
+    register,
+    cancel,
+    registerCancellation,
+    clearCancellation,
+    makeHandler,
+    dispatch,
+    timeoutLabel,
+  } = args;
 
   return new Promise<R>((resolve) => {
     let settled = false;
@@ -63,27 +81,28 @@ function awaitRendererPrompt<H extends ConsentHandler | ClientIdHandler, R>(args
       clearTimeout(timer);
       if (signal && abortHandler) signal.removeEventListener('abort', abortHandler);
       cancel(requestId);
+      clearCancellation(requestId);
+    };
+
+    const cancelPrompt = () => {
+      if (settled) return;
+      cleanup();
+      resolve(onCancelled());
     };
 
     const timer = setTimeout(() => {
       if (settled) return;
-      cleanup();
+      cancelPrompt();
       log.warn({ msg: `[McpAuthService] ${timeoutLabel} for "${serverName}" timed out after ${timeoutMs}ms — treating as cancel`, mod: 'McpAuthService' });
-      resolve(onCancelled());
     }, timeoutMs);
     timer.unref?.();
 
     if (signal) {
       if (signal.aborted) {
-        cleanup();
-        resolve(onCancelled());
+        cancelPrompt();
         return;
       }
-      abortHandler = () => {
-        if (settled) return;
-        cleanup();
-        resolve(onCancelled());
-      };
+      abortHandler = cancelPrompt;
       signal.addEventListener('abort', abortHandler, { once: true });
     }
 
@@ -92,19 +111,18 @@ function awaitRendererPrompt<H extends ConsentHandler | ClientIdHandler, R>(args
       cleanup();
       resolve(value);
     }));
+    registerCancellation(requestId, cancelPrompt);
 
     try {
-      const targetWindow = pickAuthUiWindow(BrowserWindow.getAllWindows());
-      if (!targetWindow?.webContents) {
-        cleanup();
-        resolve(onCancelled());
+      const targetWindow = ProfileRegistry.require(profileId).getMainWindow();
+      if (!targetWindow) {
+        cancelPrompt();
         return;
       }
       dispatch(targetWindow.webContents);
     } catch (error) {
       log.warn({ msg: `[McpAuthService] Failed to dispatch renderer prompt for "${serverName}": ${error instanceof Error ? error.message : String(error)}`, mod: 'McpAuthService' });
-      cleanup();
-      resolve(onCancelled());
+      cancelPrompt();
     }
   });
 }
@@ -113,25 +131,60 @@ function makeRequestId(kind: 'consent' | 'clientid'): string {
   return `mcp-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-interface McpTokenOptions {
-  forceRefresh?: boolean;
+export interface McpAuthTokenOptions {
   cfg?: McpServerConfig;
+  forceRefresh?: boolean;
   signal?: AbortSignal;
 }
 
-export class McpAuthService {
+export interface McpAuthTokenProvider {
+  getTokenForServer(
+    serverName: string,
+    metadata: McpResolvedAuthMetadata,
+    options?: McpAuthTokenOptions,
+  ): Promise<string | undefined>;
+}
+
+export class McpAuthService implements McpAuthTokenProvider {
   private readonly interactionListeners = new Set<McpAuthInteractionListener>();
+  private readonly tokenCache: DeskmateTokenCache;
+  private readonly promptRegistry = new McpAuthPromptRegistry();
+  private readonly pendingPromptCancels = new Map<string, () => void>();
   /**
    * Concurrent callers for the same server-key reuse one in-flight promise
    * so we never pop two consent dialogs / open two browser tabs.
    */
   private readonly inflightTokenRequests = new Map<string, Promise<string | undefined>>();
 
+  public constructor(private readonly profileId: string) {
+    this.tokenCache = new DeskmateTokenCache(profileId);
+  }
+
   onInteraction(listener: McpAuthInteractionListener): () => void {
     this.interactionListeners.add(listener);
     return () => {
       this.interactionListeners.delete(listener);
     };
+  }
+
+  respondConsent(requestId: string, decision: McpAuthConsentDecision): boolean {
+    const handler = this.promptRegistry.takeConsent(requestId);
+    if (!handler) return false;
+    handler(decision);
+    return true;
+  }
+
+  respondClientId(requestId: string, response: McpAuthClientIdResponse): boolean {
+    const handler = this.promptRegistry.takeClientId(requestId);
+    if (!handler) return false;
+    handler(response);
+    return true;
+  }
+
+  cancelPendingPrompts(): void {
+    for (const cancelPrompt of [...this.pendingPromptCancels.values()]) {
+      cancelPrompt();
+    }
   }
 
   private emitInteraction(event: Parameters<McpAuthInteractionListener>[0]): void {
@@ -156,21 +209,18 @@ export class McpAuthService {
   async getTokenForServer(
     serverName: string,
     metadata: McpResolvedAuthMetadata,
-    options?: McpTokenOptions,
+    options?: McpAuthTokenOptions,
   ): Promise<string | undefined> {
     const cfg = options?.cfg;
     if (!cfg) {
-      // Without cfg we can't compute a stable serverKey; surface a controlled
-      // skip rather than throwing so the transport keeps using whatever
-      // Authorization header was already on the request.
-      log.warn({ msg: `[McpAuthService] Generic OAuth requested for ${serverName} but cfg was not threaded through transport — returning undefined`, mod: 'McpAuthService' });
+      log.warn({ msg: `[McpAuthService] OAuth requested for ${serverName} without server configuration — returning undefined`, mod: 'McpAuthService' });
       return undefined;
     }
 
     const dedupKey = getMcpOAuthServerKey(serverName, cfg);
     const inflight = this.inflightTokenRequests.get(dedupKey);
     if (inflight) {
-      log.info({ msg: `[McpAuthService] Joining in-flight generic OAuth flow for ${serverName}`, mod: 'McpAuthService' });
+      log.info({ msg: `[McpAuthService] Joining in-flight OAuth flow for ${serverName}`, mod: 'McpAuthService' });
       return inflight;
     }
 
@@ -185,10 +235,11 @@ export class McpAuthService {
     serverName: string,
     metadata: McpResolvedAuthMetadata,
     cfg: McpServerConfig,
-    options?: McpTokenOptions,
+    options?: McpAuthTokenOptions,
   ): Promise<string | undefined> {
-    const provider = new DeskmateOAuthProvider(serverName, cfg);
+    const provider = new DeskmateOAuthProvider(this.profileId, serverName, cfg, this.tokenCache);
     const { signal, forceRefresh } = options ?? {};
+    await this.ensureCallbackServer(provider.pinnedCallbackPort);
 
     // ─── Fast path / proactive refresh ───
     if (!forceRefresh) {
@@ -295,9 +346,15 @@ export class McpAuthService {
     cfg: McpServerConfig,
     scope: 'tokens' | 'all' = 'tokens',
   ): Promise<void> {
-    const provider = new DeskmateOAuthProvider(serverName, cfg);
+    const provider = new DeskmateOAuthProvider(this.profileId, serverName, cfg, this.tokenCache);
     await provider.invalidateCredentials(scope);
     log.info({ msg: `[McpAuthService] Cleared OAuth credentials for "${serverName}" (scope=${scope})`, mod: 'McpAuthService' });
+  }
+
+  /** Clear current and historical OAuth slots for one server name. */
+  async clearAllOAuthForServer(serverName: string): Promise<void> {
+    await this.tokenCache.deleteMcpOAuthForServer(serverName);
+    log.info({ msg: `[McpAuthService] Cleared all OAuth credentials for "${serverName}"`, mod: 'McpAuthService' });
   }
 
   /**
@@ -315,18 +372,22 @@ export class McpAuthService {
     signal?: AbortSignal,
   ): Promise<McpAuthClientIdResponse> {
     const { serverName, metadata, cfg, redirectUri } = args;
+    const profileId = this.profileId;
     const requestId = makeRequestId('clientid');
     const instructions = getProviderHelp(metadata, cfg);
 
     return awaitRendererPrompt<ClientIdHandler, McpAuthClientIdResponse>({
+      profileId,
       requestId,
       serverName,
       timeoutMs: MCP_AUTH_PROMPT_TIMEOUT_MS,
       signal,
       onCancelled: () => ({ cancelled: true }),
       timeoutLabel: 'Client-id dialog',
-      register: (id, h) => mcpAuthPromptRegistry.registerClientId(id, h),
-      cancel: (id) => mcpAuthPromptRegistry.cancelClientId(id),
+      register: (id, handler) => this.promptRegistry.registerClientId(id, handler),
+      cancel: (id) => this.promptRegistry.cancelClientId(id),
+      registerCancellation: (id, cancelPrompt) => this.pendingPromptCancels.set(id, cancelPrompt),
+      clearCancellation: (id) => this.pendingPromptCancels.delete(id),
       makeHandler: (resolve) => (response) => resolve(response),
       dispatch: (webContents) => {
         const payload: McpAuthClientIdRequestPayload = {
@@ -346,17 +407,21 @@ export class McpAuthService {
     providerLabel: string,
     signal?: AbortSignal,
   ): Promise<McpAuthConsentDecision> {
+    const profileId = this.profileId;
     const requestId = makeRequestId('consent');
 
     return awaitRendererPrompt<ConsentHandler, McpAuthConsentDecision>({
+      profileId,
       requestId,
       serverName,
       timeoutMs: MCP_AUTH_PROMPT_TIMEOUT_MS,
       signal,
       onCancelled: () => 'cancel',
       timeoutLabel: 'Consent dialog',
-      register: (id, h) => mcpAuthPromptRegistry.registerConsent(id, h),
-      cancel: (id) => mcpAuthPromptRegistry.cancelConsent(id),
+      register: (id, handler) => this.promptRegistry.registerConsent(id, handler),
+      cancel: (id) => this.promptRegistry.cancelConsent(id),
+      registerCancellation: (id, cancelPrompt) => this.pendingPromptCancels.set(id, cancelPrompt),
+      clearCancellation: (id) => this.pendingPromptCancels.delete(id),
       makeHandler: (resolve) => (decision) => resolve(decision),
       dispatch: (webContents) => {
         this.emitInteraction({ serverName, providerLabel, phase: 'consent-requested' });
@@ -366,12 +431,11 @@ export class McpAuthService {
   }
 }
 
-export const mcpAuthService = new McpAuthService();
 
 // ────────────────── Barrel re-exports (auth 目录对外唯一出口) ──────────────────
 // 外部消费者一律从 `.../auth` import；不要深入到具体文件。
 export { McpAuthMetadataService } from './McpAuthMetadataService';
-export { mcpAuthPromptRegistry } from './mcpAuthPromptRegistry';
+export { McpAuthPromptRegistry } from './mcpAuthPromptRegistry';
 export type { McpAuthConsentDecision } from './mcpAuthPromptRegistry';
 export type {
   McpAuthChallengeInfo,

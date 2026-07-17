@@ -14,7 +14,6 @@ import {
   type MCPStats,
   type MCPTool,
 } from '@/lib/mcp/mcpClientCacheManager';
-import { mcpApi } from '@/ipc/mcp';
 
 function subscribe(cb: () => void): () => void {
   return mcpClientCacheManager.subscribe(() => cb());
@@ -50,9 +49,5 @@ export function getAllMcpTools(): MCPTool[] {
 
 /** 触发一次主进程 server status 刷新（renderer 主动 pull）。 */
 export async function refreshMcpRuntime(): Promise<void> {
-  try {
-    await mcpApi.getServerStatus();
-  } catch {
-    // ignore — listener 会在拿到结果时刷新
-  }
+  await mcpClientCacheManager.refresh();
 }

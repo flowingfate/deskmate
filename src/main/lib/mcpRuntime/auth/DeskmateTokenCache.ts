@@ -12,8 +12,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { log } from '@main/log';
-// profile 永远存在;token cache 只关心写盘根目录,认证态由 pi/auth 自己管。
-import { Profiles } from '@main/persist';
 import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
 
@@ -116,9 +114,7 @@ function normalizeCacheData(value: unknown): DeskmateTokenCacheData | null {
 }
 
 export class DeskmateTokenCache {
-  private static instance: DeskmateTokenCache | null = null;
-
-  /** In-memory mirror of the profile-scoped persisted cache. */
+  /** In-memory mirror of one profile's persisted cache. */
   private cache: DeskmateTokenCacheData | null = null;
   /**
    * Serialization chain for cache writes. Required because read-modify-write
@@ -127,35 +123,19 @@ export class DeskmateTokenCache {
    */
   private writeChain: Promise<unknown> = Promise.resolve();
 
-  static getInstance(): DeskmateTokenCache {
-    if (!DeskmateTokenCache.instance) {
-      DeskmateTokenCache.instance = new DeskmateTokenCache();
-    }
-    return DeskmateTokenCache.instance;
+  public constructor(private readonly profileId: string) {}
+
+  private getStorageDirectory(): string {
+    return path.join(PERSIST_PATH.profileDir(getAppRoot(), this.profileId), 'credentials');
   }
 
-  private getStorageDirectory(): string | null {
-    try {
-      const profileId = Profiles.get().activeProfileId;
-      if (!isNonEmptyString(profileId)) return null;
-      return path.join(PERSIST_PATH.profileDir(getAppRoot(), profileId), 'credentials');
-    } catch {
-      return null;
-    }
-  }
-
-  private cacheFile(): { file: string; directory: string } | null {
+  private cacheFile(): { file: string; directory: string } {
     const directory = this.getStorageDirectory();
-    if (!directory) return null;
     return { directory, file: path.join(directory, CACHE_FILE) };
   }
 
   private async readPersistedCache(): Promise<DeskmateTokenCacheData | null> {
     const paths = this.cacheFile();
-    if (!paths) {
-      log.warn({ msg: '[DeskmateTokenCache] Skipping persisted MCP OAuth cache load — no active profile', mod: 'DeskmateTokenCache' });
-      return null;
-    }
 
     try {
       if (fs.existsSync(paths.file)) {
@@ -170,10 +150,6 @@ export class DeskmateTokenCache {
 
   private async persistCache(data: DeskmateTokenCacheData): Promise<void> {
     const paths = this.cacheFile();
-    if (!paths) {
-      log.warn({ msg: '[DeskmateTokenCache] Skipping persisted MCP OAuth cache save — no active profile', mod: 'DeskmateTokenCache' });
-      return;
-    }
 
     await fs.promises.mkdir(paths.directory, { recursive: true });
     await fs.promises.writeFile(paths.file, JSON.stringify(data, null, 2), 'utf-8');
@@ -232,6 +208,32 @@ export class DeskmateTokenCache {
         version: CACHE_VERSION,
         updatedAt: Date.now(),
         mcpOAuth: Object.keys(rest).length > 0 ? rest : undefined,
+      };
+      this.cache = structuredClone(next);
+      await this.persistCache(next);
+    });
+  }
+
+  /**
+   * Remove every OAuth slot ever associated with one server name. A server's
+   * identity key changes when its auth-relevant config changes, so removing
+   * only its current key would leave historical refresh tokens behind.
+   */
+  async deleteMcpOAuthForServer(serverName: string): Promise<void> {
+    return this.runSerialized(async () => {
+      const existing = await this.load();
+      if (!existing?.mcpOAuth) return;
+
+      const entries = Object.entries(existing.mcpOAuth).filter(
+        ([, entry]) => entry.serverName !== serverName,
+      );
+      if (entries.length === Object.keys(existing.mcpOAuth).length) return;
+
+      const mcpOAuth = Object.fromEntries(entries);
+      const next: DeskmateTokenCacheData = {
+        version: CACHE_VERSION,
+        updatedAt: Date.now(),
+        mcpOAuth: Object.keys(mcpOAuth).length > 0 ? mcpOAuth : undefined,
       };
       this.cache = structuredClone(next);
       await this.persistCache(next);

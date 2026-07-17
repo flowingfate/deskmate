@@ -46,7 +46,6 @@
     "src/preload/main.ts",
     "src/renderer/lib/chat/agentChatSessionCacheManager.ts",
     "src/main/main.ts",
-    "src/main/lib/mcpRuntime/mcpClientManager.ts",
     "src/main/lib/autoUpdate/updateManager.ts",
     "src/main/lib/runtime/RuntimeManager.ts",
     "src/main/lib/mcpRuntime/builtinTools/builtinToolsManager.ts",

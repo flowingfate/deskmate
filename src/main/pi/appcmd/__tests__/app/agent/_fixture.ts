@@ -4,8 +4,7 @@
  * 设计:
  *   - 所有 kernel `*Internal()` 都用 `vi.hoisted` 替成 spy fn,subcommand 实测
  *     时拿到的就是这些 mock 的返回值。
- *   - persist 层(`Profiles.get().active()` / `getAgent` / `archiveAgent`)统一
- *     mock 为对一个内部状态 obj 的读写,beforeEach 重置。
+ *   - owning `Profile.store` 的 `listAgents` 绑定到内部状态 spy,beforeEach 重置。
  *   - `runAgent('install foo --json')` 直接走真实 dispatcher,确保 dispatcher
  *     + parseFlags + 子命令路由都被测到,不只是 unit-test 单 subcommand。
  *
@@ -19,6 +18,7 @@ import { vi } from 'vitest';
 
 import { Tracer } from '@shared/log/trace';
 import type { AgentToolContext } from '@main/pi/tools/types';
+import { testProfile } from '../../../../tools/__tests__/profileFixture';
 
 // ---------------------------------------------------------------------------
 // 被 mock 模块的 stub state(必须 hoisted —— vi.mock factory 在 import 前跑)
@@ -32,9 +32,7 @@ const agentMocks = vi.hoisted(() => ({
   getStatusInternal: vi.fn(),
   setPrimaryInternal: vi.fn(),
 
-  profileActive: vi.fn(),
   profileListAgents: vi.fn(),
-  profileGetAgent: vi.fn(),
 }));
 
 export { agentMocks };
@@ -64,13 +62,7 @@ vi.mock('@main/pi/appcmd/builtins/app/agent/kernel/setPrimary', () => ({
 }));
 
 
-vi.mock('@main/persist', () => ({
-  Profiles: {
-    get: () => ({
-      active: agentMocks.profileActive,
-    }),
-  },
-}));
+vi.spyOn(testProfile.store, 'listAgents').mockImplementation(() => agentMocks.profileListAgents());
 
 // ---------------------------------------------------------------------------
 // dispatch helper —— 必须在 vi.mock 之后再 import 被测对象。
@@ -83,6 +75,7 @@ import { agentCommand } from '@main/pi/appcmd/builtins/app/agent';
 
 function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
+    profile: testProfile,
     profileId: 'profile-test',
     agentId: 'agent-test',
     sessionId: 'session-test',
@@ -128,21 +121,12 @@ export async function runAgent(
   };
 }
 
-/**
- * beforeEach 默认状态:
- *   - active profile 成功(空 records,no primary)
- *   - 所有 kernel mock 未配置(测试自己 mockResolvedValue)
- */
+/** beforeEach 重置所有 kernel 与 owning Profile store spy。 */
 export function resetAgentMocks(): void {
   for (const fn of Object.values(agentMocks)) {
     fn.mockReset();
   }
   agentMocks.profileListAgents.mockReturnValue([]);
-  agentMocks.profileGetAgent.mockResolvedValue(undefined);
-  agentMocks.profileActive.mockResolvedValue({
-    listAgents: agentMocks.profileListAgents,
-    getAgent: agentMocks.profileGetAgent,
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -158,8 +142,6 @@ describe('agent fixture sanity', () => {
         'createAgentInternal',
         'getStatusInternal',
         'listAgentsInternal',
-        'profileActive',
-        'profileGetAgent',
         'profileListAgents',
         'removeAgentInternal',
         'setPrimaryInternal',

@@ -16,6 +16,7 @@ import { vi } from 'vitest';
 
 import { Tracer } from '@shared/log/trace';
 import type { AgentToolContext } from '@main/pi/tools/types';
+import { testProfile } from '../../../../tools/__tests__/profileFixture';
 
 // ---------------------------------------------------------------------------
 // 被 mock 模块的 stub state(必须 hoisted)
@@ -62,6 +63,7 @@ import { scheduleCommand } from '@main/pi/appcmd/builtins/app/schedule';
 
 function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
+    profile: testProfile,
     profileId: 'profile-test',
     agentId: 'agent-test',
     sessionId: 'session-test',

@@ -83,25 +83,25 @@ async function setupRun(): Promise<{
 }> {
   vi.resetModules();
   const root = await import('../../../persist/lib/root');
-  const { Profiles } = await import('../../../persist/profiles');
+  const { ProfileRegistry } = await import('../../../profileRegistry');
   const { ProfileDb } = await import('../../../persist/lib/db/db');
   const { SubAgentManager } = await import('../manager');
   root.setRootForTesting(tmpRoot);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.resetForTesting();
-  await Profiles.get().bootstrap();
-  const profile = await Profiles.get().active();
-  const parent = await profile.createAgent({ name: 'Parent', version: '1', model: 'model-parent' });
-  const delegate = await profile.createAgent({ name: 'Delegate', version: '1', model: 'model-delegate' });
+  await ProfileRegistry.bootstrap();
+  const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+  const parent = await store.createAgent({ name: 'Parent', version: '1', model: 'model-parent' });
+  const delegate = await store.createAgent({ name: 'Delegate', version: '1', model: 'model-delegate' });
   await parent.patchFront({ delegates: [delegate.id] });
   const session = await parent.createSession({ title: 'Parent session' });
 
   return {
-    profileId: profile.id,
+    profileId: store.id,
     parentAgentId: parent.id,
     parentSessionId: session.id,
     delegateAgentId: delegate.id,
-    manager: SubAgentManager.forProfile(profile),
+    manager: new SubAgentManager(store),
   };
 }
 
@@ -185,9 +185,9 @@ describe('SubAgentManager admission and cancellation', () => {
 
   it('converts an unowned persisted running subrun into an interrupted terminal state', async () => {
     const setup = await setupRun();
-    const { Profiles } = await import('../../../persist/profiles');
-    const profile = await Profiles.get().active();
-    const parent = await profile.getAgent(setup.parentAgentId);
+    const { ProfileRegistry } = await import('../../../profileRegistry')
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const parent = await store.getAgent(setup.parentAgentId);
     if (!parent) throw new Error('Expected parent agent.');
     const session = await parent.getSession(setup.parentSessionId);
     if (!session) throw new Error('Expected parent session.');
@@ -213,9 +213,9 @@ describe('SubAgentManager admission and cancellation', () => {
 
   it('continues a terminal subrun without allocating another reservation', async () => {
     const setup = await setupRun();
-    const { Profiles } = await import('../../../persist/profiles');
-    const profile = await Profiles.get().active();
-    const parent = await profile.getAgent(setup.parentAgentId);
+    const { ProfileRegistry } = await import('../../../profileRegistry')
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const parent = await store.getAgent(setup.parentAgentId);
     if (!parent) throw new Error('Expected parent agent.');
     const session = await parent.getSession(setup.parentSessionId);
     if (!session) throw new Error('Expected parent session.');
@@ -251,9 +251,9 @@ describe('SubAgentManager admission and cancellation', () => {
 
   it('applies the shared parallel cap before transitioning a continuation', async () => {
     const setup = await setupRun();
-    const { Profiles } = await import('../../../persist/profiles');
-    const profile = await Profiles.get().active();
-    const parent = await profile.getAgent(setup.parentAgentId);
+    const { ProfileRegistry } = await import('../../../profileRegistry')
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const parent = await store.getAgent(setup.parentAgentId);
     if (!parent) throw new Error('Expected parent agent.');
     const session = await parent.getSession(setup.parentSessionId);
     if (!session) throw new Error('Expected parent session.');

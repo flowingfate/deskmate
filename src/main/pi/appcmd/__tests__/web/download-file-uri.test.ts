@@ -18,8 +18,8 @@ import * as path from 'node:path';
 import { downloadFileInternal } from '../../builtins/web/kernel/download';
 import type { ToolContext } from '@main/pi/tools/types';
 
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import { ProfileStore } from '@main/persist/profileStore'
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting } from '@main/persist/lib/root';
 import { ProfileDb } from '@main/persist/lib/db/db';
 import { InternalUrlRouter } from '@main/pi/internal-urls';
@@ -35,8 +35,8 @@ let sessionFilesDir = '';
 let agentKnowledgeDir = '';
 
 async function seed(): Promise<void> {
-  const profile = await Profile.getOrLoad(profileId);
-  const agent = await profile.createAgent({ name: 'DownloadTest', version: '1.0.0' });
+  const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+  const agent = await store.createAgent({ name: 'DownloadTest', version: '1.0.0' });
   agentId = agent.id;
   const session = await agent.createSession({ title: 'sandbox' });
   sessionId = session.id;
@@ -47,6 +47,7 @@ async function seed(): Promise<void> {
 function makeCtx(): ToolContext {
   return {
     mode: 'agent',
+    profile: ProfileRegistry.require(profileId),
     profileId,
     agentId,
     sessionId,
@@ -89,7 +90,7 @@ function mockFetchOnce(payload: Uint8Array, contentType = 'image/png'): void {
 beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'download-file-uri-it-'));
   setRootForTesting(tmpRoot);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   InternalUrlRouter.resetForTesting();
@@ -107,8 +108,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  Profile.evict(profileId);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   setRootForTesting(null);

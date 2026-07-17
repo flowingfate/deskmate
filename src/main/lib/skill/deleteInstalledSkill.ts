@@ -1,4 +1,4 @@
-import { Profiles } from '../../persist';
+import type { ProfileStore } from '@main/persist';
 
 export interface DeleteInstalledSkillResult {
   success: boolean;
@@ -15,23 +15,13 @@ export interface DeleteInstalledSkillResult {
  * 本函数只负责错误映射，不重复做文件删除。
  */
 export async function deleteInstalledSkill(
+  store: ProfileStore,
   skillName: string,
 ): Promise<DeleteInstalledSkillResult> {
   const normalizedSkillName = skillName.trim();
 
-  let profile;
   try {
-    profile = Profiles.get().activeSync();
-  } catch {
-    return {
-      success: false,
-      skillName: normalizedSkillName,
-      error: 'DELETE_FILES_FAILED',
-    };
-  }
-
-  try {
-    await profile.skills.remove(normalizedSkillName);
+    await store.skills.remove(normalizedSkillName);
   } catch {
     return {
       success: false,

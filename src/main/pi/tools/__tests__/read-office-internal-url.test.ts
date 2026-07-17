@@ -19,8 +19,8 @@ import * as path from 'node:path';
 
 import { dispatchRead } from '../read/dispatch';
 import type { ToolContext } from '../types';
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import { ProfileStore } from '@main/persist/profileStore'
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting, getAppRoot } from '@main/persist/lib/root';
 import { ProfileDb } from '@main/persist/lib/db/db';
 import { InternalUrlRouter } from '@main/pi/internal-urls';
@@ -46,8 +46,8 @@ let sessionId = '';
 let sessionFilesDir = '';
 let agentKnowledgeDir = '';
 async function seed(): Promise<void> {
-  const profile = await Profile.getOrLoad(profileId);
-  const agent = await profile.createAgent({ name: 'OfficeUriTest', version: '1.0.0' });
+  const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+  const agent = await store.createAgent({ name: 'OfficeUriTest', version: '1.0.0' });
   agentId = agent.id;
   const session = await agent.createSession({ title: 'sandbox' });
   sessionId = session.id;
@@ -58,6 +58,7 @@ async function seed(): Promise<void> {
 function makeCtx(): ToolContext {
   return {
     mode: 'agent',
+    profile: ProfileRegistry.require(profileId),
     profileId,
     agentId,
     sessionId,
@@ -72,7 +73,7 @@ function makeCtx(): ToolContext {
 beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'read-office-uri-it-'));
   setRootForTesting(tmpRoot);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   InternalUrlRouter.resetForTesting();
@@ -87,8 +88,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  Profile.evict(profileId);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   setRootForTesting(null);

@@ -29,9 +29,6 @@ describe('agent update', () => {
 
   it('ON-DEVICE agent + partial flags → patch 仅含给的字段', async () => {
     agentMocks.profileListAgents.mockReturnValue([{ id: 'cid', name: 'bot' }]);
-    agentMocks.profileGetAgent.mockResolvedValue({
-      config: {},
-    });
     agentMocks.updateAgentInternal.mockResolvedValue({
       success: true,
       message: 'updated',
@@ -41,7 +38,7 @@ describe('agent update', () => {
 
     const r = await runAgent(['update', 'bot', '--model', 'gpt-4o', '--skill', 'foo']);
     expect(r.exitCode).toBe(0);
-    const cfg = agentMocks.updateAgentInternal.mock.calls[0][0].agent_config;
+    const cfg = agentMocks.updateAgentInternal.mock.calls[0][1].agent_config;
     expect(cfg.name).toBe('bot');
     expect(cfg.model).toBe('gpt-4o');
     expect(cfg.skills).toEqual(['foo']);
@@ -53,9 +50,6 @@ describe('agent update', () => {
 
   it('kernel update 失败 → exit 1 + 透传 message', async () => {
     agentMocks.profileListAgents.mockReturnValue([{ id: 'cid', name: 'bot' }]);
-    agentMocks.profileGetAgent.mockResolvedValue({
-      config: {},
-    });
     agentMocks.updateAgentInternal.mockResolvedValue({
       success: false,
       message: 'failed to write',
@@ -68,9 +62,6 @@ describe('agent update', () => {
 
   it('--json 成功输出 patch + 版本信息', async () => {
     agentMocks.profileListAgents.mockReturnValue([{ id: 'cid', name: 'bot' }]);
-    agentMocks.profileGetAgent.mockResolvedValue({
-      config: {},
-    });
     agentMocks.updateAgentInternal.mockResolvedValue({
       success: true,
       message: 'ok',
@@ -87,24 +78,14 @@ describe('agent update', () => {
     expect(parsed.patch.model).toBe('gpt-4o');
   });
 
-  it('profile.active 抛错 → exit 1 + 提示', async () => {
-    agentMocks.profileActive.mockRejectedValue(new Error('no profile'));
-    const r = await runAgent('update bot --model gpt-4o');
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain('no profile');
-    expect(agentMocks.updateAgentInternal).not.toHaveBeenCalled();
-  });
 
   it('signal 透传到 updateAgentInternal', async () => {
     agentMocks.profileListAgents.mockReturnValue([{ id: 'cid', name: 'bot' }]);
-    agentMocks.profileGetAgent.mockResolvedValue({
-      config: {},
-    });
     agentMocks.updateAgentInternal.mockResolvedValue({ success: true, message: 'ok' });
 
     const ctrl = new AbortController();
     await runAgent('update bot --model gpt-4o', { signal: ctrl.signal });
-    const opts = agentMocks.updateAgentInternal.mock.calls[0][1];
+    const opts = agentMocks.updateAgentInternal.mock.calls[0][2];
     expect(opts.signal).toBe(ctrl.signal);
   });
 });

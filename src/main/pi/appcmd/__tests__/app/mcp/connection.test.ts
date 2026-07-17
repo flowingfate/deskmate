@@ -24,15 +24,6 @@ describe('mcp connect|disconnect|reconnect — 共享形态', () => {
     expect(manager).not.toHaveBeenCalled();
   });
 
-  it('connect 无 active profile → exit 1 + 提示 sign in', async () => {
-    mcpMocks.profileActiveSync.mockImplementation(() => {
-      throw new Error('no profile');
-    });
-    const r = await runMcp('connect brave');
-    expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain('no active profile');
-    expect(mcpMocks.mcpConnect).not.toHaveBeenCalled();
-  });
 
   it('server 未安装 → exit 1', async () => {
     mcpMocks.profileMcpGet.mockReturnValue(undefined);

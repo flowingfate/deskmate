@@ -1,14 +1,15 @@
 /**
  * pi 路径下的 agent / model 配置 reader。
  *
- * 读路径走 `Profiles.get().active() → profile.getAgent(id)`。
+ * 读路径按调用方绑定的 profileId 走 `ProfileRegistry.require(profileId).store`
+ * 再取 agent；不得读取 renderer selected profile。
  *
  * pi 的 `model` 字段必须是 `${provider}::${modelId}` 复合 key；
  * 与 core 的裸 modelId 语义不兼容，缺失 / 错格式都让 UI 走重选流程，
  * 不要 fallback 到默认模型（默认模型可能没登录对应 provider，会掩盖问题）。
  */
 
-import { Profiles } from '@main/persist';
+import { ProfileRegistry } from '@main/profileRegistry'
 import { parseAgentModel, type ParsedAgentModel } from '@shared/utils/agentModelId';
 import type { ThinkingLevel } from '@shared/persist/types'
 import type { SkillBindings } from '@shared/persist/types'
@@ -33,16 +34,8 @@ export interface AgentConfig {
 }
 
 export async function readAgentConfig(profileId: string, agentId: string): Promise<AgentConfig | null> {
-  const profiles = Profiles.get();
-  // profileId 必须与当前 active 一致 —— pi 调用面只对 active profile 工作；
-  // 跨 profile 访问属于 IPC 边界事故，宁可早抛也别静默读错文件。
-  if (profiles.activeProfileId !== profileId) {
-    throw new Error(
-      `[pi/config] profileId mismatch: requested "${profileId}" but active is "${profiles.activeProfileId}"`,
-    );
-  }
-  const profile = await profiles.active();
-  const agent = await profile.getAgent(agentId);
+  const store = ProfileRegistry.require(profileId).store
+  const agent = await store.getAgent(agentId);
   if (!agent) return null;
 
   const c = agent.config;

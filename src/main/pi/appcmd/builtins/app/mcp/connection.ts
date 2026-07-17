@@ -7,15 +7,11 @@
  * 与旧 `runSetMcpConnectionState` 的差异:
  *   - 透传 `ctx.signal`(旧 facade 没有透传)
  *   - 报错走 stderr + exit code(LLM 母语),不是 JSON envelope
- *   - 不再做 `Profiles.activeSync()` 的 has-active 守门 —— mcpClientManager
- *     方法本身会拒,语义重复。我们只关心"server 是否安装"这一层
+ *   - manager 从 `ctx.profileId` 解析的 runtime Profile 取得；先确认 server
+ *     配置存在，再执行连接动作。
  */
 
-import {
-  mcpClientManager,
-  type MCPServerRuntimeState,
-} from '@main/lib/mcpRuntime';
-import { Profiles } from '@main/persist';
+import type { MCPServerRuntimeState } from '@main/lib/mcpRuntime';
 import type { McpServerConfig } from '@shared/persist/types'
 
 import { COMMON_FLAGS, isHelp, isJson } from '../../../_commonFlags';
@@ -115,15 +111,9 @@ async function runConnection(
     return;
   }
 
-  // Confirm the server is installed before touching the runtime.
-  let config: McpServerConfig | null = null;
-  try {
-    config = Profiles.get().activeSync().mcp.get(name) ?? null;
-  } catch {
-    ctx.printErr(`mcp ${action}: no active profile. Please sign in first.\n`);
-    ctx.setExitCode(1);
-    return;
-  }
+  // ToolContext 在 turn 创建时已绑定 owning runtime Profile。
+  const profile = ctx.profile;
+  const config: McpServerConfig | null = profile.store.mcp.get(name) ?? null;
   if (!config) {
     ctx.printErr(
       `mcp ${action}: server "${name}" is not installed. ` +
@@ -133,23 +123,23 @@ async function runConnection(
     return;
   }
 
-  const previousStatus = snapshotStatus(name);
+  const previousStatus = snapshotStatus(profile.mcpManager, name);
 
   try {
     switch (action) {
       case 'connect':
-        await mcpClientManager.connect(name);
+        await profile.mcpManager.connect(name);
         break;
       case 'disconnect':
-        await mcpClientManager.disconnect(name);
+        await profile.mcpManager.disconnect(name);
         break;
       case 'reconnect':
-        await mcpClientManager.reconnect(name);
+        await profile.mcpManager.reconnect(name);
         break;
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const currentStatus = snapshotStatus(name);
+    const currentStatus = snapshotStatus(profile.mcpManager, name);
     if (isJson(parsed.flags)) {
       ctx.printErr(
         JSON.stringify(
@@ -176,7 +166,7 @@ async function runConnection(
     return;
   }
 
-  const currentStatus = snapshotStatus(name);
+  const currentStatus = snapshotStatus(profile.mcpManager, name);
 
   if (isJson(parsed.flags)) {
     ctx.print(
@@ -200,8 +190,6 @@ async function runConnection(
   );
 }
 
-function snapshotStatus(name: string): string {
-  const runtime: MCPServerRuntimeState | undefined =
-    mcpClientManager.getMcpServerRuntimeState(name);
-  return runtime?.status ?? 'disconnected';
+function snapshotStatus(manager: { getMcpServerRuntimeState(name: string): MCPServerRuntimeState | undefined }, name: string): string {
+  return manager.getMcpServerRuntimeState(name)?.status ?? 'disconnected';
 }

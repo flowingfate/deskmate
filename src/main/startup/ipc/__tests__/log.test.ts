@@ -5,6 +5,9 @@ let registeredHandler: ((event: { sender: { id: number } }, payload: unknown) =>
 let registeredBatchHandler: ((event: { sender: { id: number } }, payload: unknown) => void) | null = null;
 
 vi.mock('electron', () => ({
+  BrowserWindow: {
+    fromWebContents: vi.fn(() => null),
+  },
   ipcMain: {
     on: vi.fn((channel: string, fn: (event: { sender: { id: number } }, payload: unknown) => void) => {
       if (channel === 'log:write') registeredHandler = fn;

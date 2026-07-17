@@ -37,13 +37,17 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
   private readonly callbackPort: number;
   private _state: string | undefined;
   private _codeVerifier: string | undefined;
+  private readonly cache: DeskmateTokenCache;
 
   constructor(
+    private readonly profileId: string,
     private readonly serverName: string,
     private readonly cfg: McpServerConfig,
+    cache?: DeskmateTokenCache,
   ) {
     this.serverKey = getMcpOAuthServerKey(serverName, cfg);
     this.callbackPort = cfg.oauth?.callbackPort ?? DESKMATE_DEFAULT_OAUTH_CALLBACK_PORT;
+    this.cache = cache ?? new DeskmateTokenCache(profileId);
   }
 
   /** The fixed local callback port this provider's flow uses. */
@@ -74,7 +78,7 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
   }
 
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
-    const stored = await DeskmateTokenCache.getInstance().getMcpOAuth(this.serverKey);
+    const stored = await this.cache.getMcpOAuth(this.serverKey);
     if (stored?.clientId) {
       return {
         client_id: stored.clientId,
@@ -92,7 +96,7 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
   }
 
   async saveClientInformation(info: OAuthClientInformationMixed): Promise<void> {
-    const cache = DeskmateTokenCache.getInstance();
+    const cache = this.cache;
     const prev = (await cache.getMcpOAuth(this.serverKey)) ?? this.makeEmptyEntry();
     await cache.setMcpOAuth(this.serverKey, {
       ...prev,
@@ -103,7 +107,7 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
   }
 
   async tokens(): Promise<OAuthTokens | undefined> {
-    const data = await DeskmateTokenCache.getInstance().getMcpOAuth(this.serverKey);
+    const data = await this.cache.getMcpOAuth(this.serverKey);
     if (!data || !data.accessToken) {
       return undefined;
     }
@@ -136,7 +140,7 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
-    const cache = DeskmateTokenCache.getInstance();
+    const cache = this.cache;
     const prev = (await cache.getMcpOAuth(this.serverKey)) ?? this.makeEmptyEntry();
     const expiresAt = computeExpiresAt(tokens, prev);
     await cache.setMcpOAuth(this.serverKey, {
@@ -176,7 +180,7 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
   }
 
   async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier'): Promise<void> {
-    const cache = DeskmateTokenCache.getInstance();
+    const cache = this.cache;
     if (scope === 'verifier') {
       this._codeVerifier = undefined;
       return;
@@ -215,7 +219,7 @@ export class DeskmateOAuthProvider implements OAuthClientProvider {
    * NOT equivalent to `invalidateCredentials('tokens')` (which wipes refresh too).
    */
   async markAccessTokenExpired(): Promise<void> {
-    const cache = DeskmateTokenCache.getInstance();
+    const cache = this.cache;
     const data = await cache.getMcpOAuth(this.serverKey);
     if (!data) return;
     if (data.expiresAt <= 0 && !data.accessToken) {

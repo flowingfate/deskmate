@@ -1,6 +1,5 @@
-# `src/main/lib/attachment/` — 用户附件 sandbox 落盘
+<!-- Last verified: 2026-07-18 (runtime Profile context injection) -->
 
-<!-- Last verified: 2026-07-16 (附件 URI context 使用 agent mode) -->
 
 > 本模块把所有用户附件(拖入 / 粘贴 / 剪贴板图片 / screenshot /
 > Electron 文件选择)物化进当前 session 的 `files/uploads/` sandbox,返回
@@ -34,8 +33,9 @@
 
 ### URI 不带 ULID
 LLM 看见的 URI 是 `local://uploads/<name>` —— **没有 session/agent id**。
-当前 session 由 IPC handler 的 `Profiles.get().active()` + 调用方传入的
-`{ agentId, sessionId }` 注入；附件只服务当前普通会话，调用 internal URL router 时显式使用 `mode:'agent'`。
+IPC sender 所属主窗口先解析 owning runtime `Profile`，`attachFromPath` /
+`attachFromBytes` 直接接收该对象，再结合 `{ agentId, sessionId }` 构造携带同一
+Profile 的 `ResolveContext`；Internal URL handler 不按 ID 反查 Registry。
 
 ### 唯一名生成
 同目录冲突 → `foo.png` / `foo_1.png` / `foo_2.png` ...(扩展名前追加),
@@ -45,7 +45,7 @@ LLM 看见的 URI 是 `local://uploads/<name>` —— **没有 session/agent id*
 ## 常见变更
 
 ### 新增 attach 来源(e.g. 拖入 URL,远程下载)
-1. 在 `index.ts` 增 `attachFromUrl(url, ctx, profileId)` —— 先 fetch 到 Buffer,
+1. 在 `index.ts` 增 `attachFromUrl(url, ctx, profile)` —— 先 fetch 到 Buffer,
    再走 `attachFromBytes`(或 stream 到临时文件再走 `attachFromPath` 拿 reflink 红利)
 2. 加 IPC: `src/shared/ipc/attachment.ts` 加入新 input/handler,
    `src/main/startup/ipc/attachment.ts` 加 handler,`src/preload/attachment/invoke.ts` 加白名单

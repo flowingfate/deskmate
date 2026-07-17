@@ -5,7 +5,6 @@
  * 等 UI 偏好）。
  *
  * 订阅通道：
- *   - persist:profile:switched → 清空 + hydrate
  *   - persist:settings:updated → 整体替换
  *
  * 写操作走 `persistApi.updateConfirmationSettings(...)` 等 IPC（main 端最终调
@@ -14,6 +13,7 @@
 
 import { unit } from '@/atom/unit';
 import { persistEvents } from '@/ipc/persist';
+
 import { getInitialSnapshot } from '@/states/_snapshot';
 import type { SettingsFile, ConfirmationSettings, WebSearchSettings } from '@shared/persist/types';
 import { log } from '@/log';
@@ -41,10 +41,7 @@ async function hydrate(): Promise<void> {
   change({ settings: res.data.settings, hydrated: true });
 }
 
-persistEvents['profile:switched']((_e, _payload) => {
-  change({ settings: EMPTY, hydrated: false });
-  void hydrate();
-});
+
 
 persistEvents['settings:updated']((_e, payload) => {
   change({ settings: payload.settings, hydrated: true });

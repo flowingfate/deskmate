@@ -44,4 +44,5 @@ export {
 export { checkAndCompress } from './compression';
 
 export { Agent } from './agent';
+export { SubAgentManager } from './subagent/manager';
 export { RegularSession, JobRun, type PersistSessionLike } from './session';

@@ -112,6 +112,7 @@ export async function runInstall(argv: string[], ctx: AppCmdContext): Promise<vo
   };
 
   const result: InstallSkillResult = await installSkillInternal(internalArgs, {
+    store: ctx.profile.store,
     signal: ctx.signal,
   });
 

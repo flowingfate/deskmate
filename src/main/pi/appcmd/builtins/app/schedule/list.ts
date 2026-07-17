@@ -65,7 +65,10 @@ export async function runList(argv: string[], ctx: AppCmdContext): Promise<void>
 
   const agent = typeof parsed.flags.agent === 'string' ? parsed.flags.agent.trim() || undefined : undefined;
 
-  const result: ListJobsResult = await listJobsInternal({ agent_id: agent }, { signal: ctx.signal });
+  const result: ListJobsResult = await listJobsInternal(
+    { agent_id: agent },
+    { profile: ctx.profile, signal: ctx.signal },
+  );
 
   if (!result.success) {
     if (isJson(parsed.flags)) {

@@ -1,14 +1,12 @@
-import { app, ipcMain } from 'electron';
-import { registerSchedulerIPC, schedulerManager } from '../../lib/scheduler';
-import { log } from '@main/log';
-import { getAppDataPath } from "@main/persist/lib/path";
+import { ipcMain } from 'electron';
+import { registerSchedulerIPC } from '../../lib/scheduler';
 import { listenInMain as listenHumanLoop } from '@shared/ipc/human-loop';
 
 import type { Context } from './shared';
 
 import handleAppIPC from './app';
 import handlePiIPC from './pi';
-import { registerPersistIpc, Profiles } from '../../persist';
+import { registerPersistIpc } from '../../persist';
 import handleMcpIPC from './mcp';
 import handleSkillIPC from './skill';
 import handleAgentChatIPC from './agent-chat';
@@ -38,7 +36,6 @@ export function setUpIPC(ctx: Context) {
   registerLogIPC();
   registerLogViewerIPC();
 
-  app.on('before-quit', ctx.onBeforeQuit);
 
   handleAppIPC(ctx);
   listenHumanLoop(ipcMain);
@@ -66,21 +63,8 @@ export function setUpIPC(ctx: Context) {
   setUpToolsIPC(ctx);
   handleUpdateIPC(ctx);
 
-  // Scheduler IPC handlers are always registered. Profile bootstrap completes
-  // before the scheduler starts so cron and one-shot tasks work for every profile.
+  // Scheduler IPC handlers are always registered. ProfileRegistry.bootstrap()
+  // starts each Profile scheduler after the handler surface is available.
   registerSchedulerIPC();
 
-  // Scheduler startup is decoupled from sign-in: trigger after profile bootstrap;
-  // cron and one-shot tasks also run for guest profiles.
-  void (async () => {
-    try {
-      await Profiles.get().bootstrap();
-      const profile = await Profiles.get().active();
-      log.info({ msg: 'scheduler.lifecycle.startup.before-init', mod: 'ipc:setup', profileId: profile.id, schedulerState: schedulerManager.getRuntimeDiagnostics() });
-      await schedulerManager.initialize(profile);
-      log.info({ msg: 'scheduler.lifecycle.startup.after-init', mod: 'ipc:setup', profileId: profile.id, schedulerState: schedulerManager.getRuntimeDiagnostics() });
-    } catch (err) {
-      log.warn({ msg: '[Startup] SchedulerManager initialization failed', mod: 'ipc:setup', err });
-    }
-  })();
 }

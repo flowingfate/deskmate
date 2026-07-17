@@ -13,7 +13,6 @@
  * 支持一次卸载多个 skill:positional 全部视作 skill name。
  */
 
-import { Profiles } from '@main/persist';
 
 import {
   uninstallSkillInternal,
@@ -82,13 +81,7 @@ export async function runUninstall(argv: string[], ctx: AppCmdContext): Promise<
   const { names } = namesResult;
 
   // 提供 dry-run 友好的"哪些真的会被删"提示。
-  let installedSet = new Set<string>();
-  try {
-    const profile = Profiles.get().activeSync();
-    installedSet = new Set(profile.skills.items.map((s) => s.name));
-  } catch {
-    // profile 未就绪 —— 走到下面 dry-run / real-uninstall,各自再处理。
-  }
+  const installedSet = new Set(ctx.profile.store.skills.items.map((skill) => skill.name));
 
   if (isDryRun(parsed.flags)) {
     const wouldRemove = names.filter((n) => installedSet.has(n));
@@ -128,7 +121,7 @@ export async function runUninstall(argv: string[], ctx: AppCmdContext): Promise<
 
   const result: UninstallSkillResult = await uninstallSkillInternal(
     { skill_names: names },
-    { signal: ctx.signal },
+    { store: ctx.profile.store, signal: ctx.signal },
   );
 
   if (isJson(parsed.flags)) {

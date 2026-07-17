@@ -41,7 +41,6 @@ export type PersistResult<T = void> = PersistOkResult<T> | PersistErrResult;
 // ──────────────────────────────────────────────
 
 export interface PersistSnapshot {
-  profileId: string;
   settings: SettingsFile;
   agents: AgentRecord[];
   /** 当前 profile 的 primary agent id；缺席表示未设置。 */
@@ -111,9 +110,8 @@ export interface AgentStorageGroup {
   parts: AgentStoragePart[];
 }
 
-/** 当前 active profile 的本地存储全景（agent 分组 + profile 级共享）。 */
+/** owner window 所属 profile 的本地存储全景（agent 分组 + profile 级共享）。 */
 export interface StorageOverview {
-  profileId: string;
   profileName: string;
   profileKind: 'guest' | 'signed_in';
   /** 应用数据根目录（`~/.deskmate`）。 */
@@ -146,12 +144,11 @@ export interface StorageOverview {
 // ──────────────────────────────────────────────
 
 type RenderToMain = {
-  /** 拉取一次性快照：active profile + hot agent registry + settings + starred；不读 AGENT.md。 */
+  /** 拉取 owner window profile 的 hot 数据：agent registry + settings + starred；不读 AGENT.md。 */
   getSnapshot: {
     call: [];
     return: PersistResult<PersistSnapshot>;
   };
-  switchProfile: { call: [profileId: string]; return: PersistResult };
 
   /** 一次性拉某 agent 全部 regular session entries（按 updatedAt 倒序）。renderer sessionIndex atom 用。 */
   listAllSessions: { call: [agentId: string]; return: PersistResult<RegularSessionIndexEntry[]> };
@@ -200,7 +197,7 @@ type RenderToMain = {
   updateWebSearchSettings: { call: [settings: WebSearchSettings]; return: PersistResult };
 
   // ─────────── 本地数据透明（/settings/persist） ───────────
-  /** 汇总当前 active profile 的本地存储占用（递归统计各分类字节 + 条目计数）。 */
+  /** 汇总 owner window profile 的本地存储占用（递归统计各分类字节 + 条目计数）。 */
   getStorageOverview: { call: []; return: PersistResult<StorageOverview> };
   /** 在系统文件管理器中打开指定绝对路径（限当前 profile 目录树内）。 */
   revealStoragePath: { call: [absPath: string]; return: PersistResult };
@@ -211,13 +208,10 @@ type RenderToMain = {
 // ──────────────────────────────────────────────
 
 export type MainToRender = {
-  /** 切换 active profile。 */
-  'profile:switched':
-    { profileId: string; previous: string };
 
   /** 共享注册表（顶层 agent registry / skill / mcp）改动。kind='agents' 时附 primaryAgentId。 */
   'agent:registry:updated':
-    { profileId: string; kind: 'agents' | 'skills' | 'mcp'; items: unknown[]; primaryAgentId?: string };
+    { kind: 'agents' | 'skills' | 'mcp'; items: unknown[]; primaryAgentId?: string };
 
   /**
    * 某个 agent 的 AGENT.md 改动（front + body）。同时下发：
@@ -226,11 +220,11 @@ export type MainToRender = {
    * 编辑 agent 是 hot path，让已打开的 editor 立即看到更新，省一个 round-trip。
    */
   'agent:updated':
-    { profileId: string; agentId: string; record: AgentRecord; detail: AgentDetail };
+    { agentId: string; record: AgentRecord; detail: AgentDetail };
 
   /** 某个 agent 归档。 */
   'agent:removed':
-    { profileId: string; agentId: string };
+    { agentId: string };
 
   /**
    * 某 agent 的 regular session 索引发生单条变化。粒度从"整月 entries 数组"切到"单条 op"
@@ -239,16 +233,16 @@ export type MainToRender = {
    * - op='remove' → `id` 必填；renderer 按 id 剔除。
    */
   'session:index:updated':
-    | { profileId: string; agentId: string; op: 'upsert'; entry: RegularSessionIndexEntry }
-    | { profileId: string; agentId: string; op: 'remove'; id: string };
+    | { agentId: string; op: 'upsert'; entry: RegularSessionIndexEntry }
+    | { agentId: string; op: 'remove'; id: string };
 
   /** 某个 session 的 data.json 改动。 */
   'session:updated':
-    { profileId: string; agentId: string; sessionId: string; data: SessionDataFile };
+    { agentId: string; sessionId: string; data: SessionDataFile };
 
   /** 流式消息追加。 */
   'session:messages:appended':
-    { profileId: string; agentId: string; sessionId: string; items: unknown[] };
+    { agentId: string; sessionId: string; items: unknown[] };
 
   /**
    * messages.jsonl 被全量重写。`rewriteMessages` 在 edit user message / retry
@@ -256,31 +250,31 @@ export type MainToRender = {
    * 用 `items` 整体替换该 session 的消息缓存，而不是合并。
    */
   'session:messages:rewritten':
-    { profileId: string; agentId: string; sessionId: string; items: unknown[] };
+    { agentId: string; sessionId: string; items: unknown[] };
 
   /** Schedule job 配置变化。 */
   'schedule:updated':
-    { profileId: string; agentId: string; jobId: string; job: ScheduleJobFile; entry: ScheduleJobIndexEntry };
+    { agentId: string; jobId: string; job: ScheduleJobFile; entry: ScheduleJobIndexEntry };
 
   /** Schedule job 被删除。 */
   'schedule:removed':
-    { profileId: string; agentId: string; jobId: string };
+    { agentId: string; jobId: string };
 
   /** 单次 schedule run 状态变化。 */
   'schedule:run:updated':
-    { profileId: string; agentId: string; jobId: string; sessionId: string; status: 'running' | 'completed' | 'failed' };
+    { agentId: string; jobId: string; sessionId: string; status: 'running' | 'completed' | 'failed' };
 
   /** 单条 schedule run 被删除。 */
   'schedule:run:removed':
-    { profileId: string; agentId: string; jobId: string; sessionId: string };
+    { agentId: string; jobId: string; sessionId: string };
 
   /** profile 偏好变化。 */
   'settings:updated':
-    { profileId: string; settings: SettingsFile };
+    { settings: SettingsFile };
 
   /** starred 列表变化。 */
   'starred:updated':
-    { profileId: string; items: StarredSessionEntry[] };
+    { items: StarredSessionEntry[] };
 };
 
 // ──────────────────────────────────────────────

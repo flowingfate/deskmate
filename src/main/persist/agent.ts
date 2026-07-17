@@ -39,8 +39,8 @@ import { emit } from './lib/emit';
 import { getAppRoot } from './lib/root';
 import { PersistBase } from './lib/persistBase';
 import { readTextOrNull, removeDirIfExists, writeText } from './lib/atomic';
-// `import type` 仅类型擦除，运行时不引入 ./profile，避免与 profile.ts 的 value-level `import { Agent }` 形成循环。
-import type { AgentRegistry } from './profile';
+// `import type` 仅类型擦除，运行时不引入 ./profileStore，避免与 profileStore.ts 的 value-level `import { Agent }` 形成循环。
+import type { AgentRegistry } from './profileStore';
 
 /** AGENT.md front-matter 的可变状态承载。 */
 class AgentConfig {
@@ -250,8 +250,7 @@ export class Agent extends PersistBase {
     // emit 时 record 可能因 createdAt/updatedAt 尚未填充而抛 —— 仅当已初始化时发，
     // 避免早期注入路径意外炸。
     if (this.createdAt !== '' && this.updatedAt !== '') {
-      emit('agent:updated', {
-        profileId: this.profileId,
+      emit(this.profileId, 'agent:updated', {
         agentId: this.id,
         record: this.toRecord(),
         detail: this.toDetail(),
@@ -495,8 +494,7 @@ export class Agent extends PersistBase {
       await this.loadScheduleRegistry();
       const entry = job.toIndexEntry();
       await this.scheduleRegistry.upsert(entry);
-      emit('schedule:updated', {
-        profileId: this.profileId,
+      emit(this.profileId, 'schedule:updated', {
         agentId: this.id,
         jobId: job.id,
         job: job.toFile(),
@@ -569,8 +567,7 @@ export class Agent extends PersistBase {
     this.jobRunIdx.removeByJob(id);
     await job.deleteFromDisk();
     this.jobs.delete(id);
-    emit('schedule:removed', {
-      profileId: this.profileId,
+    emit(this.profileId, 'schedule:removed', {
       agentId: this.id,
       jobId: id,
     });

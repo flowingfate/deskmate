@@ -21,9 +21,9 @@ import { log } from '@main/log';
 import { Tracer } from '@shared/log/trace';
 import type { ToolResultImage } from '@shared/persist/types'
 import { isDelegatedExecution } from '@main/lib/delegateExecutionScope';
+import type { Profile } from '@main/profile';
 
 import type { AgentConfig } from './utils/config';
-import { executeMcpToolOnServer, listAllMcpTools } from './mcp';
 import { ask } from './tools/ask';
 import { tools as localTools, ensureToolsRegistered, executeLocalTool } from './tools/registry';
 import type { LocalTool, ToolContext } from './tools/types';
@@ -116,7 +116,10 @@ export class ToolCatalog {
  * 本地工具列表里如果引用了未注册的名字(uninstall 后残留 / typo),保留为
  * "unavailable selection" —— 这里直接跳过,UI 侧负责显示警示。
  */
-export async function buildToolCatalogForAgent(agentCfg: AgentConfig): Promise<ToolCatalog> {
+export async function buildToolCatalogForAgent(
+  agentCfg: AgentConfig,
+  profile: Profile,
+): Promise<ToolCatalog> {
   await ensureToolsRegistered();
   const routes = new Map<string, ToolRoute>();
   const specs: PiTool[] = [];
@@ -133,7 +136,7 @@ export async function buildToolCatalogForAgent(agentCfg: AgentConfig): Promise<T
     specs.push(tool.spec);
   }
 
-  await appendMcpTools(routes, specs, agentCfg.mcpServers ?? []);
+  await appendMcpTools(routes, specs, profile, agentCfg.mcpServers ?? []);
   return new ToolCatalog(specs, routes);
 }
 
@@ -156,11 +159,12 @@ function pickLocalSubset(selection: string[] | undefined): LocalTool[] {
 async function appendMcpTools(
   routes: Map<string, ToolRoute>,
   specs: PiTool[],
+  profile: Profile,
   mcpSelections: AgentConfig['mcpServers'],
 ): Promise<void> {
   if (mcpSelections.length === 0) return;
 
-  const allMcpTools = await listAllMcpTools();
+  const allMcpTools = await profile.mcpManager.getAllTools();
   const wantedByServer = new Map<string, Set<string> | null>();
   for (const sel of mcpSelections) {
     // 空 tools 列表 = 该 server 全部工具
@@ -243,12 +247,12 @@ export async function executeToolCall(
       images = result.images;
       deliverables = result.deliverables;
     } else {
-      rawContent = await executeMcpToolOnServer(
-        route.serverName,
-        route.toolName,
-        args,
-        ctx.signal,
-      );
+      rawContent = await ctx.profile.mcpManager.executeToolOnServer({
+        serverName: route.serverName,
+        toolName: route.toolName,
+        toolArgs: args,
+        signal: ctx.signal,
+      });
     }
 
     log.info(ctx.tracer.fields({

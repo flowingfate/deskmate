@@ -1,8 +1,7 @@
-import { Profiles, type Profile } from '@main/persist';
+import type { Profile } from '@main/profile';
 
 import { executeCommandFacade } from '../appcmd/executeCommandFacade';
 import { createSubAgentCommand } from '../subagent/commands';
-import { SubAgentManager } from '../subagent/manager';
 import { jsonSchema } from './schema';
 import type { LocalTool } from './types';
 
@@ -29,7 +28,7 @@ function getSubAgentCommand(profile: Profile): ReturnType<typeof createSubAgentC
   const existing = commandsByProfile.get(profile);
   if (existing) return existing;
 
-  const command = createSubAgentCommand(SubAgentManager.forProfile(profile));
+  const command = createSubAgentCommand(profile.getSubAgentManager());
   commandsByProfile.set(profile, command);
   return command;
 }
@@ -43,11 +42,7 @@ export const subagent: LocalTool<typeof SubagentParams> = {
     parameters: SubagentParams,
   },
   async handler(args, ctx) {
-    const profile = await Profiles.get().active();
-    if (profile.id !== ctx.profileId) {
-      return { ok: false, error: 'Subagent command profile is unavailable.' };
-    }
-    const command = getSubAgentCommand(profile);
+    const command = getSubAgentCommand(ctx.profile);
     return executeCommandFacade(command, (args as SubagentArgs).cmd, ctx);
   },
 };

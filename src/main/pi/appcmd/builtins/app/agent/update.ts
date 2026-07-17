@@ -7,7 +7,6 @@
  *   - mcp_servers / skills 整体替换
  */
 
-import { Profiles } from '@main/persist';
 
 import {
   updateAgentInternal,
@@ -96,21 +95,12 @@ export async function runUpdate(argv: string[], ctx: AppCmdContext): Promise<voi
   }
   const skills = parseSkillFlag(parsed.flags.skill);
 
-  try {
-    const profile = await Profiles.get().active();
-    const records = profile.listAgents();
-    const rec = records.find((r) => r.name === name);
-    if (!rec) {
-      ctx.printErr(
-        `agent update: agent "${name}" is not installed. ` +
-          'Hint: use "app agent add" first.\n',
-      );
-      ctx.setExitCode(1);
-      return;
-    }
-  } catch (err) {
+  const records = ctx.profile.store.listAgents();
+  const rec = records.find((record) => record.name === name);
+  if (!rec) {
     ctx.printErr(
-      `agent update: failed to load profile: ${err instanceof Error ? err.message : String(err)}\n`,
+      `agent update: agent "${name}" is not installed. ` +
+        'Hint: use "app agent add" first.\n',
     );
     ctx.setExitCode(1);
     return;
@@ -133,6 +123,7 @@ export async function runUpdate(argv: string[], ctx: AppCmdContext): Promise<voi
   }
 
   const result: UpdateAgentResult = await updateAgentInternal(
+    ctx.profile.store,
     { agent_config: agentConfig },
     { signal: ctx.signal },
   );

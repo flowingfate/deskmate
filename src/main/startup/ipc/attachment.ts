@@ -1,7 +1,7 @@
 /**
  * Attachment IPC —— 用户附件落 session sandbox。
  *
- * 不暴露 profile id;handler 内部走 `Profiles.get().active()`。
+ * profile 从 IPC sender 所属 BrowserWindow 解析；renderer 不传或伪造 profileId。
  * agent / session 任一缺失或抓不到属于 client-side bug —— 返回结构化 error,
  * 不抛(渲染层 alert 即可)。
  */
@@ -10,9 +10,11 @@ import sharp from 'sharp';
 
 import { renderToMain, type ProcessImageOutcome } from '@shared/ipc/attachment';
 import { FILE_ATTACHMENT_LIMITS } from '@shared/types/chatTypes';
-import { Profiles, Profile } from '@main/persist';
+import { ProfileStore } from '@main/persist';
+import type { Profile } from '@main/profile';
 import { attachFromPath, attachFromBytes } from '@main/lib/attachment';
 import { log } from '@main/log';
+import { requireProfileForSender } from './profileContext';
 
 const logger = log.child({ mod: 'AttachmentIpc' });
 
@@ -31,11 +33,11 @@ const logger = log.child({ mod: 'AttachmentIpc' });
  * "Agent not found",保持单一错误出口。
  */
 export async function ensureSandboxSession(
-  profile: Profile,
+  store: ProfileStore,
   agentId: string,
   sessionId: string,
 ): Promise<void> {
-  const agent = await profile.getAgent(agentId);
+  const agent = await store.getAgent(agentId);
   if (!agent) return;
   if (await agent.findSessionAcrossKinds(sessionId)) return;
   await agent.createSession({ id: sessionId });
@@ -108,8 +110,8 @@ export async function processImageAttachment(
     };
   }
 
-  await ensureSandboxSession(profile, agentId, sessionId);
-  const outcome = await attachFromBytes(buf, originalName, { agentId, sessionId }, profile.id);
+  await ensureSandboxSession(profile.store, agentId, sessionId);
+  const outcome = await attachFromBytes(buf, originalName, { agentId, sessionId }, profile);
   return {
     kind: 'sandbox',
     uri: outcome.uri,
@@ -124,15 +126,15 @@ export async function processImageAttachment(
 export default function handleAttachmentIPC(): void {
   const handle = renderToMain.bindMain(ipcMain);
 
-  handle.attachFromPath(async (_e, input) => {
+  handle.attachFromPath(async (event, input) => {
     try {
-      const profile = await Profiles.get().active();
-      await ensureSandboxSession(profile, input.agentId, input.sessionId);
+      const profile = requireProfileForSender(event);
+      await ensureSandboxSession(profile.store, input.agentId, input.sessionId);
       const outcome = await attachFromPath(
         input.srcPath,
         input.originalName,
         { agentId: input.agentId, sessionId: input.sessionId },
-        profile.id,
+        profile,
       );
       return {
         success: true,
@@ -145,17 +147,17 @@ export default function handleAttachmentIPC(): void {
     }
   });
 
-  handle.attachFromBytes(async (_e, input) => {
+  handle.attachFromBytes(async (event, input) => {
     try {
-      const profile = await Profiles.get().active();
-      await ensureSandboxSession(profile, input.agentId, input.sessionId);
+      const profile = requireProfileForSender(event);
+      await ensureSandboxSession(profile.store, input.agentId, input.sessionId);
       // structured-clone 把 Uint8Array 原样过来,Buffer.from 共享底层 ArrayBuffer 避免拷贝。
       const buf = Buffer.from(input.bytes.buffer, input.bytes.byteOffset, input.bytes.byteLength);
       const outcome = await attachFromBytes(
         buf,
         input.originalName,
         { agentId: input.agentId, sessionId: input.sessionId },
-        profile.id,
+        profile,
       );
       return {
         success: true,
@@ -168,9 +170,9 @@ export default function handleAttachmentIPC(): void {
     }
   });
 
-  handle.processImage(async (_e, input) => {
+  handle.processImage(async (event, input) => {
     try {
-      const profile = await Profiles.get().active();
+      const profile = requireProfileForSender(event);
       const data = await processImageAttachment(
         profile,
         input.agentId,

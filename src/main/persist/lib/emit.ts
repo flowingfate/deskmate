@@ -1,4 +1,4 @@
-import { mainWindow } from '@main/startup/wins';
+import { mainWindowForProfile } from '@main/startup/wins';
 import { mainToRender, type MainToRender } from '@shared/ipc/persist';
 
 /**
@@ -7,8 +7,12 @@ import { mainToRender, type MainToRender } from '@shared/ipc/persist';
  * 没 main window（启动早期 / window 已关 / 测试 / CLI demo）→ silent no-op，
  * 不让 emit 失败阻塞写盘。
  */
-export function emit<K extends keyof MainToRender>(channel: K, payload: MainToRender[K]): void {
-  const wc = mainWindow()?.webContents;
-  if (!wc) return;
-  mainToRender.bindWebContents(wc)[channel](payload);
+export function emit<K extends keyof MainToRender>(
+  profileId: string,
+  channel: K,
+  payload: MainToRender[K],
+): void {
+  mainWindowForProfile(profileId, (win) => {
+    mainToRender.bindWebContents(win.webContents)[channel](payload);
+  });
 }

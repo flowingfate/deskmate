@@ -19,6 +19,7 @@ import type { Static, Tool as PiTool, TSchema } from '@earendil-works/pi-ai';
 import type { ToolResultImage } from '@shared/persist/types'
 import type { Tracer } from '@shared/log/trace';
 import type { WebContents } from 'electron';
+import type { Profile } from '@main/profile';
 
 import type { ToolCatalog } from '../tool';
 
@@ -62,6 +63,8 @@ export function executorId(identity: ExecutionIdentity): string {
 
 /** 单次工具执行的公共上下文。所有依赖均由 caller 显式注入。 */
 interface ToolContextBase {
+  /** 当前工具调用绑定的运行时 Profile。 */
+  profile: Profile;
   profileId: string;
   sessionId: string;
   signal: AbortSignal;

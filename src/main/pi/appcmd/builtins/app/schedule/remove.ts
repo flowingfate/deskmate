@@ -72,7 +72,7 @@ export async function runRemove(argv: string[], ctx: AppCmdContext): Promise<voi
   // 反查存在性(给温和提示;dry-run 也用得到)
   let exists = false;
   try {
-    const list = await listJobsInternal({}, { signal: ctx.signal });
+    const list = await listJobsInternal({}, { profile: ctx.profile, signal: ctx.signal });
     if (list.success) {
       exists = list.schedules.some((s) => s.job_id === jobId);
     }
@@ -124,7 +124,10 @@ export async function runRemove(argv: string[], ctx: AppCmdContext): Promise<voi
     return;
   }
 
-  const result: DeleteJobResult = await deleteJobInternal({ job_id: jobId }, { signal: ctx.signal });
+  const result: DeleteJobResult = await deleteJobInternal(
+    { job_id: jobId },
+    { profile: ctx.profile, signal: ctx.signal },
+  );
 
   if (!result.success) {
     if (isJson(parsed.flags)) {

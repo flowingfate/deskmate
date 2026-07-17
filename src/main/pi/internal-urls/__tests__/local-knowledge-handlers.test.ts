@@ -27,8 +27,8 @@ import { SkillProtocolHandler } from '../handlers/skill-protocol';
 import { ResourceNotFoundError } from '../types';
 import type { ResolveContext, WriteContext } from '../types';
 
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import { ProfileStore } from '@main/persist/profileStore'
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting } from '@main/persist/lib/root';
 import { ProfileDb } from '@main/persist/lib/db/db';
 import { PERSIST_PATH } from '@shared/persist/path';
@@ -41,8 +41,8 @@ let sessionId = '';
 async function seedProfileAgentSession(): Promise<void> {
   // 真盘 + 真 SQLite。Profile.getOrLoad 会创建 ProfileDb(better-sqlite3),
   // 测试环境下走 ELECTRON_RUN_AS_NODE=1 跑 vitest(见 CLAUDE.md)。
-  const profile = await Profile.getOrLoad(profileId);
-  const agent = await profile.createAgent({
+  const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+  const agent = await store.createAgent({
     name: 'TestAgent',
     version: '1.0.0',
   });
@@ -58,7 +58,7 @@ beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'local-knowledge-it-'));
   setRootForTesting(tmpRoot);
   // 跨用例污染清理 —— Profile / Profiles / DB / router 各自单例。
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   InternalUrlRouter.resetForTesting();
@@ -68,8 +68,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  Profile.evict(profileId);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   setRootForTesting(null);
@@ -83,6 +83,7 @@ afterEach(() => {
 
 function makeCtx(): ResolveContext & WriteContext {
   return {
+    profile: ProfileRegistry.require(profileId),
     mode: 'agent',
     profileId,
     agentId,
@@ -161,8 +162,8 @@ describe('LocalProtocolHandler', () => {
     router.register(new LocalProtocolHandler());
 
     // 直接写一个含 NUL 的二进制文件到 session sandbox(绕开 handler.write 走真 fs)
-    const profile = await Profile.getOrLoad(profileId);
-    const agent = await profile.getAgent(agentId);
+    const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+    const agent = await store.getAgent(agentId);
     const session = await agent!.getSession(sessionId);
     const filesDir = session!.filesDir();
     await fsp.mkdir(filesDir, { recursive: true });
@@ -180,8 +181,8 @@ describe('LocalProtocolHandler', () => {
 
     // 写 1MB + 1 byte 文件,绕 handler 直写盘以快速触发 size 守卫(handler.write
     // 自身没装 size cap;cap 是 read 路径的;这里只测 read 路径)。
-    const profile = await Profile.getOrLoad(profileId);
-    const agent = await profile.getAgent(agentId);
+    const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+    const agent = await store.getAgent(agentId);
     const session = await agent!.getSession(sessionId);
     const filesDir = session!.filesDir();
     await fsp.mkdir(filesDir, { recursive: true });
@@ -197,8 +198,8 @@ describe('LocalProtocolHandler', () => {
     const router = InternalUrlRouter.get();
     router.register(new LocalProtocolHandler());
 
-    const profile = await Profile.getOrLoad(profileId);
-    const agent = await profile.getAgent(agentId);
+    const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+    const agent = await store.getAgent(agentId);
     const session = await agent!.getSession(sessionId);
     await fsp.mkdir(path.join(session!.filesDir(), 'sub'), { recursive: true });
 
@@ -224,10 +225,11 @@ describe('LocalProtocolHandler', () => {
     await router.write('local://shared.md', 'A wrote this', makeCtx());
 
     // 切到第二个 session
-    const profile = await Profile.getOrLoad(profileId);
-    const agent = await profile.getAgent(agentId);
+    const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+    const agent = await store.getAgent(agentId);
     const sessionB = await agent!.createSession({ title: 'B' });
     const ctxB: ResolveContext = {
+      profile: ProfileRegistry.require(profileId),
       mode: 'agent',
       profileId,
       agentId,
@@ -347,8 +349,8 @@ describe('InternalUrlRouter.write', () => {
 
 describe('LocalProtocolHandler × JobRun', () => {
   async function seedJobRun(): Promise<{ jobId: string; runId: string; runFilesDir: string }> {
-    const profile = await Profile.getOrLoad(profileId);
-    const agent = await profile.getAgent(agentId);
+    const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+    const agent = await store.getAgent(agentId);
     if (!agent) throw new Error('seed: agent missing');
     const job = await agent.createJob({
       scheduleType: 'cron',
@@ -366,6 +368,7 @@ describe('LocalProtocolHandler × JobRun', () => {
 
   function ctxFor(runId: string): ResolveContext & WriteContext {
     return {
+      profile: ProfileRegistry.require(profileId),
       mode: 'agent',
       profileId,
       agentId,
@@ -443,6 +446,7 @@ describe('LocalProtocolHandler × JobRun', () => {
 
     await expect(
       router.resolve('local://x.md', {
+        profile: ProfileRegistry.require(profileId),
         mode: 'agent',
         profileId,
         agentId,

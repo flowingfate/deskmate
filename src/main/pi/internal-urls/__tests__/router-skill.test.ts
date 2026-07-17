@@ -21,28 +21,28 @@ import { InternalUrlRouter } from '../router';
 import { SkillProtocolHandler } from '../handlers/skill-protocol';
 import type { ResolveContext } from '../types';
 import { Skills } from '@main/persist/skills';
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import { ProfileStore } from '@main/persist/profileStore'
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting } from '@main/persist/lib/root';
 
 let tmpRoot = '';
 let agentId = '';
 const PROFILE_ID = 'p_TEST';
 
-beforeEach(() => {
+beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'read-router-it-'));
   agentId = '';
   setRootForTesting(tmpRoot);
   // 单例需要清掉 —— 上一个 test 的 Profile cache / Profiles instance 会拖进来。
-  Profile.evict(PROFILE_ID);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   // router 单例同样要清:tools/index.ts 启动链路把 SkillProtocolHandler 注册
   // 进了全局 router;手动 reset 后由用例自己掌控注册,避免重名 throw。
   InternalUrlRouter.resetForTesting();
+  await ProfileRegistry.getOrLoad(PROFILE_ID);
 });
 
 afterEach(() => {
-  Profile.evict(PROFILE_ID);
+  ProfileRegistry.resetForTesting();
   setRootForTesting(null);
   try {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
@@ -54,6 +54,7 @@ afterEach(() => {
 
 function makeCtx(): ResolveContext {
   return {
+    profile: ProfileRegistry.require(PROFILE_ID),
     mode: 'agent',
     profileId: PROFILE_ID,
     agentId,
@@ -63,10 +64,10 @@ function makeCtx(): ResolveContext {
 }
 
 async function bindSkill(name: string): Promise<void> {
-  const profile = await Profile.getOrLoad(PROFILE_ID);
-  let agent = agentId ? await profile.getAgent(agentId) : undefined;
+  const store = await (await ProfileRegistry.getOrLoad(PROFILE_ID)).store
+  let agent = agentId ? await store.getAgent(agentId) : undefined;
   if (!agent) {
-    agent = await profile.createAgent({ name: 'Router Test Agent', version: '1.0.0' });
+    agent = await store.createAgent({ name: 'Router Test Agent', version: '1.0.0' });
     agentId = agent.id;
   }
   await agent.patchFront({

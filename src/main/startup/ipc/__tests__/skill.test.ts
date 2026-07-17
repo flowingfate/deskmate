@@ -6,10 +6,17 @@ const mockShowOpenDialog = vi.fn();
 
 const mockInstallAndActivateSkill = vi.fn();
 const mockUpdateSkillFromDevice = vi.fn();
+const mockWindow = vi.hoisted(() => ({ isDestroyed: () => false }));
+const mockStore = vi.hoisted(() => ({ id: 'p_test' }));
 
 vi.mock('electron', async () => ({
   app: {
     getPath: vi.fn(() => '/tmp')
+  },
+  BrowserWindow: class {
+    static fromWebContents() {
+      return mockWindow;
+    }
   },
   ipcMain: {
     handle: (...args: any[]) => mockHandle(...args),
@@ -41,14 +48,15 @@ vi.mock('../../../lib/skill/applySkillToAgents', async () => ({
   applySkillToAgents: vi.fn().mockResolvedValue({ applied: [] }),
 }));
 
-vi.mock('@main/persist', async () => ({
-  Profiles: {
-    get: () => ({ activeProfileId: 'tester' }),
+
+vi.mock('@main/profileRegistry', async () => ({
+  ProfileRegistry: {
+    require: () => ({ store: mockStore }),
   },
 }));
 
 vi.mock('@main/startup/wins', async () => ({
-  mainWindow: () => ({} as any),
+  getWindowMeta: () => ({ role: 'main', profileId: 'p_test' }),
 }));
 
 function getHandler(channel: string): Function {
@@ -132,6 +140,7 @@ describe('startup/ipc/skill Windows selection flow', () => {
       }),
     );
     expect(mockInstallAndActivateSkill).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p_test' }),
       expect.objectContaining({
         source: { type: 'device-path', value: 'C:/tmp/demo.skill' },
       }),
@@ -178,6 +187,7 @@ describe('startup/ipc/skill Windows selection flow', () => {
     );
     expect(mockShowOpenDialog.mock.calls[0][1].filters).toBeUndefined();
     expect(mockInstallAndActivateSkill).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p_test' }),
       expect.objectContaining({
         source: { type: 'device-path', value: 'C:/tmp/skill-folder' },
       }),
@@ -206,6 +216,7 @@ describe('startup/ipc/skill Windows selection flow', () => {
       }),
     );
     expect(mockInstallAndActivateSkill).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p_test' }),
       expect.objectContaining({
         source: { type: 'device-path', value: '/tmp/demo.skill' },
       }),
@@ -239,6 +250,9 @@ describe('startup/ipc/skill Windows selection flow', () => {
         properties: ['openDirectory'],
       }),
     );
-    expect(mockUpdateSkillFromDevice).toHaveBeenCalledWith('C:/tmp/skill-folder');
+    expect(mockUpdateSkillFromDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p_test' }),
+      'C:/tmp/skill-folder',
+    );
   });
 });

@@ -17,6 +17,9 @@ import {
 import { Subrun, type SubrunParent } from '../../../persist/subrun';
 import type { StreamOneRoundArgs } from '../../session/base';
 
+vi.mock('../../../profileRegistry', () => ({
+  ProfileRegistry: { require: () => ({}) },
+}));
 vi.mock('../../utils/config', () => ({
   readAgentRuntimeConfig: async () => ({
     ok: true,

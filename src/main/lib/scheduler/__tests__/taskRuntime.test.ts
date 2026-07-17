@@ -1,3 +1,4 @@
+import type { ProfileStore } from '@main/persist';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runCronWatchdog } from '../cronWatchdog';
 import { SchedulerContext } from '../context';
@@ -33,7 +34,11 @@ describe('SchedulerTaskRuntime', () => {
 
   it('restarts the watchdog after re-registering the only cron task', async () => {
     vi.useFakeTimers();
-    const runtime = new SchedulerTaskRuntime(new SchedulerContext());
+    const store: ProfileStore = Object.assign(Object.create(null), { id: 'p_test' });
+    const context = new SchedulerContext(store);
+    context.activate();
+    const executeJob = vi.fn(async () => ({ success: true }));
+    const runtime = new SchedulerTaskRuntime(context, executeJob);
 
     await runtime.registerJob(cronJob);
     runtime.startHeartbeat();

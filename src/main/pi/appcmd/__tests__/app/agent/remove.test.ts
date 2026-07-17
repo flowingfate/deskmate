@@ -48,6 +48,7 @@ describe('agent remove', () => {
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain('Removed agent "bot"');
     expect(agentMocks.removeAgentInternal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.any(String) }),
       { agent_name: 'bot' },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );

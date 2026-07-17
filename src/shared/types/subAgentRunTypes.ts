@@ -49,7 +49,6 @@ export type SubAgentRunStep =
   | SubAgentToolFailedStep;
 
 interface SubAgentRuntimeStateBase {
-  profileId: string;
   parentAgentId: string;
   parentSessionId: string;
   subrunId: SubrunId;

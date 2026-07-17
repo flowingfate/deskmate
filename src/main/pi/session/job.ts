@@ -18,6 +18,7 @@ import type { UserMessage } from '@shared/persist/types'
 
 import { CancellationError } from '@main/lib/utilities/errors';
 import { log } from '@main/log';
+import { ProfileRegistry } from '@main/profileRegistry';
 import { Tracer } from '@shared/log/trace';
 
 import { deriveToolTracer, executeToolCall, ToolCatalog } from '../tool';
@@ -34,7 +35,10 @@ import {
 export class JobRun extends BaseSession {
   private running = false;
 
-  async run(userMessage: UserMessage, parentTracer?: Tracer): Promise<{ messageCount: number }> {
+  async run(
+    userMessage: UserMessage,
+    parentTracer?: Tracer,
+  ): Promise<{ messageCount: number }> {
     await this.restoreTask;
     if (this.running) throw new Error('JobRun already running');
     // JobRun 一次性:scheduler 每次 run 创建新 session,这条入口在每个 session
@@ -143,11 +147,13 @@ export class JobRun extends BaseSession {
     parent: Tracer,
     catalog: ToolCatalog,
   ): Promise<void> {
+    const profile = ProfileRegistry.require(this.profileId);
     const settled = await Promise.all(
       toolCalls.map((tc) => {
         const call = { id: tc.id, name: tc.name, arguments: tc.arguments ?? {} };
         const ctx: ToolContext = {
           mode: 'agent',
+          profile,
           profileId: this.profileId,
           agentId: this.agentId,
           sessionId: this.id,

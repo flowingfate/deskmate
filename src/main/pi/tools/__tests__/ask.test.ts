@@ -14,9 +14,11 @@ import { describe, it, expect } from 'vitest';
 import { ask } from '../ask';
 import type { AgentToolContext } from '../types';
 import { Tracer } from '@shared/log/trace';
+import { testProfile } from './profileFixture';
 
 function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
+    profile: testProfile,
     profileId: 'p',
     agentId: 'a',
     sessionId: 's',

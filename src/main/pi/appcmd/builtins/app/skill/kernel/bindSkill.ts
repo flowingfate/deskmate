@@ -17,7 +17,7 @@ import {
   type ApplySkillToAgentsResult,
   type SkillAgentTarget,
 } from '@main/lib/skill';
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 
 export interface BindSkillArgs {
   skill_name: string;
@@ -44,7 +44,7 @@ export interface BindSkillResult {
 
 export async function bindSkillInternal(
   args: BindSkillArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { store: ProfileStore; signal?: AbortSignal },
 ): Promise<BindSkillResult> {
   const skillName = args.skill_name?.trim();
   if (!skillName) {
@@ -61,24 +61,7 @@ export async function bindSkillInternal(
     };
   }
 
-  let profile;
-  try {
-    profile = Profiles.get().activeSync();
-  } catch {
-    return {
-      success: false,
-      message: 'No current user session found. Please ensure you are logged in.',
-      skill_name: skillName,
-      applied_count: 0,
-      already_applied_count: 0,
-      failed_count: 0,
-      applied_targets: [],
-      skipped_targets: [],
-      error: 'NO_USER_SESSION',
-    };
-  }
-
-  const isInstalled = !!profile.skills.get(skillName);
+  const isInstalled = !!opts.store.skills.get(skillName);
   if (!isInstalled) {
     return {
       success: false,
@@ -93,12 +76,12 @@ export async function bindSkillInternal(
     };
   }
 
-  const result: ApplySkillToAgentsResult = await applySkillToAgents({
+  const result: ApplySkillToAgentsResult = await applySkillToAgents(opts.store, {
     skillName,
     targets: args.targets,
     agentNames: args.agent_names,
     applyToAll: args.apply_to_all,
-    requestSource: args.request_source ?? 'chat-tool',
+    requestSource: args.request_source,
   });
 
   return {

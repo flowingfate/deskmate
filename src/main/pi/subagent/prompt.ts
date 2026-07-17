@@ -1,5 +1,5 @@
 import type { AgentRecord, SubAgentRunRequest, SubrunExecution } from '@shared/persist/types';
-import { Profiles } from '@main/persist';
+import { ProfileRegistry } from '@main/profileRegistry'
 
 import type { AgentConfig } from '../utils/config';
 import { buildSystemPrompt } from '../prompt';
@@ -32,12 +32,9 @@ export async function buildDelegationPrompt(input: {
   profileId: string;
   parentAgentId: string;
 }): Promise<string> {
-  const profile = await Profiles.get().active();
-  if (profile.id !== input.profileId) {
-    throw new Error(`[pi/subagent] profileId mismatch: requested "${input.profileId}" but active is "${profile.id}"`);
-  }
+  const store = ProfileRegistry.require(input.profileId).store
 
-  const delegates = await profile.resolveDelegates(input.parentAgentId);
+  const delegates = await store.resolveDelegates(input.parentAgentId);
   if (!delegates || (delegates.available.length === 0 && delegates.unavailableIds.length === 0)) return '';
 
   const sections = [

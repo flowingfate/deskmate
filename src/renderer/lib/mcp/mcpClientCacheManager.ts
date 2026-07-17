@@ -174,21 +174,21 @@ export class MCPClientCacheManager {
    * Fetch initial state from the backend
    */
   async initialize(): Promise<void> {
-    logger.debug({ msg: "Initializing..." })
+    const profileId = window.electronAPI.profile.id
+    logger.debug({ msg: "Initializing...", profileId })
 
     try {
-      // Fetch current MCP server status from the backend
       const result = await mcpApi.getServerStatus()
       if (result.success && result.data) {
         this.handleServerStatesUpdate(result.data)
       }
-
       this.cache.isInitialized = true
-      logger.debug({ msg: "Initialized successfully" })
+      logger.debug({ msg: "Initialized successfully", profileId })
     } catch (error) {
-      logger.error({ msg: "Initialization failed:", err: error })
+      logger.error({ msg: "Initialization failed:", profileId, err: error })
     }
   }
+
 
   /**
    * Set up IPC listeners
@@ -197,9 +197,9 @@ export class MCPClientCacheManager {
   private setupIPCListeners(): void {
     logger.debug({ msg: "Setting up IPC listeners..." })
 
-    const cleanup = mcpEvents.serverStatesUpdated((_event, serverStates: any[]) => {
-      logger.debug({ msg: "Received server states update", serverCount: serverStates?.length || 0 })
-      this.handleServerStatesUpdate(serverStates)
+    const cleanup = mcpEvents.serverStatesUpdated((_event, states) => {
+      logger.debug({ msg: "Received server states update", profileId: window.electronAPI.profile.id, serverCount: states.length })
+      this.handleServerStatesUpdate(states)
     })
     this.cleanupFunctions.push(cleanup)
     logger.debug({ msg: "IPC listener registered" })
@@ -332,9 +332,8 @@ export class MCPClientCacheManager {
    * This method syncs configuration info; runtime status is updated via IPC events
    */
   updateServerConfigs(configs: McpServerConfig[]): void {
-    if (!configs || !Array.isArray(configs)) {
-      return
-    }
+    if (!Array.isArray(configs)) return
+
 
     let hasChanges = false
     const newServers: MCPServerExtended[] = []
@@ -362,20 +361,16 @@ export class MCPClientCacheManager {
         error: runtimeState?.lastError ? String(runtimeState.lastError) : existingServer?.error,
         lastUpdated: existingServer?.lastUpdated || Date.now()
       }
-
       newServers.push(server)
     })
 
-    // Check if there are any changes
     if (JSON.stringify(this.cache.servers) !== JSON.stringify(newServers)) {
       hasChanges = true
       this.cache.servers = newServers
       this.cache.lastUpdated = Date.now()
     }
 
-    if (hasChanges) {
-      this.notifyListeners()
-    }
+    if (hasChanges) this.notifyListeners()
   }
 
   /**
@@ -558,7 +553,8 @@ export class MCPClientCacheManager {
    * Refresh data
    */
   async refresh(): Promise<void> {
-    logger.debug({ msg: "Refreshing data..." })
+    const profileId = window.electronAPI.profile.id
+    logger.debug({ msg: "Refreshing data...", profileId })
 
     try {
       const result = await mcpApi.getServerStatus()
@@ -566,7 +562,7 @@ export class MCPClientCacheManager {
         this.handleServerStatesUpdate(result.data)
       }
     } catch (error) {
-      logger.error({ msg: "Refresh failed:", err: error })
+      logger.error({ msg: "Refresh failed:", profileId, err: error })
     }
   }
 

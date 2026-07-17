@@ -6,7 +6,7 @@
 import type { Tool } from '@earendil-works/pi-ai';
 import { jsonSchema } from '@main/pi';
 import type { AgentQuestion, QuestionInputType } from '@shared/ipc/doctor';
-import { doctorManager } from '../manager';
+import type { ToolContext } from '../toolExecutor';
 
 export const askUserQuestionToolDef: Tool = {
   name: 'ask_user_question',
@@ -78,7 +78,7 @@ function normalizeQuestion(raw: RawQuestion): AgentQuestion | null {
 
 export async function executeAskUserQuestion(
   args: { questions: RawQuestion[] },
-  context: { taskId: string },
+  context: Pick<ToolContext, 'task'>,
 ): Promise<string> {
   const questions = args.questions
     .map(normalizeQuestion)
@@ -88,6 +88,6 @@ export async function executeAskUserQuestion(
     return JSON.stringify({ error: 'No valid questions provided.' });
   }
 
-  const answers = await doctorManager.askUserQuestion(context.taskId, questions);
+  const answers = await context.task.askUserQuestion(questions);
   return JSON.stringify({ answers });
 }

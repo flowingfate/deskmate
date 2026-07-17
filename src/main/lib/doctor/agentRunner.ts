@@ -12,6 +12,8 @@ import { MAX_TURNS, TOOL_DEFINITIONS, SYSTEM_PROMPT } from './agentConfig';
 import { executeTool } from './toolExecutor';
 import { clearDebugLog, appendDebugLog } from './log';
 import { callDoctorLlm } from './llmClient';
+import type { ProfileStore } from '@main/persist';
+import type { DoctorTask } from './task';
 import {
   compressImageFirstPass,
   MAX_IMAGE_BYTES_FOR_INLINE,
@@ -32,7 +34,6 @@ export type RunResult =
   | { success: true; issueUrl: string }
   | { success: false; error: string };
 
-export type StepInfoPusher = (text: string) => void;
 
 /** Tool name → one-line step description (auto-pushed to UI by the runner). */
 const TOOL_STEP_INFO: Record<string, string> = {
@@ -62,18 +63,28 @@ function toolCallsOf(msg: PiAssistantMessage): PiToolCall[] {
   return msg.content.filter((b): b is PiToolCall => b.type === 'toolCall');
 }
 
-export class DoctorAgentRunner {
-  constructor(private readonly pushStepInfo: StepInfoPusher) {}
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw new Error('Doctor task cancelled.');
+}
 
-  async run(payload: DoctorInquiryPayload, taskId: string): Promise<RunResult> {
-    clearDebugLog();
-    appendDebugLog('Agent Started', `**TaskId:** ${taskId}\n**MaxTurns:** ${MAX_TURNS}`);
-    this.pushStepInfo('Preparing analysis...');
+export class DoctorAgentRunner {
+  public constructor(private readonly store: ProfileStore) {}
+
+  public async run(
+    payload: DoctorInquiryPayload,
+    task: DoctorTask,
+  ): Promise<RunResult> {
+    const { id: taskId, signal } = task;
+    throwIfAborted(signal);
+    clearDebugLog(taskId);
+    appendDebugLog(taskId, 'Agent Started', `**TaskId:** ${taskId}\n**MaxTurns:** ${MAX_TURNS}`);
+    task.pushStepInfo('Preparing analysis...');
 
     // 全程 pi 原生 message；system prompt 由 pi.Context.systemPrompt 承载，不入 messages。
-    const messages: PiMessage[] = [await this.buildUserMessage(payload)];
+    const messages: PiMessage[] = [await this.buildUserMessage(payload, taskId)];
 
     appendDebugLog(
+      taskId,
       'User Bug Report',
       `**Description:** ${payload.description}\n` +
       `**Steps:** ${payload.stepsToReproduce}\n` +
@@ -85,16 +96,19 @@ export class DoctorAgentRunner {
 
     let issueUrl: string | undefined;
 
-    this.pushStepInfo('Thinking...');
+    task.pushStepInfo('Thinking...');
     for (let turn = 0; turn < MAX_TURNS; turn++) {
+      throwIfAborted(signal);
       logger.info({ msg: `[DoctorAgent] Turn ${turn + 1}/${MAX_TURNS}`, mod: 'run' });
-      appendDebugLog(`Turn ${turn + 1}/${MAX_TURNS}`, 'Calling LLM...');
+      appendDebugLog(taskId, `Turn ${turn + 1}/${MAX_TURNS}`, 'Calling LLM...');
 
-      const response = await callDoctorLlm(SYSTEM_PROMPT, messages, TOOL_DEFINITIONS, payload.modelKey);
+      const response = await callDoctorLlm(this.store.id, SYSTEM_PROMPT, messages, TOOL_DEFINITIONS, payload.modelKey, signal);
+      throwIfAborted(signal);
       const toolCalls = toolCallsOf(response);
       const content = assistantText(response);
 
       appendDebugLog(
+        taskId,
         `LLM Response (Turn ${turn + 1})`,
         `**StopReason:** ${response.stopReason}\n` +
         `**Content:** ${content ? content.slice(0, 500) + (content.length > 500 ? '...' : '') : '(none)'}\n` +
@@ -107,7 +121,7 @@ export class DoctorAgentRunner {
       // Termination condition: no tool_calls
       if (toolCalls.length === 0) {
         logger.info({ msg: '[DoctorAgent] Agent finished (no more tool calls)', mod: 'run' });
-        appendDebugLog('Agent Finished', 'No more tool calls.');
+        appendDebugLog(taskId, 'Agent Finished', 'No more tool calls.');
         break;
       }
 
@@ -116,13 +130,15 @@ export class DoctorAgentRunner {
         const { name, arguments: args } = toolCall;
 
         const stepText = TOOL_STEP_INFO[name] ?? `Running ${name}...`;
-        this.pushStepInfo(stepText);
+        task.pushStepInfo(stepText);
 
-        appendDebugLog(`Tool Call: ${name}`, `**Args:**\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``);
+        appendDebugLog(taskId, `Tool Call: ${name}`, `**Args:**\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``);
 
-        const result = await executeTool(name, args, { taskId });
+        const result = await executeTool(name, args, { task, store: this.store });
+        throwIfAborted(signal);
 
         appendDebugLog(
+          taskId,
           `Tool Result: ${name}`,
           `\`\`\`\n${result.slice(0, 2000)}${result.length > 2000 ? '\n...(truncated)' : ''}\n\`\`\``,
         );
@@ -132,7 +148,7 @@ export class DoctorAgentRunner {
             const parsed = JSON.parse(result);
             if (parsed.issueUrl) {
               issueUrl = parsed.issueUrl;
-              appendDebugLog('Issue Created', `**URL:** ${issueUrl}`);
+              appendDebugLog(taskId, 'Issue Created', `**URL:** ${issueUrl}`);
             }
           } catch { /* ignore */ }
         }
@@ -149,15 +165,15 @@ export class DoctorAgentRunner {
     }
 
     if (issueUrl) {
-      appendDebugLog('Run Complete', `**Success:** true\n**IssueUrl:** ${issueUrl}`);
+      appendDebugLog(taskId, 'Run Complete', `**Success:** true\n**IssueUrl:** ${issueUrl}`);
       return { success: true, issueUrl };
     }
 
-    appendDebugLog('Run Complete', '**Success:** false — Agent did not create a GitHub issue.');
+    appendDebugLog(taskId, 'Run Complete', '**Success:** false — Agent did not create a GitHub issue.');
     return { success: false, error: 'Agent completed but did not create a GitHub issue.' };
   }
 
-  private async buildUserMessage(payload: DoctorInquiryPayload): Promise<PiMessage> {
+  private async buildUserMessage(payload: DoctorInquiryPayload, taskId: string): Promise<PiMessage> {
     let text = `## Bug Report\n\n`;
     text += `**Description:**\n${payload.description}\n\n`;
     text += `**Steps to Reproduce:**\n${payload.stepsToReproduce}\n\n`;
@@ -182,7 +198,7 @@ export class DoctorAgentRunner {
         if (originalBytes > MAX_IMAGE_BYTES_FOR_INLINE) {
           const note = `[Screenshot "${shot.name}" is too large (${Math.round(originalBytes / 1024 / 1024)}MB); inline embedding was skipped.]`;
           skippedNotes.push(note);
-          appendDebugLog('Screenshot Skipped (too large)', `**Name:** ${shot.name}\n**Size:** ${originalBytes} bytes`);
+          appendDebugLog(taskId, 'Screenshot Skipped (too large)', `**Name:** ${shot.name}\n**Size:** ${originalBytes} bytes`);
           continue;
         }
 
@@ -196,10 +212,11 @@ export class DoctorAgentRunner {
           if (compressed.compressedSize > MAX_COMPRESSED_IMAGE_BYTES_FOR_INLINE) {
             const note = `[Screenshot "${shot.name}" is still too large after compression (${Math.round(compressed.compressedSize / 1024 / 1024)}MB); inline embedding was skipped.]`;
             skippedNotes.push(note);
-            appendDebugLog('Screenshot Skipped (post-compress)', `**Name:** ${shot.name}\n**Compressed:** ${compressed.compressedSize} bytes`);
+            appendDebugLog(taskId, 'Screenshot Skipped (post-compress)', `**Name:** ${shot.name}\n**Compressed:** ${compressed.compressedSize} bytes`);
             continue;
           }
           appendDebugLog(
+            taskId,
             'Screenshot Compressed',
             `**Name:** ${shot.name}\n` +
               `**Original:** ${compressed.originalSize} bytes (${inputMime})\n` +
@@ -214,6 +231,7 @@ export class DoctorAgentRunner {
           const note = `[Screenshot "${shot.name}" compression failed; inline embedding was skipped.]`;
           skippedNotes.push(note);
           appendDebugLog(
+            taskId,
             'Screenshot Compression Failed',
             `**Name:** ${shot.name}\n**Error:** ${err instanceof Error ? err.message : String(err)}`,
           );

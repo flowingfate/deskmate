@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-15 (sessions 新建聊天直接导航至完整 session URL；job-run 保持只读 capability) -->
+<!-- Last verified: 2026-07-17 (direct immutable Profile identity) -->
 # Agent Side Panel
 
 > 中间列（左 nav 与右侧 ChatView 之间）的整块 UI：agent header + sessions / jobs 双模式切换。
@@ -74,7 +74,7 @@ const JobRunChatView = () => (<><JobRunBanner /><ChatView kind="job-run" /></>);
 - regular sessions：`useAgentSessions(agentId)` / `useAgentSessionsHydrated(agentId)`（`states/sessionIndex.atom.ts`）
 - jobs：`useSchedulesByAgentId(agentId)`（`states/schedules.atom.ts`，subscribes `persist:schedule:*`）
 - runs：`useAgentScheduleRuns(agentId)` / `useAgentScheduleRunsHydrated(agentId)`（`states/scheduleRuns.atom.ts`）
-- 未读 badge：`useAgentUnreadSummary(agentId, profileId).scheduledUnreadCount`
+- 未读 badge：`useAgentUnreadSummary(agentId).scheduledUnreadCount`
 - CRUD IPC：`schedulerApi.{toggleJob, deleteJob, runJobNow, updateJob, createJob}`（`shared/ipc/scheduler.ts`）
 
 ## 常见变更

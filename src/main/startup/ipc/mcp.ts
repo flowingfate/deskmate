@@ -1,34 +1,28 @@
 import { ipcMain } from 'electron';
 
-import { Profiles } from '../../persist/profiles';
 import { log } from '@main/log';
 import type { Context } from './shared';
-import { mcpClientManager } from "../../lib/mcpRuntime"
-import { mcpAuthPromptRegistry, mcpAuthService } from "../../lib/mcpRuntime/auth";
 import { mcpRenderToMain, mcpAuthRenderToMain } from '@shared/ipc/mcp';
+import { requireProfileForSender } from './profileContext';
 
 export default function(ctx: Context) {
   const handleMcp = mcpRenderToMain.bindMain(ipcMain);
   const handleMcpAuth = mcpAuthRenderToMain.bindMain(ipcMain);
 
-  // MCP Status Operations - AUTHORIZED
-  // 🆕 Refactor: get runtime status directly from mcpClientManager
-  handleMcp.getServerStatus(async () => {
+  // MCP Status Operations
+  handleMcp.getServerStatus(async (event) => {
     try {
-      // 🆕 Dynamically import mcpClientManager
-
-      // Get runtime status from mcpClientManager
-      const runtimeStates = mcpClientManager.getAllMcpServerRuntimeStates();
-
-      // Serialize error objects for IPC transmission
-      const serverStatus = runtimeStates.map(state => ({
-        serverName: state.serverName,
-        status: state.status,
-        tools: state.tools,
-        lastError: state.lastError ? state.lastError.message : null
-      }));
-
-      return { success: true, data: serverStatus };
+      const profile = requireProfileForSender(event);
+      const runtimeStates = profile.mcpManager.getAllMcpServerRuntimeStates();
+      return {
+        success: true,
+        data: runtimeStates.map((state) => ({
+          serverName: state.serverName,
+          status: state.status,
+          tools: state.tools,
+          lastError: state.lastError ? state.lastError.message : null,
+        })),
+      };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
@@ -50,9 +44,7 @@ export default function(ctx: Context) {
 
     logger.info({ msg: '[MCP-AUTH-IPC] Consent response received', mod: 'mcpAuth:respondConsent', requestId, decision, senderUrl: event.sender?.getURL?.() || '' });
 
-    const handler = mcpAuthPromptRegistry.takeConsent(requestId);
-    if (handler) {
-      handler(decision);
+    if (requireProfileForSender(event).mcpManager.respondAuthConsent(requestId, decision)) {
       return { success: true };
     }
 
@@ -60,11 +52,9 @@ export default function(ctx: Context) {
   });
 
   /**
-   * Renderer's response to a `mcpAuth:requestClientId` prompt. Either the
-   * user supplies a client_id (and optionally a client_secret), or they
-   * cancel. The main-process orchestrator (DeskmateOAuthProvider flow)
-   * registers a one-shot handler under `requestId` in
-   * `__pendingMcpAuthClientIdRequest` before sending the prompt.
+   * Renderer's response to a `mcpAuth:requestClientId` prompt. The sender's
+   * profile-bound MCP manager resolves its own one-shot requestId handler;
+   * another Profile cannot consume this response.
    */
   handleMcpAuth.respondClientId(async (
     event,
@@ -84,9 +74,7 @@ export default function(ctx: Context) {
 
     logger.info({ msg: '[MCP-AUTH-IPC] Client-id response received', mod: 'mcpAuth:respondClientId', requestId, kind: isCancel ? 'cancel' : 'provided', senderUrl: event.sender?.getURL?.() || '' });
 
-    const handler = mcpAuthPromptRegistry.takeClientId(requestId);
-    if (handler) {
-      handler(response);
+    if (requireProfileForSender(event).mcpManager.respondAuthClientId(requestId, response)) {
       return { success: true };
     }
 
@@ -110,30 +98,26 @@ export default function(ctx: Context) {
    *     swapping to a different OAuth app entirely.
    */
   handleMcp.resetOAuth(async (
-    _event,
+    event,
     serverName,
     scope,
   ) => {
     const logger = log;
     try {
-      const profile = await Profiles.get().active();
-      const config = profile.mcp.get(serverName);
+      const profile = requireProfileForSender(event);
+      const config = profile.store.mcp.get(serverName);
       if (!config) {
         return { success: false, error: `Server "${serverName}" not found` };
       }
 
       // Disconnect first so the live client stops using the about-to-be-cleared token.
       try {
-        await mcpClientManager.disconnect(serverName);
+        await profile.mcpManager.disconnect(serverName);
       } catch (e) {
         logger.warn({ msg: '[MCP-IPC] Disconnect before OAuth reset failed (continuing)', mod: 'mcp:resetOAuth', serverName, err: e });
       }
 
-      await mcpAuthService.clearOAuthForServer(
-        serverName,
-        config,
-        scope,
-      );
+      await profile.mcpManager.clearOAuthForServer(serverName, config, scope);
 
       logger.info({ msg: '[MCP-IPC] OAuth credentials reset', mod: 'mcp:resetOAuth', serverName, scope });
       return { success: true };
@@ -144,61 +128,60 @@ export default function(ctx: Context) {
     }
   });
 
-  // ─────────────────────────────────────────────────────────────
-  // Server CRUD（Step 7 PR-3 从老 profile 通道搬入；纯包装 mcpClientManager.*）
+  // Server CRUD：精确路由到 runtime Profile 的 MCP manager
   // ─────────────────────────────────────────────────────────────
 
   const errMsg = (error: unknown): string =>
     error instanceof Error ? error.message : 'Unknown error';
 
-  handleMcp.addServer(async (_event, serverName, serverConfig) => {
+  handleMcp.addServer(async (event, serverName, serverConfig) => {
     try {
-      await mcpClientManager.add(serverName, serverConfig);
+      await requireProfileForSender(event).mcpManager.add(serverName, serverConfig);
       return { success: true };
     } catch (error) {
       return { success: false, error: errMsg(error) };
     }
   });
 
-  handleMcp.updateServer(async (_event, serverName, serverConfig) => {
+  handleMcp.updateServer(async (event, serverName, serverConfig) => {
     try {
-      await mcpClientManager.update(serverName, serverConfig);
+      await requireProfileForSender(event).mcpManager.update(serverName, serverConfig);
       return { success: true };
     } catch (error) {
       return { success: false, error: errMsg(error) };
     }
   });
 
-  handleMcp.deleteServer(async (_event, serverName) => {
+  handleMcp.deleteServer(async (event, serverName) => {
     try {
-      await mcpClientManager.delete(serverName);
+      await requireProfileForSender(event).mcpManager.delete(serverName);
       return { success: true };
     } catch (error) {
       return { success: false, error: errMsg(error) };
     }
   });
 
-  handleMcp.connectServer(async (_event, serverName) => {
+  handleMcp.connectServer(async (event, serverName) => {
     try {
-      await mcpClientManager.connect(serverName);
+      await requireProfileForSender(event).mcpManager.connect(serverName);
       return { success: true };
     } catch (error) {
       return { success: false, error: errMsg(error) };
     }
   });
 
-  handleMcp.reconnectServer(async (_event, serverName) => {
+  handleMcp.reconnectServer(async (event, serverName) => {
     try {
-      await mcpClientManager.reconnect(serverName);
+      await requireProfileForSender(event).mcpManager.reconnect(serverName);
       return { success: true };
     } catch (error) {
       return { success: false, error: errMsg(error) };
     }
   });
 
-  handleMcp.disconnectServer(async (_event, serverName) => {
+  handleMcp.disconnectServer(async (event, serverName) => {
     try {
-      await mcpClientManager.disconnect(serverName);
+      await requireProfileForSender(event).mcpManager.disconnect(serverName);
       return { success: true };
     } catch (error) {
       return { success: false, error: errMsg(error) };

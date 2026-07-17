@@ -9,11 +9,11 @@ export interface Context {
   readonly isDev: boolean;
   readonly isAgentChatReady: boolean;
 
-  readonly onBeforeQuit: (event: Electron.Event) => Promise<void>
   readonly getPersistedWindowZoomLevel: () => Promise<number>;
-  readonly applyWindowZoomLevel: (level: number) => number;
-  readonly stepWindowZoomLevel: (level: number) => Promise<number>;
-  readonly resetWindowZoomLevel: () => Promise<number>;
+  readonly applyWindowZoomLevel: (window: BrowserWindow, level: number) => number;
+  readonly stepWindowZoomLevel: (window: BrowserWindow, delta: number) => Promise<number>;
+  readonly resetWindowZoomLevel: (window: BrowserWindow) => Promise<number>;
+  readonly openProfileMainWindow: (profileId: string) => Promise<void>;
   readonly getMenuTemplate: () => Electron.MenuItemConstructorOptions[];
 }
 

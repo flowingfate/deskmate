@@ -1,4 +1,4 @@
-import { ipcMain, shell, dialog } from 'electron';
+import { BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -8,7 +8,6 @@ import type { ImportConflictResolution } from '@shared/types/fsTypes';
 import { collectImportConflicts, planImportTargets, promptImportConflictResolution } from './shared';
 import { getWorkspaceWatcher } from "../../lib/workspace/WorkspaceWatcher";
 import { renderToMain, mainToRender } from '@shared/ipc/workspace';
-import { mainWindow } from '@main/startup/wins';
 
 export default function(ctx: Context) {
   const handle = renderToMain.bindMain(ipcMain);
@@ -18,9 +17,9 @@ export default function(ctx: Context) {
   // ===============================
 
   // Select workspace folder
-  handle.selectFolder(async () => {
+  handle.selectFolder(async (event) => {
     try {
-      const win = mainWindow();
+      const win = BrowserWindow.fromWebContents(event.sender);
       if (!win) {
         return {
           success: false,

@@ -198,6 +198,7 @@ describe('agent set-primary', () => {
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain('Successfully set "bot"');
     expect(agentMocks.setPrimaryInternal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.any(String) }),
       { agent_name: 'bot' },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -238,7 +239,7 @@ describe('agent add', () => {
     });
     const r = await runAgent('add bot');
     expect(r.exitCode).toBe(0);
-    const callArgs = agentMocks.createAgentInternal.mock.calls[0][0];
+    const callArgs = agentMocks.createAgentInternal.mock.calls[0][1];
     expect(callArgs.name).toBe('bot');
     expect(callArgs.version).toBe('1.0.0');
   });
@@ -268,7 +269,7 @@ describe('agent add', () => {
       'git:status',
     ]);
     expect(r.exitCode).toBe(0);
-    const callArgs = agentMocks.createAgentInternal.mock.calls[0][0];
+    const callArgs = agentMocks.createAgentInternal.mock.calls[0][1];
     expect(callArgs.model).toBe('gpt-4o');
     expect(callArgs.emoji).toBe('🤖');
     expect(callArgs.system_prompt).toBe('Be concise.');
@@ -313,7 +314,7 @@ describe('agent add', () => {
     agentMocks.createAgentInternal.mockResolvedValue({ success: true, message: 'ok' });
     const ctrl = new AbortController();
     await runAgent('add bot', { signal: ctrl.signal });
-    const opts = agentMocks.createAgentInternal.mock.calls[0][1];
+    const opts = agentMocks.createAgentInternal.mock.calls[0][2];
     expect(opts.signal).toBe(ctrl.signal);
   });
 });

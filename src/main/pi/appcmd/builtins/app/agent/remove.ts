@@ -9,7 +9,6 @@
  * 看看会做什么)。与 `mcp remove` 完全对称。
  */
 
-import { Profiles } from '@main/persist';
 
 import {
   removeAgentInternal,
@@ -74,13 +73,7 @@ export async function runRemove(argv: string[], ctx: AppCmdContext): Promise<voi
   const { name } = nameResult;
 
   // 确认 agent 存在(给一个温和提示;dry-run 也应该有这个反馈)
-  let exists = false;
-  try {
-    const profile = await Profiles.get().active();
-    exists = profile.listAgents().some((r) => r.name === name);
-  } catch {
-    // profile 未就绪 —— 走到下面 dry-run / 真删,各自再处理失败
-  }
+  const exists = ctx.profile.store.listAgents().some((record) => record.name === name);
 
   if (isDryRun(parsed.flags)) {
     if (isJson(parsed.flags)) {
@@ -119,6 +112,7 @@ export async function runRemove(argv: string[], ctx: AppCmdContext): Promise<voi
   }
 
   const result: RemoveAgentResult = await removeAgentInternal(
+    ctx.profile,
     { agent_name: name },
     { signal: ctx.signal },
   );

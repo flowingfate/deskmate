@@ -1,7 +1,7 @@
 /**
  * `agent list [--json]`
  *
- * 只读:列出当前 active profile 内所有 agent 名(去重)。
+ * 只读:列出 owning Profile 内所有 agent 名(去重)。
  *
  * 与 `agent search --installed` 的区别:`list` 只回名字(更轻量),`search --installed`
  * 回名字 + 状态等元信息。LLM 想纯列表用 `list`;想看状态详情用 `search --installed`。
@@ -53,7 +53,7 @@ export async function runList(argv: string[], ctx: AppCmdContext): Promise<void>
     return;
   }
 
-  const result: ListAgentsResult = await listAgentsInternal({ signal: ctx.signal });
+  const result: ListAgentsResult = await listAgentsInternal(ctx.profile.store, { signal: ctx.signal });
 
   if (isJson(parsed.flags)) {
     ctx.print(JSON.stringify(result, null, 2) + '\n');

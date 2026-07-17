@@ -90,7 +90,7 @@ agents/{parentAgentId}/sessions/{YYYYMM}/{parentSessionId}/
 ## 关键约束
 
 - 不读取、迁移、转换或删除历史 `sub-agents/` 磁盘数据；新路径只使用 Agent graph 与 `subruns/`。
-- `SubAgentManager.forProfile(profile)` 是唯一构造方式。manager 通过 `WeakMap<Profile, …>` 绑定 active runs、锁与订阅者，不能作为跨 Profile 全局单例。
+- `Profile.getSubAgentManager()` 是唯一生产构造点：直接 `new SubAgentManager(profile.store)` 并缓存；manager 绑定该 Profile 的 active runs、锁与订阅者，不能作为跨 Profile 全局单例或 static cache。
 - 所有可预期业务拒绝通过 discriminated union 返回，不以未声明异常表达。
 - 会落盘的 Subrun 类型以 `PersistSubrunDataFile` / `PersistSubrunHistory` 为唯一契约；正式结果只定义一个 `SubAgentRunResult` 判别联合，需要具体分支时通过 `SubAgentRunResultByStatus[Status]` 读取。persisted terminal history 与 runtime terminal state 都复用同一份显式 status→data 映射，不使用 `Extract` / `Omit` 等二次变换。`Subrun` 通过 request/execution/status/timestamp/result 等明确 getter 向 main 暴露语义，manager 与 IPC 统一投影为 `SubAgentRuntimeState`。
 

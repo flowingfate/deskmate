@@ -7,7 +7,7 @@
  * - 渲染层无须知道绝对路径布局 —— 只持有 URI 字符串作为对附件的引用。
  * - `bytes` 走 `Uint8Array`(结构化克隆原生支持);路径走 `srcPath`(由 webUtils
  *   或 dialog 已经拿到的绝对路径)。两条入口接受不同 payload,但归一到同一返回。
- * - 不接受 `profileId` —— 主进程内部用 active profile,避免渲染层学 profile id。
+ * - 不接受 `profileId` —— 主进程从 IPC sender 解析 owning Profile，避免 renderer 伪造或重复传递窗口 identity。
  */
 
 import { connectRenderToMain } from './base';

@@ -25,8 +25,8 @@ DESCRIPTION
   Show the current status of an agent. Read-only.
 
   Status values:
-    NotAdded   not in the active profile
-    Added      installed in the active profile
+    NotAdded   not in the owning profile
+    Added      installed in the owning profile
 
   When Added, the output also lists agent_id / emoji / model.
 
@@ -70,6 +70,7 @@ export async function runStatus(argv: string[], ctx: AppCmdContext): Promise<voi
   const { name } = nameResult;
 
   const result: GetStatusResult = await getStatusInternal(
+    ctx.profile.store,
     { agent_name: name },
     { signal: ctx.signal },
   );

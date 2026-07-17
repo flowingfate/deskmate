@@ -6,7 +6,6 @@
  * 仍由 `mcpClientCacheManager` 维护。
  *
  * 订阅通道：
- *   - persist:profile:switched                    → 清空 + hydrate
  *   - persist:agent:registry:updated [kind=mcp]   → payload.items 直接替换
  *
  * 副作用：每次 items 更新会主动调用 `mcpClientCacheManager.updateServerConfigs(items)`，
@@ -16,6 +15,7 @@
 
 import { unit } from '@/atom/unit';
 import { persistEvents } from '@/ipc/persist';
+
 import { getInitialSnapshot } from '@/states/_snapshot';
 import type { McpServerRecord } from '@shared/persist/types';
 import { mcpClientCacheManager } from '@/lib/mcp/mcpClientCacheManager';
@@ -47,20 +47,13 @@ async function hydrate(): Promise<void> {
     logger.warn({ msg: 'getSnapshot failed', error: res.error });
     return;
   }
-  const items = res.data.mcp;
+  const { mcp: items } = res.data;
   change({ items, hydrated: true });
   applyToClientCache(items);
-  // main 只在连接状态"变化"时 push serverStatesUpdated。renderer 冷启动 / location.reload()
-  // 后 main 已处于稳定连接态（不会再 push），必须主动 pull 一次，否则 runtime 状态一直停在
-  // updateServerConfigs 播种的 disconnected。
   void mcpClientCacheManager.refresh();
 }
 
-persistEvents['profile:switched'](() => {
-  change({ items: [], hydrated: false });
-  applyToClientCache([]);
-  void hydrate();
-});
+
 
 persistEvents['agent:registry:updated']((_e, payload) => {
   if (payload.kind !== 'mcp') return;

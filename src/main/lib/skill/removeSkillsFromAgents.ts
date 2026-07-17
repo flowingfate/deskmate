@@ -1,5 +1,5 @@
 import { log } from '@main/log';
-import { Profiles } from '../../persist';
+import type { ProfileStore } from '@main/persist';
 import type { Agent } from '../../persist/agent';
 import type { SkillBindings } from '@shared/persist/types'
 
@@ -76,6 +76,7 @@ function resolveTargets(agents: Agent[], options: RemoveSkillsFromAgentsOptions)
 }
 
 export async function removeSkillsFromAgents(
+  store: ProfileStore,
   options: RemoveSkillsFromAgentsOptions,
 ): Promise<RemoveSkillsFromAgentsResult> {
   const skillNames = normalizeStringArray(options.skillNames);
@@ -94,31 +95,10 @@ export async function removeSkillsFromAgents(
     };
   }
 
-  let profile;
-  try {
-    profile = await Profiles.get().active();
-  } catch {
-    profile = null;
-  }
-  if (!profile) {
-    return {
-      success: false,
-      skillNames,
-      message: 'User profile not found',
-      updatedAgentCount: 0,
-      removedBindingCount: 0,
-      unchangedTargetCount: 0,
-      failedCount: 0,
-      updatedTargets: [],
-      skippedTargets: [],
-      error: 'PROFILE_NOT_FOUND',
-    };
-  }
-
-  const records = profile.listAgents();
+  const records = store.listAgents();
   const allAgents: Agent[] = [];
   for (const rec of records) {
-    const a = await profile.getAgent(rec.id);
+    const a = await store.getAgent(rec.id);
     if (a) allAgents.push(a);
   }
 

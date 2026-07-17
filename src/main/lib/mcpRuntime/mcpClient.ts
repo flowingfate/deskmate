@@ -1,7 +1,6 @@
 /**
  * Deskmate MCP client adapter.
- *
- * 面向 `mcpClientManager` 的稳定 seam。**内部实现**已切换到
+ * 面向 profile-bound `MCPClientManager` 的稳定 seam。**内部实现**已切换到
  * `@modelcontextprotocol/sdk` 的 `Client`(1.29),协议大脑(initialize
  * 握手、request/response 关联、pending map、timeout、AbortSignal、通知分发)
  * 全部由 SDK `Protocol` 承担。
@@ -38,6 +37,7 @@ import {
   type DeskmateSdkTransport,
 } from './sdkTransport';
 import { Tool } from './manager/types';
+import type { McpAuthService } from './auth';
 
 
 
@@ -105,7 +105,7 @@ function enrichConnectionError(error: unknown, transport: DeskmateSdkTransport |
   return enriched;
 }
 
-function buildTransport(server: McpServerConfig): DeskmateSdkTransport {
+function buildTransport(server: McpServerConfig, authService: McpAuthService): DeskmateSdkTransport {
   const isStdio = server.transport === 'stdio';
   if (isStdio) {
     return new DeskmateStdioSdkTransport(server.name, {
@@ -123,6 +123,7 @@ function buildTransport(server: McpServerConfig): DeskmateSdkTransport {
   // 一直塞 `Deskmate-MCP-Client/1.0.0`,部分 MCP server 会按 UA 做遥测/阻断,
   // 迁移时必须保留。用户 headers 里同名字段优先(spread 顺序保证)。
   return new DeskmateHttpSdkTransport(server.name, {
+    authService,
     serverName: server.name,
     url: server.url,
     headers: {
@@ -138,7 +139,10 @@ export class McpClient {
   private tools: Tool[] = [];
   private connected = false;
 
-  constructor(private readonly server: McpServerConfig) {}
+  constructor(
+    private readonly server: McpServerConfig,
+    private readonly authService: McpAuthService,
+  ) {}
 
   /**
    * 连接 MCP server 并拉取工具列表。**一次性**:成功一次后同实例不可再连。
@@ -158,7 +162,7 @@ export class McpClient {
 
     signal?.throwIfAborted?.();
 
-    const transport = buildTransport(this.server);
+    const transport = buildTransport(this.server, this.authService);
 
     const client = new Client({
       name: 'Deskmate-MCP-Client',
@@ -198,7 +202,7 @@ export class McpClient {
   }
 
   async getTools(): Promise<Tool[]> {
-    // `connectToServer()` 已经把 tools 缓存进 this.tools;`mcpClientManager`
+    // `connectToServer()` 已经把 tools 缓存进 this.tools; owning manager
     // 只在 connect 成功后立刻调一次 `getTools()` 拿最新列表,不再触发
     // 网络往返。tools/list-changed 通知(SDK 已监听)会由未来的订阅路径
     // 单独 refresh,这里不再重复请求。

@@ -118,7 +118,7 @@ describe('mcp status', () => {
 
     await runMcp('status brave', { signal: aborter.signal });
     const optsArg = mcpMocks.getStatusInternal.mock.calls[0][1];
-    expect(optsArg).toEqual({ signal: aborter.signal });
+    expect(optsArg).toMatchObject({ signal: aborter.signal, profile: expect.anything() });
   });
 
   it('--wait 轮询过渡态直到 connected → 多次调用 + exit 0', async () => {

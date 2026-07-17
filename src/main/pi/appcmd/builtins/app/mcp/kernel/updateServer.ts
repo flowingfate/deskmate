@@ -7,8 +7,7 @@
  * 给了就用新的,没给就保留(或清空 env)。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime'
-import { Profiles } from '@main/persist';
+import type { Profile } from '@main/profile';
 import type { McpServerConfig } from '@shared/persist/types'
 
 export interface UpdateServerArgs {
@@ -51,7 +50,7 @@ function incrementPatchVersion(version: string): string {
  */
 export async function updateServerInternal(
   args: UpdateServerArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { profile: Profile; signal?: AbortSignal },
 ): Promise<UpdateServerResult> {
   try {
     if (!args.mcp_config || typeof args.mcp_config !== 'object') {
@@ -63,7 +62,6 @@ export async function updateServerInternal(
     }
 
     const config = args.mcp_config;
-
     if (!config.name || typeof config.name !== 'string' || !config.name.trim()) {
       return {
         success: false,
@@ -73,10 +71,7 @@ export async function updateServerInternal(
     }
 
     const serverName = config.name.trim();
-
-    // Check if MCP is installed in the active profile
-    const profile = await Profiles.get().active();
-    const existingConfig = profile.mcp.get(serverName);
+    const existingConfig = opts.profile.store.mcp.get(serverName);
     if (!existingConfig) {
       return {
         success: false,
@@ -119,7 +114,7 @@ export async function updateServerInternal(
       }
     }
 
-    await mcpClientManager.update(serverName, updatedConfig);
+    await opts.profile.mcpManager.update(serverName, updatedConfig);
 
     return {
       success: true,

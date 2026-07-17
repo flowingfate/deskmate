@@ -17,6 +17,7 @@ import * as path from 'node:path';
 import { read } from '../../read';
 import type { ToolContext } from '../../types';
 import { Tracer } from '@shared/log/trace';
+import { testProfile } from '../../__tests__/profileFixture';
 
 let tmpDir = '';
 let htmlPath = '';
@@ -34,6 +35,7 @@ const HTML = `<!DOCTYPE html>
 function makeCtx(): ToolContext {
   return {
     mode: 'agent',
+    profile: testProfile,
     profileId: 'p_TEST',
     agentId: 'a',
     sessionId: 's',

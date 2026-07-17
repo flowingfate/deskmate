@@ -2,11 +2,19 @@
  * `toMediaUrl` 构建器单测 —— 纯函数,验证 `media://` URL 文法、per-authority
  * 必填 ctx、percent-encoding、非 servable scheme 兜底。
  */
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 
 import { toMediaUrl, imageMimeFromPath, toImageDisplaySrc } from '../mediaUrl';
 
 const CTX = { agentId: 'a_1', sessionId: 's_1' };
+
+beforeAll(() => {
+  vi.stubGlobal('window', { electronAPI: { profile: { id: 'p_test' } } });
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('toMediaUrl', () => {
   it('local 附 agent+session+mime,path 段 encode', () => {
@@ -17,6 +25,7 @@ describe('toMediaUrl', () => {
     expect(parsed.hostname).toBe('local');
     expect(parsed.pathname).toBe('/uploads/shot.png');
     expect(parsed.searchParams.get('agent')).toBe('a_1');
+    expect(parsed.searchParams.get('profile')).toBe('p_test');
     expect(parsed.searchParams.get('session')).toBe('s_1');
     expect(parsed.searchParams.get('mime')).toBe('image/png');
   });

@@ -6,7 +6,6 @@
  * renderer 通过 persist IPC `getSnapshot.data.starred` hydrate + `starred:updated` 增量同步。
  *
  * 订阅通道：
- *   - persist:profile:switched → 清空 + 重新 hydrate
  *   - persist:starred:updated → 整体替换
  *
  * 注意：渲染收藏列表 UI 字段（title / readStatus / agentName 等）已由 D3 sessionIndex.atom
@@ -15,6 +14,7 @@
 
 import { unit } from '@/atom/unit';
 import { persistEvents } from '@/ipc/persist';
+
 import { getInitialSnapshot } from '@/states/_snapshot';
 import type { StarredSessionEntry } from '@shared/persist/types';
 import { log } from '@/log';
@@ -39,10 +39,7 @@ async function hydrate(): Promise<void> {
   change({ items: res.data.starred, hydrated: true });
 }
 
-persistEvents['profile:switched']((_e, _payload) => {
-  change({ items: EMPTY, hydrated: false });
-  void hydrate();
-});
+
 
 persistEvents['starred:updated']((_e, payload) => {
   change({ items: payload.items, hydrated: true });

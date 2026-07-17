@@ -3,10 +3,9 @@ import { generateEvalSessionId } from '../utilities/idFactory';
 import type { RunTestRequest, RunTestResponse, RunTestMessageOutput } from './evalProtocol';
 import type { Message, AssistantMessage } from '@shared/persist/types'
 import { createUserMessage } from '@shared/utils/messageFactory';
-import type { ContextState } from '@shared/persist/types'
 import type { StreamingChunk } from '@shared/types/streamingTypes';
 import Stream from '@shared/stream-iterator';
-import { Profiles } from '../../persist';
+import { ProfileRegistry } from '../../profileRegistry'
 import { RegularSession, type PersistSessionLike } from '../../pi';
 import { newEntityId } from '../../../shared/persist/id';
 import { log } from '@main/log';
@@ -42,9 +41,11 @@ interface CachedSession {
 export class EvalAgentRunner {
   private sessions: Map<string, CachedSession> = new Map();
 
-  // 老接口 EvalHttpServer 传 profileId，新路径只跟当前 active profile 工作。
-  // 参数静默忽略而不是改签名，避免无意义的调用方联动。
-  constructor(profileId: string) {}
+  private readonly profileId: string;
+
+  constructor(profileId: string) {
+    this.profileId = profileId;
+  }
 
   async run(request: RunTestRequest): Promise<RunTestResponse> {
     const sessionId = request.session_id;
@@ -56,9 +57,9 @@ export class EvalAgentRunner {
    * 调用方已 abort 则不缓存，session 随返回直接进 GC。
    */
   async runOneShot(request: RunTestRequest, signal?: AbortSignal): Promise<RunTestResponse> {
+    const store = ProfileRegistry.require(this.profileId).store
     const agentId = await this.getDefaultAgentId();
-    const profile = await Profiles.get().active();
-    const piSession = this.makeEphemeralSession(profile.id, agentId);
+    const piSession = this.makeEphemeralSession(store.id, agentId);
 
     const evalSessionId = generateEvalSessionId();
 
@@ -240,16 +241,16 @@ export class EvalAgentRunner {
    * Gets the default agent's agentId from the user's profile.
    */
   private async getDefaultAgentId(): Promise<string> {
-    const profile = await Profiles.get().active();
-    const primary = profile.getPrimaryAgentId();
+    const store = ProfileRegistry.require(this.profileId).store
+    const primary = store.getPrimaryAgentId();
     if (primary) {
-      const agent = await profile.getAgent(primary);
+      const agent = await store.getAgent(primary);
       if (agent) return primary;
     }
-    const records = profile.listAgents();
+    const records = store.listAgents();
     const fallback = records[0];
     if (!fallback) {
-      throw new Error(`No agents found under profile "${profile.id}"`);
+      throw new Error(`No agents found under profile "${store.id}"`);
     }
     return fallback.id;
   }

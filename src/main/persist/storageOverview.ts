@@ -1,5 +1,5 @@
 /**
- * 「本地数据透明」聚合器 —— 递归统计当前 active profile 目录树的磁盘占用，
+ * 「本地数据透明」聚合器 —— 递归统计调用方传入 Profile 目录树的磁盘占用，
  * 供 `/settings/persist` 页面把用户的本地数据布局完全透明地呈现出来。
  *
  * 组织轴心：**agent 是一等公民**。
@@ -25,13 +25,15 @@ import type {
   StorageCategory,
   StorageOverview,
 } from '../../shared/ipc/persist';
-import type { AgentRecord } from '../../shared/persist/types';
+import type { AgentRecord, ProfileIndexEntry } from '../../shared/persist/types';
 import { PERSIST_PATH } from '../../shared/persist/path';
 import { getAppRoot } from './lib/root';
 import { dirBytes, pathExists } from './lib/atomic';
 import * as fsp from 'node:fs/promises';
-import type { Profile } from './profile';
-import type { Profiles } from './profiles';
+import type { ProfileStore } from './profileStore';
+interface ProfileIndexReader {
+  getEntry(id: string): ProfileIndexEntry | undefined;
+}
 
 /** stat 单个文件字节数；不存在返回 0。 */
 async function fileBytes(file: string): Promise<number> {
@@ -112,27 +114,27 @@ async function computeAgentGroup(
 }
 
 /**
- * 汇总 active profile 的本地存储全景（agent 分组 + profile 级共享）。
+ * 汇总指定 Profile 的本地存储全景（agent 分组 + profile 级共享）。
  *
- * @param profile  当前 active Profile 实例（用于计数与子域路径）。
- * @param profiles Profiles 单例（用于取 profile 展示名 / 登录态）。
+ * @param store 目标 ProfileStore（用于计数与子域路径）。
+ * @param profileIndex Profile index reader（用于取 profile 展示名 / 登录态）。
  */
 export async function computeStorageOverview(
-  profile: Profile,
-  profiles: Profiles,
+  store: ProfileStore,
+  profileIndex: ProfileIndexReader,
 ): Promise<StorageOverview> {
   const root = getAppRoot();
-  const profileId = profile.id;
+  const profileId = store.id;
   const profileRoot = PERSIST_PATH.profileDir(root, profileId);
 
   // ── agent 分组（一等公民）──
-  const records = profile.listAgents();
+  const records = store.listAgents();
   const agents: AgentStorageGroup[] = [];
   let conversationTotal = 0;
   let scheduledRunTotal = 0;
   for (const record of records) {
-    const convCount = profile.sessionIdx.countAgent(record.id);
-    const runCount = profile.jobRunIdx.countAgent(record.id);
+    const convCount = store.sessionIdx.countAgent(record.id);
+    const runCount = store.jobRunIdx.countAgent(record.id);
     conversationTotal += convCount;
     scheduledRunTotal += runCount;
     agents.push(await computeAgentGroup(root, profileId, record, convCount, runCount));
@@ -155,9 +157,9 @@ export async function computeStorageOverview(
   const totalBytes = await dirBytes(profileRoot);
 
   // 计数（走 index / 注册表）。
-  const skillCount = profile.skills.items.length;
-  const mcpCount = profile.mcp.items.length;
-  const archivedCount = (await profile.archive.listArchivedAgents()).length;
+  const skillCount = store.skills.items.length;
+  const mcpCount = store.mcp.items.length;
+  const archivedCount = (await store.archive.listArchivedAgents()).length;
 
   // profileConfig 兜底 = 总字节 − (agents + 其余共享)，把散落小文件全部收口，保证守恒。
   const sharedNonProfile = skillsBytes + mcpBytes + modelsBytes + searchIndexBytes + archiveBytes;
@@ -212,12 +214,11 @@ export async function computeStorageOverview(
   ];
   shared.sort((a, b) => b.bytes - a.bytes);
 
-  const entry = profiles.getEntry(profileId);
+  const entry = profileIndex.getEntry(profileId);
   const profileName = entry?.displayName ?? 'Guest';
   const profileKind: 'guest' | 'signed_in' = entry?.kind === 'signed_in' ? 'signed_in' : 'guest';
 
   return {
-    profileId,
     profileName,
     profileKind,
     dataRoot: root,

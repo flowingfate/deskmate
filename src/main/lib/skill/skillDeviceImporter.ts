@@ -16,6 +16,7 @@ import {
   checkSkillExists,
   installSkill,
 } from './skillInstall';
+import type { ProfileStore } from '@main/persist';
 
 const logger = log;
 
@@ -207,8 +208,9 @@ async function prepareSkillSource(inputPath: string, tempPrefix: string): Promis
  * Add a skill from a local device
  */
 export async function addSkillFromDevice(
+  store: ProfileStore,
   inputPath: string,
-  confirmCallback?: (skillName: string) => Promise<boolean>
+  confirmCallback?: (skillName: string) => Promise<boolean>,
 ): Promise<AddSkillFromDeviceResult> {
   let preparedSource: PreparedSkillSource | null = null;
 
@@ -218,7 +220,7 @@ export async function addSkillFromDevice(
     preparedSource = await prepareSkillSource(inputPath, 'device-skill');
     const { extractedDir, metadata, parsedVersion, inputType } = preparedSource;
 
-    const existingSkill = await checkSkillExists(metadata.name);
+    const existingSkill = checkSkillExists(store, metadata.name);
     if (existingSkill) {
       logger.info({ msg: `[SkillDeviceImporter] Found existing skill "${metadata.name}", requesting user confirmation` });
 
@@ -246,7 +248,7 @@ export async function addSkillFromDevice(
       version: finalVersion,
     };
 
-    const installResult = await installSkill(skillConfig, extractedDir);
+    const installResult = await installSkill(store, skillConfig, extractedDir);
 
     if (!installResult.success) {
       return { success: false, error: installResult.error };
@@ -278,6 +280,7 @@ export async function addSkillFromDevice(
  * *only* gate, replacing the old target-name-must-match-caller-context check.
  */
 export async function updateSkillFromDevice(
+  store: ProfileStore,
   inputPath: string,
 ): Promise<AddSkillFromDeviceResult> {
   let preparedSource: PreparedSkillSource | null = null;
@@ -288,7 +291,7 @@ export async function updateSkillFromDevice(
     preparedSource = await prepareSkillSource(inputPath, 'update-skill');
     const { extractedDir, metadata, parsedVersion, inputType } = preparedSource;
 
-    const existingSkill = await checkSkillExists(metadata.name);
+    const existingSkill = checkSkillExists(store, metadata.name);
 
     if (!existingSkill) {
       return {
@@ -308,7 +311,7 @@ export async function updateSkillFromDevice(
       version: finalVersion,
     };
 
-    const installResult = await installSkill(skillConfig, extractedDir);
+    const installResult = await installSkill(store, skillConfig, extractedDir);
 
     if (!installResult.success) {
       return { success: false, error: installResult.error };

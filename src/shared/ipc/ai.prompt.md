@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (subagentRun 精简 lookup failure contract) -->
+<!-- Last verified: 2026-07-18 (sender-bound routing and Profile-owned notification events) -->
 # IPC 框架（`src/shared/ipc/`）
 
 > 基于 TypeScript 泛型 + Proxy 的框架，从单一共享定义文件出发，在 Electron 的三个层（main / preload / renderer）之间强制实现类型安全、编译期检查的 IPC。
@@ -126,19 +126,24 @@ const result = await screenshotApi.saveToFile(displayId, rect, imageData);
 - Main：`mainToRender.bindWebContents(wc).<event>(payload)` — 发送到单个窗口。没有广播辅助函数；如果多个窗口需要该事件，请遍历活跃的 `WebContents`。
 - Renderer：`mainToRender.bindRender(on, off).<event>(handler)` — 注册监听器并返回其取消订阅函数。
 - Preload：入站方向不需要白名单；只需在桥接上暴露围绕 `ipcRenderer.on` / `ipcRenderer.off` 的 `on` / `off` 包装器。
+- Profile-scoped runtime event 必须先由 main 按 owning Profile 选取单个 `WebContents`；payload 不重复携带 `profileId`，renderer 不做 Profile filter。
 
 ## 添加新契约
 
 在 `src/shared/ipc/` 下创建新文件，使用唯一前缀字符串实例化 `connectRenderToMain`（和/或 `connectMainToRender`），然后遵循上述四步模式。每个新契约需要自己的 preload `invoke.ts` 和 main 进程 `*IPC.ts` 注册器。
 
-`subagentRun` 是双向范例：`getRunState(parent)` 与 live `stateUpdate` 都返回唯一 `SubAgentRuntimeState`，不暴露磁盘 `PersistSubrunDataFile`，也不维护第二套 audit data union；`getRunMessages(parent)` 懒返回同一 owner 的 Domain `Message[]`，`cancelRun(parent)` 返回 explicit lifecycle/lookup outcome。所有调用都携带 parent Agent/session + Subrun ID；renderer 绝不传绝对路径或自行拼 persist 路径。
+`subagentRun` 是双向范例：renderer query / cancel parent 不传 `profileId`，main 从 `event.sender` 解析 owner 后再定位 parent；main 已按 owner window 推送 live `stateUpdate`，renderer 只用 parent identity 与 correlation 关联状态。messages 仅以 owner parent identity 返回 Domain `Message[]`，不暴露磁盘路径。
+
+所有由 profile-bound 主窗口 renderer 发起的 profile-scoped IPC 都遵守同一规则：shared contract 省略 `profileId`，main 通过 `requireProfileForSender(event)` 从 `event.sender → BrowserWindowMeta.profileId` 获取 owner。只有打开指定 Profile 新窗口等天然跨 Profile 操作才显式传 ID；ToolContext / scheduler 等 main 内路径继续持有自己的 Profile identity。
+
+`window:openProfile(profileId)` 是例外中的显式跨 Profile 产品操作：它只接受目标 Profile ID，main 按 Profile 合并进行中的打开请求，最终创建或聚焦唯一 owner 主窗口；其余窗口 IPC 一律由 sender 选址。
 
 ## 注意事项
 - ⚠️ 由于 `if (!main_handle)` 守卫，`bindMain` 跨调用复用单个 proxy 实例。在 `main.ts` 中每个 `ipcMain` 调用一次；在开发环境热重载后调用可能静默复用过时的 proxy。开发时需重启主进程。
 - ⚠️ `connectMainToRender` 中的 `WeakMap<WebContents>` 缓存意味着已销毁的 `WebContents`（关闭的窗口）会被自动垃圾回收 — 无需手动清理。
 - ⚠️ `provideInvokeForPreload` 中的编译期白名单检查仅捕获**缺失**的键，不捕获**多余**的。白名单中的过时条目不会导致错误，但允许 preload 调用未定义的方法。
-- ⚠️ 所有 IPC 通道已全部迁移至此框架。新增 IPC 必须使用此框架，禁止使用原始 `ipcMain.handle()` 字符串通道。
-- ⚠️ **例外：`log:write`** 是 renderer → main 的高频单向 `ipcRenderer.send`（每条 renderer 日志一次），故意不走 invoke/handle 框架避免 await round-trip 开销。handler 注册在 `setUpIPC` 最早一句，main 端强行覆写 `processType='renderer'` 和 `windowId=sender.id` 防伪造。日志读取侧（dev-only Log Viewer）走标准 `logViewer` 命名空间。
+- ⚠️ 所有**业务** IPC 通道必须使用此框架，禁止使用原始 `ipcMain.handle()` 字符串通道。
+- ⚠️ **例外：`log:write`** 是 renderer → main 的高频单向 `ipcRenderer.send`（每条 renderer 日志一次），故意不走 invoke/handle 框架避免 await round-trip 开销。handler 注册在 `setUpIPC` 最早一句，main 端强行覆写 `processType='renderer'` 与 `windowId=sender.id`，防止 renderer 伪造进程来源。日志读取侧（dev-only Log Viewer）走标准 `logViewer` 命名空间。
 - ⚠️ **主链路 trace 透传**：`agentChat` 命名空间的 `streamMessage / retryChat / editUserMessage / cancelChatSession` 末尾追加可选 `trace?: TraceContext`（来自 `@shared/log/trace`，shape `{ tid, sid, psid?, startAt }`）。renderer `Tracer.startWithSpan().bind({mod:'chat.send',...})` 起 chat.send tracer 后 `tracer.serialize()` 透传；main 端 IPC handler `Tracer.deserialize(trace).derive().bind({mod:'chat.ipc',...})` 重建上游 sid 链，下游 chat.turn / chat.llm / chat.tool 的 derive 自动接上 psid。缺省时 main 端 `Tracer.start().derive()` 兜底新起。tail-optional 形参向后兼容老 renderer。
 
 ## 联动变更映射

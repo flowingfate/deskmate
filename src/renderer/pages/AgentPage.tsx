@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 
 import AgentLayout from './layout/agent/AgentLayout';
 import { getAgents, getPrimaryAgentId } from '@/states/agents.atom';
-import { getProfileId } from '@/states/profile.atom';
 import { useMessagesWithStream, CurrentSessionStatus } from '@/lib/chat/agentSessionCacheManager';
 import { newEntityId } from '@shared/persist/id';
 import { log } from '@/log';
@@ -38,11 +37,6 @@ export const AgentPage: React.FC = () => {
   const selectPrimaryAgentOnStartup = useCallback(() => {
     logger.debug({ msg: "🚀 Selecting primary agent on startup..." });
 
-    const profileId = getProfileId();
-    if (!profileId) {
-      logger.warn({ msg: "No profile found, skipping primary agent selection" });
-      return;
-    }
 
     const agents = getAgents();
     logger.debug({ msg: "Selecting startup agent", agentsCount: agents.length });
@@ -65,7 +59,7 @@ export const AgentPage: React.FC = () => {
 
   const startupDoneRef = useRef(false);
   useEffect(() => {
-    if (startupDoneRef.current || !getProfileId() || hasAutoSelectedPrimaryAgentOnStartup) return;
+    if (startupDoneRef.current || hasAutoSelectedPrimaryAgentOnStartup) return;
 
     hasAutoSelectedPrimaryAgentOnStartup = true;
     startupDoneRef.current = true;

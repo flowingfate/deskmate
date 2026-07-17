@@ -5,7 +5,6 @@ import * as path from 'path';
 import { importForeignAgentSkills } from '../importForeignAgentSkills';
 import { addSkillFromDevice } from '../skillDeviceImporter';
 import { linkSkill } from '../skillInstall';
-import { Profiles } from '../../../persist';
 
 vi.mock('../skillDeviceImporter', () => ({
   addSkillFromDevice: vi.fn(),
@@ -15,11 +14,6 @@ vi.mock('../skillInstall', () => ({
   linkSkill: vi.fn(),
 }));
 
-vi.mock('../../../persist', () => ({
-  Profiles: {
-    get: vi.fn(),
-  },
-}));
 
 interface MockSkillStore {
   get: Mock;
@@ -47,9 +41,6 @@ describe('importForeignAgentSkills', () => {
       get: vi.fn().mockReturnValue(null),
       upsert: vi.fn().mockResolvedValue(undefined),
     };
-    (Profiles.get as Mock).mockReturnValue({
-      activeSync: () => ({ id: 'p_test', skills }),
-    });
     (linkSkill as Mock).mockResolvedValue({ success: true, skillName: 'pdf' });
     (addSkillFromDevice as Mock).mockResolvedValue({ success: true, skillName: 'pdf', skillVersion: '1.0.0' });
   });
@@ -63,7 +54,7 @@ describe('importForeignAgentSkills', () => {
     const sourcePath = path.join(tempHome, '.claude', 'skills', 'pdf');
     writeSkill(sourcePath, 'pdf', 'PDF tools', '2.0.0');
 
-    const result = await importForeignAgentSkills([
+    const result = await importForeignAgentSkills({ id: 'p_test', skills }, [
       {
         candidateId: 'claude-code:pdf',
         sourceId: 'claude-code',
@@ -80,23 +71,22 @@ describe('importForeignAgentSkills', () => {
       linkedCount: 1,
       failedCount: 0,
     }));
-    expect(linkSkill).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'pdf',
-      version: '2.0.0',
-      foreign: expect.objectContaining({
-        kind: 'link',
-        id: 'claude-code',
-        label: 'Claude Code',
-        originalPath: sourcePath,
+    expect(linkSkill).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p_test', skills }),
+      expect.objectContaining({
+        name: 'pdf',
+        version: '2.0.0',
+        foreign: expect.objectContaining({ kind: 'link', id: 'claude-code', originalPath: sourcePath }),
       }),
-    }), sourcePath);
+      sourcePath,
+    );
   });
 
   it('copies a selected foreign skill and preserves provenance after copy import', async () => {
     const sourcePath = path.join(tempHome, '.codex', 'skills', 'pdf');
     writeSkill(sourcePath, 'pdf', 'PDF tools');
 
-    const result = await importForeignAgentSkills([
+    const result = await importForeignAgentSkills({ id: 'p_test', skills }, [
       {
         candidateId: 'codex:pdf',
         sourceId: 'codex',
@@ -108,7 +98,11 @@ describe('importForeignAgentSkills', () => {
     ]);
 
     expect(result).toEqual(expect.objectContaining({ success: true, copiedCount: 1 }));
-    expect(addSkillFromDevice).toHaveBeenCalledWith(sourcePath, expect.any(Function));
+    expect(addSkillFromDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p_test', skills }),
+      sourcePath,
+      expect.any(Function),
+    );
     expect(skills.upsert).toHaveBeenCalledWith(expect.objectContaining({
       name: 'pdf',
       foreign: expect.objectContaining({ kind: 'copy', originalPath: sourcePath }),
@@ -122,7 +116,7 @@ describe('importForeignAgentSkills', () => {
     writeSkill(sourcePath, 'pdf', 'PDF tools');
     skills.upsert.mockRejectedValueOnce(new Error('disk full'));
 
-    const result = await importForeignAgentSkills([
+    const result = await importForeignAgentSkills({ id: 'p_test', skills }, [
       {
         candidateId: 'claude-code:pdf',
         sourceId: 'claude-code',
@@ -147,7 +141,7 @@ describe('importForeignAgentSkills', () => {
     writeSkill(claudePath, 'pdf', 'Claude PDF');
     writeSkill(codexPath, 'pdf', 'Codex PDF');
 
-    const result = await importForeignAgentSkills([
+    const result = await importForeignAgentSkills({ id: 'p_test', skills }, [
       { candidateId: 'a', sourceId: 'claude-code', sourcePath: claudePath, installMode: 'link', overwrite: false, selectedSkillName: 'pdf' },
       { candidateId: 'b', sourceId: 'codex', sourcePath: codexPath, installMode: 'link', overwrite: false, selectedSkillName: 'pdf' },
     ]);
@@ -163,7 +157,7 @@ describe('importForeignAgentSkills', () => {
     writeSkill(sourcePath, 'pdf', 'PDF tools');
     skills.get.mockReturnValue({ name: 'pdf', description: 'Old', version: '0.1.0' });
 
-    const result = await importForeignAgentSkills([
+    const result = await importForeignAgentSkills({ id: 'p_test', skills }, [
       {
         candidateId: 'claude-code:pdf',
         sourceId: 'claude-code',

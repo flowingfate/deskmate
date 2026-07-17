@@ -17,6 +17,7 @@ type ExecuteSchedulerJobParams = {
   onReady?: (payload: { chatSessionId: string }) => void;
   /** 补跑路径传入注册时的 generation；执行前校验仍属当前 profile，否则放弃。 */
   expectedGeneration?: number;
+  onRunCreated?: (run: JobRun) => void;
 };
 
 /**
@@ -30,6 +31,7 @@ export async function executeSchedulerJob({
   taskRuntime,
   onReady,
   expectedGeneration,
+  onRunCreated,
 }: ExecuteSchedulerJobParams): Promise<SchedulerExecutionResult> {
   if (expectedGeneration !== undefined && !context.isCurrentGeneration(expectedGeneration)) {
     return { success: false, error: 'Scheduler generation is no longer active.' };
@@ -57,18 +59,12 @@ export async function executeSchedulerJob({
     }
   };
 
-  const profile = context.profile;
-  if (!profile) {
-    const error = 'Scheduler is not initialized for the current user.';
-    markFinish('failed', new Date().toISOString());
-    logger.error({ msg: 'Job execution failed', jobId: job.id, triggerSource, err: error, success: false });
-    return { success: false, error };
-  }
+  const store = context.store
 
   let agent;
   let persistJob;
   try {
-    agent = await profile.getAgent(job.agentId);
+    agent = await store.getAgent(job.agentId);
     if (!agent) {
       throw new Error(`Agent not found: ${job.agentId}`);
     }
@@ -96,12 +92,13 @@ export async function executeSchedulerJob({
   onReady?.({ chatSessionId: runSession.id });
 
   const userMessage = createUserMessage({ content: job.message });
-  const piJobRun = new JobRun(runSession.id, profile.id, job.agentId, runSession);
+  const piJobRun = new JobRun(runSession.id, store.id, job.agentId, runSession);
+  onRunCreated?.(piJobRun);
 
   let messageCount = 0;
   let runError: string | null = null;
   try {
-    const result = await piJobRun.run(userMessage);
+    const result = await piJobRun.run(userMessage, undefined);
     messageCount = result.messageCount;
   } catch (error) {
     runError = error instanceof Error ? (error.message || 'unknown error') : String(error);
@@ -120,8 +117,9 @@ export async function executeSchedulerJob({
     logger.warn({ msg: 'Failed to finish scheduled run', jobId: job.id, runId: runSession.id, err: error });
   }
 
-  if (finishError == null && job.notifyOnCompletion) {
+  if (context.isStarted && finishError == null && job.notifyOnCompletion) {
     showSessionCompletionNotification({
+      profileId: context.profileId,
       agentId: job.agentId,
       jobId: job.id,
       sessionId: runSession.id,

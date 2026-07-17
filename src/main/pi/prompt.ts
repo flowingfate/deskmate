@@ -8,8 +8,8 @@
  * skill snapshot 不落盘（overview §3.3）；workspace / deliverables 概念已删（§3.5）。
  */
 
-import { Profiles } from '@main/persist';
-import type { Profile } from '@main/persist/profile';
+import { ProfileRegistry } from '@main/profileRegistry'
+import type { ProfileStore } from '@main/persist/profileStore';
 import { log } from '@main/log';
 
 import type { AgentConfig } from './utils/config';
@@ -31,16 +31,13 @@ export async function buildSystemPrompt(args: {
 }): Promise<string> {
   const { agentCfg, profileId } = args;
 
-  const profile = await Profiles.get().active();
-  if (profile.id !== profileId) {
-    throw new Error(`[pi/prompt] profileId mismatch: requested "${profileId}" but active is "${profile.id}"`);
-  }
+  const store = ProfileRegistry.require(profileId).store
 
   const segments: string[] = [];
   if (agentCfg.systemPrompt && agentCfg.systemPrompt.trim().length > 0) {
     segments.push(agentCfg.systemPrompt);
   }
-  const specific = await buildAgentSpecific(agentCfg, profile);
+  const specific = await buildAgentSpecific(agentCfg, store);
   if (specific) segments.push(specific);
   segments.push(getGlobalSystemPrompt());
 
@@ -49,12 +46,12 @@ export async function buildSystemPrompt(args: {
 
 async function buildAgentSpecific(
   agentCfg: AgentConfig,
-  profile: Profile,
+  store: ProfileStore,
 ): Promise<string> {
   const blocks: string[] = [];
   blocks.push(identityBlock(agentCfg.name));
   blocks.push(knowledgeBlock());
-  const bound = buildBoundSkills(agentCfg, profile);
+  const bound = buildBoundSkills(agentCfg, store);
   if (bound) blocks.push(bound);
 
   return blocks.join('');
@@ -65,7 +62,7 @@ async function buildAgentSpecific(
  * 因而不破坏 provider 的前缀 KV cache。lazy skill 不列在这里：用户的 `@skill://<name>`
  * 引用本身落在 user message，模型按稳定指引自行 `read skill://<name>`。
  */
-function buildBoundSkills(agentCfg: AgentConfig, profile: Profile): string {
+function buildBoundSkills(agentCfg: AgentConfig, store: ProfileStore): string {
   const bindings = agentCfg.skills;
   const liveNames = normalizeNames(liveSkillNames(bindings));
   const hasLazySkills = lazySkillNames(bindings).length > 0;
@@ -76,7 +73,7 @@ function buildBoundSkills(agentCfg: AgentConfig, profile: Profile): string {
   const items: Array<{ name: string; description: string; version: string; filePath: string }> = [];
   const missing: string[] = [];
   for (const name of wanted) {
-    const skill = profile.skills.get(name);
+    const skill = store.skills.get(name);
     if (!skill) { missing.push(name); continue; }
     items.push({
       name: skill.name,
@@ -88,7 +85,7 @@ function buildBoundSkills(agentCfg: AgentConfig, profile: Profile): string {
   if (missing.length > 0) {
     logger.info({
       msg: '[pi/prompt] Missing skills referenced by agent',
-      profileId: profile.id, agent: agentCfg.name, missing,
+      profileId: store.id, agent: agentCfg.name, missing,
       requested: wanted.length, resolved: items.length,
     });
   }

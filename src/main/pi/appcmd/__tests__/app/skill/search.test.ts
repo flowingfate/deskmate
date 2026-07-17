@@ -42,10 +42,13 @@ describe('skill search', () => {
 
     const r = await runSkill('search pdf');
     expect(r.exitCode).toBe(0);
-    expect(skillMocks.searchLibraryInternal).toHaveBeenCalledWith({
-      query: 'pdf',
-      current_agent_id: 'agent-test',
-    });
+    expect(skillMocks.searchLibraryInternal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.any(String) }),
+      {
+        query: 'pdf',
+        current_agent_id: 'agent-test',
+      },
+    );
     expect(r.stdout).toContain('pdf v1.0');
     expect(r.stdout).toContain('PDF tools');
   });

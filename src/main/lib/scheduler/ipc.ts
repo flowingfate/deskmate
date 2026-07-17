@@ -1,6 +1,11 @@
 import { ipcMain } from 'electron';
 import { renderToMain } from '@shared/ipc/scheduler';
-import { schedulerManager } from './manager';
+import type { SchedulerManager } from './manager';
+import { requireProfileForSender } from '@main/startup/ipc/profileContext';
+
+function schedulerForSender(event: Electron.IpcMainInvokeEvent): SchedulerManager {
+  return requireProfileForSender(event).scheduler;
+}
 
 let isRegistered = false;
 
@@ -9,54 +14,54 @@ export const registerSchedulerIPC = (): void => {
 
   const handle = renderToMain.bindMain(ipcMain);
 
-  handle.listJobs(async () => {
+  handle.listJobs(async (event) => {
     try {
-      const jobs = await schedulerManager.listJobs();
+      const jobs = await schedulerForSender(event).listJobs();
       return { success: true, data: jobs };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   });
 
-  handle.createJob(async (_event, job) => {
+  handle.createJob(async (event, job) => {
     try {
-      const jobId = await schedulerManager.createJob(job);
+      const jobId = await schedulerForSender(event).createJob(job);
       return { success: true, data: { jobId } };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   });
 
-  handle.deleteJob(async (_event, jobId) => {
+  handle.deleteJob(async (event, jobId) => {
     try {
-      const success = await schedulerManager.deleteJob(jobId);
+      const success = await schedulerForSender(event).deleteJob(jobId);
       return { success };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   });
 
-  handle.toggleJob(async (_event, jobId, enabled) => {
+  handle.toggleJob(async (event, jobId, enabled) => {
     try {
-      const success = await schedulerManager.toggleJob(jobId, enabled);
+      const success = await schedulerForSender(event).toggleJob(jobId, enabled);
       return { success };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   });
 
-  handle.updateJob(async (_event, jobId, updates) => {
+  handle.updateJob(async (event, jobId, updates) => {
     try {
-      const success = await schedulerManager.updateJob(jobId, updates);
+      const success = await schedulerForSender(event).updateJob(jobId, updates);
       return { success };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   });
 
-  handle.runJobNow(async (_event, jobId, force) => {
+  handle.runJobNow(async (event, jobId, force) => {
     try {
-      const result = await schedulerManager.runJobNow(jobId, force);
+      const result = await schedulerForSender(event).runJobNow(jobId, force);
       if (!result.success) {
         return { success: false, error: result.error || 'Failed to run schedule' };
       }

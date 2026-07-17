@@ -1,9 +1,8 @@
 import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import { Profiles } from '../persist/profiles';
+import { ProfileRegistry } from '../profileRegistry';
 import { getPiAuthManager } from '@main/pi';
-import { mcpClientManager } from "../lib/mcpRuntime"
 
 /**
  * Load .env.local synchronously for eval mode.
@@ -45,16 +44,16 @@ export async function startEvalMode(): Promise<void> {
 
   try {
     // 1. Initialize persist layer (bootstrap is idempotent)
-    await Profiles.get().bootstrap();
+    await ProfileRegistry.bootstrap();
 
-    const profileId = Profiles.get().activeProfileId;
+    const profileId = ProfileRegistry.defaultProfileId;
     if (!profileId) {
-      console.error('[EvalMode] FATAL: No active profile after bootstrap.');
+      console.error('[EvalMode] FATAL: No default profile after bootstrap.');
       app.quit();
       return;
     }
 
-    // 2. Verify github-copilot credentials in active profile's auth.pi.json.
+    // 2. Verify github-copilot credentials in the default profile's auth.pi.json.
     //    getApiKey 内部已处理过期 refresh + 回写；未登录返回 null。
     let token: string | null = null;
     try {
@@ -66,7 +65,7 @@ export async function startEvalMode(): Promise<void> {
     }
 
     if (!token) {
-      console.error(`[EvalMode] FATAL: No github-copilot credentials in active profile auth.pi.json (profileId=${profileId}).`);
+      console.error(`[EvalMode] FATAL: No github-copilot credentials in default profile auth.pi.json (profileId=${profileId}).`);
       console.error('[EvalMode] Please launch DESKMATE normally and sign in via Settings → Providers first.');
       app.quit();
       return;
@@ -77,13 +76,7 @@ export async function startEvalMode(): Promise<void> {
     // 3. chat engine 已退役（PR5e）；EvalAgentRunner 直接走 pi.Agent + persist，
     //    不再需要 AgentChatManager initialize。
 
-    // 4. Initialize MCPClientManager (for tool execution)
-    try {
-      await mcpClientManager.initialize();
-      console.error('[EvalMode] MCPClientManager initialized');
-    } catch (error) {
-      console.error('[EvalMode] WARNING: MCPClientManager init failed, tools may not work:', error);
-    }
+    // 4. ProfileRegistry.bootstrap 已启动每个 runtime Profile 的 MCP manager。
 
     // 5. Start the eval HTTP server
     const { EvalHttpServer } = await import('../lib/evalHarness/evalHttpServer');

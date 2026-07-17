@@ -24,6 +24,7 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { InternalUrlRouter } from '@main/pi';
+import type { Profile } from '@main/profile';
 
 export interface AttachContext {
   agentId: string;
@@ -58,9 +59,9 @@ export async function attachFromPath(
   srcAbsPath: string,
   originalName: string | undefined,
   ctx: AttachContext,
-  profileId: string,
+  profile: Profile,
 ): Promise<AttachOutcome> {
-  const uploadsDir = await resolveUploadsDir(profileId, ctx);
+  const uploadsDir = await resolveUploadsDir(profile, ctx);
   const safeName = sanitizeAttachmentName(originalName ?? path.basename(srcAbsPath));
   const finalName = await copyWithUniqueName(srcAbsPath, uploadsDir, safeName);
   const destPath = path.join(uploadsDir, finalName);
@@ -82,9 +83,9 @@ export async function attachFromBytes(
   bytes: Uint8Array,
   originalName: string,
   ctx: AttachContext,
-  profileId: string,
+  profile: Profile,
 ): Promise<AttachOutcome> {
-  const uploadsDir = await resolveUploadsDir(profileId, ctx);
+  const uploadsDir = await resolveUploadsDir(profile, ctx);
   const safeName = sanitizeAttachmentName(originalName);
   const finalName = await writeBytesWithUniqueName(bytes, uploadsDir, safeName);
   const destPath = path.join(uploadsDir, finalName);
@@ -106,11 +107,12 @@ export async function attachFromBytes(
  * `mkdir` 是物化职责 —— router 的 `resolveToPath` 只算路径不读 I/O,attachment
  * 落盘前必须自己 ensure 父目录。
  */
-async function resolveUploadsDir(profileId: string, ctx: AttachContext): Promise<string> {
+async function resolveUploadsDir(profile: Profile, ctx: AttachContext): Promise<string> {
   const router = InternalUrlRouter.get();
   const dir = await router.resolveToPath(`local://${UPLOADS_DIR}`, {
     mode: 'agent',
-    profileId,
+    profile,
+    profileId: profile.id,
     agentId: ctx.agentId,
     sessionId: ctx.sessionId,
   });

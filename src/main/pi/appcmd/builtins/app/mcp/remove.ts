@@ -9,8 +9,6 @@
  * 看看会做什么)。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime'
-import { Profiles } from '@main/persist';
 
 import { COMMON_FLAGS, isDryRun, isHelp, isJson, isYes } from '../../../_commonFlags';
 import { parseFlags, type FlagSpec } from '../../../flags';
@@ -69,14 +67,9 @@ export async function runRemove(argv: string[], ctx: AppCmdContext): Promise<voi
   }
   const { name } = nameResult;
 
-  // 确认 server 存在(给一个温和提示;dry-run 也应该有这个反馈)
-  let exists = false;
-  try {
-    const profile = await Profiles.get().active();
-    exists = profile.mcp.get(name) !== undefined;
-  } catch {
-    // profile 未就绪 —— 走到下面 dry-run / 真删,各自再处理失败
-  }
+  // AppCmdContext 继承 ToolContext 的不可变 runtime owner。
+  const profile = ctx.profile;
+  const exists = profile.store.mcp.get(name) !== undefined;
 
   if (isDryRun(parsed.flags)) {
     if (!exists) {
@@ -115,7 +108,8 @@ export async function runRemove(argv: string[], ctx: AppCmdContext): Promise<voi
   }
 
   try {
-    await mcpClientManager.delete(name);
+    if (!profile) throw new Error('Profile is unavailable');
+    await profile.mcpManager.delete(name);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     ctx.printErr(`mcp remove: failed to remove "${name}": ${msg}\n`);

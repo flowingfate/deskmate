@@ -14,8 +14,8 @@ import { resolveCwdUri, resolveUriTokens } from '../util/resolveUriTokens';
 import { InternalUrlRouter } from '@main/pi/internal-urls';
 import { SkillProtocolHandler } from '@main/pi/internal-urls/handlers/skill-protocol';
 import { Skills } from '@main/persist/skills';
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import { ProfileStore } from '@main/persist/profileStore'
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting } from '@main/persist/lib/root';
 import { Tracer } from '@shared/log/trace';
 import type { AgentToolContext } from '../types';
@@ -24,18 +24,18 @@ let tmpRoot = '';
 let agentId = '';
 const PROFILE_ID = 'p_TEST';
 
-beforeEach(() => {
+beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-uri-it-'));
   agentId = '';
   setRootForTesting(tmpRoot);
-  Profile.evict(PROFILE_ID);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   InternalUrlRouter.resetForTesting();
   InternalUrlRouter.get().register(new SkillProtocolHandler());
+  await ProfileRegistry.getOrLoad(PROFILE_ID);
 });
 
 afterEach(() => {
-  Profile.evict(PROFILE_ID);
+  ProfileRegistry.resetForTesting();
   setRootForTesting(null);
   try {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
@@ -48,6 +48,7 @@ afterEach(() => {
 function makeCtx(): AgentToolContext {
   return {
     mode: 'agent',
+    profile: ProfileRegistry.require(PROFILE_ID),
     profileId: PROFILE_ID,
     agentId,
     sessionId: 's',
@@ -60,10 +61,10 @@ function makeCtx(): AgentToolContext {
 }
 
 async function bindSkill(name: string): Promise<void> {
-  const profile = await Profile.getOrLoad(PROFILE_ID);
-  let agent = agentId ? await profile.getAgent(agentId) : undefined;
+  const store = await (await ProfileRegistry.getOrLoad(PROFILE_ID)).store
+  let agent = agentId ? await store.getAgent(agentId) : undefined;
   if (!agent) {
-    agent = await profile.createAgent({ name: 'URI Test Agent', version: '1.0.0' });
+    agent = await store.createAgent({ name: 'URI Test Agent', version: '1.0.0' });
     agentId = agent.id;
   }
   await agent.patchFront({
@@ -122,8 +123,8 @@ describe('resolveUriTokens', () => {
     const dirWithSpace = path.join(tmpRoot, 'has space');
     setRootForTesting(dirWithSpace);
     agentId = '';
-    Profile.evict(PROFILE_ID);
-    Profiles.resetForTesting();
+    ProfileRegistry.resetForTesting();
+    ProfileRegistry.resetForTesting();
     await seedSkill('demo');
     const out = await resolveUriTokens('cat skill://demo', makeCtx(), true);
     const absMd = path.resolve(dirWithSpace, 'profiles', PROFILE_ID, 'skills', 'demo', 'SKILL.md');

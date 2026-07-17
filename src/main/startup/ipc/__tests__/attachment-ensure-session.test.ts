@@ -14,8 +14,8 @@ import * as path from 'node:path';
 
 import { ensureSandboxSession } from '../attachment';
 import { attachFromBytes } from '@main/lib/attachment';
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import type { Profile } from '@main/profile';
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting } from '@main/persist/lib/root';
 import { ProfileDb } from '@main/persist/lib/db/db';
 import { InternalUrlRouter, LocalProtocolHandler } from '@main/pi';
@@ -32,15 +32,15 @@ const LAZY_SESSION_ID = 's_TESTLAZYCREATE0000000000';
 beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'attach-ensure-'));
   setRootForTesting(tmpRoot);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   InternalUrlRouter.resetForTesting();
   InternalUrlRouter.get().register(new LocalProtocolHandler());
 
   profileId = `p_TEST_${Math.random().toString(36).slice(2, 8)}`;
-  profile = await Profile.getOrLoad(profileId);
-  const agent = await profile.createAgent({ name: 'EnsureSessionTest', version: '1.0.0' });
+  profile = await ProfileRegistry.getOrLoad(profileId);
+  const agent = await profile.store.createAgent({ name: 'EnsureSessionTest', version: '1.0.0' });
   agentId = agent.id;
 });
 
@@ -51,12 +51,12 @@ afterEach(() => {
 
 describe('ensureSandboxSession', () => {
   it('未落盘的 sessionId → 补建 regular session,之后附件能物化进其 sandbox', async () => {
-    const agent = await profile.getAgent(agentId);
+    const agent = await profile.store.getAgent(agentId);
     expect(agent).toBeDefined();
     // 前置:该 session 既不在 regular 索引也不在 jobRun 索引。
     expect(await agent!.findSessionAcrossKinds(LAZY_SESSION_ID)).toBeUndefined();
 
-    await ensureSandboxSession(profile, agentId, LAZY_SESSION_ID);
+    await ensureSandboxSession(profile.store, agentId, LAZY_SESSION_ID);
 
     const created = await agent!.findSessionAcrossKinds(LAZY_SESSION_ID);
     expect(created).toBeDefined();
@@ -67,18 +67,18 @@ describe('ensureSandboxSession', () => {
       Buffer.from('hello world'),
       'note.txt',
       { agentId, sessionId: LAZY_SESSION_ID },
-      profileId,
+      profile,
     );
     expect(outcome.uri).toBe('local://uploads/note.txt');
     expect(fs.existsSync(path.join(created!.filesDir(), 'uploads', 'note.txt'))).toBe(true);
   });
 
   it('幂等:已存在的 session 不重复创建(createdAt 不变)', async () => {
-    const agent = await profile.getAgent(agentId);
+    const agent = await profile.store.getAgent(agentId);
     const first = await agent!.createSession({ id: LAZY_SESSION_ID });
     const createdAt = first.config.createdAt;
 
-    await ensureSandboxSession(profile, agentId, LAZY_SESSION_ID);
+    await ensureSandboxSession(profile.store, agentId, LAZY_SESSION_ID);
 
     const after = await agent!.findSessionAcrossKinds(LAZY_SESSION_ID);
     expect(after!.id).toBe(LAZY_SESSION_ID);

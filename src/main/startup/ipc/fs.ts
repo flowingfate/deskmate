@@ -1,4 +1,4 @@
-import { ipcMain, shell, dialog } from 'electron';
+import { BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -8,7 +8,6 @@ import type { Context } from './shared';
 import type { ImportConflictResolution } from '@shared/types/fsTypes';
 import { promptImportConflictResolution, getUniqueImportPath } from './shared';
 import { renderToMain } from '@shared/ipc/fs';
-import { mainWindow } from '@main/startup/wins';
 
 export default function(ctx: Context) {
   const handle = renderToMain.bindMain(ipcMain);
@@ -281,9 +280,9 @@ export default function(ctx: Context) {
     }
   });
 
-  handle.selectFile(async (_event, options?) => {
+  handle.selectFile(async (event, options?) => {
     try {
-      const win = mainWindow();
+      const win = BrowserWindow.fromWebContents(event.sender);
       if (!win) {
         return {
           success: false,
@@ -437,11 +436,11 @@ export default function(ctx: Context) {
   });
 
   // New: API implementation for selecting multiple files
-  handle.selectFiles(async (_event, options?) => {
+  handle.selectFiles(async (event, options?) => {
     const logger = log;
     logger.info({ msg: '[fs:selectFiles] Dialog requested', mod: 'fs:selectFiles', options });
     try {
-      const win = mainWindow();
+      const win = BrowserWindow.fromWebContents(event.sender);
       if (!win) {
         logger.warn({ msg: '[fs:selectFiles] No main window available', mod: 'fs:selectFiles' });
         return {

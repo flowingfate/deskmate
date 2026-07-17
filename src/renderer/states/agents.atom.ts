@@ -5,7 +5,6 @@
  * 真值在 main 端 persist 层；本 atom 通过 persist IPC 通道同步。
  *
  * 订阅通道：
- *   - persist:profile:switched      → 重新 hydrate
  *   - persist:agent:registry:updated (kind='agents') → 同步顺序 + primaryAgentId
  *   - persist:agent:updated         → upsert 单个 agent（仅 record；detail 在 agentDetail.atom）
  *   - persist:agent:removed         → 从 byId 删除
@@ -22,6 +21,7 @@
 import { produce } from 'immer';
 import { unit } from '@/atom/unit';
 import { persistEvents } from '@/ipc/persist';
+
 import { getInitialSnapshot } from '@/states/_snapshot';
 import { useCurrentSession } from '@/states/currentSession.atom';
 import type { AgentRecord } from '@shared/persist/types';
@@ -68,10 +68,7 @@ async function hydrate(): Promise<void> {
 }
 
 // 通道订阅。模块加载即生效；renderer 进程退出时整体被销毁，无需手动 off。
-persistEvents['profile:switched']((_e, _payload) => {
-  change({ byId: {}, orderedIds: [], primaryAgentId: undefined, hydrated: false });
-  void hydrate();
-});
+
 
 persistEvents['agent:registry:updated']((_e, payload) => {
   if (payload.kind !== 'agents') return;

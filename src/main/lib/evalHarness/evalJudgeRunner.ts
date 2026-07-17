@@ -1,7 +1,7 @@
 // src/main/lib/evalHarness/evalJudgeRunner.ts
 import type { JudgeRequest, JudgeResultResponse, JudgeChatMessage } from './evalProtocol';
 import { runUtilityChat } from '@main/pi'
-import { Profiles } from '../../persist';
+import { ProfileRegistry } from '../../profileRegistry'
 
 /**
  * Handles 'judge' requests: raw LLM call with caller-provided messages.
@@ -42,18 +42,15 @@ export class EvalJudgeRunner {
    * 返回 `${provider}::${modelId}` 复合 key（Step 9+ schema）。
    */
   private async getAgentModelKey(): Promise<string> {
-    const profile = await Profiles.get().active();
-    if (!profile) {
-      throw new Error(`No profile found for user alias: ${this.profileId}`);
-    }
+    const store = ProfileRegistry.require(this.profileId).store
 
-    const records = profile.listAgents();
-    const primaryId = profile.getPrimaryAgentId();
+    const records = store.listAgents();
+    const primaryId = store.getPrimaryAgentId();
     const match = (primaryId ? records.find((r) => r.id === primaryId) : undefined) ?? records[0];
     if (!match) {
       throw new Error(`No agents found in profile`);
     }
-    const agent = await profile.getAgent(match.id);
+    const agent = await store.getAgent(match.id);
     const model = agent?.config.model;
     if (!model) {
       throw new Error(`No model configured for primary agent "${match.name}"`);

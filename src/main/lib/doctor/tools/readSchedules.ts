@@ -18,7 +18,7 @@
 import type { Tool } from '@earendil-works/pi-ai';
 import { jsonSchema } from '@main/pi';
 import * as fs from 'fs';
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 import { toSchedulerJob } from '../../scheduler';
 import type { SchedulerJob } from '@shared/ipc/scheduler';
 import { truncateMiddle } from '../chatSession/truncate';
@@ -54,30 +54,23 @@ const MESSAGE_BUDGET = 2 * 1024;
 const DESCRIPTION_BUDGET = 512;
 const FIRST_LINE_PREVIEW_CHARS = 80;
 
-export async function executeReadSchedules(args: {
-  mode: 'list' | 'detail';
-  scheduleId?: string;
-}): Promise<string> {
+export async function executeReadSchedules(
+  store: ProfileStore,
+  args: { mode: 'list' | 'detail'; scheduleId?: string },
+): Promise<string> {
   const mode = args?.mode;
   if (mode !== 'list' && mode !== 'detail') {
     return errorBlock('mode must be "list" or "detail".');
   }
 
-  let profile;
-  try {
-    profile = await Profiles.get().active();
-  } catch (err) {
-    return errorBlock(`No active profile — cannot read schedules. ${err instanceof Error ? err.message : String(err)}`);
-  }
-
-  const schedulerStatePath = PERSIST_PATH.schedulerStateFile(getAppRoot(), profile.id);
+  const schedulerStatePath = PERSIST_PATH.schedulerStateFile(getAppRoot(), store.id);
   const runtimeState = readJsonSafe<SchedulerStateFile>(schedulerStatePath);
 
-  const flat = await profile.listJobsFlat();
+  const flat = await store.listJobsFlat();
   const allJobs: SchedulerJob[] = flat.map(({ job }) => toSchedulerJob(job.toFile(), job.config.runState));
 
   if (mode === 'list') {
-    return formatList(profile.id, runtimeState, allJobs);
+    return formatList(store.id, runtimeState, allJobs);
   }
 
   const scheduleId = args.scheduleId;
