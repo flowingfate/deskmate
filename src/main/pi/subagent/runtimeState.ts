@@ -16,6 +16,7 @@ export function createPendingRuntimeState(
   data: SubrunDataFile,
   correlationId?: string,
 ): SubAgentPendingRuntimeState {
+  const policy = data.execution.policy;
   return {
     profileId: data.profileId,
     parentAgentId: data.parentAgentId,
@@ -25,8 +26,8 @@ export function createPendingRuntimeState(
     correlationId,
     task: data.request.task,
     expectedOutput: data.request.expectedOutput,
-    maxTurns: data.request.policy.maxTurns,
-    timeoutMs: data.request.policy.timeoutMs,
+    maxTurns: policy.maxTurns,
+    timeoutMs: policy.timeoutMs,
     createdAt: Date.parse(data.createdAt),
     currentTurn: 0,
     steps: [],

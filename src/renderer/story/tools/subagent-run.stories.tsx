@@ -8,6 +8,7 @@ const BlockedRun = lazy(() => import('./SubagentRunDemo').then((module) => ({ de
 const CancelledRun = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.CancelledRun })));
 const ChipStates = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.ChipStates })));
 const CompletedRun = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.CompletedRun })));
+const ContinuedRun = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.ContinuedRun })));
 const FailedRun = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.FailedRun })));
 const LiveSubagentRun = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.LiveSubagentRun })));
 const PartialRun = lazy(() => import('./SubagentRunDemo').then((module) => ({ default: module.PartialRun })));
@@ -31,6 +32,7 @@ export const ChipStatesStory: Story = () => <StoryBoundary><ChipStates /></Story
 export const Pending: Story = () => <StoryBoundary><PendingRun /></StoryBoundary>;
 export const RunningAndCancelable: Story = () => <StoryBoundary><LiveSubagentRun /></StoryBoundary>;
 export const Completed: Story = () => <StoryBoundary><CompletedRun /></StoryBoundary>;
+export const Continued: Story = () => <StoryBoundary><ContinuedRun /></StoryBoundary>;
 export const Partial: Story = () => <StoryBoundary><PartialRun /></StoryBoundary>;
 export const Blocked: Story = () => <StoryBoundary><BlockedRun /></StoryBoundary>;
 export const Failed: Story = () => <StoryBoundary><FailedRun /></StoryBoundary>;

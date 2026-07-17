@@ -24,11 +24,12 @@
 subagent("list")
 subagent("describe <agent-id>")
 subagent("run <agent-id> --task \"...\" --expect \"...\"")
+subagent("continue <subrun-id> --message \"...\"")
 ```
 
 - `list` 返回当前父 Agent 的可委派目标和 `unavailableIds`；`describe` 仅展示已授权目标的安全能力摘要，不泄露 system prompt、委派图或其它冷配置。
-- `run` 的 `task`、`expectedOutput` 必填；可选 `--with-parent-summary`、`--max-turns`、`--timeout-seconds`。上下文仅允许隔离执行或显式的父摘要，不传递完整父会话历史。
-- 一个 assistant response 的多个独立 `subagent("run …")` 调用可并行执行；不存在 batch、async handle 或 join 子命令。
+- `run` 创建新的 Subrun：`task`、`expectedOutput` 必填；可选 `--with-parent-summary`、`--max-turns`、`--timeout-seconds`。`continue` 仅接受当前父 session 内已终态的 `subrunId` 与非空 `--message`；复用持久 transcript，不读取父会话完整历史，也不接受 parent summary。
+- 一个 assistant response 的多个独立 `subagent("run …")` 调用可并行执行；同一 `subrunId` 的并发 `continue` 只有一个可进入运行，其余显式拒绝。
 
 ## 请求与正式结果
 
@@ -47,13 +48,12 @@ subagent("run <agent-id> --task \"...\" --expect \"...\"")
 4. 委派 catalog 不含交互式 `ask` 和真实 `subagent` 工具，禁止嵌套。`web research` 与 shell device-auth 在执行边界拒绝；其余 LocalTool 和全局 MCP OAuth 流程保持可用。
 5. 委派 Agent 必须通过仅在该 run catalog 中可见的 `submit_result` 交付 `completed`、`partial` 或 `blocked`。未提交时至多提醒一次，之后收敛为 partial 或 failed；取消、超时和异常由运行时生成 cancelled 或 failed。
 
-正式结果、assistant/tool transcript 均在结束前落盘；终态写入失败不会向父工具调用返回成功。
 
-### 一次性会话
+### 可继续会话
 
-- Subrun 是一次性任务：`pending → running → terminal`，terminal 后不能继续对话或重新打开。后续委派必须创建新的 Subrun。
-- 每次 BaseSession 调用都是完整的 ReAct user turn。提交结果后待该 turn 自然结束才 formalize；未提交时只追加一条真实 reminder 并再执行一个完整 turn。
-- 结束顺序固定为 transcript flush → formal result → `Subrun.finish(result)` → 返回父工具调用；因此父方不会收到未持久化的完成结果。
+- Subrun 是父 session 内的一段可继续 delegated conversation。首次执行为 `pending → running → terminal`；终态后可由 `continue` 直接进入下一次 `running → terminal` execution，不能在 pending/running 状态下重入。
+- 每次 execution 都是完整的 ReAct user turn。初始 execution 使用 `request.task`；continuation 将 `--message` 作为真实 user message 追加到同一 transcript。提交结果后待该 turn 自然结束才 formalize；未提交时至多追加一条真实 reminder 并再执行一个完整 turn。
+- 每次正式结果、assistant/tool transcript 均在结束前落盘；终态写入失败不会向父工具调用返回成功。`data.json.execution` 保存产生当前结果的 execution，`data.json.result` 保存对应正式结果。
 
 ## Subrun 持久化与生命周期
 
@@ -70,8 +70,8 @@ agents/{parentAgentId}/sessions/{YYYYMM}/{parentSessionId}/
 
 - `SubrunId` 是父 session 局部的三位字符串 `001..999`，`000` 非法。任何 API、IPC 或状态关联都必须携带 profile、父 Agent 和父 session 身份，不能把 ID 视作全局 key。
 - `Session.createSubrun/getSubrun/listSubruns` 是唯一持久化入口；`Subrun` 是消息写入与 `data.json` 状态转换的唯一 owner，不进入普通 session SQL 索引，也不单独创建 files 目录。
-- `data.json` 是 pending → running → terminal 的判别联合。每个父 session 最多保留 20 次委派；manager 在同一父身份短锁内完成 stale recovery、总量门控、reservation 与 active 注册。并发上限为 5。
-- 崩溃后没有 active entry 的 running Subrun 收敛为 interrupted failed，不自动续跑。进程内 live state 仅用于进度显示；终态和重载事实始终来自持久化数据与正式工具结果。
+- `data.json` 保持 v1 判别联合：所有状态都保留当前 execution 的 `kind`、`message` 与 `policy`，terminal data 另存该 execution 的正式 result。每个父 session 最多保留 20 个 Subrun reservation，continuation 不创建 reservation。manager 的 `admitExecution()` 在同一父身份短锁内为 run/continue 统一完成 stale recovery、并发准入与 active 注册；分支仅负责 create 或 terminal→running 状态转换，并发 execution 上限为 5。
+- 崩溃后没有 active entry 的 running execution 收敛为 interrupted failed，不自动续跑。进程内 live state 仅用于进度显示；终态和重载事实始终来自持久化数据与正式工具结果。
 
 - 空 reservation、非法 ID 和非法状态转换均以显式结果返回；Subrun 不写普通 session events、SQL index 或独立 files 目录。
 

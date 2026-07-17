@@ -17,7 +17,7 @@ const SubagentParams = jsonSchema({
       type: 'string',
       description:
         'Shell-style subagent command. Run "--help", or call with empty cmdline, to see usage. ' +
-        'Use list to discover allowed Agents, describe an Agent, or run a delegated task.',
+        'Use list, describe, run, or continue a persisted delegated conversation.',
     },
   },
   required: ['cmd'],
@@ -38,8 +38,8 @@ export const subagent: LocalTool<typeof SubagentParams> = {
   spec: {
     name: 'subagent',
     description:
-      'Delegate work to allowed Agents. Use list, describe <agent-id>, or run <agent-id> --task --expect. ' +
-      'Run "--help" or call with empty cmdline for detailed usage.',
+      'Delegate work to allowed Agents. Use list, describe <agent-id>, run <agent-id> --task --expect, ' +
+      'or continue <subrun-id> --message. Run "--help" or call with empty cmdline for detailed usage.',
     parameters: SubagentParams,
   },
   async handler(args, ctx) {

@@ -167,10 +167,10 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 ## 子智能体执行流
 
 1. 父 Agent 的 LLM 请求调用顶层 `subagent` LocalTool，并以同一 response 的多个 call 表达并行。
-2. tool handler 按当前 Profile 取得 `SubAgentManager.forProfile(profile)` 的 command facade；`list` / `describe` 复用 `Profile.resolveDelegates`，`run` 通过同一 resolver 授权。
-3. manager 以完整 parent identity 短锁完成 stale recovery、总数/并行 gate、三位 subrun reservation 与 active registration。
-4. `SubAgentSession` 在 delegate scope 内使用执行 Agent 的 config/catalog/prompt，持久化 hidden transcript，并以 `submit_result` 收敛正式结果。
-5. manager timeout/parent cancel 直接 abort 实际 run；终态 `Subrun data` 与 parent tool result 是 reload 事实源。
+2. tool handler 按当前 Profile 取得 `SubAgentManager.forProfile(profile)` 的 command facade；`list` / `describe` 复用 `Profile.resolveDelegates`，`run` 创建新 subrun，`continue` 从 parent-owned terminal subrun 取得 delegate 后重新授权。
+3. manager 以完整 parent identity 短锁完成 stale recovery、parallel gate、initial reservation 或 continuation 的 terminal→running transition，再注册 active run。
+4. `SubAgentSession` 在 delegate scope 内使用执行 Agent 的 config/catalog/prompt，初始 task 或 continuation message 都写入同一 hidden transcript，并以 `submit_result` 收敛当前 execution 的正式结果。
+5. manager timeout/parent cancel 直接 abort 实际 run；Subrun data 的当前 formal result 与 parent tool result 是 reload 事实源。
 6. `subagentRun` IPC 将所有 profile-bound manager 的 live state 推到对应卡片；`getRunData` 只读 parent-owned metadata，`getRunMessages` 只在 Dialog 打开后沿相同 owner chain 读取 Domain transcript，`cancelRun` 只取消完整 parent identity 下的单一 active run。Dialog 关闭释放 transcript，renderer live cache 与主聊天 cache 都不持有它。
 
 ---

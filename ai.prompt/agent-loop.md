@@ -62,9 +62,9 @@ BaseSession (abstract)                  src/main/pi/session/base.ts
   │     └─ streamOneRound drain 所有 delta 静默
   │
   └── SubAgentSession extends BaseSession                 pi/subagent/session.ts
-        ├─ 仅运行一个 pending Subrun；scope 内执行 delegate config/catalog
-        ├─ submit_result / missing-submit → formal terminal result
-        └─ 以 `{ onStep?, onResult? }` 向未来 manager 输出有限进度
+        ├─ 执行一个 active initial/continuation Subrun execution；scope 内执行 delegate config/catalog
+        ├─ submit_result / missing-submit → 当前 execution 的 formal terminal result
+        └─ 以 `{ onStep?, onResult? }` 向 manager 输出有限进度
 ```
 
 **`PersistSessionLike`**(`session/base.ts`)是 pi 拥有的最小契约,不是 persist 暴露的细节:`config.{title,updatedAt,contextState,turn}` + `loadDomainMessages / appendDomainMessage / appendToolResponse / rewriteMessages / flushMessages / persist`。`appendDomainMessage` 写 user / assistant 行,`appendToolResponse` 单独追加 `tool_res` 行(对应 `PersistedToolResponse`),`rewriteMessages` 用于 edit / retry 整段重写。默认实现是 `@main/persist` 的 `Session` 类(落盘);eval / 测试可以注入内存实现,pi 不感知差异。
@@ -462,7 +462,7 @@ onTurnComplete → IDLE
 
 ## 15. Agent 委派
 
-生产路径为 `subagent` LocalTool → `SubAgentManager.forProfile(profile)` → parent-scoped persisted `Subrun` → `SubAgentSession`。每个 Profile 绑定唯一 manager；它授权 delegate、持久 reservation/parallel gate、timeout/cancel、stale-running recovery 与有界 runtime state。SubAgentSession 只运行一个 pending Subrun 并写正式结果。父 RegularSession stop 时先取得所属 Profile 的 manager，再按完整 parent identity 取消 active delegated runs；不存在第二套委派 backend。
+生产路径为 `subagent` LocalTool → `SubAgentManager.forProfile(profile)` → parent-scoped persisted `Subrun` → `SubAgentSession`。每个 Profile 绑定唯一 manager；它授权 delegate、持久 reservation/parallel gate、timeout/cancel、stale-running recovery 与有界 runtime state。`run` 创建初始 Subrun；`continue` 在重新授权后复用同一 transcript/contextState 执行一轮新的 persisted continuation，不分配新 reservation。父 RegularSession stop 时先取得所属 Profile 的 manager，再按完整 parent identity 取消 active delegated runs；不存在第二套委派 backend。
 
 ---
 

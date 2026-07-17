@@ -45,6 +45,11 @@ function invoke(channel: string): Promise<boolean | object> {
           expectedOutput: 'A concise implementation review.',
           policy: { maxTurns: 8, timeoutMs: 480_000 },
         },
+        execution: {
+          kind: 'continuation',
+          message: 'Add rollout risks.',
+          policy: { maxTurns: 3, timeoutMs: 180_000 },
+        },
       },
     });
   }

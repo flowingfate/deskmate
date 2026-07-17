@@ -24,18 +24,12 @@ export function formatSubrunId(sequence: number): SubrunId {
   return String(sequence).padStart(3, '0');
 }
 
-export interface IsolatedSubAgentRunContext {
-  kind: 'isolated';
-}
-
-export interface ParentSummarySubAgentRunContext {
-  kind: 'parent_summary';
-  summary: string;
-}
-
 export type SubAgentRunContext =
-  | IsolatedSubAgentRunContext
-  | ParentSummarySubAgentRunContext;
+  | { kind: 'isolated' }
+  | {
+    kind: 'parent_summary';
+    summary: string;
+  };
 
 export interface SubAgentRunPolicy {
   maxTurns: number;
@@ -107,6 +101,12 @@ export interface SubrunSessionData {
   turn?: { status: 'idle' | 'running'; startedAt?: number };
 }
 
+export interface SubrunExecution {
+  kind: 'initial' | 'continuation';
+  message: string;
+  policy: SubAgentRunPolicy;
+}
+
 interface SubrunDataFileBase {
   version: 1;
   kind: 'subrun';
@@ -116,6 +116,7 @@ interface SubrunDataFileBase {
   parentSessionId: string;
   delegateAgentId: string;
   request: SubAgentRunRequest;
+  execution: SubrunExecution;
   createdAt: string;
   session: SubrunSessionData;
 }
@@ -129,33 +130,38 @@ export interface RunningSubrunDataFile extends SubrunDataFileBase {
   startedAt: string;
 }
 
-interface TerminalSubrunDataFileBase extends SubrunDataFileBase {
+export interface CompletedSubrunDataFile extends SubrunDataFileBase {
+  status: 'completed';
   startedAt: string;
   finishedAt: string;
-}
-
-export interface CompletedSubrunDataFile extends TerminalSubrunDataFileBase {
-  status: 'completed';
   result: SubAgentRunCompletedResult;
 }
 
-export interface PartialSubrunDataFile extends TerminalSubrunDataFileBase {
+export interface PartialSubrunDataFile extends SubrunDataFileBase {
   status: 'partial';
+  startedAt: string;
+  finishedAt: string;
   result: SubAgentRunPartialResult;
 }
 
-export interface BlockedSubrunDataFile extends TerminalSubrunDataFileBase {
+export interface BlockedSubrunDataFile extends SubrunDataFileBase {
   status: 'blocked';
+  startedAt: string;
+  finishedAt: string;
   result: SubAgentRunBlockedResult;
 }
 
-export interface FailedSubrunDataFile extends TerminalSubrunDataFileBase {
+export interface FailedSubrunDataFile extends SubrunDataFileBase {
   status: 'failed';
+  startedAt: string;
+  finishedAt: string;
   result: SubAgentRunFailedResult;
 }
 
-export interface CancelledSubrunDataFile extends TerminalSubrunDataFileBase {
+export interface CancelledSubrunDataFile extends SubrunDataFileBase {
   status: 'cancelled';
+  startedAt: string;
+  finishedAt: string;
   result: SubAgentRunCancelledResult;
 }
 

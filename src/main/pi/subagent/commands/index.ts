@@ -2,6 +2,7 @@ import { makeRouterCommand } from '../../appcmd/makeRouterCommand';
 import { AppCommandRegistry } from '../../appcmd/registry';
 import type { AppCommand } from '../../appcmd/types';
 
+import { createContinueCommand } from './continue';
 import { createDescribeCommand } from './describe';
 import { createListCommand } from './list';
 import { createRunCommand } from './run';
@@ -14,7 +15,8 @@ const HELP_FOOTER = `DELEGATION RULES
     turn and is capped at 3600 seconds.
   * For parallel work, emit multiple subagent tool calls in the same assistant
     response, each invoking run once; the host executes those calls concurrently.
-  * Per parent session: at most 5 runs in parallel and 20 total reservations.
+  * Per parent session: at most 5 active executions and 20 subrun reservations;
+    continuing an existing terminal subrun does not consume another reservation.
   * Delegated Agents cannot call subagent or ask for interactive input. web
   * research and shell device authentication may also be rejected because they require human interaction.`;
 
@@ -33,12 +35,13 @@ export type {
 export function createSubAgentCommand(manager: SubAgentManager): AppCommand {
   const registry = new AppCommandRegistry();
   registry.register(createDescribeCommand(manager));
+  registry.register(createContinueCommand(manager));
   registry.register(createListCommand(manager));
   registry.register(createRunCommand(manager));
 
   return makeRouterCommand({
     name: 'subagent',
-    synopsis: 'List and describe allowed delegate Agents, or delegate one task.',
+    synopsis: 'List and describe delegates, run new work, or continue a delegated conversation.',
     registry,
     helpFooter: HELP_FOOTER,
   });

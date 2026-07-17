@@ -104,6 +104,14 @@ export const completedSubagentCall: ToolCall = {
   },
 };
 
+export const continuedSubagentCall: ToolCall = {
+  ...completedSubagentCall,
+  id: 'tool_subagent_continued',
+  args: {
+    cmd: 'continue 001 --message "Add rollout risks" --max-turns 3',
+  },
+};
+
 function delegatedResultCall(id: string, result: SubAgentRunResult): ToolCall {
   return {
     id,

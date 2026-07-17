@@ -13,7 +13,7 @@
 | `profile.ts` | 单 profile：内嵌 `ProfileSettings`（settings.json）+ `AgentRegistry`（agents.json：items + primaryAgentId）两个 PersistBase inner class；外层 `Profile` 负责 agent 实体集合（Map<id, Agent>）、CRUD、archive/restore、reconcile、跨 agent 聚合，以及 `resolveDelegates(parentId)` 按父配置 join active hot registry | large |
 | `agent.ts` | `Agent` class：AGENT.md 读写 + sessions/jobs 子域入口；description/delegates 由既有 config/patch 往返，不建立独立 normalizer | large |
 | `session.ts` | `Session`(抽象基类:`messages.jsonl` I/O + files sandbox + 节流 persist + 元数据 mutate)及 `RegularSession` / `JobRun`；还拥有 `createSubrun/getSubrun/listSubruns`，只以当前 parent session 限定三位 subrun ID | large |
-| `subrun.ts` | `Subrun`：parent `subruns/001..999/` 的 data/message store；per-parent allocation lock、directory reservation、pending → running → terminal union、`PersistSessionLike` 最小消息/配置实现；不进 SQLite、普通 Session emit 或 files sandbox | large |
+| `subrun.ts` | `Subrun`：parent `subruns/001..999/` 的 data/message store；per-parent allocation lock、directory reservation、v1 initial/continuation lifecycle、当前 execution/result 与 `PersistSessionLike` 最小消息/配置实现；不进 SQLite、普通 Session emit 或 files sandbox | large |
 | `schedule.ts` | `ScheduleJob` + `ScheduleRegistry`:once/cron job + run 状态机;Step 9 起 run 路径走 `jobRunIdx` | medium |
 | `archive.ts` | agent 软删/恢复/purge/gc | small |
 | `mcp.ts` / `skills.ts` / `models.ts` | profile 级共享注册表 CRUD | small |
@@ -65,6 +65,8 @@ Profiles.get().active()          → Profile
 - `JobRun` → `agents/{a}/schedules/{j}/runs/{ym}/{s}/`
 
 两种 parent session 的 `subruns/` 子目录都由 `Session.createSubrun` 统一拥有；每个合法 `001..999` 目录只含 `data.json` 与 `messages.jsonl`。`Subrun` 不继承 `Session`，不创建 files、不写 `regular_sessions` / `job_runs`、不 emit 普通 session channel；它直接实现 Pi 的最小 `PersistSessionLike`。
+
+`Subrun` 是可继续的 delegated conversation：initial execution 为 `pending → running → terminal`；terminal 的 `continueConversation()` 直接进入一次新的 running continuation，不分配新三位 ID。v1 data 在所有状态保留当前 execution，terminal 另存当前 formal result。
 
 两类 session 永不混走同一容器：`Agent.sessions: Map<id, RegularSession>`，`ScheduleJob.runs: Map<id, JobRun>`。子类间没有共同的 placement getter；要分支判断，用 `instanceof`。
 

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Tracer } from '../../../../shared/log/trace';
 import type { AgentAppCmdContext } from '../../appcmd/types';
 
+import { createContinueCommand } from '../commands/continue';
 import { createDescribeCommand } from '../commands/describe';
 import { createListCommand } from '../commands/list';
 import { createRunCommand } from '../commands/run';
@@ -214,5 +215,16 @@ describe('subagent command grammar', () => {
     expect(capture.output).toEqual([]);
     expect(capture.errors).toEqual(['subagent run: failed to load parent context summary: summary unavailable.\n']);
     expect(capture.exitCodes).toEqual([1]);
+  });
+
+  it('rejects malformed continuation arguments before manager admission', async () => {
+    const setup = await setupProfile();
+    const capture = commandCapture(setup.profileId, setup.parentId);
+
+    await createContinueCommand(setup.manager).run(['001', '--message', ' ', '--max-turns', '0'], capture.context);
+
+    expect(capture.output).toEqual([]);
+    expect(capture.errors).toEqual(['subagent continue: --max-turns must be a positive integer.\n']);
+    expect(capture.exitCodes).toEqual([2]);
   });
 });

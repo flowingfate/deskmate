@@ -67,7 +67,7 @@ function completedOutcome(options: SubAgentSessionOptions): SubAgentSessionRunOu
 }
 
 async function waitForPending(count: number): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
     if (sessionHarness.pending.length === count) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
@@ -209,5 +209,90 @@ describe('SubAgentManager admission and cancellation', () => {
     const reloaded = await session.getSubrun(created.subrun.subrunId);
     if (reloaded.kind !== 'found') throw new Error('Expected recovered subrun on disk.');
     expect(reloaded.subrun.status).toBe('failed');
+  });
+
+  it('continues a terminal subrun without allocating another reservation', async () => {
+    const setup = await setupRun();
+    const { Profiles } = await import('../../../persist/profiles');
+    const profile = await Profiles.get().active();
+    const parent = await profile.getAgent(setup.parentAgentId);
+    if (!parent) throw new Error('Expected parent agent.');
+    const session = await parent.getSession(setup.parentSessionId);
+    if (!session) throw new Error('Expected parent session.');
+
+    const created = await session.createSubrun(request(setup.delegateAgentId));
+    if (created.kind !== 'created') throw new Error('Expected persisted subrun.');
+    await created.subrun.start();
+    await created.subrun.finish({
+      status: 'completed',
+      subrunId: created.subrun.subrunId,
+      delegateAgentId: setup.delegateAgentId,
+      content: 'Initial result.',
+      deliverables: [],
+      warnings: [],
+      usage: { turns: 1, durationMs: 1 },
+    });
+
+    const outcome = setup.manager.continueRun(scope(setup), created.subrun.subrunId, {
+      message: 'Add risks.',
+      policy: { maxTurns: 5, timeoutMs: 60_000 },
+    });
+    await waitForPending(1);
+    expect((await session.listSubruns()).subruns).toHaveLength(1);
+
+    const [pending] = sessionHarness.pending;
+    expect(pending.options.subrun.subrunId).toBe(created.subrun.subrunId);
+    pending.completion.resolve(completedOutcome(pending.options));
+    await expect(outcome).resolves.toMatchObject({
+      kind: 'result',
+      result: { subrunId: created.subrun.subrunId },
+    });
+  });
+
+  it('applies the shared parallel cap before transitioning a continuation', async () => {
+    const setup = await setupRun();
+    const { Profiles } = await import('../../../persist/profiles');
+    const profile = await Profiles.get().active();
+    const parent = await profile.getAgent(setup.parentAgentId);
+    if (!parent) throw new Error('Expected parent agent.');
+    const session = await parent.getSession(setup.parentSessionId);
+    if (!session) throw new Error('Expected parent session.');
+
+    const created = await session.createSubrun(request(setup.delegateAgentId));
+    if (created.kind !== 'created') throw new Error('Expected persisted subrun.');
+    await created.subrun.start();
+    await created.subrun.finish({
+      status: 'completed',
+      subrunId: created.subrun.subrunId,
+      delegateAgentId: setup.delegateAgentId,
+      content: 'Initial result.',
+      deliverables: [],
+      warnings: [],
+      usage: { turns: 1, durationMs: 1 },
+    });
+
+    const parentScope = scope(setup);
+    const activeRuns = Array.from(
+      { length: 5 },
+      () => setup.manager.run(parentScope, request(setup.delegateAgentId)),
+    );
+    await waitForPending(5);
+
+    await expect(setup.manager.continueRun(parentScope, created.subrun.subrunId, {
+      message: 'Add risks.',
+      policy: { maxTurns: 5, timeoutMs: 60_000 },
+    })).resolves.toEqual({
+      kind: 'rejected',
+      error: 'Maximum parallel delegated runs (5) reached for this parent session.',
+    });
+
+    const unchanged = await session.getSubrun(created.subrun.subrunId);
+    if (unchanged.kind !== 'found') throw new Error('Expected persisted subrun.');
+    expect(unchanged.subrun.status).toBe('completed');
+
+    for (const pending of sessionHarness.pending) {
+      pending.completion.resolve(completedOutcome(pending.options));
+    }
+    await Promise.all(activeRuns);
   });
 });

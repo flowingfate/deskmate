@@ -1,12 +1,13 @@
 import type {
   AgentDetail,
   AgentRecord,
+  SubAgentRunPolicy,
   SubAgentRunRequest,
   SubAgentRunResult,
   SubrunId,
 } from '@shared/persist/types';
 import type { SubAgentRunStep, SubAgentRuntimeState } from '@shared/types/subAgentRunTypes';
-import { type Profile, type Session, type Subrun } from '@main/persist';
+import type { ListSubrunsResult, Profile, Session, Subrun } from '@main/persist';
 import { log } from '@main/log';
 
 import type {
@@ -16,6 +17,7 @@ import type {
   SubAgentDescribeDelegateOutcome,
   SubAgentListDelegatesOutcome,
 } from './commands';
+import type { SubAgentContinuation } from './types';
 import {
   advanceRuntimeState,
   completeRuntimeState,
@@ -55,6 +57,11 @@ interface ActiveRunAdmission {
 interface RejectedAdmission {
   kind: 'rejected';
   error: string;
+}
+
+interface PreparedSubrunAdmission {
+  kind: 'prepared';
+  subrun: Subrun;
 }
 
 /** 委派运行的唯一授权、reservation、timeout、cancellation 与 live-state owner。 */
@@ -128,36 +135,79 @@ export class SubAgentManager {
     const delegate = await this.authorizeDelegate(scope.parentAgentId, request.delegateAgentId);
     if (!delegate.ok) return delegate.outcome;
 
-    const admission = await this.withParentLock(scope, async () => {
-      const existing = await parentSession.session.listSubruns();
-      await this.recoverStaleRuns(scope, existing.subruns);
+    const admission = await this.admitExecution(
+      scope,
+      parentSession.session,
+      async (existing) => {
+        const reservationCount = existing.subruns.length
+          + existing.incompleteIds.length
+          + existing.corruptIds.length;
+        if (reservationCount >= MAX_TOTAL_RESERVATIONS) {
+          return {
+            kind: 'rejected',
+            error: `Maximum delegated run reservations (${MAX_TOTAL_RESERVATIONS}) reached for this parent session.`,
+          } satisfies RejectedAdmission;
+        }
 
-      const active = this.activeRuns.get(parentKey(scope));
-      if ((active?.size ?? 0) >= MAX_PARALLEL_RUNS) {
-        return {
-          kind: 'rejected',
-          error: `Maximum parallel delegated runs (${MAX_PARALLEL_RUNS}) reached for this parent session.`,
-        } satisfies RejectedAdmission;
-      }
-
-      const reservationCount = existing.subruns.length + existing.incompleteIds.length + existing.corruptIds.length;
-      if (reservationCount >= MAX_TOTAL_RESERVATIONS) {
-        return {
-          kind: 'rejected',
-          error: `Maximum delegated run reservations (${MAX_TOTAL_RESERVATIONS}) reached for this parent session.`,
-        } satisfies RejectedAdmission;
-      }
-      const created = await parentSession.session.createSubrun(request);
-      if (created.kind === 'exhausted') {
-        return { kind: 'rejected', error: 'No Subrun IDs remain for this parent session.' } satisfies RejectedAdmission;
-      }
-
-      const activeRun = this.registerActiveRun(scope, created.subrun);
-      return { kind: 'admitted', active: activeRun, subrun: created.subrun } satisfies ActiveRunAdmission;
-    });
+        const created = await parentSession.session.createSubrun(request);
+        if (created.kind === 'exhausted') {
+          return {
+            kind: 'rejected',
+            error: 'No Subrun IDs remain for this parent session.',
+          } satisfies RejectedAdmission;
+        }
+        return { kind: 'prepared', subrun: created.subrun } satisfies PreparedSubrunAdmission;
+      },
+    );
 
     if (admission.kind === 'rejected') return admission;
-    return this.executeRun(scope, request, admission);
+    return this.executeRun(scope, request.policy, admission);
+  }
+
+  public async continueRun(
+    scope: SubAgentCommandScope,
+    subrunId: SubrunId,
+    continuation: SubAgentContinuation,
+  ): Promise<SubAgentCommandOutcome> {
+    const parentSession = await this.loadParentSession(scope);
+    if (!parentSession.ok) return parentSession.outcome;
+
+    const loaded = await parentSession.session.getSubrun(subrunId);
+    if (loaded.kind !== 'found') {
+      return { kind: 'rejected', error: `Subrun ${subrunId} is unavailable: ${loaded.kind}.` };
+    }
+
+    const delegate = await this.authorizeDelegate(scope.parentAgentId, loaded.subrun.delegateAgentId);
+    if (!delegate.ok) return delegate.outcome;
+
+    const admission = await this.admitExecution(
+      scope,
+      parentSession.session,
+      async () => {
+        const current = await parentSession.session.getSubrun(subrunId);
+        if (current.kind !== 'found') {
+          return {
+            kind: 'rejected',
+            error: `Subrun ${subrunId} is unavailable: ${current.kind}.`,
+          } satisfies RejectedAdmission;
+        }
+
+        const continued = await current.subrun.continueConversation(
+          continuation.message,
+          continuation.policy,
+        );
+        if (continued.kind !== 'continued') {
+          return {
+            kind: 'rejected',
+            error: `Subrun ${subrunId} is already ${continued.status}.`,
+          } satisfies RejectedAdmission;
+        }
+        return { kind: 'prepared', subrun: current.subrun } satisfies PreparedSubrunAdmission;
+      },
+    );
+
+    if (admission.kind === 'rejected') return admission;
+    return this.executeRun(scope, continuation.policy, admission);
   }
 
   public cancelRun(key: SubAgentRunKey): boolean {
@@ -198,15 +248,46 @@ export class SubAgentManager {
     });
   }
 
+  private async admitExecution(
+    scope: SubAgentCommandScope,
+    parentSession: Session,
+    prepareSubrun: (
+      existing: ListSubrunsResult,
+    ) => Promise<PreparedSubrunAdmission | RejectedAdmission>,
+  ): Promise<ActiveRunAdmission | RejectedAdmission> {
+    return this.withParentLock(scope, async () => {
+      const existing = await parentSession.listSubruns();
+      await this.recoverStaleRuns(scope, existing.subruns);
+
+      const active = this.activeRuns.get(parentKey(scope));
+      if ((active?.size ?? 0) >= MAX_PARALLEL_RUNS) {
+        return {
+          kind: 'rejected',
+          error: `Maximum parallel delegated runs (${MAX_PARALLEL_RUNS}) reached for this parent session.`,
+        } satisfies RejectedAdmission;
+      }
+
+      const prepared = await prepareSubrun(existing);
+      if (prepared.kind === 'rejected') return prepared;
+
+      const activeRun = this.registerActiveRun(scope, prepared.subrun);
+      return {
+        kind: 'admitted',
+        active: activeRun,
+        subrun: prepared.subrun,
+      } satisfies ActiveRunAdmission;
+    });
+  }
+
   private async executeRun(
     scope: SubAgentCommandScope,
-    request: SubAgentRunRequest,
+    policy: SubAgentRunPolicy,
     admission: ActiveRunAdmission,
   ): Promise<SubAgentCommandOutcome> {
     const onParentAbort = (): void => admission.active.abortor.abort();
     if (scope.signal.aborted) admission.active.abortor.abort();
     else scope.signal.addEventListener('abort', onParentAbort, { once: true });
-    const timeout = setTimeout(() => admission.active.abortor.abort(), request.policy.timeoutMs);
+    const timeout = setTimeout(() => admission.active.abortor.abort(), policy.timeoutMs);
 
     try {
       const { SubAgentSession } = await import('./session');

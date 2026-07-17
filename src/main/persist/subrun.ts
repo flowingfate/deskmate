@@ -9,6 +9,7 @@ import {
   type PersistedToolResponse,
   type PersistedUserMessage,
   type RunningSubrunDataFile,
+  type SubAgentRunPolicy,
   type SubAgentRunRequest,
   type SubAgentRunResult,
   type SubrunDataFile,
@@ -21,17 +22,7 @@ import type { PersistSessionLike } from '@main/pi';
 import { log } from '@main/log';
 import * as fsp from 'node:fs/promises';
 import { dehydrate, rehydrate } from './messageWire';
-import {
-  appendText,
-  ensureDir,
-  listDirs,
-  pathExists,
-  readJsonOrNull,
-  readTextOrNull,
-  removeFileIfExists,
-  writeJson,
-  writeText,
-} from './lib/atomic';
+import { appendText, ensureDir, listDirs, pathExists, readJsonOrNull, readTextOrNull, removeFileIfExists, writeJson, writeText } from './lib/atomic';
 
 export interface SubrunParent {
   profileId: string;
@@ -40,46 +31,16 @@ export interface SubrunParent {
   subrunsDir: string;
 }
 
-export interface CreatedSubrun {
-  kind: 'created';
-  subrun: Subrun;
-}
-
-export interface ExhaustedSubrunAllocation {
-  kind: 'exhausted';
-}
-
-export type CreateSubrunResult = CreatedSubrun | ExhaustedSubrunAllocation;
-
-export interface FoundSubrun {
-  kind: 'found';
-  subrun: Subrun;
-}
-
-export interface MissingSubrun {
-  kind: 'missing';
-}
-
-export interface InvalidSubrunId {
-  kind: 'invalid_id';
-}
-
-export interface IncompleteSubrun {
-  kind: 'incomplete';
-  subrunId: SubrunId;
-}
-
-export interface CorruptSubrun {
-  kind: 'corrupt';
-  subrunId: SubrunId;
-}
+export type CreateSubrunResult =
+  | { kind: 'created'; subrun: Subrun }
+  | { kind: 'exhausted' };
 
 export type GetSubrunResult =
-  | FoundSubrun
-  | MissingSubrun
-  | InvalidSubrunId
-  | IncompleteSubrun
-  | CorruptSubrun;
+  | { kind: 'found'; subrun: Subrun }
+  | { kind: 'missing' }
+  | { kind: 'invalid_id' }
+  | { kind: 'incomplete'; subrunId: SubrunId }
+  | { kind: 'corrupt'; subrunId: SubrunId };
 
 export interface ListSubrunsResult {
   subruns: Subrun[];
@@ -87,31 +48,21 @@ export interface ListSubrunsResult {
   corruptIds: SubrunId[];
 }
 
-export interface StartedSubrun {
-  kind: 'started';
-}
+export type StartSubrunResult =
+  | { kind: 'started' }
+  | { kind: 'not_pending'; status: SubrunDataFile['status'] };
 
-export interface NotPendingSubrun {
-  kind: 'not_pending';
-  status: SubrunDataFile['status'];
-}
+export type FinishSubrunResult =
+  | { kind: 'finished' }
+  | { kind: 'not_running'; status: SubrunDataFile['status'] }
+  | { kind: 'result_mismatch' };
 
-export type StartSubrunResult = StartedSubrun | NotPendingSubrun;
-
-export interface FinishedSubrun {
-  kind: 'finished';
-}
-
-export interface NotRunningSubrun {
-  kind: 'not_running';
-  status: SubrunDataFile['status'];
-}
-
-export interface MismatchedSubrunResult {
-  kind: 'result_mismatch';
-}
-
-export type FinishSubrunResult = FinishedSubrun | NotRunningSubrun | MismatchedSubrunResult;
+export type ContinueSubrunResult =
+  | { kind: 'continued' }
+  | {
+  kind: 'not_terminal';
+  status: 'pending' | 'running';
+};
 
 const allocationLocks = new Map<string, Promise<void>>();
 
@@ -177,6 +128,7 @@ function createPendingData(
     delegateAgentId: request.delegateAgentId,
     request,
     createdAt,
+    execution: { kind: 'initial', message: request.task, policy: request.policy },
     session: {
       title: '',
       updatedAt: createdAt,
@@ -291,6 +243,31 @@ export class Subrun implements PersistSessionLike {
     this.data = data;
     await this.persist();
     return { kind: 'started' };
+  }
+
+  public async continueConversation(
+    message: string,
+    policy: SubAgentRunPolicy,
+  ): Promise<ContinueSubrunResult> {
+    if (this.data.status === 'pending' || this.data.status === 'running') {
+      return { kind: 'not_terminal', status: this.data.status };
+    }
+
+    const { finishedAt: _finishedAt, result: _result, ...base } = this.data;
+    const startedAt = new Date().toISOString();
+    const data: RunningSubrunDataFile = {
+      ...base,
+      status: 'running',
+      startedAt,
+      execution: { kind: 'continuation', message, policy },
+      session: {
+        ...this.data.session,
+        updatedAt: startedAt,
+      },
+    };
+    this.data = data;
+    await this.persist();
+    return { kind: 'continued' };
   }
 
   public async finish(result: SubAgentRunResult): Promise<FinishSubrunResult> {

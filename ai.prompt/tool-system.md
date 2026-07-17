@@ -53,6 +53,7 @@ app("agent list")                          ← LLM 已经知道形态了
 app("time")                              ← 查询客户端当前本地时间
 subagent("list")                         ← 发现当前 Agent 可委派的稳定 ID
 subagent("run a_x --task \"...\" --expect \"...\"") ← 同步等待正式 Subrun 结果
+subagent("continue 001 --message \"...\"")         ← 复用已终态 Subrun 的 transcript 继续对话
 
 ---
 

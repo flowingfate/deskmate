@@ -37,7 +37,38 @@ export function normalizeSubAgentRunRequest(
     context = { kind: 'parent_summary', summary };
   }
 
-  const requestedMaxTurns = input.policy?.maxTurns;
+  return {
+    delegateAgentId,
+    task,
+    expectedOutput,
+    context,
+    policy: normalizeSubAgentRunPolicy(input.policy),
+  };
+}
+
+export interface NormalizeSubAgentContinuationInput {
+  message: string;
+  policy?: Partial<SubAgentRunPolicy>;
+}
+
+export interface SubAgentContinuation {
+  message: string;
+  policy: SubAgentRunPolicy;
+}
+
+export function normalizeSubAgentContinuation(
+  input: NormalizeSubAgentContinuationInput,
+): SubAgentContinuation {
+  const message = input.message.trim();
+  if (!message) throw new Error('message must not be empty');
+  return {
+    message,
+    policy: normalizeSubAgentRunPolicy(input.policy),
+  };
+}
+
+function normalizeSubAgentRunPolicy(policy?: Partial<SubAgentRunPolicy>): SubAgentRunPolicy {
+  const requestedMaxTurns = policy?.maxTurns;
   if (requestedMaxTurns !== undefined && (
     !Number.isInteger(requestedMaxTurns) || requestedMaxTurns <= 0
   )) {
@@ -48,7 +79,7 @@ export function normalizeSubAgentRunRequest(
     SUB_AGENT_RUN_POLICY_LIMITS.MAX_TURNS,
   );
 
-  const requestedTimeoutMs = input.policy?.timeoutMs;
+  const requestedTimeoutMs = policy?.timeoutMs;
   if (requestedTimeoutMs !== undefined && (
     !Number.isInteger(requestedTimeoutMs) || requestedTimeoutMs <= 0
   )) {
@@ -59,11 +90,5 @@ export function normalizeSubAgentRunRequest(
     SUB_AGENT_RUN_POLICY_LIMITS.MAX_TIMEOUT_MS,
   );
 
-  return {
-    delegateAgentId,
-    task,
-    expectedOutput,
-    context,
-    policy: { maxTurns, timeoutMs },
-  };
+  return { maxTurns, timeoutMs };
 }

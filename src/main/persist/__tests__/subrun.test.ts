@@ -100,3 +100,50 @@ describe('Subrun state machine', () => {
     });
   });
 });
+
+
+describe('Subrun continuation', () => {
+  it('reuses one terminal subrun', async () => {
+    const owner = parent();
+    const created = await Subrun.create(owner, request);
+    if (created.kind !== 'created') throw new Error('Expected an allocated subrun.');
+
+    const subrun = created.subrun;
+    await subrun.start();
+    const initial = completedResult(subrun.subrunId, subrun.delegateAgentId);
+    await subrun.finish(initial);
+
+    expect(await subrun.continueConversation(
+      'Add rollout risks.',
+      { maxTurns: 10, timeoutMs: 60_000 },
+    )).toEqual({ kind: 'continued' });
+    expect(subrun.toDataFile()).toMatchObject({
+      status: 'running',
+      execution: { kind: 'continuation', message: 'Add rollout risks.' },
+    });
+
+    const followUp = { ...initial, content: 'Rollout risks added.', usage: { turns: 1, durationMs: 20 } };
+    await subrun.finish(followUp);
+    expect(subrun.toDataFile()).toMatchObject({
+      status: 'completed',
+      result: followUp,
+      execution: {
+        kind: 'continuation',
+        message: 'Add rollout risks.',
+        policy: { maxTurns: 10, timeoutMs: 60_000 },
+      },
+    });
+  });
+
+  it('rejects continuation while the subrun is active', async () => {
+    const owner = parent();
+    const created = await Subrun.create(owner, request);
+    if (created.kind !== 'created') throw new Error('Expected an allocated subrun.');
+
+    expect(await created.subrun.continueConversation(
+      'Follow up.',
+      { maxTurns: 10, timeoutMs: 60_000 },
+    )).toEqual({ kind: 'not_terminal', status: 'pending' });
+
+  });
+});

@@ -10,6 +10,7 @@ import {
   blockedSubagentCall,
   cancelledSubagentCall,
   completedSubagentCall,
+  continuedSubagentCall,
   describeSubagentCall,
   executionFailedSubagentCall,
   failedSubagentCall,
@@ -29,6 +30,17 @@ import {
 
 registerBuiltinToolRenderers();
 
+function useStorySession(): void {
+  useEffect(() => {
+    currentSessionStore.set({
+      agentId: storyAgentId,
+      jobId: null,
+      chatSessionId: storySessionId,
+    });
+    return () => currentSessionStore.set({ agentId: null, jobId: null, chatSessionId: null });
+  }, []);
+}
+
 function SubagentDetailScenario({ title, toolCall }: { title: string; toolCall: ToolCall }) {
   return (
     <section className="max-w-2xl">
@@ -44,6 +56,11 @@ function SubagentDetailScenario({ title, toolCall }: { title: string; toolCall: 
 
 export function CompletedRun() {
   return <SubagentDetailScenario title="Completed result" toolCall={completedSubagentCall} />;
+}
+
+export function ContinuedRun() {
+  useStorySession();
+  return <SubagentDetailScenario title="Continued result" toolCall={continuedSubagentCall} />;
 }
 
 export function PartialRun() {
@@ -139,14 +156,9 @@ export function ChipStates() {
 }
 
 export function LiveSubagentRun() {
+  useStorySession();
   useEffect(() => {
-    currentSessionStore.set({
-      agentId: storyAgentId,
-      jobId: null,
-      chatSessionId: storySessionId,
-    });
     emitSubagentRunState(liveSubagentState);
-    return () => currentSessionStore.set({ agentId: null, jobId: null, chatSessionId: null });
   }, []);
 
   return (

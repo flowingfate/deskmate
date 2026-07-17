@@ -1,6 +1,6 @@
 import type { AssistantMessage as PiAssistantMessage, ToolCall as PiToolCall } from '@earendil-works/pi-ai';
 
-import type { AssistantMessage, SubAgentRunRequest, SubAgentRunResult, SubrunDataFile, TokenUsage } from '@shared/persist/types';
+import type { AssistantMessage, SubAgentRunRequest, SubAgentRunResult, SubrunDataFile, SubrunExecution, TokenUsage } from '@shared/persist/types';
 import type { SubAgentRunStep } from '@shared/types/subAgentRunTypes';
 import type { Subrun } from '@main/persist';
 import { Tracer } from '@shared/log/trace';
@@ -49,9 +49,10 @@ export interface SubAgentSessionNotPending {
 
 export type SubAgentSessionRunOutcome = SubAgentSessionResult | SubAgentSessionNotPending;
 
-/** 一个已持久化的 delegated run。授权、并发、超时与生产工具注册均由 Step 9 manager 负责。 */
+/** 一个已持久化的 delegated execution。授权、并发、超时与生产工具注册均由 manager 负责。 */
 export class SubAgentSession extends BaseSession {
   private readonly request: SubAgentRunRequest;
+  private readonly execution: SubrunExecution;
   private readonly delegateAgentId: string;
   private readonly controller = new SubmitResultController();
   private readonly toolDeliverables: string[] = [];
@@ -68,22 +69,31 @@ export class SubAgentSession extends BaseSession {
   public constructor(private readonly options: SubAgentSessionOptions) {
     const data = options.subrun.toDataFile();
     super(data.parentSessionId, data.profileId, data.parentAgentId, options.subrun);
+    if (data.status !== 'pending' && data.status !== 'running') {
+      throw new Error(`SubAgentSession requires an active Subrun, received ${data.status}.`);
+    }
     this.request = data.request;
+    this.execution = data.execution;
     this.delegateAgentId = data.delegateAgentId;
   }
 
   public async run(): Promise<SubAgentSessionRunOutcome> {
     return runWithDelegateExecution({ delegateId: this.delegateAgentId }, async () => {
       await this.restoreTask;
-      const started = await this.options.subrun.start();
-      if (started.kind !== 'started') return { kind: 'not_pending', status: started.status };
+      if (this.execution.kind === 'initial') {
+        const started = await this.options.subrun.start();
+        if (started.kind !== 'started') return { kind: 'not_pending', status: started.status };
+      } else if (this.options.subrun.status !== 'running') {
+        return { kind: 'not_pending', status: this.options.subrun.status };
+      }
 
-      this.startedAt = Date.now();
+      const activeData = this.options.subrun.toDataFile();
+      this.startedAt = activeData.status === 'running' ? Date.parse(activeData.startedAt) : Date.now();
       this.options.signal.addEventListener('abort', this.handleParentAbort, { once: true });
       try {
         if (!(await this.finishIfAborted())) {
           this.prepareSessionTracer(this.options.parentTracer);
-          if (await this.startUserTurn(this.request.task)) {
+          if (await this.startUserTurn(this.execution.message)) {
             await this.runDelegatedTurns();
           }
         }
@@ -117,6 +127,7 @@ export class SubAgentSession extends BaseSession {
       delegateAgentId: this.delegateAgentId,
       parentSessionId: this.id,
       request: this.request,
+      execution: this.execution,
     });
     const catalog = resolved.capabilities.tools
       ? (await buildToolCatalogForAgent(cfg.agent)).withSubmitResult(createSubmitResultTool(this.controller))
@@ -128,7 +139,7 @@ export class SubAgentSession extends BaseSession {
       baseModel: resolved.model,
       systemPrompt,
       catalog,
-      maxTurns: Math.max(0, this.request.policy.maxTurns - this.currentTurn),
+      maxTurns: Math.max(0, this.execution.policy.maxTurns - this.currentTurn),
     };
   }
 
@@ -314,7 +325,7 @@ export class SubAgentSession extends BaseSession {
       reminderSent: this.reminderSent,
       assistantContent: this.lastAssistantContent,
       hasAvailableTools: this.hasAvailableTools,
-      reachedMaxTurns: this.currentTurn >= this.request.policy.maxTurns,
+      reachedMaxTurns: this.currentTurn >= this.execution.policy.maxTurns,
     });
     if (decision.kind !== 'remind') {
       await this.finishSubmitted(decision.submitted);

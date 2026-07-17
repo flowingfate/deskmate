@@ -12,7 +12,7 @@ import {
   persistedRuntimeState,
   startRuntimeState,
 } from '../runtimeState';
-import { normalizeSubAgentRunRequest } from '../types';
+import { normalizeSubAgentContinuation, normalizeSubAgentRunRequest } from '../types';
 
 function pendingData(): PendingSubrunDataFile {
   return {
@@ -31,6 +31,7 @@ function pendingData(): PendingSubrunDataFile {
       context: { kind: 'isolated' },
       policy: { maxTurns: 25, timeoutMs: 60_000 },
     },
+    execution: { kind: 'initial', message: 'Inspect the report.', policy: { maxTurns: 25, timeoutMs: 60_000 } },
     createdAt: '2026-07-17T00:00:00.000Z',
     session: {
       title: '',
@@ -102,6 +103,17 @@ describe('normalizeSubAgentRunRequest', () => {
       context: { kind: 'parent_summary', summary: ' ' },
     })).toThrow('context.summary must not be empty');
   });
+
+  it('normalizes a continuation message with the shared policy limits', () => {
+    expect(normalizeSubAgentContinuation({
+      message: '  Add rollout risks.  ',
+      policy: { maxTurns: 500, timeoutMs: 9_000_000 },
+    })).toEqual({
+      message: 'Add rollout risks.',
+      policy: { maxTurns: 100, timeoutMs: 3_600_000 },
+    });
+    expect(() => normalizeSubAgentContinuation({ message: ' ' })).toThrow('message must not be empty');
+  });
 });
 
 describe('subagent runtime state', () => {
@@ -153,5 +165,19 @@ describe('subagent runtime state', () => {
 
     expect(terminal).toMatchObject({ status: 'completed', startedAt: 100, finishedAt: 300 });
     expect(persisted).toMatchObject({ status: 'completed', result: { status: 'completed' } });
+
+    const continued = persistedRuntimeState({
+      ...pendingData(),
+      status: 'completed',
+      execution: {
+        kind: 'continuation',
+        message: 'Add rollout risks.',
+        policy: { maxTurns: 5, timeoutMs: 30_000 },
+      },
+      startedAt: '2026-07-17T00:00:01.000Z',
+      finishedAt: '2026-07-17T00:00:01.300Z',
+      result: completedResult(),
+    });
+    expect(continued).toMatchObject({ maxTurns: 5, timeoutMs: 30_000 });
   });
 });

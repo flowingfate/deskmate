@@ -8,23 +8,12 @@ import type {
 
 import { normalizeSubAgentRunRequest } from '../types';
 import {
+  parseOptionalPositiveIntegerFlag,
   printSubAgentCommandOutcome,
   SUBAGENT_HELP_FLAGS,
 } from './_shared';
 import type { SubAgentManager } from '../manager';
 import { toSubAgentCommandScope } from './types';
-
-interface ParseIntegerSuccess {
-  ok: true;
-  value: number | undefined;
-}
-
-interface ParseIntegerFailure {
-  ok: false;
-  error: string;
-}
-
-type ParseIntegerResult = ParseIntegerSuccess | ParseIntegerFailure;
 
 interface RunArguments {
   delegateAgentId: string;
@@ -98,21 +87,6 @@ const FLAGS: FlagSpec[] = [
   { name: 'max-turns', type: 'string' },
   { name: 'timeout-seconds', type: 'string' },
 ];
-
-function parseOptionalPositiveIntegerFlag(
-  value: string | boolean | readonly string[] | undefined,
-  flagName: string,
-): ParseIntegerResult {
-  if (value === undefined) return { ok: true, value: undefined };
-  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) {
-    return { ok: false, error: `${flagName} must be a positive integer` };
-  }
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) {
-    return { ok: false, error: `${flagName} must be a positive safe integer` };
-  }
-  return { ok: true, value: parsed };
-}
 
 function parseRunArguments(argv: readonly string[]): ParseRunArgumentsResult {
   const parsed = parseFlags(argv, FLAGS);

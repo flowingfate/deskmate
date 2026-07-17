@@ -118,7 +118,7 @@ async function loadImpl() {
 批 B:依赖 main 子系统 —— 仅 `executeCommand`(LLM 看到名为 `shell`)。`manageProcess` 已下线
 批 C:已下线(mcp / agent / skill → `app` shell facade,详见 `appcmd/builtins/app/`)
 批 D:已下线(schedule → `app` shell facade；命令始终在 `appcmd/builtins/app/index.ts` 注册)
-批 E:无 app 域委派命令；生产委派只走顶层 `subagent list|describe|run`。
+批 E:无 app 域委派命令；生产委派只走顶层 `subagent list|describe|run|continue`。
 批 F:已下线为子命令(`download` 顶层工具 → `web download`,见批 G)。下载内核搬到 `appcmd/builtins/web/kernel/download.ts`,CLI 在 `appcmd/builtins/web/download.ts`;`web` 域**已升为顶层一等工具 `web`**(`pi/tools/web.ts`)。`read_office_file` 一并下线 —— office 现在是 `read` 工具的内部 backend,通过 `read/backends/office.ts::loadImpl()` 推迟加载 `impl/readOfficeFile.ts`(独立 lazy chunk 输出,bundle 体积不变)
 
 注册顺序对 LLM 看到的工具列表顺序没有语义,但保持稳定有助于 prompt cache 命中率;

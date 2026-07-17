@@ -152,7 +152,7 @@ export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
   const task = liveState?.task ?? (audit.kind === 'found' ? audit.data.request.task : null);
   const expectedOutput = liveState?.expectedOutput ?? (audit.kind === 'found' ? audit.data.request.expectedOutput : null);
   const currentTurn = liveState?.currentTurn ?? formalResult?.usage.turns ?? 0;
-  const maxTurns = liveState?.maxTurns ?? (audit.kind === 'found' ? audit.data.request.policy.maxTurns : null);
+  const maxTurns = liveState?.maxTurns ?? (audit.kind === 'found' ? audit.data.execution.policy.maxTurns : null);
   const durationMs = formalResult?.usage.durationMs
     ?? (runningState ? Math.max(0, Date.now() - runningState.startedAt) : undefined);
   const latestStep = liveState?.steps.at(-1);
