@@ -20,7 +20,15 @@ import type { ToolContext } from '../tools/types';
 import { getModelInfo } from '../model';
 import { readAgentRuntimeConfig } from '../utils/config';
 import { buildDelegatedSystemPrompt } from './prompt';
-import { buildFormalResult, createSubmitResultTool, decideMissingSubmit, type SubmittedResult, type SystemResult, SubmitResultController } from './submitResult';
+import {
+  buildFormalResult,
+  createSubmitResultTool,
+  decideMissingSubmit,
+  type SubmittedResult,
+  type SystemResult,
+  SUBMIT_RESULT_REMINDER,
+  SubmitResultController,
+} from './submitResult';
 
 const TEXT_SNIPPET_LIMIT = 1_000;
 const TOOL_ARGUMENTS_SUMMARY_LIMIT = 500;
@@ -60,7 +68,7 @@ export class SubAgentSession extends BaseSession {
 
   private currentTurn = 0;
   private startedAt = 0;
-  private reminderSent = false;
+  private reminderSent: boolean;
   private lastAssistantContent = '';
   private hasAvailableTools = false;
   private terminalResult: SubAgentRunResult | undefined;
@@ -75,6 +83,7 @@ export class SubAgentSession extends BaseSession {
     this.request = data.request;
     this.execution = data.execution;
     this.delegateAgentId = data.delegateAgentId;
+    this.reminderSent = data.execution.kind === 'continuation';
   }
 
   public async run(): Promise<SubAgentSessionRunOutcome> {
@@ -93,7 +102,7 @@ export class SubAgentSession extends BaseSession {
       try {
         if (!(await this.finishIfAborted())) {
           this.prepareSessionTracer(this.options.parentTracer);
-          if (await this.startUserTurn(this.execution.message)) {
+          if (await this.startUserTurn(this.executionUserMessageContent())) {
             await this.runDelegatedTurns();
           }
         }
@@ -289,6 +298,12 @@ export class SubAgentSession extends BaseSession {
     if (!this.parentAborted && !this.options.signal.aborted) return false;
     await this.finishSubmitted({ status: 'cancelled', reason: 'Subrun cancelled before execution.' });
     return true;
+  }
+
+  private executionUserMessageContent(): string {
+    const { message } = this.execution;
+    if (this.execution.kind === 'initial') return message;
+    return `${message}\n\n${SUBMIT_RESULT_REMINDER}`;
   }
 
   private async startUserTurn(content: string): Promise<boolean> {

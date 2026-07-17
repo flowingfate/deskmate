@@ -182,7 +182,7 @@ afterEach(async () => {
 });
 
 describe('SubAgentSession continuation', () => {
-  it('uses the continuation turn limit without appending an unanswered reminder', async () => {
+  it('includes the submit reminder in the continuation message without appending another user turn', async () => {
     const created = await Subrun.create(parent(), request);
     if (created.kind !== 'created') throw new Error('Expected an allocated subrun.');
 
@@ -226,7 +226,10 @@ describe('SubAgentSession continuation', () => {
     }))).toEqual([
       { role: 'user', content: 'Write the report.' },
       { role: 'assistant', content: 'Initial report.' },
-      { role: 'user', content: 'Add rollout risks.' },
+      {
+        role: 'user',
+        content: 'Add rollout risks.\n\n<system-reminder>Before ending this delegated run, call submit_result with the formal outcome.</system-reminder>',
+      },
       { role: 'assistant', content: 'Rollout risks added.' },
     ]);
   });

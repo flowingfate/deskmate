@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (Step 12：subagent run lazy transcript Dialog 已接入) -->
+<!-- Last verified: 2026-07-17 (subagent transcript 内容生命周期对齐 Dialog Presence) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -39,7 +39,7 @@
 | `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，图片走 `ImageViewerAtom.open`、其余走 `useOpenFilePreview()`） | ~110 LOC |
 | `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；所有 app 子命令走稳定的通用 cmdline/result fallback | ~45 LOC |
 | `tool/renderers/app/cmdline.ts` | App 命令展示工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
-| `tool/renderers/subagent/{parse,RunCard,RunMessagesDialog,RunResultDetails,index}.tsx` | 顶层 `subagent` renderer：只做 `{ outcome }` 展示解析；单 run 卡片关联 live state、查询 metadata、显示 formal result 并发起单次 cancel；详情按钮以局部 Dialog state 懒取 parent-owned Domain transcript，关闭释放数据，复用 MarkdownView 和简化只读 tool 块，不进主 chat cache/render-items pipeline。`story/tools/subagent-run.stories.tsx::Transcript` 以 production Dialog + Electron mock 展示 user/assistant/tool transcript | ~700 LOC |
+| `tool/renderers/subagent/{parse,RunCard,RunResultDetails,index}.tsx` + `message/{RunMessagesDialog,RunMessagesHeader,RunMessagesContent,UserMessage,AssistantMessage,MessageCard,useRunMessages}.tsx` | 顶层 `subagent` renderer：只做 `{ outcome }` 展示解析；单 run 卡片关联 live state、查询 metadata、显示 formal result并发起单次 cancel；transcript 子模块由 Dialog 外壳、摘要头部、状态内容、直接按 role 分发的 user/assistant 专用渲染、共享消息卡片与惰性查询 hook 分层组成。UserMessage 在进入 MarkdownView 前剔除 `system-reminder` 块，reminder-only 且无附件的消息不渲染。Assistant 默认只渲染 tool chip 列表，点击 chip 后复用 `ToolDetailView` 单选展开。查询 state 由 `DialogContent` 内部子组件持有：Radix Presence 在 200ms 退场期间保持其挂载，内容不会先清空；退场结束自动卸载并释放 transcript，不用 `onOpenChange` 抢先 clear。`story/tools/subagent-run.stories.tsx::Transcript` 覆盖双 tool chip 与真实关闭动画 | ~700 LOC |
 | `agent-editor/AgentDelegationTab.tsx` | 普通 Agent delegates 选择器：hot `agents.atom` 候选、cold delegates、dangling 可移除行，以及 Agent 创建/设置导航 | ~205 LOC |
 | `message/MermaidDiagram.tsx` | 延迟加载的 Mermaid 图表渲染器，支持全屏 | — |
 | `message/ImageGallery.tsx` | `<IMAGE_REGISTRY>` 分段解析 + `ImageGalleryNew` 渲染；图 src 经 [`lib/mediaUrl.ts`](../../lib/mediaUrl.ts) `toImageDisplaySrc` 同步解析（`local://`/`knowledge://`→media://、远程 http(s) 原样），**不再** `fetch`+base64 缓存 | — |

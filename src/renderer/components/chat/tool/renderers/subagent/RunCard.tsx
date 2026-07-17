@@ -14,7 +14,7 @@ import {
   SubagentFormalResultDetails,
   SubagentStatusIcon,
 } from './RunResultDetails';
-import { SubagentRunMessagesDialog } from './RunMessagesDialog';
+import { SubagentRunMessagesDialog } from './message';
 
 type AuditState =
   | { kind: 'idle' }

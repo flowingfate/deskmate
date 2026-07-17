@@ -71,7 +71,7 @@ tools/subagent facade → LocalTool registry → parent RegularSession/JobRun
 - runtime state：`runtimeState.ts` 只包含纯 state projection/reducer；profile-bound manager 持有有界 active snapshot 与 listener，terminal 从 `SubrunDataFile` 重新派生；无 active entry 的 stale `running` 由 manager 写为 interrupted failed；
 - construction：commands 与 `createSubAgentCommand(manager)` 直接接收真实 `SubAgentManager`；`tools/subagent.ts` 以 `WeakMap<Profile, AppCommand>` 缓存每个 Profile 的 immutable command facade，只复用 cmdline parse/dispatch/format；同一 `LocalTool` 对象加入 delegated catalog blacklist；
 - formal-result seam：`SubmitResultController`、`createSubmitResultTool(controller)`、`buildFormalResult(input)`、`decideMissingSubmit(input)`；`ToolCatalog.withSubmitResult(tool)` 是唯一私有路由，普通 catalog/global registry 均不可见。
-- session seam：`SubAgentSession({ subrun, signal, parentTracer?, callbacks? })`，`run()` 返回 `{ kind:'result', result } | { kind:'not_pending', status }`。它在最外层建立 delegate scope，使用执行 Agent config/catalog/prompt，局部收集 usage/deliverables；每次调用 BaseSession 都是完整、自然结束的 ReAct user turn，未提交时只追加/flush 一条真实 reminder user message 后再跑一次完整 turn。
+- session seam：`SubAgentSession({ subrun, signal, parentTracer?, callbacks? })`，`run()` 返回 `{ kind:'result', result } | { kind:'not_pending', status }`。它在最外层建立 delegate scope，使用执行 Agent config/catalog/prompt，局部收集 usage/deliverables；initial 未提交时只追加/flush 一条真实 reminder user message 后再跑一次完整 turn，continuation 则在首条 user message 末尾预附同一 reminder，并直接消耗该 execution 的一次提醒额度。
 - IPC：`subagentRun` 的 query/cancel 都先沿 active Profile → parent Agent → parent Session → Subrun 解析；`getRunData` 只返回 metadata，`getRunMessages` 仅在 renderer Dialog 打开后调用 `Subrun.loadDomainMessages()` 并返回同 owner 的 Domain `Message[]`。manager 的 process-level state subscription 转发所有 profile-bound manager event；renderer 以完整 profile/parent identity + correlation 关联 live card，final tool result/persisted data 是终态事实。
 
 ## 常见变更
@@ -97,7 +97,7 @@ tools/subagent facade → LocalTool registry → parent RegularSession/JobRun
 - `list` 只消费 resolver hot records；`describe` 才按需读取一个 authorized AgentDetail，避免列表 fan-out，也避免泄漏 systemPrompt/delegates/zero。
 - normal Agent 不创建 AsyncLocalStorage context；只有 SubAgentSession 建立 `{ delegateId }`。
 - scope 不跨 IPC/worker/child process；所有授权判断必须在主进程 delegate run 链路内完成。
-- `SubAgentSession` 不读取 parent history；`parent_summary` 只以明确“不可信参考”提示包入 initial delegated prompt。continuation 从自身 persisted transcript 恢复并追加真实 user message；manager 才拥有 timer、cancel、state 与 recovery。
+- `SubAgentSession` 不读取 parent history；`parent_summary` 只以明确“不可信参考”提示包入 initial delegated prompt。continuation 从自身 persisted transcript 恢复，将显式 message 与 `submit_result` system reminder 合并为一条 user message；manager 才拥有 timer、cancel、state 与 recovery。
 - parent `AbortSignal` 在 execution active 后立即监听；initial 在 `Subrun.start()` 后、continuation 在 `continueConversation()` 后建立 listener，只在关键边界收敛取消。
 - `SubAgentManager` 不可全局单例：它持有 active runs、locks 与 listeners，必须通过 `SubAgentManager.forProfile(profile)` 绑定 Profile；不得按 profileId 建普通 `Map`，避免已 evict Profile 的运行态被长期保留。
 - 通用 `buildSystemPrompt()` 不读取 legacy/new delegates，也不指导委派。未来只有需要 delegation 的父 BaseSession 子类可在其通用 prompt 后显式追加基于新 Agent graph 的 guidance；SubAgentSession 永不追加。

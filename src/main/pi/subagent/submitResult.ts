@@ -15,6 +15,7 @@ import type { LocalTool, ToolResult } from '../tools/types';
 
 const SUBMIT_RESULT_NAME = 'submit_result';
 const RESULT_NOT_SUBMITTED = 'result_not_submitted';
+export const SUBMIT_RESULT_REMINDER = '<system-reminder>Before ending this delegated run, call submit_result with the formal outcome.</system-reminder>';
 
 const SUBMIT_RESULT_PARAMETERS = jsonSchema({
   type: 'object',
@@ -290,7 +291,7 @@ export function decideMissingSubmit(input: MissingSubmitInput): MissingSubmitDec
   if (!input.reminderSent && input.hasAvailableTools && !input.reachedMaxTurns) {
     return {
       kind: 'remind',
-      reminder: '<system-reminder>Before ending this delegated run, call submit_result with the formal outcome.</system-reminder>',
+      reminder: SUBMIT_RESULT_REMINDER,
     };
   }
 

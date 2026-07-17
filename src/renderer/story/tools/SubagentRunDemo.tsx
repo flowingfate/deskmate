@@ -4,7 +4,7 @@ import { ToolCallsSection } from '@/components/chat/tool/ToolCallsSection';
 import { ToolDetailView } from '@/components/chat/tool/ToolDetailView';
 import { registerBuiltinToolRenderers } from '@/components/chat/tool/registerBuiltins';
 import { subagentRenderer } from '@/components/chat/tool/renderers/subagent';
-import { SubagentRunMessagesDialog } from '@/components/chat/tool/renderers/subagent/RunMessagesDialog';
+import { SubagentRunMessagesDialog } from '@/components/chat/tool/renderers/subagent/message';
 import { currentSessionStore } from '@/states/currentSession.atom';
 import {
   blockedSubagentCall,

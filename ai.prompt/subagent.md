@@ -52,7 +52,7 @@ subagent("continue <subrun-id> --message \"...\"")
 ### 可继续会话
 
 - Subrun 是父 session 内的一段可继续 delegated conversation。首次执行为 `pending → running → terminal`；终态后可由 `continue` 直接进入下一次 `running → terminal` execution，不能在 pending/running 状态下重入。
-- 每次 execution 都是完整的 ReAct user turn。初始 execution 使用 `request.task`；continuation 将 `--message` 作为真实 user message 追加到同一 transcript。提交结果后待该 turn 自然结束才 formalize；未提交时至多追加一条真实 reminder 并再执行一个完整 turn。
+- 每次 execution 都是完整的 ReAct user turn。初始 execution 使用 `request.task`，未提交时至多追加一条真实 reminder 并再执行一个完整 turn；continuation 将 `--message` 作为真实 user message 追加到同一 transcript，并在消息末尾直接附加 `system-reminder`，该 reminder 计入一次性提醒额度，不再产生独立 reminder turn。提交结果后待当前 turn 自然结束才 formalize。
 - 每次正式结果、assistant/tool transcript 均在结束前落盘；终态写入失败不会向父工具调用返回成功。`data.json.execution` 保存产生当前结果的 execution，`data.json.result` 保存对应正式结果。
 
 ## Subrun 持久化与生命周期
