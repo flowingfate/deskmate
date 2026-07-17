@@ -1,6 +1,6 @@
 # Step 14 — 统一 Review、编写并运行新单元测试
 
-> 状态：待执行
+> 状态：complete
 > 前置：Steps 1–13 complete，用户确认业务结构稳定；`unit-test.md` 已冻结候选
 > 本步只做单元/模块测试和必要的真实bug修复，不做端到端测试。
 

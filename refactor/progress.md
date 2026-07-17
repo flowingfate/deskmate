@@ -8,11 +8,11 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 13 complete**
-- 当前门禁：用户已确认 Step 13；Step 14 保持 `pending`，等待用户明确开始并 review `unit-test.md`
-- 业务步骤：Step 9、Step 10、Step 11、Step 12 均为 `complete`
-- 测试步骤：Step 14 尚未开始；Step 13 未新增或运行单测
-- 生产代码变更：parent-owned lazy transcript IPC、局部只读 Dialog 与仅 Story 的 Transcript demo 已获用户确认
+- 总体阶段：**Step 14 complete**
+- 当前门禁：14 个重构步骤均已由用户确认
+- 业务步骤：Step 9、Step 10、Step 11、Step 12、Step 13 均为 `complete`
+- 测试步骤：Step 14 的 P0/P1 核心单测、全量测试与构建验证均已完成；不含 E2E
+- 生产修复：delegate resolver trim/去空、top-level tool 初始化环与 manager read-only 路径的 session eager-load 已获用户确认
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
 - 记得看看 [这个](../tmp/code-standard.md)，这是我对高质量好代码的理解
@@ -47,7 +47,7 @@
 | 11 | [委派运行卡片与 audit/cancel IPC](step11.md) | complete | Steps 6,7,9 | reload-safe card、live state、single cancel、run metadata query、完整 renderer Story matrix |
 | 12 | [可选 Messages Dialog](step12.md) | complete | Step 11 review | parent-owned lazy messages IPC、只读 Dialog、Ladle Transcript demo |
 | 13 | [证明新路径唯一并删除残留旧源码](step13.md) | complete | Steps 9–12 | 新路径唯一生效；残留旧源码/测试删除；全局文档更新 |
-| 14 | [统一编写单元测试](step14.md) | pending | Steps 1–13 + `unit-test.md` | 用户确认后的新单测与测试执行记录；仍无 E2E |
+| 14 | [统一编写单元测试](step14.md) | complete | Steps 1–13 + `unit-test.md` | 已确认的 P0/P1 核心单测与验证记录；无 E2E |
 
 ## 关键路径
 
@@ -567,3 +567,14 @@
 ### 2026-07-17 — Step 13 用户 review 通过
 - 用户确认 Step 13 完成：唯一新委派路径、旧 eval 协议 clean cutover、残留源码清理与文档交接均获通过。
 - Step 13 状态切为 `complete`；Step 14 仍为 `pending`，仅在用户明确开始并 review `unit-test.md` 后执行。
+
+### 2026-07-17 — Step 14 — awaiting-review
+- 用户要求扩展首批测试；最终新增/扩展 8 个相关测试文件，覆盖 request normalization、runtime state、Subrun allocator/state、delegate resolver、formal submit、command facade、manager admission/cancel/recovery 与 renderer outcome/live-state identity。
+- 测试驱动的生产修复：`Profile.resolveDelegates()` 兑现 trim/去空 contract；delegated catalog 对 registry 内同一 `subagent` LocalTool object blacklist，消除静态初始化环；`SubAgentManager` 仅在 admission 后加载 `SubAgentSession`，read-only list/describe 不初始化 LLM session 依赖。
+- 验证：expanded focused 8 files / 41 tests 通过；完整 `npm test` 143 files / 1442 tests 通过；`npm run typecheck`、`npm run build` 通过。build 仅有既有 renderer chunk-size warning；测试有既有 node-cron sourcemap、Node url.parse deprecation 和 CrashCapture mock warning，均不影响结果。
+- 未做：未运行 E2E，未启动应用或代替用户执行人工委派/UI 验证；未为真实 LLM、跨进程 IPC 或 Dialog 视觉/focus 编写脆弱 mock 测试。
+- 用户 review 待确认：扩展后的 P0/P1 筛选范围、三个生产修复与最终验证记录。
+
+### 2026-07-17 — Step 14 用户 review 通过
+- 用户确认 Step 14 完成：扩展后的 P0/P1 测试范围、delegate resolver / tool initialization / manager lazy session 三项生产修复，以及完整验证记录均获通过。
+- Step 14 状态切为 `complete`；14 Step 重构全部完成。

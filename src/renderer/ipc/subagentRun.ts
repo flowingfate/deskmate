@@ -12,6 +12,25 @@ const subagentRunEvents = mainToRender.bindRender(
 
 const statesByCorrelationId = new Map<string, SubAgentRuntimeState>();
 const listeners = new Set<() => void>();
+export interface SubagentRunStateIdentity {
+  correlationId: string;
+  profileId: string | null;
+  parentAgentId: string | null;
+  parentSessionId: string | null;
+  subrunId: SubrunId | undefined;
+}
+
+export function matchesSubagentRunState(
+  state: SubAgentRuntimeState,
+  identity: SubagentRunStateIdentity,
+): boolean {
+  return state.correlationId === identity.correlationId
+    && state.profileId === identity.profileId
+    && state.parentAgentId === identity.parentAgentId
+    && state.parentSessionId === identity.parentSessionId
+    && (identity.subrunId === undefined || state.subrunId === identity.subrunId);
+}
+
 
 subagentRunEvents.stateUpdate((_event, state) => {
   if (!state.correlationId) return;
@@ -40,12 +59,13 @@ export function useSubagentRunState(
     () => {
       const state = statesByCorrelationId.get(correlationId);
       if (!state) return null;
-      return state.profileId === profileId
-        && state.parentAgentId === parentAgentId
-        && state.parentSessionId === parentSessionId
-        && (subrunId === undefined || state.subrunId === subrunId)
-        ? state
-        : null;
+      return matchesSubagentRunState(state, {
+        correlationId,
+        profileId,
+        parentAgentId,
+        parentSessionId,
+        subrunId,
+      }) ? state : null;
     },
     () => null,
   );

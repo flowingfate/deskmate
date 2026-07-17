@@ -1,0 +1,102 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import type {
+  SubAgentRunCompletedResult,
+  SubAgentRunRequest,
+  SubrunId,
+} from '../../../shared/persist/types';
+import { isSubrunId } from '../../../shared/persist/types';
+
+import { Subrun, type SubrunParent } from '../subrun';
+
+let tmpRoot = '';
+
+const request: SubAgentRunRequest = {
+  delegateAgentId: 'a_delegate',
+  task: 'Write the report.',
+  expectedOutput: 'A report.',
+  context: { kind: 'isolated' },
+  policy: { maxTurns: 25, timeoutMs: 60_000 },
+};
+
+function parent(): SubrunParent {
+  return {
+    profileId: 'p_test',
+    parentAgentId: 'a_parent',
+    parentSessionId: 's_parent',
+    subrunsDir: path.join(tmpRoot, 'subruns'),
+  };
+}
+
+function completedResult(subrunId: SubrunId, delegateAgentId: string): SubAgentRunCompletedResult {
+  return {
+    status: 'completed',
+    subrunId,
+    delegateAgentId,
+    content: 'Completed.',
+    deliverables: [],
+    warnings: [],
+    usage: { turns: 1, durationMs: 10 },
+  };
+}
+
+beforeEach(async () => {
+  tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'subrun-test-'));
+});
+
+afterEach(async () => {
+  await fs.rm(tmpRoot, { recursive: true, force: true });
+});
+
+describe('SubrunId', () => {
+  it('accepts only three-digit parent-local sequences from 001 through 999', () => {
+    expect(['001', '010', '999'].every(isSubrunId)).toBe(true);
+    expect(['000', '1', '01', '1000', 'abc'].some(isSubrunId)).toBe(false);
+  });
+});
+
+describe('Subrun allocation', () => {
+  it('serializes concurrent reservations and never reuses an incomplete sequence', async () => {
+    const owner = parent();
+    const first = await Subrun.create(owner, request);
+    expect(first.kind).toBe('created');
+
+    await fs.mkdir(path.join(owner.subrunsDir, '002'));
+    expect(await Subrun.load(owner, '002')).toEqual({ kind: 'incomplete', subrunId: '002' });
+
+    const concurrent = await Promise.all([
+      Subrun.create(owner, request),
+      Subrun.create(owner, request),
+      Subrun.create(owner, request),
+    ]);
+    const allocatedIds = concurrent.flatMap((result) => result.kind === 'created' ? [result.subrun.subrunId] : []);
+
+    expect(allocatedIds.sort()).toEqual(['003', '004', '005']);
+  });
+});
+
+describe('Subrun state machine', () => {
+  it('persists only a matching terminal result after running', async () => {
+    const owner = parent();
+    const created = await Subrun.create(owner, request);
+    if (created.kind !== 'created') throw new Error('Expected an allocated subrun.');
+
+    const subrun = created.subrun;
+    expect(await subrun.start()).toEqual({ kind: 'started' });
+    expect(await subrun.finish(completedResult('999', subrun.delegateAgentId))).toEqual({ kind: 'result_mismatch' });
+    expect(subrun.status).toBe('running');
+
+    expect(await subrun.finish(completedResult(subrun.subrunId, subrun.delegateAgentId))).toEqual({ kind: 'finished' });
+    expect(await fs.readdir(path.join(owner.subrunsDir, subrun.subrunId))).toEqual(['data.json']);
+
+    const loaded = await Subrun.load(owner, subrun.subrunId);
+    if (loaded.kind !== 'found') throw new Error('Expected the persisted subrun.');
+    expect(loaded.subrun.toDataFile()).toMatchObject({
+      status: 'completed',
+      result: { status: 'completed', subrunId: subrun.subrunId },
+    });
+  });
+});

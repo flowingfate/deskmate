@@ -490,6 +490,28 @@ describe('Profile.reconcileAgents', () => {
   });
 });
 
+describe('Profile.resolveDelegates', () => {
+  it('normalizes configured IDs and keeps self, missing, and archived targets unavailable', async () => {
+    const { Profiles } = await freshModules();
+    await Profiles.get().bootstrap();
+    const profile = await Profiles.get().active();
+    const parent = await profile.createAgent({ name: 'Parent', version: '1' });
+    const available = await profile.createAgent({ name: 'Available', version: '1' });
+    const archived = await profile.createAgent({ name: 'Archived', version: '1' });
+
+    await parent.patchFront({
+      delegates: [' ', ` ${available.id} `, parent.id, 'a_missing', archived.id, available.id],
+    });
+    await profile.archiveAgent(archived.id);
+
+    const availableRecords = profile.listAgents().filter((record) => record.id === available.id);
+    expect(await profile.resolveDelegates(parent.id)).toEqual({
+      available: availableRecords,
+      unavailableIds: [parent.id, 'a_missing', archived.id],
+    });
+  });
+});
+
 describe('Profile.getSnapshot (Step 3 lazy AGENT.md)', () => {
   it('does not touch AGENT.md files when assembling snapshot for N agents', async () => {
     const { Profiles } = await freshModules();

@@ -25,11 +25,9 @@ import { isDelegatedExecution } from '@main/lib/delegateExecutionScope';
 import type { AgentConfig } from './utils/config';
 import { executeMcpToolOnServer, listAllMcpTools } from './mcp';
 import { ask } from './tools/ask';
-import { subagent } from './tools/subagent';
 import { tools as localTools, ensureToolsRegistered, executeLocalTool } from './tools/registry';
 import type { LocalTool, ToolContext } from './tools/types';
 
-const DELEGATED_DISABLED_TOOLS = new Set<LocalTool>([ask, subagent]);
 
 /** pi 流式层已解析后的 toolCall 入参。 */
 export interface ToolCallInput {
@@ -125,7 +123,10 @@ export async function buildToolCatalogForAgent(agentCfg: AgentConfig): Promise<T
 
   let selectedLocal = pickLocalSubset(agentCfg.tools);
   if (isDelegatedExecution()) {
-    selectedLocal = selectedLocal.filter((tool) => !DELEGATED_DISABLED_TOOLS.has(tool));
+    const disabledTools = new Set<LocalTool>([ask]);
+    const subagentTool = localTools.get('subagent');
+    if (subagentTool) disabledTools.add(subagentTool);
+    selectedLocal = selectedLocal.filter((tool) => !disabledTools.has(tool));
   }
   for (const tool of selectedLocal) {
     routes.set(tool.spec.name, { kind: 'local', tool });

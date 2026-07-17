@@ -293,8 +293,12 @@ export class Profile {
     const activeById = new Map(this.agentRegistry.items.map((record) => [record.id, record]));
     const available: AgentRecord[] = [];
     const unavailableIds: string[] = [];
-    const seen = new Set<string>(parent.config.delegates || []);
-    for (const delegateId of seen) {
+    const seen = new Set<string>();
+    for (const configuredId of parent.config.delegates ?? []) {
+      const delegateId = configuredId.trim();
+      if (!delegateId || seen.has(delegateId)) continue;
+      seen.add(delegateId);
+
       const record = activeById.get(delegateId);
       if (record && delegateId !== parentId) available.push(record);
       else unavailableIds.push(delegateId);

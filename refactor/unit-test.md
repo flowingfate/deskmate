@@ -212,6 +212,19 @@
 - 最高风险：外部评测消费者仍读取已删除字段；用户已明确确认 clean cutover。
 - 需要用户在 Step 14 前决定：无。
 
+## Step 14 实际筛选 — 2026-07-17
+
+- 用户指出首批覆盖不足；最终范围扩展为 P0/P1 的纯契约、持久化、manager admission、cmdline facade 与 renderer data 关联，不写 E2E 或真实 LLM/provider 测试。
+- 已实现：
+  - request normalization：必填字段 trim、isolated / parent_summary、policy 默认推导、独立 clamp 与非法输入拒绝。
+  - runtime state：pending/running/terminal 投影、turn 单调递增、text streaming 清理、50 条 FIFO progress 上限与 persisted terminal reload。
+  - persist / graph：三位 ID、empty reservation、并发 allocator、terminal identity、delegate resolver 的 trim/去空/去重/self/missing/archive。
+  - formal submit：URI traversal、一次性提交、metadata/deliverable merge、missing-submit 收敛。
+  - command / manager：list/describe 安全投影与 outcome envelope、run 参数/parent summary rejection、parallel=5 admission、single/parent cancel、active cleanup、stale-running recovery。
+  - renderer data：formal/rejected/read-only result parser，以及 profile + parent agent/session + correlation + optional subrun 的 live-state identity match。
+- 仍删除：真实 SubAgentSession/LLM stream transcript 细节、timeout 实时钟、main IPC handler wiring、Dialog 视觉/focus、完整 UI 流程与 eval response。它们要么需要真实 provider/多进程/人工交互，要么超出当前稳定可观察契约；不以大量脆弱 mock 换测试数量。
+- 额外回归：首批全量测试暴露顶层 subagent 的静态 import 环，已改为 delegated catalog 从已注册 registry 取得同一 `subagent` LocalTool 对象作 object blacklist；manager 改为仅在 admission 后动态加载 SubAgentSession，read-only command/manager 路径不再初始化 LLM session 依赖。
+
 ## Step 14 执行顺序建议
 
 1. 先写 P0 pure/store/policy tests；

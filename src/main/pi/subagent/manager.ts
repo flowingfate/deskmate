@@ -24,7 +24,6 @@ import {
   persistedRuntimeState,
   startRuntimeState,
 } from './runtimeState';
-import { SubAgentSession } from './session';
 
 export type SubAgentRuntimeStateListener = (state: SubAgentRuntimeState) => void;
 
@@ -210,6 +209,7 @@ export class SubAgentManager {
     const timeout = setTimeout(() => admission.active.abortor.abort(), request.policy.timeoutMs);
 
     try {
+      const { SubAgentSession } = await import('./session');
       const outcome = await new SubAgentSession({
         subrun: admission.subrun,
         signal: admission.active.abortor.signal,
