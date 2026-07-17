@@ -258,7 +258,6 @@ export const liveSubagentState: SubAgentRuntimeState = {
   expectedOutput: 'A concise implementation review.',
   maxTurns: 8,
   timeoutMs: 480_000,
-  createdAt: liveStartedAt - 800,
   currentTurn: 2,
   steps: [
     {

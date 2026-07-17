@@ -1,9 +1,6 @@
 import type {
-  SubAgentRunBlockedResult,
-  SubAgentRunCancelledResult,
-  SubAgentRunCompletedResult,
-  SubAgentRunFailedResult,
-  SubAgentRunPartialResult,
+  SubAgentRunResultByStatus,
+  SubAgentRunStatus,
   SubrunId,
 } from '../persist/types';
 
@@ -62,7 +59,6 @@ interface SubAgentRuntimeStateBase {
   expectedOutput: string;
   maxTurns: number;
   timeoutMs: number;
-  createdAt: number;
   currentTurn: number;
   steps: SubAgentRunStep[];
 }
@@ -83,36 +79,14 @@ interface SubAgentTerminalRuntimeStateBase extends SubAgentRuntimeStateBase {
   finishedAt: number;
 }
 
-export interface SubAgentCompletedRuntimeState extends SubAgentTerminalRuntimeStateBase {
-  status: 'completed';
-  result: SubAgentRunCompletedResult;
-}
-
-export interface SubAgentPartialRuntimeState extends SubAgentTerminalRuntimeStateBase {
-  status: 'partial';
-  result: SubAgentRunPartialResult;
-}
-
-export interface SubAgentBlockedRuntimeState extends SubAgentTerminalRuntimeStateBase {
-  status: 'blocked';
-  result: SubAgentRunBlockedResult;
-}
-
-export interface SubAgentFailedRuntimeState extends SubAgentTerminalRuntimeStateBase {
-  status: 'failed';
-  result: SubAgentRunFailedResult;
-}
-
-export interface SubAgentCancelledRuntimeState extends SubAgentTerminalRuntimeStateBase {
-  status: 'cancelled';
-  result: SubAgentRunCancelledResult;
-}
+type SubAgentTerminalRuntimeState = {
+  [Status in SubAgentRunStatus]: SubAgentTerminalRuntimeStateBase & {
+    status: Status;
+    result: SubAgentRunResultByStatus[Status];
+  };
+}[SubAgentRunStatus];
 
 export type SubAgentRuntimeState =
   | SubAgentPendingRuntimeState
   | SubAgentRunningRuntimeState
-  | SubAgentCompletedRuntimeState
-  | SubAgentPartialRuntimeState
-  | SubAgentBlockedRuntimeState
-  | SubAgentFailedRuntimeState
-  | SubAgentCancelledRuntimeState;
+  | SubAgentTerminalRuntimeState;

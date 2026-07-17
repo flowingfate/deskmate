@@ -4,13 +4,15 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
-  SubAgentRunCompletedResult,
+  PersistSubrunDataFile,
+  SubAgentRunResultByStatus,
   SubAgentRunRequest,
   SubrunId,
 } from '../../../shared/persist/types';
 import { isSubrunId } from '../../../shared/persist/types';
 
 import { Subrun, type SubrunParent } from '../subrun';
+import { readJsonOrNull } from '../lib/atomic';
 
 let tmpRoot = '';
 
@@ -31,7 +33,7 @@ function parent(): SubrunParent {
   };
 }
 
-function completedResult(subrunId: SubrunId, delegateAgentId: string): SubAgentRunCompletedResult {
+function completedResult(subrunId: SubrunId, delegateAgentId: string): SubAgentRunResultByStatus['completed'] {
   return {
     status: 'completed',
     subrunId,
@@ -94,10 +96,45 @@ describe('Subrun state machine', () => {
 
     const loaded = await Subrun.load(owner, subrun.subrunId);
     if (loaded.kind !== 'found') throw new Error('Expected the persisted subrun.');
-    expect(loaded.subrun.toDataFile()).toMatchObject({
-      status: 'completed',
-      result: { status: 'completed', subrunId: subrun.subrunId },
+    expect(loaded.subrun.status).toBe('completed');
+    expect(loaded.subrun.result).toMatchObject({ status: 'completed', subrunId: subrun.subrunId });
+
+    const persisted = await readJsonOrNull<PersistSubrunDataFile>(
+      path.join(owner.subrunsDir, subrun.subrunId, 'data.json'),
+    );
+    expect(persisted).toEqual({
+      version: 1,
+      id: subrun.subrunId,
+      delegateAgentId: subrun.delegateAgentId,
+      histories: [{
+        status: 'completed',
+        execution: {
+          kind: 'initial',
+          message: request.task,
+          expectedOutput: request.expectedOutput,
+          context: request.context,
+          policy: request.policy,
+        },
+        startedAt: expect.any(String),
+        finishedAt: expect.any(String),
+        result: {
+          content: 'Completed.',
+          deliverables: [],
+          warnings: [],
+          usage: { turns: 1, durationMs: 10 },
+        },
+      }],
+      session: {
+        title: '',
+        updatedAt: expect.any(String),
+        contextState: { compressions: [] },
+      },
     });
+    expect(persisted).not.toHaveProperty('profileId');
+    expect(persisted).not.toHaveProperty('parentAgentId');
+    expect(persisted).not.toHaveProperty('parentSessionId');
+    expect(persisted).not.toHaveProperty('request');
+    expect(persisted).not.toHaveProperty('result');
   });
 });
 
@@ -117,22 +154,36 @@ describe('Subrun continuation', () => {
       'Add rollout risks.',
       { maxTurns: 10, timeoutMs: 60_000 },
     )).toEqual({ kind: 'continued' });
-    expect(subrun.toDataFile()).toMatchObject({
-      status: 'running',
-      execution: { kind: 'continuation', message: 'Add rollout risks.' },
-    });
+    expect(subrun.status).toBe('running');
+    expect(subrun.execution).toMatchObject({ kind: 'continuation', message: 'Add rollout risks.' });
 
     const followUp = { ...initial, content: 'Rollout risks added.', usage: { turns: 1, durationMs: 20 } };
     await subrun.finish(followUp);
-    expect(subrun.toDataFile()).toMatchObject({
-      status: 'completed',
-      result: followUp,
-      execution: {
-        kind: 'continuation',
-        message: 'Add rollout risks.',
-        policy: { maxTurns: 10, timeoutMs: 60_000 },
-      },
+    expect(subrun.status).toBe('completed');
+    expect(subrun.result).toEqual(followUp);
+    expect(subrun.execution).toEqual({
+      kind: 'continuation',
+      message: 'Add rollout risks.',
+      policy: { maxTurns: 10, timeoutMs: 60_000 },
     });
+
+    const persisted = await readJsonOrNull<PersistSubrunDataFile>(
+      path.join(owner.subrunsDir, subrun.subrunId, 'data.json'),
+    );
+    expect(persisted?.histories).toHaveLength(2);
+    expect(persisted?.histories[0]).toMatchObject({
+      status: 'completed',
+      execution: { kind: 'initial', message: request.task },
+      result: { content: 'Completed.' },
+    });
+    expect(persisted?.histories[1]).toMatchObject({
+      status: 'completed',
+      execution: { kind: 'continuation', message: 'Add rollout risks.' },
+      result: { content: 'Rollout risks added.' },
+    });
+    expect(persisted?.histories[0]).not.toHaveProperty('result.status');
+    expect(persisted?.histories[0]).not.toHaveProperty('result.subrunId');
+    expect(persisted?.histories[0]).not.toHaveProperty('result.delegateAgentId');
   });
 
   it('rejects continuation while the subrun is active', async () => {

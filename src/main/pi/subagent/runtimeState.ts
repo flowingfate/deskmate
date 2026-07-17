@@ -1,8 +1,8 @@
 import type {
-  SubAgentRunFailedResult,
   SubAgentRunResult,
-  SubrunDataFile,
+  SubAgentRunResultByStatus,
 } from '@shared/persist/types';
+import type { Subrun } from '@main/persist';
 import type {
   SubAgentPendingRuntimeState,
   SubAgentRunStep,
@@ -13,22 +13,22 @@ import type {
 const MAX_RUNTIME_STEPS = 50;
 
 export function createPendingRuntimeState(
-  data: SubrunDataFile,
+  subrun: Subrun,
   correlationId?: string,
 ): SubAgentPendingRuntimeState {
-  const policy = data.execution.policy;
+  const request = subrun.request;
+  const policy = subrun.execution.policy;
   return {
-    profileId: data.profileId,
-    parentAgentId: data.parentAgentId,
-    parentSessionId: data.parentSessionId,
-    subrunId: data.subrunId,
-    delegateAgentId: data.delegateAgentId,
+    profileId: subrun.profileId,
+    parentAgentId: subrun.parentAgentId,
+    parentSessionId: subrun.parentSessionId,
+    subrunId: subrun.subrunId,
+    delegateAgentId: subrun.delegateAgentId,
     correlationId,
-    task: data.request.task,
-    expectedOutput: data.request.expectedOutput,
+    task: request.task,
+    expectedOutput: request.expectedOutput,
     maxTurns: policy.maxTurns,
     timeoutMs: policy.timeoutMs,
-    createdAt: Date.parse(data.createdAt),
     currentTurn: 0,
     steps: [],
     status: 'pending',
@@ -83,7 +83,6 @@ export function completeRuntimeState(
     expectedOutput: state.expectedOutput,
     maxTurns: state.maxTurns,
     timeoutMs: state.timeoutMs,
-    createdAt: state.createdAt,
     currentTurn: state.currentTurn,
     steps: state.steps,
     startedAt: state.startedAt,
@@ -99,32 +98,33 @@ export function completeRuntimeState(
   }
 }
 
-export function persistedRuntimeState(data: SubrunDataFile): SubAgentRuntimeState {
-  if (data.status === 'pending') return createPendingRuntimeState(data);
+export function persistedRuntimeState(subrun: Subrun): SubAgentRuntimeState {
+  if (subrun.status === 'pending') return createPendingRuntimeState(subrun);
 
   const running = startRuntimeState(
-    createPendingRuntimeState(data),
-    Date.parse(data.startedAt),
+    createPendingRuntimeState(subrun),
+    Date.parse(subrun.startedAt),
   );
-  if (data.status === 'running') return running;
+  if (subrun.status === 'running') return running;
 
-  const terminal = completeRuntimeState(running, data.result, Date.parse(data.finishedAt));
+  const terminal = completeRuntimeState(running, subrun.result, Date.parse(subrun.finishedAt));
   if (!terminal) throw new Error('Could not derive terminal Subrun runtime state.');
   return terminal;
 }
 
-export function interruptedResult(
-  data: Extract<SubrunDataFile, { status: 'running' }>,
-): SubAgentRunFailedResult {
+export function interruptedResult(subrun: Subrun): SubAgentRunResultByStatus['failed'] {
+  if (subrun.status !== 'running') {
+    throw new Error(`Cannot interrupt Subrun ${subrun.subrunId} from status ${subrun.status}.`);
+  }
   return {
     status: 'failed',
-    subrunId: data.subrunId,
-    delegateAgentId: data.delegateAgentId,
+    subrunId: subrun.subrunId,
+    delegateAgentId: subrun.delegateAgentId,
     deliverables: [],
     warnings: [],
     usage: {
       turns: 0,
-      durationMs: Math.max(0, Date.now() - Date.parse(data.startedAt)),
+      durationMs: Math.max(0, Date.now() - Date.parse(subrun.startedAt)),
     },
     error: 'Subrun interrupted by application restart.',
   };

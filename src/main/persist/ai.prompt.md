@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (Step 13：Subrun 是唯一委派持久化路径) -->
+<!-- Last verified: 2026-07-17 (Subrun trusted schema + RuntimeState 投影) -->
 
 # Persist 模块（新布局 store 层）
 
@@ -13,7 +13,7 @@
 | `profile.ts` | 单 profile：内嵌 `ProfileSettings`（settings.json）+ `AgentRegistry`（agents.json：items + primaryAgentId）两个 PersistBase inner class；外层 `Profile` 负责 agent 实体集合（Map<id, Agent>）、CRUD、archive/restore、reconcile、跨 agent 聚合，以及 `resolveDelegates(parentId)` 按父配置 join active hot registry | large |
 | `agent.ts` | `Agent` class：AGENT.md 读写 + sessions/jobs 子域入口；description/delegates 由既有 config/patch 往返，不建立独立 normalizer | large |
 | `session.ts` | `Session`(抽象基类:`messages.jsonl` I/O + files sandbox + 节流 persist + 元数据 mutate)及 `RegularSession` / `JobRun`；还拥有 `createSubrun/getSubrun/listSubruns`，只以当前 parent session 限定三位 subrun ID | large |
-| `subrun.ts` | `Subrun`：parent `subruns/001..999/` 的 data/message store；per-parent allocation lock、directory reservation、v1 initial/continuation lifecycle、当前 execution/result 与 `PersistSessionLike` 最小消息/配置实现；不进 SQLite、普通 Session emit 或 files sandbox | large |
+| `subrun.ts` | `Subrun`：parent `subruns/001..999/` 的 data/message store；per-parent allocation lock、directory reservation、v1 execution history、明确运行 getter 与 `PersistSessionLike` 最小实现；不创建旧 data-file snapshot，不进 SQLite、普通 Session emit 或 files sandbox | large |
 | `schedule.ts` | `ScheduleJob` + `ScheduleRegistry`:once/cron job + run 状态机;Step 9 起 run 路径走 `jobRunIdx` | medium |
 | `archive.ts` | agent 软删/恢复/purge/gc | small |
 | `mcp.ts` / `skills.ts` / `models.ts` | profile 级共享注册表 CRUD | small |
@@ -64,9 +64,9 @@ Profiles.get().active()          → Profile
 - `RegularSession` → `agents/{a}/sessions/{ym}/{s}/`
 - `JobRun` → `agents/{a}/schedules/{j}/runs/{ym}/{s}/`
 
-两种 parent session 的 `subruns/` 子目录都由 `Session.createSubrun` 统一拥有；每个合法 `001..999` 目录只含 `data.json` 与 `messages.jsonl`。`Subrun` 不继承 `Session`，不创建 files、不写 `regular_sessions` / `job_runs`、不 emit 普通 session channel；它直接实现 Pi 的最小 `PersistSessionLike`。
+两种 parent session 的 `subruns/` 子目录都由 `Session.createSubrun` 统一拥有；每个合法 `001..999` 目录只含 `data.json` 与 `messages.jsonl`。`Subrun` 不继承 `Session`，不创建 files、不写 `regular_sessions` / `job_runs`、不 emit 普通 session channel；它直接实现 Pi 的最小 `PersistSessionLike`。磁盘 `PersistSubrunDataFile` 不重复 profile、父 Agent/session ID；owner identity、initial request、当前 execution/status/timestamps/result 通过明确 getter 暴露，不再组装 `SubrunDataFile` 镜像。
 
-`Subrun` 是可继续的 delegated conversation：initial execution 为 `pending → running → terminal`；terminal 的 `continueConversation()` 直接进入一次新的 running continuation，不分配新三位 ID。v1 data 在所有状态保留当前 execution，terminal 另存当前 formal result。
+`Subrun` 是可继续的 delegated conversation：initial execution 为 `pending → running → terminal`；terminal 的 `continueConversation()` 直接追加一项 running continuation，不分配新三位 ID。每项 history 对应一次 execution，状态变化替换最后一项；terminal persisted result 不重复 status、subrunId、delegateAgentId，`Subrun.result` 按需补回。
 
 两类 session 永不混走同一容器：`Agent.sessions: Map<id, RegularSession>`，`ScheduleJob.runs: Map<id, JobRun>`。子类间没有共同的 placement getter；要分支判断，用 `instanceof`。
 
@@ -109,7 +109,7 @@ Profiles.get().active()          → Profile
 
 - ⚠️ `name` 不是主键。`agents.json` 允许重名；所有引用走 `a_{ulid}` id。重命名 agent 时 id 不变；skills 沿用 name 作 id。
 - ⚠️ Agent 委派关系只存普通 Agent ID，patch 原样落盘。授权与 prompt 必须调用 `Profile.resolveDelegates(parentId)`，不得按 name 查找或绕过 resolver；resolver 只读父 AGENT.md，再 join active `AgentRecord`，解析时 trim/去空/稳定去重，self/dangling/archived 进入 unavailable。parent record/AGENT.md 缺失通过返回 `null` 显式表达，不抛业务异常。
-- ⚠️ Subrun 的三位 ID 只在 parent Session 下有意义。`Session.createSubrun/getSubrun/listSubruns` 是唯一 owner API；allocator 以 parent `subruns/` path 锁串行扫描、原子 mkdir reservation 与初始 data 写入。空 reservation 返回 `incomplete`，不复用；`999` 返回 `exhausted`；running crash record 不自动续跑或改写，等待 Step 9 的唯一 recovery 入口。
+- ⚠️ Subrun 的三位 ID 只在 parent Session 下有意义。`Session.createSubrun/getSubrun/listSubruns` 是唯一 owner API；allocator 以 parent `subruns/` path 锁串行扫描、原子 mkdir reservation 与初始 data 写入。空 reservation 返回 `incomplete`，不复用；`999` 返回 `exhausted`。`data.json` 按当前 writer 生成的 v1 schema 直接读取，不提供旧形态迁移或结构校验；切换 schema 时由开发环境清理旧数据。
 - ⚠️ Session 删除必须按形态走 owner：`Agent.deleteSession(id)` 只删 RegularSession；`ScheduleJob.deleteRun(id)` 只删已结束的单条 JobRun（running 会拒绝，避免与执行写盘竞态）；`Agent.deleteJob(id)` 才整 job 级联删除。它们分别同步源目录、SQLite 行并 emit 对应 remove 事件。**不要**直接 `session.deleteFromDisk()`。
 - ⚠️ Agent 软删走 `Profile.archiveAgent(id)`：写顺序是 archive move dir → agents.json 剔除（含 `primaryAgentId` 命中清空）。若中途崩溃，下次启动 `reconcileAgents()` 会发现 items 指向不存在的目录并自愈。
 - ⚠️ `knowledge/` 是每个 agent 的基础目录：`Profile.createAgent` 在将 record 发布到 `agents.json` 前创建它；`duplicateAgent` 复制源目录，旧 source 缺目录时创建空目录；`Agent.load` 会为已登记的旧 agent 懒创建目录。渲染器文件树会校验物理目录存在，不能把空知识库当作缺失目录。

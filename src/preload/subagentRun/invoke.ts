@@ -4,7 +4,7 @@ import { renderToMain } from '@shared/ipc/subagentRun';
 const invoke = renderToMain.provideInvokeForPreload(ipcRenderer, [
   'cancelRun',
   'getRunMessages',
-  'getRunData',
+  'getRunState',
 ]);
 
 export default invoke;

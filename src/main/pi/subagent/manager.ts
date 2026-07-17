@@ -139,9 +139,7 @@ export class SubAgentManager {
       scope,
       parentSession.session,
       async (existing) => {
-        const reservationCount = existing.subruns.length
-          + existing.incompleteIds.length
-          + existing.corruptIds.length;
+        const reservationCount = existing.subruns.length + existing.incompleteIds.length;
         if (reservationCount >= MAX_TOTAL_RESERVATIONS) {
           return {
             kind: 'rejected',
@@ -244,7 +242,7 @@ export class SubAgentManager {
       const listed = await parentSession.session.listSubruns();
       await this.recoverStaleRuns(key, listed.subruns);
       const loaded = await parentSession.session.getSubrun(key.subrunId);
-      return loaded.kind === 'found' ? persistedRuntimeState(loaded.subrun.toDataFile()) : null;
+      return loaded.kind === 'found' ? persistedRuntimeState(loaded.subrun) : null;
     });
   }
 
@@ -362,8 +360,7 @@ export class SubAgentManager {
     scope: SubAgentCommandScope,
     subrun: Subrun,
   ): ActiveRun {
-    const data = subrun.toDataFile();
-    const pending = createPendingRuntimeState(data, scope.correlationId);
+    const pending = createPendingRuntimeState(subrun, scope.correlationId);
     const active: ActiveRun = { abortor: new AbortController(), state: pending };
     const key = parentKey(scope);
     const runs = this.activeRuns.get(key) ?? new Map<SubrunId, ActiveRun>();
@@ -410,17 +407,16 @@ export class SubAgentManager {
 
     for (const subrun of subruns) {
       if (subrun.status !== 'running' || active?.has(subrun.subrunId)) continue;
-      const data = subrun.toDataFile();
-      if (data.status !== 'running') continue;
 
-      const result = interruptedResult(data);
+      const result = interruptedResult(subrun);
+      const startedAt = subrun.startedAt;
       const finished = await subrun.finish(result);
       if (finished.kind !== 'finished') {
         throw new Error(`Could not recover Subrun ${subrun.subrunId}: ${finished.kind}`);
       }
-      const started = startRuntimeState(createPendingRuntimeState(data), Date.parse(data.startedAt));
+      const started = startRuntimeState(createPendingRuntimeState(subrun), Date.parse(startedAt));
       const recovered = completeRuntimeState(started, result);
-      this.publish(recovered ?? persistedRuntimeState(subrun.toDataFile()));
+      this.publish(recovered ?? persistedRuntimeState(subrun));
       log.warn({
         msg: 'Recovered interrupted delegated run',
         mod: 'pi.subagent.manager',

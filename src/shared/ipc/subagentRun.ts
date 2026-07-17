@@ -1,5 +1,5 @@
 import { connectMainToRender, connectRenderToMain } from './base';
-import type { Message, SubAgentRunStatus, SubrunDataFile, SubrunId } from '../persist/types';
+import type { Message, SubAgentRunStatus, SubrunId } from '../persist/types';
 import type { SubAgentRuntimeState } from '../types/subAgentRunTypes';
 
 export interface SubagentRunParent {
@@ -8,9 +8,9 @@ export interface SubagentRunParent {
   subrunId: SubrunId;
 }
 
-export interface SubagentRunFound {
+export interface SubagentRunStateFound {
   kind: 'found';
-  data: SubrunDataFile;
+  state: SubAgentRuntimeState;
 }
 
 export interface SubagentRunParentNotFound {
@@ -30,10 +30,6 @@ export interface SubagentRunIncomplete {
   kind: 'incomplete';
 }
 
-export interface SubagentRunCorrupt {
-  kind: 'corrupt';
-}
-
 export interface SubagentRunQueryError {
   kind: 'error';
   error: string;
@@ -44,10 +40,9 @@ export type SubagentRunLookupFailure =
   | SubagentRunInvalidId
   | SubagentRunMissing
   | SubagentRunIncomplete
-  | SubagentRunCorrupt
   | SubagentRunQueryError;
 
-export type SubagentRunDataResult = SubagentRunFound | SubagentRunLookupFailure;
+export type SubagentRunStateResult = SubagentRunStateFound | SubagentRunLookupFailure;
 
 export interface SubagentRunMessagesFound {
   kind: 'found';
@@ -81,9 +76,9 @@ type RenderToMain = {
     call: [parent: SubagentRunParent];
     return: SubagentRunCancelResult;
   };
-  getRunData: {
+  getRunState: {
     call: [parent: SubagentRunParent];
-    return: SubagentRunDataResult;
+    return: SubagentRunStateResult;
   };
   getRunMessages: {
     call: [parent: SubagentRunParent];

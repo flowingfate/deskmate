@@ -1,6 +1,6 @@
 import type { AssistantMessage as PiAssistantMessage, ToolCall as PiToolCall } from '@earendil-works/pi-ai';
 
-import type { AssistantMessage, SubAgentRunRequest, SubAgentRunResult, SubrunDataFile, SubrunExecution, TokenUsage } from '@shared/persist/types';
+import type { AssistantMessage, SubAgentRunRequest, SubAgentRunResult, SubrunExecution, SubrunStatus, TokenUsage } from '@shared/persist/types';
 import type { SubAgentRunStep } from '@shared/types/subAgentRunTypes';
 import type { Subrun } from '@main/persist';
 import { Tracer } from '@shared/log/trace';
@@ -52,7 +52,7 @@ export interface SubAgentSessionResult {
 
 export interface SubAgentSessionNotPending {
   kind: 'not_pending';
-  status: SubrunDataFile['status'];
+  status: SubrunStatus;
 }
 
 export type SubAgentSessionRunOutcome = SubAgentSessionResult | SubAgentSessionNotPending;
@@ -75,15 +75,15 @@ export class SubAgentSession extends BaseSession {
   private parentAborted = false;
 
   public constructor(private readonly options: SubAgentSessionOptions) {
-    const data = options.subrun.toDataFile();
-    super(data.parentSessionId, data.profileId, data.parentAgentId, options.subrun);
-    if (data.status !== 'pending' && data.status !== 'running') {
-      throw new Error(`SubAgentSession requires an active Subrun, received ${data.status}.`);
+    const { subrun } = options;
+    super(subrun.parentSessionId, subrun.profileId, subrun.parentAgentId, subrun);
+    if (subrun.status !== 'pending' && subrun.status !== 'running') {
+      throw new Error(`SubAgentSession requires an active Subrun, received ${subrun.status}.`);
     }
-    this.request = data.request;
-    this.execution = data.execution;
-    this.delegateAgentId = data.delegateAgentId;
-    this.reminderSent = data.execution.kind === 'continuation';
+    this.request = subrun.request;
+    this.execution = subrun.execution;
+    this.delegateAgentId = subrun.delegateAgentId;
+    this.reminderSent = subrun.execution.kind === 'continuation';
   }
 
   public async run(): Promise<SubAgentSessionRunOutcome> {
@@ -96,8 +96,7 @@ export class SubAgentSession extends BaseSession {
         return { kind: 'not_pending', status: this.options.subrun.status };
       }
 
-      const activeData = this.options.subrun.toDataFile();
-      this.startedAt = activeData.status === 'running' ? Date.parse(activeData.startedAt) : Date.now();
+      this.startedAt = Date.parse(this.options.subrun.startedAt);
       this.options.signal.addEventListener('abort', this.handleParentAbort, { once: true });
       try {
         if (!(await this.finishIfAborted())) {

@@ -53,7 +53,7 @@ subagent("continue <subrun-id> --message \"...\"")
 
 - Subrun 是父 session 内的一段可继续 delegated conversation。首次执行为 `pending → running → terminal`；终态后可由 `continue` 直接进入下一次 `running → terminal` execution，不能在 pending/running 状态下重入。
 - 每次 execution 都是完整的 ReAct user turn。初始 execution 使用 `request.task`，未提交时至多追加一条真实 reminder 并再执行一个完整 turn；continuation 将 `--message` 作为真实 user message 追加到同一 transcript，并在消息末尾直接附加 `system-reminder`，该 reminder 计入一次性提醒额度，不再产生独立 reminder turn。提交结果后待当前 turn 自然结束才 formalize。
-- 每次正式结果、assistant/tool transcript 均在结束前落盘；终态写入失败不会向父工具调用返回成功。`data.json.execution` 保存产生当前结果的 execution，`data.json.result` 保存对应正式结果。
+- 每次 execution 的正式结果与 assistant/tool transcript 均在结束前落盘；终态写入失败不会向父工具调用返回成功。`data.json.histories` 每项对应一次 execution，最后一项是当前/最新状态；terminal 项内保存去除 owner 身份与重复 status 后的正式 result。
 
 ## Subrun 持久化与生命周期
 
@@ -70,8 +70,8 @@ agents/{parentAgentId}/sessions/{YYYYMM}/{parentSessionId}/
 
 - `SubrunId` 是父 session 局部的三位字符串 `001..999`，`000` 非法。任何 API、IPC 或状态关联都必须携带 profile、父 Agent 和父 session 身份，不能把 ID 视作全局 key。
 - `Session.createSubrun/getSubrun/listSubruns` 是唯一持久化入口；`Subrun` 是消息写入与 `data.json` 状态转换的唯一 owner，不进入普通 session SQL 索引，也不单独创建 files 目录。
-- `data.json` 保持 v1 判别联合：所有状态都保留当前 execution 的 `kind`、`message` 与 `policy`，terminal data 另存该 execution 的正式 result。每个父 session 最多保留 20 个 Subrun reservation，continuation 不创建 reservation。manager 的 `admitExecution()` 在同一父身份短锁内为 run/continue 统一完成 stale recovery、并发准入与 active 注册；分支仅负责 create 或 terminal→running 状态转换，并发 execution 上限为 5。
-- 崩溃后没有 active entry 的 running execution 收敛为 interrupted failed，不自动续跑。进程内 live state 仅用于进度显示；终态和重载事实始终来自持久化数据与正式工具结果。
+- `data.json` 使用 `PersistSubrunDataFile` v1：目录链提供 profile、父 Agent/session 身份，文件只保留 `id` 校验、delegate、可恢复 session 状态与 execution histories。首项 initial history 持有重建初始 request 所需的 task、expected output、context、policy；每次 continuation 追加一项，状态变化原位更新该项，不记录冗余 transition event。每个父 session 最多保留 20 个 Subrun reservation，continuation 不创建 reservation。manager 的 `admitExecution()` 在同一父身份短锁内为 run/continue 统一完成 stale recovery、并发准入与 active 注册；分支仅负责 create 或 terminal→running 状态转换，并发 execution 上限为 5。
+- 崩溃后没有 active entry 的最新 running history 收敛为 interrupted failed，不自动续跑。进程内 live state 仅用于进度显示；终态和重载事实始终来自持久化 history 投影与正式工具结果。
 
 - 空 reservation、非法 ID 和非法状态转换均以显式结果返回；Subrun 不写普通 session events、SQL index 或独立 files 目录。
 
@@ -80,19 +80,19 @@ agents/{parentAgentId}/sessions/{YYYYMM}/{parentSessionId}/
 - 父 RegularSession 或 JobRun 只在 catalog 实际启用 `subagent` 时追加可委派目标提示；SubAgentSession 不获得委派提示。
 - `RegularSession.stopStream` 会取消同一父身份下的 active runs。单 run cancel 只影响完整 parent identity + subrunId 指向的目标，不影响并行 sibling。
 - `subagentRun` IPC 以 active profile → parent Agent → parent Session → Subrun 的 ownership chain 查询或取消：
-  - `getRunData` 返回 metadata；
+  - `getRunState` 返回 manager 的 `SubAgentRuntimeState`；
   - `getRunMessages` 只在详情 Dialog 打开后惰性读取 canonical Domain `Message[]`；
-  - `stateUpdate` 推送 pending/running live state。
-- renderer 的工具卡片以 profile、父 Agent/session、correlationId 和已知 subrunId 关联 live state；最终展示以 formal result 与 persisted data 为准。详情 Dialog 只读、关闭即释放 transcript，不进入主聊天缓存。
+  - `stateUpdate` 推送同一个 `SubAgentRuntimeState` union 的 live 更新。
+- renderer 的工具卡片以 profile、父 Agent/session、correlationId 和已知 subrunId 关联 live state；对应父 tool formal result 优先表示该次调用的终态，`getRunState` 负责事件丢失或重载后的恢复。详情 Dialog 只读、关闭即释放 transcript，不进入主聊天缓存。
 
-- live state 是带完整 parent identity 的判别联合；进度 steps 有界，不能替代持久化终态。renderer 在消息重载、状态事件丢失或 profile 切换后，仍可仅凭正式 result 和 metadata 恢复卡片。
+- runtime state 是带完整 parent identity 的判别联合；live steps 有界且不落盘，重载 state 从持久化 history 重新投影。
 
 ## 关键约束
 
 - 不读取、迁移、转换或删除历史 `sub-agents/` 磁盘数据；新路径只使用 Agent graph 与 `subruns/`。
 - `SubAgentManager.forProfile(profile)` 是唯一构造方式。manager 通过 `WeakMap<Profile, …>` 绑定 active runs、锁与订阅者，不能作为跨 Profile 全局单例。
 - 所有可预期业务拒绝通过 discriminated union 返回，不以未声明异常表达。
-- 任何会落盘的 Subrun 类型定义在 `src/shared/persist/types/subrun.ts`；仅运行时的 step/state 定义在 `src/shared/types/subAgentRunTypes.ts`。
+- 会落盘的 Subrun 类型以 `PersistSubrunDataFile` / `PersistSubrunHistory` 为唯一契约；正式结果只定义一个 `SubAgentRunResult` 判别联合，需要具体分支时通过 `SubAgentRunResultByStatus[Status]` 读取。persisted terminal history 与 runtime terminal state 都复用同一份显式 status→data 映射，不使用 `Extract` / `Omit` 等二次变换。`Subrun` 通过 request/execution/status/timestamp/result 等明确 getter 向 main 暴露语义，manager 与 IPC 统一投影为 `SubAgentRuntimeState`。
 
 ## 代码地图
 

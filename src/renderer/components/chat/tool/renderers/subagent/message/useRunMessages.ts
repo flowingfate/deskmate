@@ -26,8 +26,6 @@ function getFailureMessage(result: SubagentRunLookupFailure): string {
       return 'The delegated run transcript is unavailable.';
     case 'incomplete':
       return 'The delegated run reservation is incomplete.';
-    case 'corrupt':
-      return 'The delegated run record is corrupt.';
   }
 }
 

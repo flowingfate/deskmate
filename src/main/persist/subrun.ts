@@ -3,18 +3,19 @@ import {
   isSubrunId,
   parseSubrunId,
   type Message,
-  type PendingSubrunDataFile,
   type PersistedAssistantMessage,
   type PersistedJsonLine,
   type PersistedToolResponse,
   type PersistedUserMessage,
-  type RunningSubrunDataFile,
+  type PersistSubrunDataFile,
+  type PersistSubrunHistory,
   type SubAgentRunPolicy,
   type SubAgentRunRequest,
   type SubAgentRunResult,
-  type SubrunDataFile,
+  type SubrunExecution,
   type SubrunId,
-  type TerminalSubrunDataFile,
+  type SubrunSessionData,
+  type SubrunStatus,
   type ToolResult,
 } from '../../shared/persist/types';
 import { PERSIST_PATH } from '../../shared/persist/path';
@@ -39,22 +40,20 @@ export type GetSubrunResult =
   | { kind: 'found'; subrun: Subrun }
   | { kind: 'missing' }
   | { kind: 'invalid_id' }
-  | { kind: 'incomplete'; subrunId: SubrunId }
-  | { kind: 'corrupt'; subrunId: SubrunId };
+  | { kind: 'incomplete'; subrunId: SubrunId };
 
 export interface ListSubrunsResult {
   subruns: Subrun[];
   incompleteIds: SubrunId[];
-  corruptIds: SubrunId[];
 }
 
 export type StartSubrunResult =
   | { kind: 'started' }
-  | { kind: 'not_pending'; status: SubrunDataFile['status'] };
+  | { kind: 'not_pending'; status: SubrunStatus };
 
 export type FinishSubrunResult =
   | { kind: 'finished' }
-  | { kind: 'not_running'; status: SubrunDataFile['status'] }
+  | { kind: 'not_running'; status: SubrunStatus }
   | { kind: 'result_mismatch' };
 
 export type ContinueSubrunResult =
@@ -101,34 +100,25 @@ function validSubrunIds(parent: SubrunParent, directoryNames: readonly string[])
   return ids;
 }
 
-function isDataForParent(data: SubrunDataFile, parent: SubrunParent, subrunId: SubrunId): boolean {
-  return data.version === 1
-    && data.kind === 'subrun'
-    && data.subrunId === subrunId
-    && data.profileId === parent.profileId
-    && data.parentAgentId === parent.parentAgentId
-    && data.parentSessionId === parent.parentSessionId
-    && data.delegateAgentId === data.request.delegateAgentId;
-}
-
 function createPendingData(
-  parent: SubrunParent,
   subrunId: SubrunId,
   request: SubAgentRunRequest,
   createdAt: string,
-): PendingSubrunDataFile {
+): PersistSubrunDataFile {
   return {
     version: 1,
-    kind: 'subrun',
-    status: 'pending',
-    subrunId,
-    profileId: parent.profileId,
-    parentAgentId: parent.parentAgentId,
-    parentSessionId: parent.parentSessionId,
+    id: subrunId,
     delegateAgentId: request.delegateAgentId,
-    request,
-    createdAt,
-    execution: { kind: 'initial', message: request.task, policy: request.policy },
+    histories: [{
+      status: 'pending',
+      execution: {
+        kind: 'initial',
+        message: request.task,
+        expectedOutput: request.expectedOutput,
+        context: request.context,
+        policy: request.policy,
+      },
+    }],
     session: {
       title: '',
       updatedAt: createdAt,
@@ -142,28 +132,98 @@ export class Subrun implements PersistSessionLike {
   private flushing?: Promise<void>;
 
   private constructor(
-    private data: SubrunDataFile,
+    private data: PersistSubrunDataFile,
     private readonly parent: SubrunParent,
   ) {}
 
-  public get config(): SubrunDataFile['session'] {
+  public get config(): SubrunSessionData {
     return this.data.session;
   }
 
+  public get profileId(): string {
+    return this.parent.profileId;
+  }
+
+  public get parentAgentId(): string {
+    return this.parent.parentAgentId;
+  }
+
+  public get parentSessionId(): string {
+    return this.parent.parentSessionId;
+  }
+
   public get subrunId(): SubrunId {
-    return this.data.subrunId;
+    return this.data.id;
   }
 
   public get delegateAgentId(): string {
     return this.data.delegateAgentId;
   }
 
-  public get status(): SubrunDataFile['status'] {
-    return this.data.status;
+  public get request(): SubAgentRunRequest {
+    const execution = this.initialExecution();
+    return {
+      delegateAgentId: this.delegateAgentId,
+      task: execution.message,
+      expectedOutput: execution.expectedOutput,
+      context: execution.context,
+      policy: execution.policy,
+    };
   }
 
-  public toDataFile(): SubrunDataFile {
-    return this.data;
+  public get execution(): SubrunExecution {
+    return this.latestHistory().execution;
+  }
+
+  public get status(): SubrunStatus {
+    return this.latestHistory().status;
+  }
+
+  public get startedAt(): string {
+    const history = this.latestHistory();
+    if (history.status === 'pending') {
+      throw new Error(`Subrun ${this.subrunId} has not started.`);
+    }
+    return history.startedAt;
+  }
+
+  public get finishedAt(): string {
+    const history = this.latestHistory();
+    if (history.status === 'pending' || history.status === 'running') {
+      throw new Error(`Subrun ${this.subrunId} has not finished.`);
+    }
+    return history.finishedAt;
+  }
+
+  public get result(): SubAgentRunResult {
+    const history = this.latestHistory();
+    const identity = {
+      subrunId: this.subrunId,
+      delegateAgentId: this.delegateAgentId,
+    };
+    switch (history.status) {
+      case 'pending':
+      case 'running':
+        throw new Error(`Subrun ${this.subrunId} has no terminal result.`);
+      case 'completed':
+        return { ...identity, status: 'completed', ...history.result };
+      case 'partial':
+        return { ...identity, status: 'partial', ...history.result };
+      case 'blocked':
+        return { ...identity, status: 'blocked', ...history.result };
+      case 'failed':
+        return { ...identity, status: 'failed', ...history.result };
+      case 'cancelled':
+        return { ...identity, status: 'cancelled', ...history.result };
+    }
+  }
+
+  private initialExecution(): Extract<SubrunExecution, { kind: 'initial' }> {
+    const history = this.data.histories[0];
+    if (!history || history.execution.kind !== 'initial') {
+      throw new Error(`Subrun ${this.subrunId} has no initial execution.`);
+    }
+    return history.execution;
   }
 
   public static async create(
@@ -188,7 +248,7 @@ export class Subrun implements PersistSessionLike {
         }
 
         const createdAt = new Date().toISOString();
-        const data = createPendingData(parent, subrunId, request, createdAt);
+        const data = createPendingData(subrunId, request, createdAt);
         await writeJson(PERSIST_PATH.subrunData(parent.subrunsDir, subrunId), data);
         return { kind: 'created', subrun: new Subrun(data, parent) };
       }
@@ -201,13 +261,12 @@ export class Subrun implements PersistSessionLike {
     if (!isSubrunId(subrunId)) return { kind: 'invalid_id' };
 
     const directory = PERSIST_PATH.subrunDir(parent.subrunsDir, subrunId);
-    const data = await readJsonOrNull<SubrunDataFile>(PERSIST_PATH.subrunData(parent.subrunsDir, subrunId));
+    const data = await readJsonOrNull<PersistSubrunDataFile>(PERSIST_PATH.subrunData(parent.subrunsDir, subrunId));
     if (data === null) {
       return await pathExists(directory)
         ? { kind: 'incomplete', subrunId }
         : { kind: 'missing' };
     }
-    if (!isDataForParent(data, parent, subrunId)) return { kind: 'corrupt', subrunId };
     return { kind: 'found', subrun: new Subrun(data, parent) };
   }
 
@@ -215,32 +274,27 @@ export class Subrun implements PersistSessionLike {
     const ids = validSubrunIds(parent, await listDirs(parent.subrunsDir));
     const subruns: Subrun[] = [];
     const incompleteIds: SubrunId[] = [];
-    const corruptIds: SubrunId[] = [];
 
     for (const subrunId of ids) {
       const result = await Subrun.load(parent, subrunId);
       if (result.kind === 'found') subruns.push(result.subrun);
       if (result.kind === 'incomplete') incompleteIds.push(subrunId);
-      if (result.kind === 'corrupt') corruptIds.push(subrunId);
     }
 
-    return { subruns, incompleteIds, corruptIds };
+    return { subruns, incompleteIds };
   }
 
   public async start(): Promise<StartSubrunResult> {
-    if (this.data.status !== 'pending') return { kind: 'not_pending', status: this.data.status };
+    const current = this.latestHistory();
+    if (current.status !== 'pending') return { kind: 'not_pending', status: current.status };
 
     const startedAt = new Date().toISOString();
-    const data: RunningSubrunDataFile = {
-      ...this.data,
+    this.replaceLatestHistory({
       status: 'running',
+      execution: current.execution,
       startedAt,
-      session: {
-        ...this.data.session,
-        updatedAt: startedAt,
-      },
-    };
-    this.data = data;
+    });
+    this.data.session.updatedAt = startedAt;
     await this.persist();
     return { kind: 'started' };
   }
@@ -249,65 +303,97 @@ export class Subrun implements PersistSessionLike {
     message: string,
     policy: SubAgentRunPolicy,
   ): Promise<ContinueSubrunResult> {
-    if (this.data.status === 'pending' || this.data.status === 'running') {
-      return { kind: 'not_terminal', status: this.data.status };
+    const status = this.status;
+    if (status === 'pending' || status === 'running') {
+      return { kind: 'not_terminal', status };
     }
 
-    const { finishedAt: _finishedAt, result: _result, ...base } = this.data;
     const startedAt = new Date().toISOString();
-    const data: RunningSubrunDataFile = {
-      ...base,
+    this.data.histories.push({
       status: 'running',
       startedAt,
       execution: { kind: 'continuation', message, policy },
-      session: {
-        ...this.data.session,
-        updatedAt: startedAt,
-      },
-    };
-    this.data = data;
+    });
+    this.data.session.updatedAt = startedAt;
     await this.persist();
     return { kind: 'continued' };
   }
 
   public async finish(result: SubAgentRunResult): Promise<FinishSubrunResult> {
-    if (this.data.status !== 'running') return { kind: 'not_running', status: this.data.status };
+    const current = this.latestHistory();
+    if (current.status !== 'running') return { kind: 'not_running', status: current.status };
     if (result.subrunId !== this.subrunId || result.delegateAgentId !== this.delegateAgentId) {
       return { kind: 'result_mismatch' };
     }
 
     const finishedAt = new Date().toISOString();
-    const base = {
-      ...this.data,
-      finishedAt,
-      session: {
-        ...this.data.session,
-        updatedAt: finishedAt,
-      },
+    const resultBase = {
+      deliverables: result.deliverables,
+      warnings: result.warnings,
+      usage: result.usage,
     };
-    let data: TerminalSubrunDataFile;
     switch (result.status) {
       case 'completed':
-        data = { ...base, status: 'completed', result };
+        this.replaceLatestHistory({
+          status: 'completed',
+          execution: current.execution,
+          startedAt: current.startedAt,
+          finishedAt,
+          result: { ...resultBase, content: result.content },
+        });
         break;
       case 'partial':
-        data = { ...base, status: 'partial', result };
+        this.replaceLatestHistory({
+          status: 'partial',
+          execution: current.execution,
+          startedAt: current.startedAt,
+          finishedAt,
+          result: { ...resultBase, content: result.content, incompleteReason: result.incompleteReason },
+        });
         break;
       case 'blocked':
-        data = { ...base, status: 'blocked', result };
+        this.replaceLatestHistory({
+          status: 'blocked',
+          execution: current.execution,
+          startedAt: current.startedAt,
+          finishedAt,
+          result: { ...resultBase, reason: result.reason, content: result.content },
+        });
         break;
       case 'failed':
-        data = { ...base, status: 'failed', result };
+        this.replaceLatestHistory({
+          status: 'failed',
+          execution: current.execution,
+          startedAt: current.startedAt,
+          finishedAt,
+          result: { ...resultBase, error: result.error },
+        });
         break;
       case 'cancelled':
-        data = { ...base, status: 'cancelled', result };
+        this.replaceLatestHistory({
+          status: 'cancelled',
+          execution: current.execution,
+          startedAt: current.startedAt,
+          finishedAt,
+          result: { ...resultBase, reason: result.reason },
+        });
         break;
     }
 
-    this.data = data;
+    this.data.session.updatedAt = finishedAt;
     await this.flushMessages();
     await this.persist();
     return { kind: 'finished' };
+  }
+
+  private latestHistory(): PersistSubrunHistory {
+    const history = this.data.histories.at(-1);
+    if (!history) throw new Error(`Subrun ${this.subrunId} has no execution history.`);
+    return history;
+  }
+
+  private replaceLatestHistory(history: PersistSubrunHistory): void {
+    this.data.histories[this.data.histories.length - 1] = history;
   }
 
   public appendDomainMessage(message: Message): void {

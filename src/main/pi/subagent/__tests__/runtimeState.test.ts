@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
-  PendingSubrunDataFile,
-  SubAgentRunCompletedResult,
+  SubAgentRunResultByStatus,
+  SubAgentRunRequest,
 } from '../../../../shared/persist/types';
+import { Subrun, type SubrunParent } from '../../../persist/subrun';
 
 import {
   advanceRuntimeState,
@@ -14,44 +18,50 @@ import {
 } from '../runtimeState';
 import { normalizeSubAgentContinuation, normalizeSubAgentRunRequest } from '../types';
 
-function pendingData(): PendingSubrunDataFile {
+const request: SubAgentRunRequest = {
+  delegateAgentId: 'a_delegate',
+  task: 'Inspect the report.',
+  expectedOutput: 'A concise review.',
+  context: { kind: 'isolated' },
+  policy: { maxTurns: 25, timeoutMs: 60_000 },
+};
+
+let tmpRoot = '';
+
+function parent(): SubrunParent {
   return {
-    version: 1,
-    kind: 'subrun',
-    status: 'pending',
-    subrunId: '001',
     profileId: 'p_test',
     parentAgentId: 'a_parent',
     parentSessionId: 's_parent',
-    delegateAgentId: 'a_delegate',
-    request: {
-      delegateAgentId: 'a_delegate',
-      task: 'Inspect the report.',
-      expectedOutput: 'A concise review.',
-      context: { kind: 'isolated' },
-      policy: { maxTurns: 25, timeoutMs: 60_000 },
-    },
-    execution: { kind: 'initial', message: 'Inspect the report.', policy: { maxTurns: 25, timeoutMs: 60_000 } },
-    createdAt: '2026-07-17T00:00:00.000Z',
-    session: {
-      title: '',
-      updatedAt: '2026-07-17T00:00:00.000Z',
-      contextState: { compressions: [] },
-    },
+    subrunsDir: path.join(tmpRoot, 'subruns'),
   };
 }
 
-function completedResult(): SubAgentRunCompletedResult {
+async function pendingSubrun(): Promise<Subrun> {
+  const created = await Subrun.create(parent(), request);
+  if (created.kind !== 'created') throw new Error('Expected a pending Subrun.');
+  return created.subrun;
+}
+
+function completedResult(subrun: Subrun): SubAgentRunResultByStatus['completed'] {
   return {
     status: 'completed',
-    subrunId: '001',
-    delegateAgentId: 'a_delegate',
+    subrunId: subrun.subrunId,
+    delegateAgentId: subrun.delegateAgentId,
     content: 'Completed.',
     deliverables: [],
     warnings: [],
     usage: { turns: 2, durationMs: 200 },
   };
 }
+
+beforeEach(async () => {
+  tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'subrun-runtime-test-'));
+});
+
+afterEach(async () => {
+  await fs.rm(tmpRoot, { recursive: true, force: true });
+});
 
 describe('normalizeSubAgentRunRequest', () => {
   it('trims required fields and derives the default timeout from default turns', () => {
@@ -117,8 +127,8 @@ describe('normalizeSubAgentRunRequest', () => {
 });
 
 describe('subagent runtime state', () => {
-  it('tracks text progress, clears streaming text after another step, and never regresses turn', () => {
-    const running = startRuntimeState(createPendingRuntimeState(pendingData(), 'call_1'), 100);
+  it('tracks text progress, clears streaming text after another step, and never regresses turn', async () => {
+    const running = startRuntimeState(createPendingRuntimeState(await pendingSubrun(), 'call_1'), 100);
     const afterText = advanceRuntimeState(running, {
       kind: 'assistant_text', turn: 2, timestamp: 110, textSnippet: 'working',
     });
@@ -136,8 +146,8 @@ describe('subagent runtime state', () => {
     });
   });
 
-  it('retains only the latest fifty progress steps', () => {
-    let state = startRuntimeState(createPendingRuntimeState(pendingData()), 100);
+  it('retains only the latest fifty progress steps', async () => {
+    let state = startRuntimeState(createPendingRuntimeState(await pendingSubrun()), 100);
     for (let turn = 1; turn <= 51; turn += 1) {
       const next = advanceRuntimeState(state, { kind: 'turn_started', turn, timestamp: turn });
       if (!next) throw new Error('Expected a running state.');
@@ -149,35 +159,24 @@ describe('subagent runtime state', () => {
     expect(state.steps[49]).toMatchObject({ turn: 51 });
   });
 
-  it('derives matching terminal state from a persisted terminal data file', () => {
-    const running = startRuntimeState(createPendingRuntimeState(pendingData()), 100);
-    const terminal = completeRuntimeState(running, completedResult(), 300);
+  it('derives matching terminal state directly from a persisted Subrun', async () => {
+    const subrun = await pendingSubrun();
+    const running = startRuntimeState(createPendingRuntimeState(subrun), 100);
+    const result = completedResult(subrun);
+    const terminal = completeRuntimeState(running, result, 300);
     if (!terminal) throw new Error('Expected terminal runtime state.');
 
-    expect(completeRuntimeState(createPendingRuntimeState(pendingData()), completedResult())).toBeNull();
-    const persisted = persistedRuntimeState({
-      ...pendingData(),
-      status: 'completed',
-      startedAt: '2026-07-17T00:00:00.100Z',
-      finishedAt: '2026-07-17T00:00:00.300Z',
-      result: completedResult(),
-    });
+    expect(completeRuntimeState(createPendingRuntimeState(subrun), result)).toBeNull();
+    await subrun.start();
+    await subrun.finish(result);
+    const persisted = persistedRuntimeState(subrun);
 
     expect(terminal).toMatchObject({ status: 'completed', startedAt: 100, finishedAt: 300 });
     expect(persisted).toMatchObject({ status: 'completed', result: { status: 'completed' } });
 
-    const continued = persistedRuntimeState({
-      ...pendingData(),
-      status: 'completed',
-      execution: {
-        kind: 'continuation',
-        message: 'Add rollout risks.',
-        policy: { maxTurns: 5, timeoutMs: 30_000 },
-      },
-      startedAt: '2026-07-17T00:00:01.000Z',
-      finishedAt: '2026-07-17T00:00:01.300Z',
-      result: completedResult(),
-    });
+    await subrun.continueConversation('Add rollout risks.', { maxTurns: 5, timeoutMs: 30_000 });
+    await subrun.finish(result);
+    const continued = persistedRuntimeState(subrun);
     expect(continued).toMatchObject({ maxTurns: 5, timeoutMs: 30_000 });
   });
 });

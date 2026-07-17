@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Bot, Loader2, OctagonX, Wrench } from 'lucide-react';
-import type { SubAgentRunResult, SubrunDataFile } from '@shared/persist/types';
+import type { SubAgentRunResult, ToolCall } from '@shared/persist/types';
 import type { SubAgentRunStep, SubAgentRuntimeState } from '@shared/types/subAgentRunTypes';
-import type { ToolCall } from '@shared/persist/types';
 import { subagentRunApi, useSubagentRunState } from '@/ipc/subagentRun';
 import { useAgentById } from '@/states/agents.atom';
 import { useProfileId } from '@/states/profile.atom';
@@ -19,7 +18,7 @@ import { SubagentRunMessagesDialog } from './message';
 type AuditState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'found'; data: SubrunDataFile }
+  | { kind: 'found'; state: SubAgentRuntimeState }
   | { kind: 'error'; message: string };
 
 interface SubagentRunCardProps {
@@ -34,10 +33,6 @@ function formatDuration(durationMs: number | undefined): string {
   return `${Math.floor(durationMs / 60_000)}m ${Math.round((durationMs % 60_000) / 1_000)}s`;
 }
 
-function resultFromData(data: SubrunDataFile | null): SubAgentRunResult | null {
-  if (!data || data.status === 'pending' || data.status === 'running') return null;
-  return data.result;
-}
 
 function resultFromRuntime(state: SubAgentRuntimeState | null): SubAgentRunResult | null {
   if (!state || state.status === 'pending' || state.status === 'running') return null;
@@ -60,7 +55,7 @@ function stepSummary(step: SubAgentRunStep | undefined): string | null {
   }
 }
 
-function auditError(result: Awaited<ReturnType<typeof subagentRunApi.getRunData>>): string | null {
+function auditError(result: Awaited<ReturnType<typeof subagentRunApi.getRunState>>): string | null {
   switch (result.kind) {
     case 'found':
       return null;
@@ -73,8 +68,6 @@ function auditError(result: Awaited<ReturnType<typeof subagentRunApi.getRunData>
       return 'The delegated run record is unavailable.';
     case 'incomplete':
       return 'The delegated run reservation is incomplete.';
-    case 'corrupt':
-      return 'The delegated run record is corrupt.';
   }
 }
 
@@ -95,20 +88,18 @@ function cancelError(result: Awaited<ReturnType<typeof subagentRunApi.cancelRun>
       return 'The delegated run record is unavailable.';
     case 'incomplete':
       return 'The delegated run reservation is incomplete.';
-    case 'corrupt':
-      return 'The delegated run record is corrupt.';
   }
 }
-
 
 export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
   const { agentId, chatSessionId } = useCurrentSession();
   const profileId = useProfileId();
   const liveState = useSubagentRunState(toolCall.id, profileId, agentId, chatSessionId, result?.subrunId);
   const subrunId = result?.subrunId ?? liveState?.subrunId;
-  const delegateAgentId = result?.delegateAgentId ?? liveState?.delegateAgentId;
-  const agent = useAgentById(delegateAgentId);
   const [audit, setAudit] = useState<AuditState>({ kind: 'idle' });
+  const auditState = audit.kind === 'found' ? audit.state : null;
+  const delegateAgentId = result?.delegateAgentId ?? liveState?.delegateAgentId ?? auditState?.delegateAgentId;
+  const agent = useAgentById(delegateAgentId);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
 
@@ -122,14 +113,14 @@ export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
     setAudit({ kind: 'loading' });
     void (async () => {
       try {
-        const queried = await subagentRunApi.getRunData({
+        const queried = await subagentRunApi.getRunState({
           parentAgentId: agentId,
           parentSessionId: chatSessionId,
           subrunId,
         });
         if (disposed) return;
         if (queried.kind === 'found') {
-          setAudit({ kind: 'found', data: queried.data });
+          setAudit({ kind: 'found', state: queried.state });
           return;
         }
         setAudit({ kind: 'error', message: auditError(queried) ?? 'Unable to load run metadata.' });
@@ -145,17 +136,18 @@ export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
     };
   }, [agentId, chatSessionId, subrunId]);
 
-  const auditResult = audit.kind === 'found' ? resultFromData(audit.data) : null;
+  const auditResult = resultFromRuntime(auditState);
   const formalResult = result ?? resultFromRuntime(liveState) ?? auditResult;
-  const runningState = liveState?.status === 'running' ? liveState : null;
-  const status = formalResult?.status ?? liveState?.status ?? auditResult?.status ?? 'pending';
-  const task = liveState?.task ?? (audit.kind === 'found' ? audit.data.request.task : null);
-  const expectedOutput = liveState?.expectedOutput ?? (audit.kind === 'found' ? audit.data.request.expectedOutput : null);
-  const currentTurn = liveState?.currentTurn ?? formalResult?.usage.turns ?? 0;
-  const maxTurns = liveState?.maxTurns ?? (audit.kind === 'found' ? audit.data.execution.policy.maxTurns : null);
+  const displayState = liveState ?? auditState;
+  const runningState = displayState?.status === 'running' ? displayState : null;
+  const status = formalResult?.status ?? displayState?.status ?? 'pending';
+  const task = displayState?.task ?? null;
+  const expectedOutput = displayState?.expectedOutput ?? null;
+  const currentTurn = liveState?.currentTurn ?? formalResult?.usage.turns ?? auditState?.currentTurn ?? 0;
+  const maxTurns = liveState?.maxTurns ?? auditState?.maxTurns ?? null;
   const durationMs = formalResult?.usage.durationMs
     ?? (runningState ? Math.max(0, Date.now() - runningState.startedAt) : undefined);
-  const latestStep = liveState?.steps.at(-1);
+  const latestStep = displayState?.steps.at(-1);
   const latestUpdate = runningState?.streamingText ?? runningState?.lastTextSnippet ?? stepSummary(latestStep);
   const canCancel = Boolean(
     subrunId

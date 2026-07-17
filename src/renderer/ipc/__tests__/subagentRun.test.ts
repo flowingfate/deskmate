@@ -18,7 +18,6 @@ function runningState(): SubAgentRunningRuntimeState {
     expectedOutput: 'A concise review.',
     maxTurns: 25,
     timeoutMs: 60_000,
-    createdAt: 10,
     startedAt: 20,
     currentTurn: 1,
     steps: [],

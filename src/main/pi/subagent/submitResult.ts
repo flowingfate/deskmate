@@ -1,8 +1,4 @@
 import type {
-  SubAgentRunCancelledResult,
-  SubAgentRunCompletedResult,
-  SubAgentRunFailedResult,
-  SubAgentRunPartialResult,
   SubAgentRunResult,
   SubAgentRunUsage,
   SubrunId,
@@ -248,7 +244,7 @@ export function buildFormalResult(input: BuildFormalResultInput): BuildFormalRes
     case 'completed':
       return {
         kind: 'result',
-        result: { ...metadata, status: 'completed', content: input.submitted.content } satisfies SubAgentRunCompletedResult,
+        result: { ...metadata, status: 'completed', content: input.submitted.content },
       };
     case 'partial':
       return {
@@ -258,7 +254,7 @@ export function buildFormalResult(input: BuildFormalResultInput): BuildFormalRes
           status: 'partial',
           content: input.submitted.content,
           incompleteReason: input.submitted.incompleteReason,
-        } satisfies SubAgentRunPartialResult,
+        },
       };
     case 'blocked':
       return {
@@ -273,12 +269,12 @@ export function buildFormalResult(input: BuildFormalResultInput): BuildFormalRes
     case 'failed':
       return {
         kind: 'result',
-        result: { ...metadata, status: 'failed', error: input.submitted.error } satisfies SubAgentRunFailedResult,
+        result: { ...metadata, status: 'failed', error: input.submitted.error },
       };
     case 'cancelled':
       return {
         kind: 'result',
-        result: { ...metadata, status: 'cancelled', reason: input.submitted.reason } satisfies SubAgentRunCancelledResult,
+        result: { ...metadata, status: 'cancelled', reason: input.submitted.reason },
       };
   }
 }

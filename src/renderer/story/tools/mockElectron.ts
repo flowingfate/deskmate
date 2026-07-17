@@ -35,21 +35,23 @@ function invoke(channel: string): Promise<boolean | object> {
       },
     });
   }
-  if (channel === 'subagentRun:getRunData') {
+  if (channel === 'subagentRun:getRunState') {
     return Promise.resolve({
       kind: 'found',
-      data: {
+      state: {
+        profileId: 'p_story',
+        parentAgentId: 'a_story_parent',
+        parentSessionId: 's_story_parent',
+        subrunId: '001',
+        delegateAgentId: 'a_story_delegate',
+        task: 'Inspect the tool renderer composition.',
+        expectedOutput: 'A concise implementation review.',
+        maxTurns: 3,
+        timeoutMs: 180_000,
+        currentTurn: 1,
+        steps: [],
         status: 'running',
-        request: {
-          task: 'Inspect the tool renderer composition.',
-          expectedOutput: 'A concise implementation review.',
-          policy: { maxTurns: 8, timeoutMs: 480_000 },
-        },
-        execution: {
-          kind: 'continuation',
-          message: 'Add rollout risks.',
-          policy: { maxTurns: 3, timeoutMs: 180_000 },
-        },
+        startedAt: Date.now() - 1_000,
       },
     });
   }

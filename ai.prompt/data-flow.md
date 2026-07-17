@@ -1,6 +1,6 @@
 # 数据流
 
-<!-- Last verified: 2026-07-17 (Step 12：subagentRun lazy transcript Dialog IPC 已接入) -->
+<!-- Last verified: 2026-07-17 (subagentRun query/push 统一 RuntimeState) -->
 
 参考：`src/shared/ipc/base.ts`、`src/main/pi/`、`src/main/persist/`、`src/main/lib/mcpRuntime/mcpClientManager.ts`
 
@@ -170,8 +170,8 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 2. tool handler 按当前 Profile 取得 `SubAgentManager.forProfile(profile)` 的 command facade；`list` / `describe` 复用 `Profile.resolveDelegates`，`run` 创建新 subrun，`continue` 从 parent-owned terminal subrun 取得 delegate 后重新授权。
 3. manager 以完整 parent identity 短锁完成 stale recovery、parallel gate、initial reservation 或 continuation 的 terminal→running transition，再注册 active run。
 4. `SubAgentSession` 在 delegate scope 内使用执行 Agent 的 config/catalog/prompt，初始 task 或 continuation message 都写入同一 hidden transcript，并以 `submit_result` 收敛当前 execution 的正式结果。
-5. manager timeout/parent cancel 直接 abort 实际 run；Subrun data 的当前 formal result 与 parent tool result 是 reload 事实源。
-6. `subagentRun` IPC 将所有 profile-bound manager 的 live state 推到对应卡片；`getRunData` 只读 parent-owned metadata，`getRunMessages` 只在 Dialog 打开后沿相同 owner chain 读取 Domain transcript，`cancelRun` 只取消完整 parent identity 下的单一 active run。Dialog 关闭释放 transcript，renderer live cache 与主聊天 cache 都不持有它。
+5. manager timeout/parent cancel 直接 abort 实际 run；`PersistSubrunDataFile.histories` 与 parent tool formal result 是 reload 事实源，`Subrun` getter 在内存中补回身份与状态语义。
+6. `subagentRun` IPC 将所有 profile-bound manager 的 live state 推到对应卡片；`getRunState` 沿相同 owner chain 把磁盘状态投影为同一个 `SubAgentRuntimeState`，`getRunMessages` 只在 Dialog 打开后读取 Domain transcript，`cancelRun` 只取消完整 parent identity 下的单一 active run。Dialog 关闭释放 transcript，renderer live cache 与主聊天 cache 都不持有它。
 
 ---
 

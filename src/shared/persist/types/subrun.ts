@@ -50,49 +50,34 @@ export interface SubAgentRunUsage {
   tokenUsage?: TokenUsage;
 }
 
-interface SubAgentRunResultBase {
-  subrunId: SubrunId;
-  delegateAgentId: string;
+interface SubAgentRunResultDataBase {
   deliverables: string[];
   warnings: string[];
   usage: SubAgentRunUsage;
 }
 
-export interface SubAgentRunCompletedResult extends SubAgentRunResultBase {
-  status: 'completed';
-  content: string;
+interface SubAgentRunResultDataByStatus {
+  completed: SubAgentRunResultDataBase & { content: string };
+  partial: SubAgentRunResultDataBase & { content: string; incompleteReason: string };
+  blocked: SubAgentRunResultDataBase & { reason: string; content?: string };
+  failed: SubAgentRunResultDataBase & { error: string };
+  cancelled: SubAgentRunResultDataBase & { reason: string };
 }
 
-export interface SubAgentRunPartialResult extends SubAgentRunResultBase {
-  status: 'partial';
-  content: string;
-  incompleteReason: string;
+interface SubAgentRunIdentity {
+  subrunId: SubrunId;
+  delegateAgentId: string;
 }
 
-export interface SubAgentRunBlockedResult extends SubAgentRunResultBase {
-  status: 'blocked';
-  reason: string;
-  content?: string;
-}
+export type SubAgentRunStatus = keyof SubAgentRunResultDataByStatus;
 
-export interface SubAgentRunFailedResult extends SubAgentRunResultBase {
-  status: 'failed';
-  error: string;
-}
+export type SubAgentRunResultByStatus = {
+  [Status in SubAgentRunStatus]: SubAgentRunIdentity &
+    { status: Status } &
+    SubAgentRunResultDataByStatus[Status];
+};
 
-export interface SubAgentRunCancelledResult extends SubAgentRunResultBase {
-  status: 'cancelled';
-  reason: string;
-}
-
-export type SubAgentRunResult =
-  | SubAgentRunCompletedResult
-  | SubAgentRunPartialResult
-  | SubAgentRunBlockedResult
-  | SubAgentRunFailedResult
-  | SubAgentRunCancelledResult;
-
-export type SubAgentRunStatus = SubAgentRunResult['status'];
+export type SubAgentRunResult = SubAgentRunResultByStatus[SubAgentRunStatus];
 
 export interface SubrunSessionData {
   title: string;
@@ -101,78 +86,50 @@ export interface SubrunSessionData {
   turn?: { status: 'idle' | 'running'; startedAt?: number };
 }
 
-export interface SubrunExecution {
-  kind: 'initial' | 'continuation';
+export interface SubrunInitialExecution {
+  kind: 'initial';
+  message: string;
+  expectedOutput: string;
+  context: SubAgentRunContext;
+  policy: SubAgentRunPolicy;
+}
+
+export interface SubrunContinuationExecution {
+  kind: 'continuation';
   message: string;
   policy: SubAgentRunPolicy;
 }
 
-interface SubrunDataFileBase {
-  version: 1;
-  kind: 'subrun';
-  subrunId: SubrunId;
-  profileId: string;
-  parentAgentId: string;
-  parentSessionId: string;
-  delegateAgentId: string;
-  request: SubAgentRunRequest;
+export type SubrunExecution = SubrunInitialExecution | SubrunContinuationExecution;
+
+interface PersistSubrunHistoryBase {
   execution: SubrunExecution;
-  createdAt: string;
+}
+
+interface PersistSubrunTerminalHistoryBase extends PersistSubrunHistoryBase {
+  startedAt: string;
+  finishedAt: string;
+}
+
+type PersistSubrunTerminalHistory = {
+  [Status in SubAgentRunStatus]: PersistSubrunTerminalHistoryBase & {
+    status: Status;
+    result: SubAgentRunResultDataByStatus[Status];
+  };
+}[SubAgentRunStatus];
+
+export type PersistSubrunHistory =
+  | (PersistSubrunHistoryBase & { status: 'pending' })
+  | (PersistSubrunHistoryBase & { status: 'running'; startedAt: string })
+  | PersistSubrunTerminalHistory;
+
+export type SubrunStatus = PersistSubrunHistory['status'];
+
+/** `subruns/{id}/data.json` 的真实磁盘形态；owner identity 由目录链提供。 */
+export interface PersistSubrunDataFile {
+  version: 1;
+  id: SubrunId;
+  delegateAgentId: string;
+  histories: PersistSubrunHistory[];
   session: SubrunSessionData;
 }
-
-export interface PendingSubrunDataFile extends SubrunDataFileBase {
-  status: 'pending';
-}
-
-export interface RunningSubrunDataFile extends SubrunDataFileBase {
-  status: 'running';
-  startedAt: string;
-}
-
-export interface CompletedSubrunDataFile extends SubrunDataFileBase {
-  status: 'completed';
-  startedAt: string;
-  finishedAt: string;
-  result: SubAgentRunCompletedResult;
-}
-
-export interface PartialSubrunDataFile extends SubrunDataFileBase {
-  status: 'partial';
-  startedAt: string;
-  finishedAt: string;
-  result: SubAgentRunPartialResult;
-}
-
-export interface BlockedSubrunDataFile extends SubrunDataFileBase {
-  status: 'blocked';
-  startedAt: string;
-  finishedAt: string;
-  result: SubAgentRunBlockedResult;
-}
-
-export interface FailedSubrunDataFile extends SubrunDataFileBase {
-  status: 'failed';
-  startedAt: string;
-  finishedAt: string;
-  result: SubAgentRunFailedResult;
-}
-
-export interface CancelledSubrunDataFile extends SubrunDataFileBase {
-  status: 'cancelled';
-  startedAt: string;
-  finishedAt: string;
-  result: SubAgentRunCancelledResult;
-}
-
-export type TerminalSubrunDataFile =
-  | CompletedSubrunDataFile
-  | PartialSubrunDataFile
-  | BlockedSubrunDataFile
-  | FailedSubrunDataFile
-  | CancelledSubrunDataFile;
-
-export type SubrunDataFile =
-  | PendingSubrunDataFile
-  | RunningSubrunDataFile
-  | TerminalSubrunDataFile;
