@@ -1,7 +1,7 @@
 # Step 13 — 证明新路径唯一、删除残留旧源码、更新全局文档
 
-> 状态：待执行
-> 前置：Step 9后端、Step 10配置UI、Step 11卡片完成；Step 12已明确 implemented/deferred
+> 状态：complete
+> 前置：Step 9后端、Step 10配置UI、Step 11卡片、Step 12 Dialog 均已获用户确认完成
 > 下游：Step 14只对稳定后的最终生产结构写单测
 > 本步是最终源码 cleanup；不读取、迁移或删除用户磁盘上的旧数据。
 
@@ -38,6 +38,7 @@
 
 - 不逐文件修旧签名、补兼容 shim或更新旧测试；
 - `lib/subAgent` 与旧 app command 已由 Step 9 删除；Step 10 已删除旧 CRUD IPC/UI/atom、persist SubAgents store、旧 app renderer 和 shared contract。Step 13 只做最终全仓 reachability 证明，不恢复或修补这些路径。
+- 本次全仓复核发现 `src/main/lib/evalHarness/` 仍在解析已删除的 `spawn_subagent` 返回格式，并通过 `RunTestResponse.sub_agent_messages` 暴露它；计划删除该解析、响应字段及专属旧测试，同时保留普通扁平 `messages` 工具结果。该字段属于外部 AgenticEval HTTP 协议，执行前须确认 clean cutover 可移除该兼容字段。
 - 引用归零的子树连同测试和模块文档一起删除，不移动到 `tmp/` 或 archive；
 - 新 `pi/subagent/ai.prompt.md` 明确禁止旧依赖方向；
 - 旧本地 `sub-agents/` 数据目录完全不碰。
@@ -85,6 +86,7 @@ parent LLM → subagent tool → pi/subagent manager → SubAgentSession
 - `src/main/persist/ai.prompt.md`；
 - `src/renderer/components/chat/ai.prompt.md`；
 - `src/shared/ipc/ai.prompt.md`。
+- 同步清理旧实现遗留的评测/trace 文档与 bootstrap 注释；保留“Sub-Agent”作为新运行角色的产品术语，不把新 `SubAgentRun*` / `SubAgentSession` 类型误删。
 
 每个被修改的 ai.prompt更新 Last verified日期。文档必须区分已实现与deferred Dialog。
 

@@ -52,7 +52,6 @@ export interface RunTestMessageOutput {
 
 export interface RunTestResponse {
   messages: RunTestMessageOutput[];
-  sub_agent_messages: RunTestMessageOutput[][];
   metadata: Record<string, unknown>;
   session_id?: string;
 }

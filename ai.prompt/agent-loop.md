@@ -1,6 +1,6 @@
 # Agent Loop（pi chat 引擎）
 
-<!-- Last verified: 2026-07-16 (Step 9：production subagent manager/top-level tool 已切换) -->
+<!-- Last verified: 2026-07-17 (Step 13：唯一 delegated run 路径与历史 prompt/trace 残留已清理) -->
 
 ## 1. 范围
 
@@ -248,7 +248,7 @@ catch e:
 
 - **handler 显式拿 ctx**：`ToolContext` 用 `mode:'agent' | 'delegate'` 区分执行角色；`agentId/sessionId` 固定 parent session，delegate 分支必填 `delegateId`。其它字段仍显式注入，禁止回读全局执行上下文。
 - **错误不抛,以字符串回填**:assistant/tool 配对必须完整,否则下一轮 LLM 看到孤儿 toolCall 会报 schema 错。
-- **递归保护**：delegate context 下 catalog 结构性移除真实 `subagent` LocalTool；不再存在旧 `app subagent` command guard。
+- **递归保护**：delegate context 下 catalog 结构性移除真实 `subagent` LocalTool；不存在第二个委派入口。
 - **`eventSender=null` 模式**:JobRun(scheduler 静默)走这条;`ask` / 选择 / 表单 类工具自动返回 cancel 默认应答 = "用户拒绝",turn 自然收敛。
 - **`chunkStream=null` 模式**:JobRun / 测试路径无可推流端,工具内 `if (!ctx.chunkStream) return` 早返,跳过 partial-result 推流。
 
@@ -356,7 +356,6 @@ identityBlock      role + emoji + name + agent.system_prompt
 knowledgeBlock     `knowledge://` URI 描述(KB 路径已固定为 `${agentRoot}/knowledge`)
 fsSkillsBlock      扫 knowledge/.claude/skills/ 子目录,每个一行 metadata
 boundSkillsBlock   profile.skills 注册表中按 agent.skills[] 过滤
-subAgentsBlock     profile.subAgents 中按 agent.subAgents[] 过滤
 getGlobalSystemPrompt   ~/.deskmate/.claude/global.md(全 agent 共享)
 ```
 
@@ -400,7 +399,7 @@ chat.turn                                                       session/base.ts
    │   └─ pi.stream(...)
    └─ derive(mod: 'chat.tool', toolName, callId)                tool.ts
        └─ 拷进 ToolContext.tracer,handler 直接消费
-           └─ tool 内部嵌套 LLM(spawn_subagent / 内置 chat)继续 derive
+           └─ `subagent run` 以该 tracer 派生单次 delegated session 的 trace
 ```
 
 形参一律 `parentTracer?: Tracer`。**不要**降级回传 tid 字符串 —— `derive()` 在接收端拿不到 `parent.sid`,trace 树在 chat.ipc → chat.turn 之间断链。eval / scheduler 等无外部上游入口:`prepareSessionTracer(undefined)` → 本地 `Tracer.start()` 起新 trace,chat.turn 为顶层 span。
@@ -463,7 +462,7 @@ onTurnComplete → IDLE
 
 ## 15. Agent 委派
 
-生产路径为 `subagent` LocalTool → `SubAgentManager.forProfile(profile)` → parent-scoped persisted `Subrun` → `SubAgentSession`。每个 Profile 绑定唯一 manager；它授权 delegate、持久 reservation/parallel gate、timeout/cancel、stale-running recovery 与有界 runtime state。SubAgentSession 只运行一个 pending Subrun 并写正式结果。父 RegularSession stop 时先取得所属 Profile 的 manager，再按完整 parent identity 取消 active delegated runs。旧 `lib/subAgent` 与 `app subagent` backend 已删除。
+生产路径为 `subagent` LocalTool → `SubAgentManager.forProfile(profile)` → parent-scoped persisted `Subrun` → `SubAgentSession`。每个 Profile 绑定唯一 manager；它授权 delegate、持久 reservation/parallel gate、timeout/cancel、stale-running recovery 与有界 runtime state。SubAgentSession 只运行一个 pending Subrun 并写正式结果。父 RegularSession stop 时先取得所属 Profile 的 manager，再按完整 parent identity 取消 active delegated runs；不存在第二套委派 backend。
 
 ---
 

@@ -8,10 +8,10 @@
 
 ## 当前状态
 
-- 总体阶段：**Step 12 complete**
-- 当前门禁：用户已确认 Step 12 按当前实现完结；Step 13 保持 `pending`，等待用户明确开始
+- 总体阶段：**Step 13 complete**
+- 当前门禁：用户已确认 Step 13；Step 14 保持 `pending`，等待用户明确开始并 review `unit-test.md`
 - 业务步骤：Step 9、Step 10、Step 11、Step 12 均为 `complete`
-- 测试步骤：Step 14 尚未开始；Step 12 未新增或运行单测
+- 测试步骤：Step 14 尚未开始；Step 13 未新增或运行单测
 - 生产代码变更：parent-owned lazy transcript IPC、局部只读 Dialog 与仅 Story 的 Transcript demo 已获用户确认
 - 共享契约：`refactor/context.md`
 - 累积单测方案：`refactor/unit-test.md`
@@ -46,7 +46,7 @@
 | 10 | [Agent Delegation 配置 UI](step10.md) | complete | Step 2 | description/delegates UI；独立 Sub-Agent 管理入口下线 |
 | 11 | [委派运行卡片与 audit/cancel IPC](step11.md) | complete | Steps 6,7,9 | reload-safe card、live state、single cancel、run metadata query、完整 renderer Story matrix |
 | 12 | [可选 Messages Dialog](step12.md) | complete | Step 11 review | parent-owned lazy messages IPC、只读 Dialog、Ladle Transcript demo |
-| 13 | [证明新路径唯一并删除残留旧源码](step13.md) | pending | Steps 9–12 | 新路径唯一生效；残留旧源码/测试删除；全局文档更新 |
+| 13 | [证明新路径唯一并删除残留旧源码](step13.md) | complete | Steps 9–12 | 新路径唯一生效；残留旧源码/测试删除；全局文档更新 |
 | 14 | [统一编写单元测试](step14.md) | pending | Steps 1–13 + `unit-test.md` | 用户确认后的新单测与测试执行记录；仍无 E2E |
 
 ## 关键路径
@@ -550,3 +550,20 @@
 ### 2026-07-17 — Step 12 用户 review 通过
 - 用户确认 Messages Dialog、lazy transcript IPC 与 Ladle Transcript demo 先按当前实现完结；Step 12 状态切为 `complete`。
 - Step 13 仍为 `pending`，只能由用户另行明确开始；保留既有 messages IPC/Dialog 作为其稳定输入。
+### 2026-07-17 — Step 13 启动与 eval legacy cleanup 决策
+
+- 全仓 production root 复核确认：`tools/index.ts` 仅注册顶层 `subagent`；Regular/Job 仅经新 manager/prompt 接线；`subagentRun` 是唯一 audit/cancel/messages IPC；旧 app command、CRUD IPC/UI/atom、persist store、feature flag 与 backend 目录均已不存在。
+- 复核发现唯一功能性旧残留在 `src/main/lib/evalHarness/`：旧委派 JSON 提取和外部 `RunTestResponse` 嵌套 transcript 字段。用户明确选择 clean cutover：删除该字段、解析与专属旧测试；普通扁平 `messages` 仍保留所有工具结果。
+- 计划已进入 `in-progress`；此变更不读、不迁移、不删除用户磁盘的历史委派数据。 
+
+### 2026-07-17 — Step 13 — awaiting-review
+
+- 实际清理：删除 AgenticEval 的旧嵌套委派 transcript 响应字段、JSON extractor 与专属旧测试；`messages` 继续以扁平 user/assistant/tool 形态返回普通工具结果。同步删除 bootstrap、shared persist、preload、renderer 注释中的旧命名。
+- production root 证明：`tools/index.ts` 只注册顶层 `subagent`；Regular/Job 经新的 command facade/manager 接线；`subagentRun` 是唯一 metadata/lazy transcript/cancel/live-state IPC；全仓 `src` 无旧委派符号、旧 CRUD/store/feature-flag/backend 引用。
+- 文档交接：刷新 Agent Loop、trace、主架构、persist、tool system、Pi/tools/subagent、eval harness 和 chat 模块文档；`context.md` 改为实际 `persist/subrun.ts` 路径；`unit-test.md` 仅保留新的 eval response contract 候选。
+- 静态验证：`npm run check:impact -- <所有实际修改文件>`、`npm run typecheck`、`npm run build` 均通过；build 仅有既有 renderer chunk-size warning，npm 仍报告既有 `.npmrc` unknown-config warnings。按 Steps 1–13 政策未新增/运行单测，未启动应用、未做 browser/smoke/E2E。
+- 下游交接：Steps 1–13 业务结构稳定，Step 14 只能在用户 review 本 step 与 `unit-test.md` 后开始。
+
+### 2026-07-17 — Step 13 用户 review 通过
+- 用户确认 Step 13 完成：唯一新委派路径、旧 eval 协议 clean cutover、残留源码清理与文档交接均获通过。
+- Step 13 状态切为 `complete`；Step 14 仍为 `pending`，仅在用户明确开始并 review `unit-test.md` 后执行。

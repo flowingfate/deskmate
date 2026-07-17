@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-16 (Step 6：parent-scoped Subrun store 已落盘，尚未接 manager/session) -->
+<!-- Last verified: 2026-07-17 (Step 13：新 Subrun 路径已是唯一委派持久化入口) -->
 
 ## 1. 范围
 

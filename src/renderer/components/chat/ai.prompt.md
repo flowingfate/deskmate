@@ -37,7 +37,7 @@
 | `tool/index.ts` | barrel；import 副作用触发 `registerBuiltinToolRenderers()`；导出 ToolCallsSection / ToolDetailView / registry helpers | ~25 LOC |
 | `tool/renderers/shell/index.tsx` | `shellRenderer` —— `chipLabel` (`shell: <cmd>`) + `InputBlock`（终端 prompt+command）+ `OutputSuccessBlock`（stdout/stderr/exit 终端块） | ~110 LOC |
 | `tool/renderers/write/index.tsx` | `writeRenderer` —— `inputArgsText`（细，仅 fileUri）+ `OutputSuccessBlock`（可点击文件卡片，图片走 `ImageViewerAtom.open`、其余走 `useOpenFilePreview()`） | ~110 LOC |
-| `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；不再持有已删除 `app subagent` 特化渲染，所有子命令走稳定的通用 cmdline/result fallback | ~45 LOC |
+| `tool/renderers/app/index.tsx` | `appRenderer` —— 顶层接管所有四个 slot；所有 app 子命令走稳定的通用 cmdline/result fallback | ~45 LOC |
 | `tool/renderers/app/cmdline.ts` | App 命令展示工具：`extractAppCmdline`、`firstNonFlagTokens`、`tokenizeForView`。**只**给 renderer 用，不带语义保证 | ~90 LOC |
 | `tool/renderers/subagent/{parse,RunCard,RunMessagesDialog,RunResultDetails,index}.tsx` | 顶层 `subagent` renderer：只做 `{ outcome }` 展示解析；单 run 卡片关联 live state、查询 metadata、显示 formal result 并发起单次 cancel；详情按钮以局部 Dialog state 懒取 parent-owned Domain transcript，关闭释放数据，复用 MarkdownView 和简化只读 tool 块，不进主 chat cache/render-items pipeline。`story/tools/subagent-run.stories.tsx::Transcript` 以 production Dialog + Electron mock 展示 user/assistant/tool transcript | ~700 LOC |
 | `agent-editor/AgentDelegationTab.tsx` | 普通 Agent delegates 选择器：hot `agents.atom` 候选、cold delegates、dangling 可移除行，以及 Agent 创建/设置导航 | ~205 LOC |

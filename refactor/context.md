@@ -299,6 +299,14 @@ Step 12 实际落地（2026-07-17）：
 - `RunMessagesDialog` 是 `RunCard` 的局部受控 shadcn Dialog：loading/error/empty/ready 可辨识状态，关闭即释放消息；request 序号忽略关闭、重开或更换 run 后的旧返回。Header 展示 Agent、三位 ID、文字+icon 状态、task/expected output/duration/usage 与可点击 deliverables；Body 按时间显示 user/assistant Markdown 和只读 tool call，默认不显示 thinking。
 - Dialog 保持 Radix focus trap/Esc/trigger focus restore，一条外层 transcript scroll region；不支持 edit/retry/compose/cancel、搜索/export 或后续对话。`story/tools/subagent-run.stories.tsx::Transcript` 直接挂载 production Dialog，并由仅 Story 的 mock 提供 user/assistant/tool transcript；生产代码不依赖 Story。
 - 用户已于 2026-07-17 review 并确认 Step 12 按当前实现 `complete`；该实现是 Step 13 的稳定输入，Step 13 必须保留新 messages IPC，不能把 subrun 注入普通 session list 或 chat render pipeline。
+### 2.12 Step 13 eval legacy cleanup（2026-07-17）
+
+- AgenticEval 的 `RunTestResponse.sub_agent_messages` 仅解析已删除 `spawn_subagent` 工具结果中的历史嵌套 transcript；仓库内无其它生产消费方。
+- 用户已确认 clean cutover：Step 13 删除该字段、旧 JSON 提取与专属测试；`messages` 是评测协议保留的唯一工具结果载体，仍返回扁平的 user/assistant/tool 消息。
+- 此协议 cleanup 不影响新的 `subagent` tool、其 formal result 或 `subagentRun` audit/messages IPC。
+- Step 13 静态证明已完成：新 tool/manager/session/IPC roots 均在生产注册链路中，`src` 内不存在旧委派符号、旧 CRUD/store/feature-flag/backend 引用；旧用户磁盘数据仍未被触碰。
+- `check:impact`、typecheck 与 build 已通过；Step 14 仅在用户 review Step 13 和 `unit-test.md` 后开始。
+- 用户已确认 Step 13 完成；Steps 1–13 的业务结构已稳定，后续只可按 Step 14 的测试计划推进。
 
 ## 3. 动态规划更新机制（强制）
 
@@ -368,7 +376,7 @@ Step 12 实际落地（2026-07-17）：
 | `src/main/lib/delegateExecutionScope.ts` | 仅限委派 run 的 AsyncLocalStorage `delegateId`；normal execution 没有 store |
 | `src/main/pi/tool.ts` | delegate-aware catalog；Step 7 再按需添加 submit route |
 | `src/main/pi/subagent/prompt.ts` | delegated operating prompt / context boundary |
-| `src/main/pi/subagent/subrunStore.ts` | 三位 ID allocator + hidden transcript/data adapter |
+| `src/main/persist/subrun.ts` | parent-scoped 三位 ID allocator 与 hidden transcript/data store |
 | `src/main/pi/subagent/submitResult.ts` | explicit result submission |
 | `src/main/pi/subagent/session.ts` | BaseSession-based delegated run |
 | `src/main/pi/subagent/manager.ts` | limits/cancel/state/lifecycle |

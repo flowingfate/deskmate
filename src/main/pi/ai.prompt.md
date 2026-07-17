@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 11：委派运行的 audit/cancel/state IPC 已接入) -->
+<!-- Last verified: 2026-07-17 (Step 13：唯一 subagent production path 已复核) -->
 # pi 模块 — Chat 引擎（pi-ai 底座）
 
 > Deskmate 的 chat orchestrator，基于 `@earendil-works/pi-ai` 适配多 provider。
@@ -15,7 +15,7 @@
 | `session/` | turn loop 单一权威。RegularSession/JobRun 维持无 scope 行为；RegularSession stop 先从所属 active Profile 取得 manager 并取消同一 parent 的 delegated runs；SubAgentSession 仅通过 additive seam 复用它，并在外层编排完整 delegated user turns | 中 |
 | `tool.ts` | **catalog + 执行**两段同住一文件。catalog local route 直接持有 `LocalTool` snapshot，经统一 helper 执行；delegate context 存在时排除 `ask` 与真实 `subagent` 对象，单次 delegated catalog 可附未注册 `submit_result` | 中 |
 | `tools/` | **本地工具子系统** —— `LocalTool` registry + `ToolContext` + 所有具体工具。生产注册 app/web/subagent 三个顶层 facade；subagent handler 再按 profile 取得 manager | 见子目录 |
-| `subagent/` | **生产 Agent 委派运行时**。`SubAgentManager.forProfile(profile)` 绑定 persisted Subrun 的授权、limits/cancel/state/recovery，并通过唯一 process-level state bridge 供 `subagentRun` IPC 推送 live card；旧 `lib/subAgent` 已删除 | 中 |
+| `subagent/` | **唯一生产 Agent 委派运行时**。`SubAgentManager.forProfile(profile)` 绑定 persisted Subrun 的授权、limits/cancel/state/recovery，并通过唯一 process-level state bridge 供 `subagentRun` IPC 推送 live card | 中 |
 | `auth.ts` | PiAuthManager:OAuth + apiKey 存取 + expires-based refresh + inflight dedup | 中 |
 | `compression.ts` | 压缩决策(usage = pi.usage.totalTokens,含 output,与 badge 同口径)+ 内置 compressWithFullMode 调用 | 小 |
 | `mcp.ts` | external MCP 工具薄包装:`listAllMcpTools()`(给 catalog 列举外部工具)/ `executeMcpToolOnServer(serverName, toolName, args, signal)`(server-scoped 执行,**不再**有按裸 toolName 查全局 map 的路径) | 小 |

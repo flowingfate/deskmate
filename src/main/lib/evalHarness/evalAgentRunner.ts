@@ -71,13 +71,11 @@ export class EvalAgentRunner {
       }
 
       const outputMessages = this.convertMessages(newMessages);
-      const subAgentMessages = this.extractSubAgentMessages(newMessages);
 
       this.cacheSession(evalSessionId, piSession, piSession.messages.length);
 
       return {
         messages: outputMessages,
-        sub_agent_messages: subAgentMessages,
         metadata: { session_id: evalSessionId },
         session_id: evalSessionId,
       };
@@ -126,11 +124,9 @@ export class EvalAgentRunner {
       cached.messageCount = allMessages.length;
 
       const outputMessages = this.convertMessages(newMessages);
-      const subAgentMessages = this.extractSubAgentMessages(newMessages);
 
       return {
         messages: outputMessages,
-        sub_agent_messages: subAgentMessages,
         metadata: { session_id: sessionId },
         session_id: sessionId,
       };
@@ -295,36 +291,6 @@ export class EvalAgentRunner {
     return out;
   }
 
-  /**
-   * 从 tool result 文本里嗅探 sub-agent message 列表。
-   * 老 spawn_subagent 结果会把 messages 数组 JSON 嵌进 tool result text。
-   */
-  private extractSubAgentMessages(messages: Message[]): RunTestMessageOutput[][] {
-    const subAgentResults: RunTestMessageOutput[][] = [];
-
-    for (const msg of messages) {
-      if (msg.role !== 'assistant') continue;
-      for (const tc of msg.tool_calls) {
-        const text = tc.response?.result;
-        if (!text) continue;
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed && Array.isArray(parsed.messages)) {
-            subAgentResults.push(
-              parsed.messages.map((m: { role?: string; content?: unknown }) => ({
-                role: (m.role || 'assistant') as RunTestMessageOutput['role'],
-                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-              })),
-            );
-          }
-        } catch {
-          // Not JSON or no sub-agent data — skip
-        }
-      }
-    }
-
-    return subAgentResults;
-  }
 }
 
 /**

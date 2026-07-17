@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 10：旧 Sub-Agent 配置 store/IPC/schema 已移除) -->
+<!-- Last verified: 2026-07-17 (Step 13：Subrun 是唯一委派持久化路径) -->
 
 # Persist 模块（新布局 store 层）
 

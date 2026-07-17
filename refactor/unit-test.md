@@ -203,9 +203,14 @@
 
 ## Step 13 候选：入口收口
 
-- [ ] P1 registry/snapshot/prompt 不再读取旧 SubAgents store。
-- [ ] P1 旧源码即使存在，也没有 production imports/registration/routes。
-- [ ] P1 feature flag 不会隐藏新 delegation 能力。
+- [ ] P1 `run_test` 响应只以扁平 `messages` 返回 user/assistant/tool 结果，不再输出旧的嵌套委派 transcript 字段。
+
+### Step 13 实际补充 — 2026-07-17
+- 实际 contract：删除仅为已移除委派工具解析的 `RunTestResponse.sub_agent_messages`、JSON extractor 与专属旧测试；普通 `messages` 保持既有扁平工具结果。
+- 新增候选：只验证上述公开 eval 响应契约，不以源文件、import 或已删除路径文本作为测试目标。
+- 删除/改写候选：旧 store/import/feature-flag reachability 由本 step 静态检查证明；这些不是 Step 14 应维护的行为测试。
+- 最高风险：外部评测消费者仍读取已删除字段；用户已明确确认 clean cutover。
+- 需要用户在 Step 14 前决定：无。
 
 ## Step 14 执行顺序建议
 

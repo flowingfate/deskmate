@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-16 (Step 9：顶层 subagent 已注册，并按 Profile 解析 manager 后执行) -->
+<!-- Last verified: 2026-07-17 (Step 13：顶层 subagent 是唯一委派入口) -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -118,7 +118,7 @@ async function loadImpl() {
 批 B:依赖 main 子系统 —— 仅 `executeCommand`(LLM 看到名为 `shell`)。`manageProcess` 已下线
 批 C:已下线(mcp / agent / skill → `app` shell facade,详见 `appcmd/builtins/app/`)
 批 D:已下线(schedule → `app` shell facade；命令始终在 `appcmd/builtins/app/index.ts` 注册)
-批 E:已下线(旧 `app subagent spawn/spawn-many` backend 已整体删除；新委派走顶层 `subagent list|describe|run`)
+批 E:无 app 域委派命令；生产委派只走顶层 `subagent list|describe|run`。
 批 F:已下线为子命令(`download` 顶层工具 → `web download`,见批 G)。下载内核搬到 `appcmd/builtins/web/kernel/download.ts`,CLI 在 `appcmd/builtins/web/download.ts`;`web` 域**已升为顶层一等工具 `web`**(`pi/tools/web.ts`)。`read_office_file` 一并下线 —— office 现在是 `read` 工具的内部 backend,通过 `read/backends/office.ts::loadImpl()` 推迟加载 `impl/readOfficeFile.ts`(独立 lazy chunk 输出,bundle 体积不变)
 
 注册顺序对 LLM 看到的工具列表顺序没有语义,但保持稳定有助于 prompt cache 命中率;

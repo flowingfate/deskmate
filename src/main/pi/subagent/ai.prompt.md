@@ -1,8 +1,8 @@
-<!-- Last verified: 2026-07-17 (Step 12：subagentRun lazy messages Dialog IPC 已接入) -->
+<!-- Last verified: 2026-07-17 (Step 13：唯一生产委派路径与残留清理已复核) -->
 # pi/subagent 模块 — Agent 委派运行时
 
 > 普通 Agent 在父 session 中被委派执行一次任务的运行时边界。Sub-Agent 是运行角色，不是第二种配置实体。
-> 生产路径已由顶层 `subagent` tool → manager → persisted Subrun → `SubAgentSession` 构成；旧 `lib/subAgent` 与 `app subagent` backend 已删除。
+> 生产路径唯一为顶层 `subagent` tool → manager → persisted Subrun → `SubAgentSession`。
 
 ## 关键文件
 
@@ -46,7 +46,7 @@ appcmd infrastructure ← pi/subagent/commands ← manager → persist Session/S
         ↑                         ↓
 tools/subagent facade → LocalTool registry → parent RegularSession/JobRun
 
-新生产代码不得依赖旧 Sub-Agent backend、旧 app command 或旧配置数据；磁盘上的旧 `sub-agents/` 数据不读、不迁移、不删除。
+新生产代码只依赖当前 Pi、persist 与 Agent graph；磁盘上的历史 `sub-agents/` 数据不读、不迁移、不删除。
 
 ### 核心不变量
 
