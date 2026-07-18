@@ -4,12 +4,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 import { log } from '@main/log';
-import type { Context } from './shared';
 import type { ImportConflictResolution } from '@shared/types/fsTypes';
 import { promptImportConflictResolution, getUniqueImportPath } from './shared';
 import { renderToMain } from '@shared/ipc/fs';
 
-export default function(ctx: Context) {
+export default function() {
   const handle = renderToMain.bindMain(ipcMain);
 
   // Delete files or directories (supports recursive directory deletion)

@@ -2,8 +2,6 @@ import { BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 
-import type { Context } from './shared';
-
 import {
   installAndActivateSkill,
   applySkillToAgents,
@@ -16,7 +14,7 @@ import { getProfileSkillsDir } from "@main/persist/lib/path";
 import { skillsRenderToMain } from '@shared/ipc/skill';
 import { requireProfileForSender } from './profileContext';
 
-export default function(_ctx: Context) {
+export default function() {
 
   const handleSkills = skillsRenderToMain.bindMain(ipcMain);
 

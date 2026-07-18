@@ -2,8 +2,6 @@ import { ipcMain, dialog, BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import { renderToMain, mainToRender } from '@shared/ipc/agentChat';
 
-import type { Context } from './shared';
-import { mainWindow } from '@main/startup/wins';
 import { StreamingChunk } from '@shared/types/streamingTypes';
 import Stream from '@shared/stream-iterator';
 
@@ -15,7 +13,9 @@ import { rehydrate } from '@main/persist/messageWire';
 import { log } from '@main/log';
 import { Tracer, type TraceContext } from '@shared/log/trace';
 import { requireProfileForSender } from './profileContext';
-export default function (ctx: Context) {
+
+
+export default function() {
   const handle = renderToMain.bindMain(ipcMain);
 
   /**

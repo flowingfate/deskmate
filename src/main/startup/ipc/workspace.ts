@@ -3,13 +3,12 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 import { log } from '@main/log';
-import type { Context } from './shared';
 import type { ImportConflictResolution } from '@shared/types/fsTypes';
 import { collectImportConflicts, planImportTargets, promptImportConflictResolution } from './shared';
 import { getWorkspaceWatcher } from "../../lib/workspace/WorkspaceWatcher";
 import { renderToMain, mainToRender } from '@shared/ipc/workspace';
 
-export default function(ctx: Context) {
+export default function() {
   const handle = renderToMain.bindMain(ipcMain);
 
   // ===============================

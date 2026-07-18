@@ -52,7 +52,7 @@ log.info({ mod, msg, ... })
 ## 注意事项
 
 - **bootstrap 顺序**：`src/main/bootstrap.ts` 必须最早执行 `app.setPath('userData', ~/.deskmate)`，否则 pino transport 把 db 写到默认 `~/Library/Application Support/Electron/`。bootstrap 与 main 是两个独立 bundle，`bootstrap.ts` 末尾用 `createRequire(__filename)('./main.js')` 动态 require 避免 rolldown 把 main hoist 到 bootstrap 之前。
-- **登录关键路径**：`log:write` IPC handler 注册必须在 `setUpIPC` **最早一句**，避免 preload ready 后丢失启动期 renderer 日志。
+- **登录关键路径**：`log:write` IPC handler 注册必须在 `setUpAllIPCHandlers` **最早一句**，避免 preload ready 后丢失启动期 renderer 日志。
 - **viewer 是 dev-only**：`registerLogViewerIPC()` 内首句 `if (app.isPackaged) return;`，菜单项 `visible:!app.isPackaged`。生产包不存在 viewer 通道与窗口。
 - **viewer 自身防成环**：viewer preload **故意不**暴露 `log.write`。viewer 内部异常只走 `console.warn`，不调 `log.error`。否则 viewer error → IPC → sqlite → broadcast → viewer 刷新 → viewer error 死循环。
 

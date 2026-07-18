@@ -1,12 +1,15 @@
 import { BrowserWindow, ipcMain, Menu } from 'electron';
+import { createMainWindow } from '../main-win';
 
 import { renderToMain } from '@shared/ipc/window';
-import type { Context } from './shared';
+import { getMenuTemplate } from '../menu';
+import { zoomLevel as winZoomLevel } from '../wins';
 
-export default function(ctx: Context) {
+export default function() {
   const handle = renderToMain.bindMain(ipcMain);
+
   handle.openProfile(async (_event, profileId) => {
-    await ctx.openProfileMainWindow(profileId);
+    await createMainWindow(profileId);
   });
 
   const windowForSender = (event: Electron.IpcMainInvokeEvent): BrowserWindow | null => {
@@ -24,28 +27,28 @@ export default function(ctx: Context) {
   const syncWindowZoomWithPersistedState = async (event: Electron.IpcMainInvokeEvent) => {
     const window = windowForSender(event);
     if (!window) return 0;
-    const zoomLevel = await ctx.getPersistedWindowZoomLevel();
-    return ctx.applyWindowZoomLevel(window, zoomLevel);
+    const zoomLevel = await winZoomLevel.get();
+    return winZoomLevel.apply(window, zoomLevel);
   };
 
   handle.zoomIn(async (event) => {
     const window = windowForSender(event);
-    return window ? ctx.stepWindowZoomLevel(window, 0.5) : 0;
+    return window ? winZoomLevel.step(window, 0.5) : 0;
   });
   handle.zoomOut(async (event) => {
     const window = windowForSender(event);
-    return window ? ctx.stepWindowZoomLevel(window, -0.5) : 0;
+    return window ? winZoomLevel.step(window, -0.5) : 0;
   });
   handle.resetZoom(async (event) => {
     const window = windowForSender(event);
-    return window ? ctx.resetWindowZoomLevel(window) : 0;
+    return window ? winZoomLevel.reset(window) : 0;
   });
   handle.getZoomLevel(async (event) => {
     return syncWindowZoomWithPersistedState(event);
   });
 
   handle.showAppMenu((event) => {
-    const menu = Menu.buildFromTemplate(ctx.getMenuTemplate());
+    const menu = Menu.buildFromTemplate(getMenuTemplate());
     menu.popup({ window: windowForSender(event) || undefined });
     return true;
   });

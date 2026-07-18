@@ -1,11 +1,10 @@
 import { ipcMain } from 'electron';
 
 import { log } from '@main/log';
-import type { Context } from './shared';
 import { mcpRenderToMain, mcpAuthRenderToMain } from '@shared/ipc/mcp';
 import { requireProfileForSender } from './profileContext';
 
-export default function(ctx: Context) {
+export default function() {
   const handleMcp = mcpRenderToMain.bindMain(ipcMain);
   const handleMcpAuth = mcpAuthRenderToMain.bindMain(ipcMain);
 

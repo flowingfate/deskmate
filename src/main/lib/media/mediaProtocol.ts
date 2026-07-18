@@ -196,7 +196,7 @@ export async function resolveMediaRequest(rawUrl: string): Promise<Response> {
  * 的前置条件)。scheme 本身的 privileged 声明在 `main.ts` 的
  * `registerSchemesAsPrivileged`(MUST 在 app ready 前)。
  */
-export function registerMediaProtocol(): void {
+export function handleMediaProtocol(): void {
   protocol.handle('media', (request) => resolveMediaRequest(request.url));
   logger.info({ msg: 'media protocol registered', authorities: Object.keys(MEDIA_AUTHORITIES) });
 }

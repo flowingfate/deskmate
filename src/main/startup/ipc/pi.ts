@@ -22,7 +22,6 @@
 
 import { ipcMain } from 'electron';
 
-import type { Context } from './shared';
 import { getModelInfo, getPiAuthManager, listModels, type ResolvedModel } from '@main/pi';
 import { parseAgentModel } from '@shared/utils/agentModelId';
 import { renderToMain, mainToRender, type PiModelListItem, type PiModelInfo } from '@shared/ipc/pi';
@@ -65,7 +64,7 @@ function failSession(s: LoginSession, error: string): void {
   }
 }
 
-export default function (ctx: Context) {
+export default function() {
   const handle = renderToMain.bindMain(ipcMain);
 
   // ─── auth ──────────────────────────────────────────────────────────────

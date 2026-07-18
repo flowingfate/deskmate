@@ -1,11 +1,10 @@
 import { ipcMain } from 'electron';
 
-import type { Context } from './shared';
 import { FileNameLlmGenerator, McpConfigLlmFormatter, SystemPromptLlmWriter } from '@main/pi';
 import { renderToMain } from '@shared/ipc/llm';
 import { requireProfileForSender } from './profileContext';
 
-export default function(ctx: Context) {
+export default function() {
 
   // ===============================
   // LLM related IPC handlers

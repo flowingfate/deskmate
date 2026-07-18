@@ -1,7 +1,6 @@
 import { app, ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import type { Context } from './shared';
 import type { ProfileStore } from '@main/persist';
 import type { ChatSessionFile } from '@shared/persist/types'
 import { renderToMain } from '@shared/ipc/chatSession';
@@ -58,7 +57,7 @@ async function writeSessionDownload(
   return { filePath, fileName };
 }
 
-export default function handleChatSessionIPC(_ctx: Context): void {
+export default function handleChatSessionIPC(): void {
   const handle = renderToMain.bindMain(ipcMain);
 
   // Download ChatSession to Downloads directory

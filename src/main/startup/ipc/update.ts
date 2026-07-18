@@ -1,10 +1,8 @@
 import { app, ipcMain } from 'electron';
 import { renderToMain as updateRenderToMain } from '@shared/ipc/update';
-import type { UpdateManager } from '../../lib/autoUpdate/updateManager';
+import  { updater, UpdateManager } from '../../lib/autoUpdate';
 import { ProfileRegistry } from '../../profileRegistry';
 import { log } from '@main/log';
-import { safeConsole } from '../../lib/utilities/safeConsole';
-import type { Context } from './shared';
 import { APP_VERSION } from '@shared/constants/branding';
 
 const logger = log;
@@ -14,10 +12,10 @@ type UseUpdateManagerResult<T> =
   { type: 'call-failed'; error: any } |
   { type: 'success', error: null, data: T };
 
-export default function handleUpdateIPC(ctx: Context) {
+export default function handleUpdateIPC() {
   async function useUpdateManager<T>(call: (manager: UpdateManager) => Promise<T>): Promise<UseUpdateManagerResult<T>> {
     try {
-      const manager = await ctx.updateManager;
+      const manager = updater.setup();
       try {
         const data = await call(manager);
         return { type: 'success', error: null, data };
@@ -70,24 +68,23 @@ export default function handleUpdateIPC(ctx: Context) {
       logger.warn({ msg: 'scheduler.lifecycle.updater-handoff', mod: 'update:quitAndInstall', stage: 'shutdown-failed', filePath, err: schedulerError });
     }
 
-    safeConsole.log('[MAIN] 🚀 update:quitAndInstall IPC handler called!', {
+    console.log('[MAIN] 🚀 update:quitAndInstall IPC handler called!', {
       timestamp: new Date().toISOString(),
       filePath,
-      hasUpdateManager: !!ctx.updateManager
     });
 
     const { type, error } = await useUpdateManager(async (m) => {
-      safeConsole.log('[MAIN] 📞 Calling updateManager.quitAndInstall...');
+      console.log('[MAIN] 📞 Calling updateManager.quitAndInstall...');
       m.quitAndInstall(filePath);
-      safeConsole.log('[MAIN] ✅ updateManager.quitAndInstall completed');
+      console.log('[MAIN] ✅ updateManager.quitAndInstall completed');
     });
     // 🔥 Fix: try to initialize if update manager is not initialized
     if (type === 'init-failed') {
-      safeConsole.error('[MAIN] ❌ Failed to initialize update manager:', error);
+      console.error('[MAIN] ❌ Failed to initialize update manager:', error);
       throw error;
     }
     if (type === 'call-failed') {
-      safeConsole.error('[MAIN] ❌ update:quitAndInstall error:', error);
+      console.error('[MAIN] ❌ update:quitAndInstall error:', error);
       throw error;
     }
   });

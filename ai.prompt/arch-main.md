@@ -141,4 +141,4 @@
 
 **启动性能**：`bootstrap.ts` 最先执行（在任何 import 之前）；`main.ts` 使用懒 getter（import 时零初始化）；重量级模块仅作为 `import type`；开发模式下 `dotenv`/`electron-reload` 通过 `setImmediate` 加载；`screenshot://` 在 `app.ready` 之前注册。
 
-**多主窗口纪律**：`main.ts` 对同一 Profile 的主窗口创建实行 single-flight；`startup/wins.ts` 仅在关闭的窗口仍是该 Profile 当前 map entry 时移除注册。来自 UI 的窗口操作（缩放、菜单导航）必须按 IPC sender 或 Electron 菜单提供的 target window 选址，不得复用“最近创建的主窗口”。应用退出仅由 `ElectronApp` 的唯一 `before-quit` handler 编排 Profile 停止、persist/SQLite close 与 logger close。
+**多主窗口纪律**：`main.ts` 对同一 Profile 的主窗口创建实行 single-flight，`startup/wins.ts` 再作为最终防线复用该 Profile 尚未销毁的既有主窗口；单例不变量保证关闭回调可直接移除该 Profile 的主窗口注册。来自 UI 的窗口操作（缩放、菜单导航）必须按 IPC sender 或 Electron 菜单提供的 target window 选址，不得复用“最近创建的主窗口”。应用退出仅由 `ElectronApp` 的唯一 `before-quit` handler 编排 Profile 停止、persist/SQLite close 与 logger close。

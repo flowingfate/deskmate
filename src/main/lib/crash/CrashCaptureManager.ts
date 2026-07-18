@@ -2,7 +2,6 @@ import { app, BrowserWindow, crashReporter } from 'electron';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { safeConsole } from '../utilities/safeConsole';
 import { getCrashesDir, getStateDir, getLogsDir } from '@main/persist/lib/path';
 import { APP_VERSION } from '@shared/constants/branding';
 
@@ -392,7 +391,7 @@ class CrashCaptureManager {
       crashReporter.addExtraParameter('ver', this.getAppVersionSafe().slice(0, 120));
       this.crashReporterStarted = true;
     } catch (error) {
-      safeConsole.warn('[CrashCapture] Failed to start crashReporter:', error);
+      console.warn('[CrashCapture] Failed to start crashReporter:', error);
     }
   }
 
@@ -481,7 +480,7 @@ class CrashCaptureManager {
         fs.writeFileSync(path.join(bundleDir, 'recent-main.log'), recentLogTail, 'utf8');
       }
     } catch (error) {
-      safeConsole.error('[CrashCapture] Failed to persist crash bundle:', error);
+      console.error('[CrashCapture] Failed to persist crash bundle:', error);
     }
   }
 

@@ -1,4 +1,6 @@
+import { appCacheManager } from '@main/lib/appCache';
 import { BrowserWindow } from 'electron';
+import { mainToRender as windowMainToRender } from '@shared/ipc/window';
 
 export type WindowRole = 'main' | 'log' | 'screenshot' | 'research';
 type CallBackWin = (win: BrowserWindow) => void;
@@ -20,20 +22,31 @@ const __windows__ = {
   research: null as BrowserWindow | null,
   screenshots: new Set<BrowserWindow>(),
 };
+function requireMainProfileId(profileId: string | undefined): string {
+  if (!profileId) throw new Error('Main window requires a profile ID.');
+  return profileId;
+}
+
 
 export function createWindow(
   options: Electron.BrowserWindowConstructorOptions,
   meta: BrowserWindowMeta,
 ): BrowserWindow {
+  if (meta.role === 'main') {
+    const profileId = requireMainProfileId(meta.profileId);
+    const existing = __windows__.main.get(profileId);
+    if (existing && !existing.isDestroyed()) return existing;
+    if (existing) __windows__.main.delete(profileId);
+  }
+
   const win = new BrowserWindow(options);
   metas.set(win, meta);
 
   if (meta.role === 'main') {
-    if (!meta.profileId) throw new Error('Main window requires a profile ID.');
-    const id = meta.profileId;
-    __windows__.main.set(id, win);
+    const profileId = requireMainProfileId(meta.profileId);
+    __windows__.main.set(profileId, win);
     win.once('closed', () => {
-      __windows__.main.delete(id);
+      __windows__.main.delete(profileId);
     });
   } else if (meta.role === 'screenshot') {
     __windows__.screenshots.add(win);
@@ -150,3 +163,54 @@ export function anyVisibleWindow(call?: CallBackWin): BrowserWindow | null {
   }
   return null;
 }
+
+export const zoomLevel = (() => {
+  function normalizeWindowZoomLevel(level: number): number {
+    const zoomStep = 0.5;
+    const zoomMin = -3;
+    const zoomMax = 3;
+    const rounded = Math.round(level / zoomStep) * zoomStep;
+    return Math.min(zoomMax, Math.max(zoomMin, rounded));
+  }
+
+  async function get(): Promise<number> {
+    await appCacheManager.initialize();
+    const zoomLevel = appCacheManager.getConfig().zoomLevel;
+    return typeof zoomLevel === 'number' ? normalizeWindowZoomLevel(zoomLevel) : 0;
+  }
+
+  function apply(window: BrowserWindow, level: number): number {
+    if (window.isDestroyed()) return 0;
+
+    const next = normalizeWindowZoomLevel(level);
+    window.webContents.setZoomLevel(next);
+    windowMainToRender.bindWebContents(window.webContents).zoomChanged(next);
+    return next;
+  }
+
+  async function persist(level: number): Promise<void> {
+    try {
+      await appCacheManager.initialize();
+      await appCacheManager.updateConfig({ zoomLevel: level });
+    } catch (e) {
+      console.error('[Zoom] Failed to persist zoom level:', e);
+    }
+  }
+
+  async function step(window: BrowserWindow, delta: number): Promise<number> {
+    const current = await get();
+    const next = normalizeWindowZoomLevel(current + delta);
+    apply(window, next);
+    void persist(next);
+    return next;
+  }
+
+  async function reset(window: BrowserWindow): Promise<number> {
+    const next = apply(window, 0);
+    void persist(next);
+    return next;
+  }
+
+  return { get, apply, step, reset };
+})();
+

@@ -20,9 +20,10 @@ import { Tracer } from '@shared/log/trace';
 // `pi/tools/registry.ts` 对 `./index` 的 dynamic import 形成 mixed-import,被 repo lint 拒。
 import { tools, ensureToolsRegistered } from '@main/pi';
 
-import type { Context } from './shared';
 import { requireProfileForSender } from './profileContext';
-export default function setUpToolsIPC(_ctx: Context) {
+
+
+export default function setUpToolsIPC() {
   const handle = renderToMain.bindMain(ipcMain);
 
   handle.execute(async (event, name, args) => {
