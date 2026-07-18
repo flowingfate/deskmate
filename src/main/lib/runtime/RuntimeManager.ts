@@ -64,7 +64,7 @@ export class RuntimeManager {
   }
 
   public static getInstance(): RuntimeManager {
-    return RuntimeManager.instance || (RuntimeManager.instance = new RuntimeManager());
+    return RuntimeManager.instance ??= new RuntimeManager();
   }
 
   // --- 配置 ---

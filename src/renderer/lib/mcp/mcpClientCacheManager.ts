@@ -129,10 +129,7 @@ export class MCPClientCacheManager {
   }
 
   static getInstance(): MCPClientCacheManager {
-    if (!MCPClientCacheManager.instance) {
-      MCPClientCacheManager.instance = new MCPClientCacheManager()
-    }
-    return MCPClientCacheManager.instance
+    return MCPClientCacheManager.instance ??= new MCPClientCacheManager();
   }
 
   /**

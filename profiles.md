@@ -159,10 +159,11 @@ private defaultProfileId = '';
 - 不提供 `selected()` / `selectedStore()` / `selectedStoreSync()` / `select()`；打开 Profile 必须创建新主窗口并在窗口创建时绑定 ID；
 - `shutdownAll()` 等待所有 Profile 完成 stop / flush；
 - 删除 Profile 前必须先停止其 runtime，并处理正在执行的 stream、subrun、scheduler run 与 MCP connection。
+- Profile 管理 UI 可以编辑 index `displayName`，但不得改变 window owner ID；删除只允许非 sender current、无 owner main window、且不是最后一个的 Profile。main 必须在执行时重新校验并将 target 标为 stopping/removing，避免 open 与 delete 竞态。
 
 ### 3.5 Profile owning main window
 
-每个 runtime `Profile` 持有至多一个 nullable `mainWindow: BrowserWindow | null`。`MainWindowManager.open(profileId)` 在创建窗口后立即调用 `profile.attachMainWindow(window)`；同 Profile 已有窗口时聚焦它，不重复创建。窗口关闭时若仍是该 Profile 的当前 window 则 detach。Profile 没有窗口时 scheduler、MCP 与已启动工作继续运行，但不能向 renderer 发 UI event；状态留在 runtime/persist，等待下次打开该 Profile 窗口再 hydrate。Doctor task 是显式例外：它可能等待用户问答，owner window 真正销毁时必须 abort，禁止带着空答案继续创建 Issue 或向其他 Profile 窗口 fallback。
+每个 runtime `Profile` 持有至多一个 nullable `mainWindow: BrowserWindow | null`。`MainWindowManager.open(profileId)` 在创建窗口后立即调用 `profile.attachMainWindow(window)`；同 Profile 已有窗口时聚焦它，不重复创建。窗口真正销毁时若仍是该 Profile 的当前 window 则 detach。macOS 上仅**最后一个**主窗口的 close 会被拦截并 hide 以保持应用驻留；同时存在其他主窗口时，close 必须真实销毁目标 Profile 窗口，使其可进入关闭后删除流程。Profile 没有窗口时 scheduler、MCP 与已启动工作继续运行，但不能向 renderer 发 UI event；状态留在 runtime/persist，等待下次打开该 Profile 窗口再 hydrate。Doctor task 是显式例外：它可能等待用户问答，owner window 真正销毁时必须 abort，禁止带着空答案继续创建 Issue 或向其他 Profile 窗口 fallback。
 
 Profile-scoped main → renderer event 必须先由 owning Profile 找到 window，再只发送到该 webContents。发送给 owner window 的 IPC payload **不得包含 `profileId`**：renderer 已有不可变 `electronAPI.profile.id`。只有天然跨 Profile 的产品操作才显式携带 target Profile ID。
 

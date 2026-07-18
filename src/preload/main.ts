@@ -25,6 +25,7 @@ import invokeAttachment from './attachment/invoke';
 import invokeInternalUrls from './internalUrls/invoke';
 import invokeResearch from './research/invoke';
 import invokeSubagentRun from './subagentRun/invoke';
+import invokeProfiles from './profiles/invoke';
 import { profile } from './windowProfile';
 
 // Define the API that will be exposed to the renderer process
@@ -116,6 +117,11 @@ export interface ElectronAPI {
     invoke: InvokeFn;
     on: OnOff;
     off: OnOff;
+  };
+
+  // Cross-profile window management
+  profiles: {
+    invoke: InvokeFn;
   };
 
   // Logger — 渲染进程统一日志通道（单向 send，main 端不返回）
@@ -275,6 +281,9 @@ export const electronAPI: ElectronAPI = {
     invoke: invokeWindow,
     on: ipcOn,
     off: ipcOff,
+  },
+  profiles: {
+    invoke: invokeProfiles,
   },
   log: {
     write: (level: LogLevel, fields: LogFields) =>

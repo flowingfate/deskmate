@@ -99,10 +99,7 @@ export class AgentSessionCacheManager {
   }
 
   static getInstance(): AgentSessionCacheManager {
-    if (!AgentSessionCacheManager.instance) {
-      AgentSessionCacheManager.instance = new AgentSessionCacheManager();
-    }
-    return AgentSessionCacheManager.instance;
+    return AgentSessionCacheManager.instance ??= new AgentSessionCacheManager();
   }
 
   /**

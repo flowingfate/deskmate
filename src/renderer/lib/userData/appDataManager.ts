@@ -35,10 +35,7 @@ export class AppDataManager {
   }
 
   static getInstance(): AppDataManager {
-    if (!AppDataManager.instance) {
-      AppDataManager.instance = new AppDataManager();
-    }
-    return AppDataManager.instance;
+    return AppDataManager.instance ??= new AppDataManager();
   }
 
   // ── Fallback fetch ────────────────────────────────────────────────────────────

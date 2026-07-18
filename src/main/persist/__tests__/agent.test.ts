@@ -158,6 +158,7 @@ describe('Agent.persist + load round-trip', () => {
     const { ProfileRegistry } = await freshModules()
     await ProfileRegistry.bootstrap();
     const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const initialIds = store.listAgents().map((record) => record.id);
     const a = await store.createAgent({
       name: 'A', version: '1',
     });
@@ -165,7 +166,7 @@ describe('Agent.persist + load round-trip', () => {
       name: 'B', version: '1',
     });
     const list = store.listAgents();
-    expect(list.map((r) => r.id)).toEqual([a.id, b.id]);
+    expect(list.map((r) => r.id)).toEqual([...initialIds, a.id, b.id]);
   });
 });
 
@@ -472,6 +473,7 @@ describe('Profile.reconcileAgents', () => {
     const { ProfileRegistry } = await freshModules()
     await ProfileRegistry.bootstrap();
     const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const initialIds = store.listAgents().map((record) => record.id);
     const a = await store.createAgent({ name: 'A', version: '1' });
     const ghost = await store.createAgent({ name: 'Ghost', version: '1' });
     await store.setPrimaryAgent(ghost.id);
@@ -485,7 +487,7 @@ describe('Profile.reconcileAgents', () => {
     const result = await store.reconcileAgents();
     expect(result.droppedFromIndex).toEqual([ghost.id]);
     expect(result.primaryCleared).toBe(true);
-    expect(store.listAgents().map((r) => r.id)).toEqual([a.id]);
+    expect(store.listAgents().map((r) => r.id)).toEqual([...initialIds, a.id]);
     expect(store.getPrimaryAgentId()).toBeUndefined();
   });
 });
@@ -517,6 +519,7 @@ describe('Profile.getSnapshot (Step 3 lazy AGENT.md)', () => {
     const { ProfileRegistry } = await freshModules()
     await ProfileRegistry.bootstrap();
     const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const initialCount = store.listAgents().length;
 
     // Seed 3 agents（每个都会写 AGENT.md，但写时记录的 readFile 在 setup 阶段，
     // 我们 spy 是在 setup 之后才装的）
@@ -535,7 +538,7 @@ describe('Profile.getSnapshot (Step 3 lazy AGENT.md)', () => {
     const readSpy = vi.spyOn(fsp, 'readFile');
 
     const snap = await p2.getSnapshot();
-    expect(snap.agents).toHaveLength(3);
+    expect(snap.agents).toHaveLength(initialCount + 3);
 
     const agentMdReads = readSpy.mock.calls.filter((args) => String(args[0]).endsWith('AGENT.md'));
     expect(agentMdReads).toEqual([]);

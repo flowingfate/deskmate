@@ -15,6 +15,7 @@ vi.mock('../lib/db/db', () => ({
 }));
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { LegacyAuthFile } from '../../../shared/persist/types';
+import { DEFAULT_AGENT_PERSONA } from '../../../shared/types/profileTypes';
 
 function makeAuth(): LegacyAuthFile {
   return {
@@ -219,6 +220,57 @@ describe('Profiles CRUD', () => {
     expect(reg.items).toHaveLength(2);
     expect(second.id).not.toBe(firstId);
     expect(reg.defaultProfileId).toBe(firstId);
+  });
+
+  it('initializes a newly created profile with the default primary agent', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+
+    const profile = await ProfileRegistry.create({ displayName: 'Second' });
+    const [record] = profile.store.listAgents();
+    if (!record) throw new Error('Expected the default agent to be created.');
+
+    expect(profile.store.listAgents()).toHaveLength(1);
+    expect(record.name).toBe(DEFAULT_AGENT_PERSONA.name);
+    expect(record.model).toBe(DEFAULT_AGENT_PERSONA.model);
+    expect(record.emoji).toBe(DEFAULT_AGENT_PERSONA.emoji);
+    expect(profile.store.getPrimaryAgentId()).toBe(record.id);
+    expect((await profile.store.getAgent(record.id))?.systemPrompt)
+      .toBe(DEFAULT_AGENT_PERSONA.system_prompt);
+  });
+
+  it('persists profile display name updates without changing identity', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+    const profile = await ProfileRegistry.create({ displayName: 'Before' });
+
+    const updated = await ProfileRegistry.updateMetadata(profile.id, { displayName: 'After' });
+    expect(updated).toMatchObject({ id: profile.id, displayName: 'After', kind: 'guest' });
+
+    const fresh = await freshModules();
+    await fresh.ProfileRegistry.bootstrap();
+    expect(fresh.ProfileRegistry.getEntry(profile.id)?.displayName).toBe('After');
+  });
+
+  it('only removes a closed noncurrent profile when another profile remains', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+    const currentProfileId = ProfileRegistry.defaultProfileId;
+    const target = await ProfileRegistry.create({ displayName: 'Target' });
+
+    expect(await ProfileRegistry.removeClosed(currentProfileId, currentProfileId))
+      .toEqual({ kind: 'blocked', reason: 'current' });
+    expect(await ProfileRegistry.removeClosed(target.id, currentProfileId))
+      .toEqual({ kind: 'deleted' });
+    expect(ProfileRegistry.getEntry(target.id)).toBeUndefined();
+  });
+
+  it('never removes the last remaining profile through managed deletion', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+
+    expect(await ProfileRegistry.removeClosed(ProfileRegistry.defaultProfileId, 'p_other'))
+      .toEqual({ kind: 'blocked', reason: 'last' });
   });
 
   it('serializes concurrent creation so every profile survives reload', async () => {

@@ -114,10 +114,7 @@ export class PlaywrightManager {
   private constructor() {}
 
   static getInstance(): PlaywrightManager {
-    if (!PlaywrightManager.instance) {
-      PlaywrightManager.instance = new PlaywrightManager();
-    }
-    return PlaywrightManager.instance;
+    return PlaywrightManager.instance ??= new PlaywrightManager();
   }
 
   // ══════════════════════════════════════════════════════════════

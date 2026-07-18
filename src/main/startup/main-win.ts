@@ -1,5 +1,5 @@
 import { app, BrowserWindow, Menu, shell } from 'electron';
-import { createWindow, zoomLevel } from './wins';
+import { createWindow, getWindowMeta, zoomLevel } from './wins';
 import * as path from 'path';
 import * as fs from 'fs';
 import { log } from '@main/log';
@@ -19,6 +19,12 @@ import { IS_DEV } from './context';
 const DEV_SERVER_PORT = process.env.DEV_SERVER_PORT || '39017';
 const DEV_SERVER_URL = process.env['ELECTRON_RENDERER_URL'] || `http://localhost:${DEV_SERVER_PORT}`;
 const openingMainWindows = new Map<string, Promise<BrowserWindow>>()
+
+function hasAnotherMainWindow(window: BrowserWindow): boolean {
+  return BrowserWindow.getAllWindows().some((candidate) =>
+    candidate !== window && getWindowMeta(candidate)?.role === 'main',
+  );
+}
 
 
 async function createMainWindowImpl(profileId: string): Promise<BrowserWindow> {
@@ -232,9 +238,11 @@ async function createMainWindowImpl(profileId: string): Promise<BrowserWindow> {
   // ProfileCacheManager.setMainWindow 钩子已删 —— persist 走全局 mainWindow() getter 自动拿窗口。
   // AppCacheManager 同理：移除 setMainWindow 后，sendConfigToFrontend 内部用 wins.mainWindow() / anyVisibleWindow()。
 
-  // macOS standard behavior: intercept close event, hide window instead of destroying
+  // 在 macOS 上保留最后一个主窗口的隐藏行为；关闭其它 Profile 窗口必须真正销毁，
+  // 这样 Profile 会 detach owner window，后续可被安全删除。
   if (process.platform === 'darwin') {
     window.on('close', (event) => {
+      if (hasAnotherMainWindow(window)) return;
       event.preventDefault();
       window.hide();
     });

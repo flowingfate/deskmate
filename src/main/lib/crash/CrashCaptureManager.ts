@@ -186,11 +186,7 @@ class CrashCaptureManager {
   private hasMarkedCleanExit = false;
 
   public static getInstance(): CrashCaptureManager {
-    if (!CrashCaptureManager.instance) {
-      CrashCaptureManager.instance = new CrashCaptureManager();
-    }
-
-    return CrashCaptureManager.instance;
+    return CrashCaptureManager.instance ??= new CrashCaptureManager();
   }
 
   public initialize(options: { isDev: boolean }): void {

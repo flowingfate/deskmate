@@ -33,10 +33,7 @@ export class BackgroundProcessManager {
   }
 
   public static getInstance(): BackgroundProcessManager {
-    if (!BackgroundProcessManager.instance) {
-      BackgroundProcessManager.instance = new BackgroundProcessManager();
-    }
-    return BackgroundProcessManager.instance;
+    return BackgroundProcessManager.instance ??= new BackgroundProcessManager();
   }
 
   /**

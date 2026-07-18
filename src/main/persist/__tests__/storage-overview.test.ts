@@ -58,6 +58,9 @@ describe('computeStorageOverview', () => {
     const profiles = fresh.ProfileRegistry;
     await fresh.ProfileRegistry.bootstrap();
     const store = fresh.ProfileRegistry.require(profiles.defaultProfileId).store
+    const defaultAgentId = store.getPrimaryAgentId();
+    if (!defaultAgentId) throw new Error('Expected a default primary agent.');
+    await store.archiveAgent(defaultAgentId);
 
     const overview = await fresh.computeStorageOverview(store, profiles);
 
@@ -78,6 +81,9 @@ describe('computeStorageOverview', () => {
     const profiles = fresh.ProfileRegistry;
     await fresh.ProfileRegistry.bootstrap();
     const store = fresh.ProfileRegistry.require(profiles.defaultProfileId).store
+    const defaultAgentId = store.getPrimaryAgentId();
+    if (!defaultAgentId) throw new Error('Expected a default primary agent.');
+    await store.archiveAgent(defaultAgentId);
 
     const agent = await store.createAgent({ name: 'Scout', version: '1', emoji: '🛰️' });
     const s = await agent.createSession({ title: 'hello' });
@@ -124,6 +130,9 @@ describe('computeStorageOverview', () => {
     const profiles = fresh.ProfileRegistry;
     await fresh.ProfileRegistry.bootstrap();
     const store = fresh.ProfileRegistry.require(profiles.defaultProfileId).store
+    const defaultAgentId = store.getPrimaryAgentId();
+    if (!defaultAgentId) throw new Error('Expected a default primary agent.');
+    await store.archiveAgent(defaultAgentId);
 
     const a1 = await store.createAgent({ name: 'Light', version: '1' });
     const a2 = await store.createAgent({ name: 'Heavy', version: '1' });

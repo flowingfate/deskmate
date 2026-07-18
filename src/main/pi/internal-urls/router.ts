@@ -27,10 +27,7 @@ export class InternalUrlRouter {
   private readonly handlers = new Map<string, ProtocolHandler>();
 
   public static get(): InternalUrlRouter {
-    if (!InternalUrlRouter.instance) {
-      InternalUrlRouter.instance = new InternalUrlRouter();
-    }
-    return InternalUrlRouter.instance;
+    return InternalUrlRouter.instance ??= new InternalUrlRouter();
   }
 
   /** 测试入口:重置全局单例,避免跨用例污染。 */

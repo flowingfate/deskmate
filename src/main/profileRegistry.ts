@@ -4,6 +4,7 @@ import type {
   ProfilesIndexFile,
   SignedInProfileEntry,
 } from '@shared/persist/types';
+import type { ProfileRemovalBlockReason, ProfileRemovalResult } from '@shared/ipc/profiles';
 import { newEntityId } from '@shared/persist/id';
 import { nowIso } from '@shared/persist/time';
 import { PERSIST_PATH } from '@shared/persist/path';
@@ -110,14 +111,10 @@ function create() {
 
     const pending = initializeIndex();
     indexBootstrapPromise = pending;
-    pending.then(
-      () => {
-        if (indexBootstrapPromise === pending) indexBootstrapPromise = undefined;
-      },
-      () => {
-        if (indexBootstrapPromise === pending) indexBootstrapPromise = undefined;
-      },
-    );
+    const release = () => {
+      if (indexBootstrapPromise === pending) indexBootstrapPromise = undefined;
+    };
+    void pending.then(release, release);
     return pending;
   }
 
@@ -141,6 +138,23 @@ function create() {
     });
   }
 
+  async function updateMetadata(id: string, input: { displayName: string }): Promise<ProfileIndexEntry> {
+    await bootstrapIndex();
+    return enqueueMutation(async () => {
+      const entry = items.find((item) => item.id === id);
+      if (!entry) throw new Error(`ProfileRegistry.updateMetadata: unknown profile id ${id}`);
+
+      const updated: ProfileIndexEntry = {
+        ...entry,
+        displayName: input.displayName,
+      };
+      const nextItems = items.map((item) => item.id === id ? updated : item);
+      await writeIndex(nextItems, defaultProfileId);
+      commitIndex(nextItems, defaultProfileId);
+      return cloneEntry(updated);
+    });
+  }
+
   async function removeEntry(id: string): Promise<void> {
     await bootstrapIndex();
     await enqueueMutation(async () => {
@@ -153,6 +167,14 @@ function create() {
       await writeIndex(nextItems, nextDefaultProfileId);
       commitIndex(nextItems, nextDefaultProfileId);
     });
+  }
+
+  function getRemovalBlockReason(id: string, currentProfileId: string): ProfileRemovalBlockReason | undefined {
+    if (!getEntry(id)) throw new Error(`ProfileRegistry.remove: unknown profile id ${id}`);
+    if (id === currentProfileId) return 'current';
+    if (items.length <= 1) return 'last';
+    if (profiles.get(id)?.getMainWindow()) return 'open';
+    return undefined;
   }
 
   async function load(id: string): Promise<Profile> {
@@ -173,7 +195,17 @@ function create() {
     removing.clear();
   }
 
+  function releaseRemoval(id: string, pending: Promise<void>): void {
+    const release = () => {
+      if (removing.get(id) === pending) removing.delete(id);
+    };
+    void pending.then(release, release);
+  }
+
   async function getOrLoad(id: string): Promise<Profile> {
+    if (removing.has(id)) {
+      return Promise.reject(new Error(`ProfileRegistry.getOrLoad: profile ${id} is being removed`));
+    }
     const existing = profiles.get(id);
     if (existing) return existing;
 
@@ -190,6 +222,7 @@ function create() {
   }
 
   function require(id: string): Profile {
+    if (removing.has(id)) throw new Error(`ProfileRegistry.require: profile ${id} is being removed`);
     const profile = profiles.get(id);
     if (!profile) throw new Error(`ProfileRegistry.require: profile ${id} is not loaded`);
     return profile;
@@ -239,20 +272,33 @@ function create() {
     await removeDirIfExists(PERSIST_PATH.profileDir(getAppRoot(), id));
   }
 
+  async function removeClosed(id: string, currentProfileId: string): Promise<ProfileRemovalResult> {
+    const existing = removing.get(id);
+    if (existing) {
+      await existing;
+      return { kind: 'deleted' };
+    }
+    const pending: Promise<ProfileRemovalResult> = Promise.resolve().then(
+      async (): Promise<ProfileRemovalResult> => {
+        const reason = getRemovalBlockReason(id, currentProfileId);
+        if (reason) return { kind: 'blocked', reason };
+        await removeProfile(id);
+        return { kind: 'deleted' };
+      },
+    );
+    const lock = pending.then(() => undefined);
+    removing.set(id, lock);
+    releaseRemoval(id, lock);
+    return pending;
+  }
+
   function remove(id: string): Promise<void> {
     const pending = removing.get(id);
     if (pending) return pending;
 
     const next = removeProfile(id);
     removing.set(id, next);
-    next.then(
-      () => {
-        if (removing.get(id) === next) removing.delete(id);
-      },
-      () => {
-        if (removing.get(id) === next) removing.delete(id);
-      },
-    );
+    releaseRemoval(id, next);
     return next;
   }
 
@@ -321,6 +367,9 @@ function create() {
     handleSystemResume,
     create: createProfile,
     remove,
+    updateMetadata,
+    getRemovalBlockReason,
+    removeClosed,
     attachAuth,
     detachAuth,
     shutdownAll,

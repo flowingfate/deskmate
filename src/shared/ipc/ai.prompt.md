@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-18 (sender-bound routing and Profile-owned notification events) -->
+<!-- Last verified: 2026-07-18 (Profile window manager IPC) -->
 # IPC 框架（`src/shared/ipc/`）
 
 > 基于 TypeScript 泛型 + Proxy 的框架，从单一共享定义文件出发，在 Electron 的三个层（main / preload / renderer）之间强制实现类型安全、编译期检查的 IPC。
@@ -137,6 +137,8 @@ const result = await screenshotApi.saveToFile(displayId, rect, imageData);
 所有由 profile-bound 主窗口 renderer 发起的 profile-scoped IPC 都遵守同一规则：shared contract 省略 `profileId`，main 通过 `requireProfileForSender(event)` 从 `event.sender → BrowserWindowMeta.profileId` 获取 owner。只有打开指定 Profile 新窗口等天然跨 Profile 操作才显式传 ID；ToolContext / scheduler 等 main 内路径继续持有自己的 Profile identity。
 
 `window:openProfile(profileId)` 是例外中的显式跨 Profile 产品操作：它只接受目标 Profile ID，main 按 Profile 合并进行中的打开请求，最终创建或聚焦唯一 owner 主窗口；其余窗口 IPC 一律由 sender 选址。
+
+`profiles:list()` / `profiles:createAndOpen({ displayName })` / `profiles:listManaged()` / `profiles:updateMetadata()` / `profiles:delete()` 是受控跨 Profile 产品操作。`listManaged` 返回由 main 计算的 deletion eligibility；删除 handler 必须从 sender owner 重新检查 current/open/last，随后将目标 Profile 标记为 removing，阻止并发 `getOrLoad` / `createMainWindow`，再 stop、flush、移除 index 与目录。`updateMetadata` 仅更新 index displayName，不改变 runtime identity。它们不得用于任何 profile-bound 业务数据读写。
 
 ## 注意事项
 - ⚠️ 由于 `if (!main_handle)` 守卫，`bindMain` 跨调用复用单个 proxy 实例。在 `main.ts` 中每个 `ipcMain` 调用一次；在开发环境热重载后调用可能静默复用过时的 proxy。开发时需重启主进程。

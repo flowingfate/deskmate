@@ -12,6 +12,7 @@ import handleFsIPC from './fs';
 import handleWorkspaceIPC from './workspace';
 import handleLlmIPC from './llm';
 import handleWindowIPC from './window';
+import registerProfilesIpc from './profiles';
 import handleChatSessionIPC from './chat-session';
 import { registerLogIPC } from './log';
 import { registerLogViewerIPC } from '../../log/viewer-window';
@@ -48,6 +49,7 @@ export function setUpAllIPCHandlers() {
   handleWorkspaceIPC();
   handleLlmIPC();
   handleWindowIPC();
+  registerProfilesIpc();
   handleChatSessionIPC();
   handleResearchIPC();
   handleDoctorIPC();

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-18 (ProfileRegistry-owned profiles index lifecycle) -->
+<!-- Last verified: 2026-07-18 (new Profile default agent initialization) -->
 
 # Persist 模块（新布局 store 层）
 
@@ -41,7 +41,7 @@ ProfileRegistry.require(profileId).store → ProfileStore
 ```
 
 ### Runtime registry 与持久化 store
-- `ProfileRegistry` 是 app-scoped 闭包对象：模块加载时由 `create()` 生成并导出为 const；闭包私有持有 `profiles.json` index、runtime Profile / loading Map，负责 index bootstrap、串行 entry CRUD / auth 更新、并发 load 去重、按 ID 查询、remove 前 dispose、完整删除 profile 数据目录与进程退出 shutdown。同一 Profile 的 remove 会合并为单一 in-flight operation；index mutation 均在原子写盘成功后提交内存，`items` / `list()` / `getEntry()` 返回副本；它不提供 ambient selected accessor。
+- `ProfileRegistry` 是 app-scoped 闭包对象：模块加载时由 `create()` 生成并导出为 const；闭包私有持有 `profiles.json` index、runtime Profile / loading Map，负责 index bootstrap、串行 entry CRUD / auth 更新、并发 load 去重、按 ID 查询、remove 前 dispose、完整删除 profile 数据目录与进程退出 shutdown。同一 Profile 的 remove 会合并为单一 in-flight operation；受控 UI 删除还要求目标不是 sender 当前 Profile、没有 owner window、且不是最后一个，并在删除期间阻止 `getOrLoad` / `require`。index mutation 均在原子写盘成功后提交内存，`items` / `list()` / `getEntry()` 返回副本；它不提供 ambient selected accessor。
 - `Profile` 持有一个 `ProfileStore`、runtime-only Pi Agent map、懒建的 SubAgentManager、MCPClientManager 与构造时绑定同一 store 的 SchedulerManager。Pi / MCP / scheduler 运行态都经 Profile 创建、查找和关闭；`dispose()` 先停止 scheduler、再停止 Pi session、清理 MCP clients，最后关闭 store。`ProfileStore` 不再持有跨 profile static cache。
 
 ### 派生数据 vs 源真值
@@ -50,7 +50,7 @@ ProfileRegistry.require(profileId).store → ProfileStore
 - **任何修改源真值的写路径必须同步重写索引**（写顺序见 [ai.prompt/persist.md §2 不变量 #4](../../../ai.prompt/persist.md)）。DB 损坏可由 `SessionIdx.rebuildFromDisk()` + `JobRunIdx.rebuildFromDisk()` 从所有 `data.json` 完全恢复
 
 ### Bootstrap 顺序（详见 [ai.prompt/persist.md §5](../../../ai.prompt/persist.md)）
-`ProfileRegistry.bootstrap()` 自己加载 `profiles.json` index，再并行 `getOrLoad()` 所有 entry 并启动 runtime Profile；每个 `Profile.start()` 都启动自己的 scheduler。ProfileStore 在 load 时完成持久化子域与 SQLite 自愈。
+`ProfileRegistry.bootstrap()` 自己加载 `profiles.json` index，再并行 `getOrLoad()` 所有 entry 并启动 runtime Profile；每个 `Profile.start()` 都启动自己的 scheduler。ProfileStore 在 load 时完成持久化子域与 SQLite 自愈；**首次创建 profile 目录时**还会落盘 `DEFAULT_AGENT_PERSONA`（Otto）并写为 `primaryAgentId`，保证新窗口有可用聊天入口。
 
 ### Session 物理位置
 `Session` 是抽象基类(messages.jsonl I/O + files sandbox + 节流 persist + 元数据 mutate)，路径树由子类各自实现：
@@ -97,6 +97,7 @@ ProfileRegistry.require(profileId).store → ProfileStore
 | 加 IPC 通道 | `src/shared/ipc/persist.ts` 加 channel + `ipc.ts` 加 handler + `preload/persist/invoke.ts` 加 allowlist | renderer 调用走 `persistApi.xxx()` 自动类型推导 |
 | 加 SQLite 单元测试 | `__tests__/sqlite-index.test.ts` 仿 PR-1 模板（tmp 真盘 + ProfileDb.resetForTesting） | better-sqlite3 是 native，无法在 mock fs 跑 |
 | 加 mock fs 集成测试 | 仿 `agent.test.ts` 顶部 `vi.mock('../lib/db/db', () => ({ ProfileDb: { open: () => fakeDb, ... } }))` stub | fakeDb 提供 `db.prepare/get/all/run` no-op；不直接断言 SQL 行 |
+| 修改 Profile 名称 / 删除 Profile | `profileRegistry.ts` + `shared/ipc/profiles.ts` + `startup/ipc/profiles.ts` + Profile manager UI | 删除仅走 `removeClosed(id, senderOwnerId)`；先由 main 重新检查 current/open/last，再停止 runtime 并删 index/目录 |
 
 ## Gotchas
 
@@ -106,6 +107,8 @@ ProfileRegistry.require(profileId).store → ProfileStore
 - ⚠️ Session 删除必须按形态走 owner：`Agent.deleteSession(id)` 只删 RegularSession；`ScheduleJob.deleteRun(id)` 只删已结束的单条 JobRun（running 会拒绝，避免与执行写盘竞态）；`Agent.deleteJob(id)` 才整 job 级联删除。它们分别同步源目录、SQLite 行并 emit 对应 remove 事件。**不要**直接 `session.deleteFromDisk()`。
 - ⚠️ Agent 软删的 store 原语是 `ProfileStore.archiveAgent(id)`：写顺序是 archive move dir → agents.json 剔除（含 `primaryAgentId` 命中清空）。生产运行时入口必须走 `Profile.archiveAgent(id)`，它先停止并移除同 ID 的 Pi Agent，避免 archive 后残留内存 session。若中途崩溃，下次启动 `reconcileAgents()` 会发现 items 指向不存在的目录并自愈。
 - ⚠️ `knowledge/` 是每个 agent 的基础目录：`ProfileStore.createAgent` 在将 record 发布到 `agents.json` 前创建它；`duplicateAgent` 复制源目录，旧 source 缺目录时创建空目录；`Agent.load` 会为已登记的旧 agent 懒创建目录。渲染器文件树会校验物理目录存在，不能把空知识库当作缺失目录。
+- ⚠️ 新 profile 的默认 Otto 只在 `ProfileStore.load()` 发现 profile 目录尚不存在时创建，并立即设为 primary。**不得**把“当前 agent list 为空”当成补种条件：已有 Profile 可能是用户主动归档完所有 Agent 后的合法状态，自动复活默认 Agent 会篡改用户意图。
+- ⚠️ Profile 删除的 UI 禁用仅是提示，不是授权。`ProfileRegistry.removeClosed` 必须在删除开始时重新检查 target 的 owner window、current owner 与剩余数量；目标进入 removing 后 `getOrLoad` / `require` 必须拒绝，避免关闭窗口与删除并发时重新创建 runtime。
 - ⚠️ `markdown.ts` 允许 `model: ''`（空字符串），便于刚 create 的 agent 立刻 round-trip。**不要**收紧成非空校验，否则会破坏 reconcile / restore 流程。
 - ⚠️ 测试 mock fs 时 helper 不能单放 `_*.ts` —— vitest 的 include 模式 `__tests__/**/*.ts` 全扫；要么内嵌进 test 文件，要么改后缀。`session-schedule.test.ts` 整文件改走 tmp 真盘（Step 9）—— `better-sqlite3` 是 native，无法被 `vi.mock('node:fs')` 拦截。
 - ⚠️ `Agent.createSession({ id?, title?, overrides?, contextState? })` 可接收外部 `id`。供 `pi.Agent.getOrCreateSession` 的 lazy create 路径使用：renderer 在 "New Chat" 按钮按下时本地 `newEntityId('s')` 生成 id 并 navigate，但**直到首次 streamMessage 走 pi 才真正落盘**，避免空壳 session。不传 id 走默认 ULID 生成，保持向后兼容。

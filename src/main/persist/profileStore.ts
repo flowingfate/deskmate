@@ -24,6 +24,7 @@ import * as fsp from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import { newEntityId } from '../../shared/persist/id';
 import { nowIso } from '@shared/persist/time';
+import { DEFAULT_AGENT_PERSONA } from '@shared/types/profileTypes';
 import { partialAssign } from '@shared/persist/data';
 import { PersistBase } from './lib/persistBase';
 
@@ -189,7 +190,8 @@ export class ProfileStore {
         this.agentRegistry.load(),
       ]);
     } else {
-      await this.settings.persist();
+      await this.agentRegistry.load();
+      await this.initializeNewProfile();
     }
     // DB 自愈/初次填充触发条件：
     //  - wasCreated：本次 open 新建 `index.db`（升级 / migrate / 用户拷贝 profile 目录），
@@ -210,6 +212,20 @@ export class ProfileStore {
         this.jobRunIdx.rebuildFromDisk(),
       ]);
     }
+  }
+
+  private async initializeNewProfile(): Promise<void> {
+    await this.settings.persist();
+    const agent = await this.createAgent({
+      name: DEFAULT_AGENT_PERSONA.name,
+      description: DEFAULT_AGENT_PERSONA.description,
+      version: DEFAULT_AGENT_PERSONA.version ?? '1.0.0',
+      model: DEFAULT_AGENT_PERSONA.model,
+      emoji: DEFAULT_AGENT_PERSONA.emoji,
+      avatar: DEFAULT_AGENT_PERSONA.avatar,
+      systemPrompt: DEFAULT_AGENT_PERSONA.system_prompt,
+    });
+    await this.setPrimaryAgent(agent.id);
   }
 
   public async patchSettings(partial: Partial<SettingsFile>) {

@@ -30,10 +30,7 @@ class FeatureFlagCacheManager {
    * Get the singleton instance
    */
   public static getInstance(): FeatureFlagCacheManager {
-    if (!FeatureFlagCacheManager.instance) {
-      FeatureFlagCacheManager.instance = new FeatureFlagCacheManager();
-    }
-    return FeatureFlagCacheManager.instance;
+    return FeatureFlagCacheManager.instance ??= new FeatureFlagCacheManager();
   }
 
   /**

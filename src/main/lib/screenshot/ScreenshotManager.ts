@@ -70,10 +70,7 @@ export class ScreenshotManager {
   }
 
   static getInstance(): ScreenshotManager {
-    if (!ScreenshotManager.instance) {
-      ScreenshotManager.instance = new ScreenshotManager();
-    }
-    return ScreenshotManager.instance;
+    return ScreenshotManager.instance ??= new ScreenshotManager();
   }
 
   private registerCustomProtocol(): void {
