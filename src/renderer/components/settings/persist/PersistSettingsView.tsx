@@ -5,7 +5,7 @@ import { HardDrive } from 'lucide-react'
 import SettingsLayout from '../SettingsLayout'
 import PersistSettingsContentView from './PersistSettingsContentView'
 import { persistApi, persistEvents } from '@/ipc/persist'
-import type { StorageOverview } from '@shared/ipc/persist'
+import type { RuntimeStorageOverview, StorageOverview } from '@shared/ipc/persist'
 import { useToast } from '../../ui/ToastProvider'
 import { log } from '@/log'
 
@@ -13,26 +13,51 @@ const logger = log.child({ mod: 'PersistSettingsView' })
 
 const PersistSettingsView: React.FC = () => {
   const [overview, setOverview] = useState<StorageOverview | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [runtimeOverview, setRuntimeOverview] = useState<RuntimeStorageOverview | null>(null)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [runtimeLoading, setRuntimeLoading] = useState(false)
   const { showError } = useToast()
 
-  const load = useCallback(async () => {
+  const loadProfile = useCallback(async () => {
     setLoading(true)
     try {
       const res = await persistApi.getStorageOverview()
       if (res.success && res.data) {
         setOverview(res.data)
-        setError(null)
+        setProfileError(null)
       } else {
-        setError(res.success ? 'Empty response' : res.error)
+        setProfileError(res.success ? 'Empty response' : res.error)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setProfileError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
   }, [])
+
+  const loadRuntime = useCallback(async () => {
+    setRuntimeLoading(true)
+    try {
+      const res = await persistApi.getRuntimeStorageOverview()
+      if (res.success && res.data) {
+        setRuntimeOverview(res.data)
+        setRuntimeError(null)
+      } else {
+        setRuntimeError(res.success ? 'Empty response' : res.error)
+      }
+    } catch (err) {
+      setRuntimeError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRuntimeLoading(false)
+    }
+  }, [])
+
+  const load = useCallback(
+    async () => Promise.all([loadProfile(), loadRuntime()]),
+    [loadProfile, loadRuntime],
+  )
 
   useEffect(() => {
     load()
@@ -41,15 +66,15 @@ const PersistSettingsView: React.FC = () => {
   // 存储量随会话 / agent 增删变化：删 session、agent 增删后自动重扫。
   useEffect(() => {
     const onRegistry = (_e: unknown, payload: { kind: string }) => {
-      if (payload.kind === 'agents') load()
+      if (payload.kind === 'agents') void loadProfile()
     }
     const unsubs = [
-      persistEvents['session:index:updated'](() => load()),
-      persistEvents['agent:removed'](() => load()),
+      persistEvents['session:index:updated'](() => void loadProfile()),
+      persistEvents['agent:removed'](() => void loadProfile()),
       persistEvents['agent:registry:updated'](onRegistry),
     ]
     return () => unsubs.forEach((u) => u())
-  }, [load])
+  }, [loadProfile])
 
   const handleReveal = useCallback(
     async (absPath: string) => {
@@ -63,14 +88,18 @@ const PersistSettingsView: React.FC = () => {
     [showError],
   )
 
+  const error = profileError ?? runtimeError
+
   return (
     <SettingsLayout icon={<HardDrive size={18} />} title="Local Data">
       <PersistSettingsContentView
         overview={overview}
+        runtimeOverview={runtimeOverview}
         error={error}
         loading={loading}
+        runtimeLoading={runtimeLoading}
         onReveal={handleReveal}
-        onRefresh={load}
+        onRefresh={() => void load()}
       />
     </SettingsLayout>
   )

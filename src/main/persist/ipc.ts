@@ -11,7 +11,7 @@ import { ProfileRegistry } from '@main/profileRegistry';
 import { emit } from './lib/emit';
 import { getAppRoot } from './lib/root';
 import { PERSIST_PATH } from '../../shared/persist/path';
-import { computeStorageOverview, resolveRevealTarget } from './storageOverview';
+import { computeRuntimeStorageOverview, computeStorageOverview, resolveRevealTarget } from './storageOverview';
 import type { AgentRecord, ArchivedAgentEntry } from '../../shared/persist/types';
 import type { ProfileStore } from '@main/persist';
 import { requireProfileForSender } from '@main/startup/ipc/profileContext';
@@ -331,13 +331,21 @@ export function registerPersistIpc(ipc: IpcMain): void {
     } catch (e) { return err(e); }
   });
 
+  handle.getRuntimeStorageOverview(async (event) => {
+    try {
+      requireProfileForSender(event);
+      const data = await computeRuntimeStorageOverview();
+      return { success: true, data };
+    } catch (e) { return err(e); }
+  });
+
   handle.revealStoragePath(async (event, absPath) => {
     try {
       const store = requireProfileForSender(event).store
       const root = getAppRoot();
       const profileRoot = PERSIST_PATH.profileDir(root, store.id);
       const resolved = await resolveRevealTarget(profileRoot, root, absPath);
-      if (!resolved) return { success: false, error: 'Path is outside the profile directory or does not exist' };
+      if (!resolved) return { success: false, error: 'Path is outside the app data directories or does not exist' };
       if (resolved.isFile) {
         shell.showItemInFolder(resolved.target);
       } else {

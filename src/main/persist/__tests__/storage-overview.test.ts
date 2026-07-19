@@ -38,6 +38,7 @@ async function freshModules() {
   return {
     ProfileRegistry: registry.ProfileRegistry,
     computeStorageOverview: storage.computeStorageOverview,
+    computeRuntimeStorageOverview: storage.computeRuntimeStorageOverview,
     resolveRevealTarget: storage.resolveRevealTarget,
   };
 }
@@ -156,8 +157,46 @@ describe('computeStorageOverview', () => {
   });
 });
 
+describe('computeRuntimeStorageOverview', () => {
+  it('单遍归类 env 文件，保持字节与文件数守恒', async () => {
+    const fresh = await freshModules();
+    const envRoot = path.join(tmpRoot, 'env');
+    fs.mkdirSync(path.join(envRoot, 'bun', 'install', 'global'), { recursive: true });
+    fs.mkdirSync(path.join(envRoot, 'python', 'cpython-3.13'), { recursive: true });
+    fs.mkdirSync(path.join(envRoot, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(envRoot, 'bun', 'install', 'global', 'package.json'), 'bun');
+    fs.writeFileSync(path.join(envRoot, 'python', 'cpython-3.13', 'python'), 'python');
+    fs.writeFileSync(path.join(envRoot, 'bin', 'bun'), 'shim');
+    fs.writeFileSync(path.join(envRoot, 'runtime.json'), 'runtime');
+
+    const overview = await fresh.computeRuntimeStorageOverview();
+    const categories = new Map(overview.categories.map((category) => [category.key, category]));
+
+    expect(overview.exists).toBe(true);
+    expect(overview.totalBytes).toBe(20);
+    expect(overview.fileCount).toBe(4);
+    expect(categories.get('bun')?.bytes).toBe(3);
+    expect(categories.get('python')?.bytes).toBe(6);
+    expect(categories.get('bin')?.bytes).toBe(4);
+    expect(categories.get('other')?.bytes).toBe(7);
+    expect(overview.categories.reduce((total, category) => total + category.bytes, 0)).toBe(overview.totalBytes);
+    expect(overview.categories.reduce((total, category) => total + category.fileCount, 0)).toBe(overview.fileCount);
+  });
+
+  it('env 目录不存在时返回空概览', async () => {
+    const fresh = await freshModules();
+
+    const overview = await fresh.computeRuntimeStorageOverview();
+
+    expect(overview.exists).toBe(false);
+    expect(overview.totalBytes).toBe(0);
+    expect(overview.fileCount).toBe(0);
+    expect(overview.categories).toEqual([]);
+  });
+});
+
 describe('resolveRevealTarget', () => {
-  it('放行 profile 目录内路径，拒绝越界 / 不存在路径', async () => {
+  it('放行 profile 与 runtime env 树，拒绝越界 / 不存在路径', async () => {
     const fresh = await freshModules();
     const profiles = fresh.ProfileRegistry;
     await fresh.ProfileRegistry.bootstrap();
@@ -165,6 +204,9 @@ describe('resolveRevealTarget', () => {
 
     const profileRoot = path.join(tmpRoot, 'profiles', store.id);
     const dataRoot = tmpRoot;
+    const runtimeFile = path.join(tmpRoot, 'env', 'bun', 'bun');
+    fs.mkdirSync(path.dirname(runtimeFile), { recursive: true });
+    fs.writeFileSync(runtimeFile, 'bun');
 
     // profile 根目录本身放行（是目录）。
     const ok = await fresh.resolveRevealTarget(profileRoot, dataRoot, profileRoot);
@@ -174,6 +216,11 @@ describe('resolveRevealTarget', () => {
     // data root 本身放行。
     const okRoot = await fresh.resolveRevealTarget(profileRoot, dataRoot, dataRoot);
     expect(okRoot).not.toBeNull();
+
+    // app-managed runtime env 树内文件放行。
+    const okRuntime = await fresh.resolveRevealTarget(profileRoot, dataRoot, runtimeFile);
+    expect(okRuntime).not.toBeNull();
+    expect(okRuntime!.isFile).toBe(true);
 
     // 越界路径拒绝。
     const outside = await fresh.resolveRevealTarget(profileRoot, dataRoot, '/etc');
