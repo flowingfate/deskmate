@@ -16,7 +16,6 @@ import type {
   WriteToolResult,
 } from '../../types';
 import FileTypeIcon from '../../../../ui/FileTypeIcon';
-import { useCurrentSession } from '@/states/currentSession.atom';
 import { toImageDisplaySrc, type MediaUrlContext } from '@/lib/mediaUrl';
 import { ImageViewerAtom } from '../../../../ui/OverlayImageViewer';
 import { useOpenFilePreview } from '../../../../filePreview/filePreviewScope';
@@ -72,10 +71,9 @@ const inputArgsText = (toolCall: ToolCall): string => {
 };
 
 
-const OutputSuccessBlock: React.FC<ToolOutputSuccessSlotProps> = ({ toolCall, result }) => {
+const OutputSuccessBlock: React.FC<ToolOutputSuccessSlotProps> = ({ agentId, sessionId, toolCall, result }) => {
   // hooks 必须在任何 early-return 前调用。
-  const { agentId, chatSessionId } = useCurrentSession();
-  const mediaCtx: MediaUrlContext = { agentId, sessionId: chatSessionId };
+  const mediaCtx: MediaUrlContext = { agentId, sessionId };
   const imageViewer = ImageViewerAtom.useChange();
   const openFilePreview = useOpenFilePreview();
   const parsed = parseWriteResult(result);

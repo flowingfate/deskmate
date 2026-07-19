@@ -2,11 +2,11 @@ import React, { useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button } from '@/shadcn/button';
-import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { useAgentUnreadSummaryMap } from '@/lib/chat/useAgentUnreadSummary';
 import { newEntityId } from '@shared/persist/id';
 import { useAgents } from '@/states/agents.atom';
 import { SidebarAgentItem } from './SidebarAgentItem';
+import { CurrentSession } from '@/states/currentSession.atom';
 
 const SIDEBAR_ICON_SIZE = 14;
 
@@ -20,7 +20,7 @@ export const SidebarTop: React.FC = () => {
 
   const currentAgentId = useMemo(() => {
     const match = location.pathname.match(/\/agent\/(?!creation(?:\/|$))([^/]+)/);
-    return match ? match[1] : agentSessionCacheManager.getCurrentAgentId();
+    return match ? match[1] : CurrentSession.get().agentId;
   }, [location.pathname]);
 
   const isAgentRoute = location.pathname.startsWith('/agent');

@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Badge } from '@/shadcn/badge';
 import { useMcpRuntimeServers } from '@/states/mcpRuntime.atom';
 import { useAgentDetail } from '@/states/agentDetail.atom';
 import { useSkills as useSkillsAtom } from '@/states/skills.atom';
 import { useLocalTools } from '@/states/tools.atom';
-import { agentSessionCacheManager } from '../../lib/chat/agentSessionCacheManager';
 import { editAgent, type AgentEditTab } from '@/lib/chat/editAgent';
 import { mcpClientCacheManager } from '../../lib/mcp/mcpClientCacheManager';
 
 interface StatusBadgeProps {
-  agentId: string | null;
+  agentId: string;
   label: string;
   count: number;
   description: string;
@@ -35,22 +34,9 @@ function StatusBadge({
   );
 }
 
-function useCurrentAgentId(): string | null {
-  const [currentAgentId, setCurrentAgentId] = useState<string | null>(
-    agentSessionCacheManager.getCurrentAgentId()
-  );
-
-  useEffect(() => agentSessionCacheManager.subscribeToCurrentChatSessionId(() => {
-    setCurrentAgentId(agentSessionCacheManager.getCurrentAgentId());
-  }), []);
-
-  return currentAgentId;
-}
-
-export function StatusBadges(): React.JSX.Element {
-  const currentAgentId = useCurrentAgentId();
+export function StatusBadges({ agentId }: { agentId: string }): React.JSX.Element {
   const servers = useMcpRuntimeServers();
-  const detail = useAgentDetail(currentAgentId);
+  const detail = useAgentDetail(agentId);
   const localTools = useLocalTools();
   const globalSkills = useSkillsAtom();
   const agentMcpServers = detail?.mcpServers ?? [];
@@ -61,12 +47,12 @@ export function StatusBadges(): React.JSX.Element {
   void servers;
 
   const skillsCount = agentSkillNames.filter((name) => globalSkills.some((skill) => skill.name === name)).length;
-  const mcpToolsCount = currentAgentId && detail
+  const mcpToolsCount = detail
     ? mcpClientCacheManager.getAgentSpecificTools(agentMcpServers).length
     : 0;
   let toolsCount = 0;
 
-  if (currentAgentId && detail) {
+  if (detail) {
     toolsCount = enabledToolNames.length === 0
       ? localTools.length
       : localTools.filter((tool) => enabledToolNames.includes(tool.name)).length;
@@ -75,21 +61,21 @@ export function StatusBadges(): React.JSX.Element {
   return (
     <div className="flex items-center gap-1 flex-nowrap">
       <StatusBadge
-        agentId={currentAgentId}
+        agentId={agentId}
         label="skills"
         count={skillsCount}
         description="skills"
         tab="skills"
       />
       <StatusBadge
-        agentId={currentAgentId}
+        agentId={agentId}
         label="mcp tools"
         count={mcpToolsCount}
         description="MCP tools"
         tab="mcp"
       />
       <StatusBadge
-        agentId={currentAgentId}
+        agentId={agentId}
         label="tools"
         count={toolsCount}
         description="local tools"

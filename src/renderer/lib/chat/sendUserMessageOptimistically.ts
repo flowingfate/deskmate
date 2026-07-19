@@ -4,6 +4,7 @@ import { agentIpc } from './agentIpc';
 import { traceContext } from './traceContext';
 import { Tracer } from '@shared/log/trace';
 import { log as logger } from '@/log';
+import { CurrentSession } from '@renderer/states/currentSession.atom';
 type ChatSessionSendCache = {
   getUserMessageSendState: (chatSessionId: string | null | undefined) => {
     canSend: boolean;
@@ -59,9 +60,8 @@ export async function sendUserMessageOptimistically<T>(options: {
 }
 
 export async function sendUserMessage(message: UserMessage) {
-  const chatSessionId = agentSessionCacheManager.getCurrentChatSessionId();
-  const agentId = agentSessionCacheManager.getCurrentAgentId();
-  if (!chatSessionId || !agentId) {
+  const { sessionId, agentId } = CurrentSession.get();
+  if (!sessionId || !agentId) {
     logger.error({ mod: 'chat.send', msg: 'enqueue failed', err: 'No active chat session' });
     return;
   }
@@ -70,21 +70,21 @@ export async function sendUserMessage(message: UserMessage) {
   // status=idle 时 derive 出 chat.recv tracer，用 fields(..., 'root') 报告
   // 端到端时延（从这里的 startAt 起算）。
   const tracer = Tracer.startWithSpan()
-    .bind({ mod: 'chat.send', chatSessionId, agentId, msgId: message.id });
-  traceContext.start(chatSessionId, tracer);
+    .bind({ mod: 'chat.send', chatSessionId: sessionId, agentId, msgId: message.id });
+  traceContext.start(sessionId, tracer);
 
   logger.info(tracer.fields({ msg: 'enqueue' }));
 
   try {
     await sendUserMessageOptimistically({
-      chatSessionId,
+      chatSessionId: sessionId,
       userMessage: message,
       cacheManager: agentSessionCacheManager,
-      send: () => agentIpc.streamMessage(agentId, chatSessionId, message, tracer.serialize()),
+      send: () => agentIpc.streamMessage(agentId, sessionId, message, tracer.serialize()),
     });
   } catch (error) {
     // 终态错误：fail 路径下 chat.recv 不会被触发，这里把 trace 上下文清掉避免泄漏。
-    traceContext.consume(chatSessionId);
+    traceContext.consume(sessionId);
     logger.warn(tracer.fields({ msg: 'enqueue failed', err: error }, 'self'));
   }
 }

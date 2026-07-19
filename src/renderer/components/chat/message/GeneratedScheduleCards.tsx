@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import type { SchedulerJob } from '@shared/ipc/scheduler';
 import { Button } from '@/shadcn/button';
 
-import { useCurrentAgentId } from '../../../lib/chat/agentSessionCacheManager';
 import { describeCronExpression } from '../../../lib/scheduler/cronDescriptions';
 import { runScheduleNow } from '../../../lib/scheduler/showScheduledRunStartedToast';
 import { useToast } from '../../ui/ToastProvider';
@@ -12,6 +11,7 @@ import { useToast } from '../../ui/ToastProvider';
 import { useSchedules, useSchedulesHydrated } from '@/states/schedules.atom';
 
 interface GeneratedScheduleCardsProps {
+  agentId: string;
   scheduleIds: string[];
 }
 
@@ -37,14 +37,13 @@ const formatRunSummary = (job: SchedulerJob | undefined): string => {
   return 'Schedule found in response';
 };
 
-export const GeneratedScheduleCards: React.FC<GeneratedScheduleCardsProps> = ({ scheduleIds }) => {
+export const GeneratedScheduleCards: React.FC<GeneratedScheduleCardsProps> = ({ agentId, scheduleIds }) => {
   const navigate = useNavigate();
   const { showToast, showSuccess, showError } = useToast();
-  const currentAgentId = useCurrentAgentId();
   const allJobs = useSchedules();
   const hydrated = useSchedulesHydrated();
   const [runningJobId, setRunningJobId] = useState<string | null>(null);
-  const effectiveAgentId = currentAgentId || undefined;
+  const effectiveAgentId = agentId;
 
   const normalizedScheduleIds = useMemo(
     () => Array.from(new Set(scheduleIds.map((scheduleId) => scheduleId.trim()).filter(Boolean))),

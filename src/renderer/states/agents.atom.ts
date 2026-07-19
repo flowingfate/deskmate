@@ -23,7 +23,7 @@ import { unit } from '@/atom/unit';
 import { persistEvents } from '@/ipc/persist';
 
 import { getInitialSnapshot } from '@/states/_snapshot';
-import { useCurrentSession } from '@/states/currentSession.atom';
+import { CurrentSession } from '@/states/currentSession.atom';
 import type { AgentRecord } from '@shared/persist/types';
 import { log } from '@/log';
 
@@ -170,15 +170,10 @@ export function listenAgents(cb: (agents: AgentRecord[]) => void): VoidFunction 
 
 /**
  * React Hook：订阅当前激活的 agent。
- * 数据来源：`currentSessionStore.agentId`（路由级 source of truth，与 agentId 1:1）。
+ * 数据来源：`CurrentSession.agentId`（路由级 source of truth，与 agentId 1:1）。
  * agent 内容变化或 agentId 切换都会重渲染。
  */
 export function useCurrentAgent(): AgentRecord | null {
-  const { agentId } = useCurrentSession();
+  const { agentId } = CurrentSession.use();
   return useAgentById(agentId);
-}
-
-/** Hook：当前激活 agentId（= agentId）。 */
-export function useCurrentAgentId(): string | null {
-  return useCurrentSession().agentId;
 }

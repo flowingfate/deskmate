@@ -11,7 +11,6 @@ import {
 } from '@/lib/utilities/contentUtils';
 import FileTypeIcon from '../../ui/FileTypeIcon';
 import { log } from '@/log';
-import { currentSessionStore } from '@/states/currentSession.atom';
 import { toImageDisplaySrc } from '@/lib/mediaUrl';
 import { atom } from '@/atom';
 import type { Change } from '@/atom/unit';
@@ -26,14 +25,13 @@ const zeroAttachments: Attachment[] = [];
 type ImageAttachment = Extract<Attachment, { kind: 'image' }>;
 type FileLikeAttachment = Extract<Attachment, { kind: 'text' | 'office' | 'opaque' }>;
 
-function imageAttachmentUrl(att: ImageAttachment): string {
+function imageAttachmentUrl(att: ImageAttachment, agentId: string, sessionId: string): string {
   if (att.source.kind === 'dataUrl') {
     return `data:${att.mimeType};base64,${att.source.data}`;
   }
   // 编辑态:从既有消息载入的 `image+fileRef`(`local://`)→ `media://` 直供。
   // 草稿态走 objectURL(getPreviewUrl 里 `previewUrls.get` 优先),不到这里。
-  const { agentId, chatSessionId } = currentSessionStore.get();
-  return toImageDisplaySrc(att.source.uri, { agentId, sessionId: chatSessionId });
+  return toImageDisplaySrc(att.source.uri, { agentId, sessionId });
 }
 
 function attachmentUri(att: Attachment): string | undefined {
@@ -237,10 +235,10 @@ function attachmentsActions(get: () => Attachment[], set: Change<Attachment[]>) 
     });
   }
 
-  function getPreviewUrl(att: Attachment): string | undefined {
+  function getPreviewUrl(att: Attachment, agentId: string, sessionId: string): string | undefined {
     if (att.kind !== 'image') return undefined;
     // 草稿 image 的 source.data 为空,预览用 objectURL;编辑态已物化图用 dataUrl/fileRef。
-    return previewUrls.get(att) ?? imageAttachmentUrl(att);
+    return previewUrls.get(att) ?? imageAttachmentUrl(att, agentId, sessionId);
   }
 
   return {
@@ -265,7 +263,7 @@ export const editAttachmentsAtom = atom(zeroAttachments, attachmentsActions);
 export type AttachmentsStateAtom = typeof composeAttachmentsAtom;
 
 interface AttachmentManagerForRender {
-  getPreviewUrl: (att: Attachment) => string | undefined;
+  getPreviewUrl: (att: Attachment, agentId: string, sessionId: string) => string | undefined;
   removeContent: (index: number) => void;
 }
 
@@ -273,11 +271,13 @@ function renderAttachment(
   manager: AttachmentManagerForRender,
   att: Attachment,
   originalIndex: number,
+  agentId: string,
+  sessionId: string,
   onOpenImage: (url: string, alt: string, id: string) => void,
   onOpenFile: (file: FilePreviewDescriptor) => void,
 ): React.ReactNode {
   if (att.kind === 'image') {
-    const previewUrl = manager.getPreviewUrl(att);
+    const previewUrl = manager.getPreviewUrl(att, agentId, sessionId);
     return (
       <div
         key={`image-${originalIndex}`}
@@ -375,7 +375,15 @@ function renderAttachment(
   return null;
 }
 
-function List({ attachmentsStateAtom }: { attachmentsStateAtom: AttachmentsStateAtom }) {
+function List({
+  agentId,
+  sessionId,
+  attachmentsStateAtom,
+}: {
+  agentId: string;
+  sessionId: string;
+  attachmentsStateAtom: AttachmentsStateAtom;
+}) {
   const [list, manager] = attachmentsStateAtom.use();
   const imageViewer = ImageViewerAtom.useChange();
   const openFilePreview = useOpenFilePreview();
@@ -386,6 +394,8 @@ function List({ attachmentsStateAtom }: { attachmentsStateAtom: AttachmentsState
       manager,
       att,
       index,
+      agentId,
+      sessionId,
       (url, alt, id) => imageViewer.open([{ id, url, alt }], 0),
       openFilePreview,
     );

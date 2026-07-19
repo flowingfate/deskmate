@@ -22,8 +22,8 @@ interface FileExplorerSectionProps {
    * 可显示（空 state）。也接受绝对路径形态以兼容内部传统调用，但新代码应只传 URI。
    */
   rootUri: string;
-  currentAgentId: string | null;
-  currentChatSessionId: string | null;
+  agentId: string;
+  sessionId: string;
   revealRequest?: { path: string; nonce: number } | null;
   onRevealHandled?: () => void;
   onMenuToggle?: (buttonElement: HTMLElement, menuActions: WorkspaceMenuActions) => void;
@@ -37,8 +37,8 @@ const FileExplorerSection: React.FC<FileExplorerSectionProps> = ({
   title,
   className,
   rootUri,
-  currentAgentId,
-  currentChatSessionId,
+  agentId,
+  sessionId,
   revealRequest,
   onRevealHandled,
   onMenuToggle,
@@ -67,8 +67,8 @@ const FileExplorerSection: React.FC<FileExplorerSectionProps> = ({
     handleOpenPasteDialog,
   } = useFileExplorerSection({
     rootUri,
-    currentAgentId,
-    currentChatSessionId,
+    agentId,
+    sessionId,
     readOnly,
     revealRequest,
     onRevealHandled,
@@ -117,7 +117,7 @@ const FileExplorerSection: React.FC<FileExplorerSectionProps> = ({
               size="icon"
               className="h-7 w-7 rounded-md text-content-tertiary hover:text-content-heading hover:bg-surface-subtle"
               onClick={handleMenuToggle}
-              disabled={!currentAgentId || !isValid}
+              disabled={!isValid}
               title="More options"
             >
               <MoreHorizontal size={14} />

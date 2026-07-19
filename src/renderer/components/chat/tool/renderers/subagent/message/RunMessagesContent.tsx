@@ -4,11 +4,13 @@ import { UserMessage } from './UserMessage';
 import type { RunMessagesState } from './useRunMessages';
 
 interface RunMessagesContentProps {
+  agentId: string;
+  sessionId: string;
   state: RunMessagesState;
   onRetry: () => void;
 }
 
-export function RunMessagesContent({ state, onRetry }: RunMessagesContentProps) {
+export function RunMessagesContent({ agentId, sessionId, state, onRetry }: RunMessagesContentProps) {
   switch (state.kind) {
     case 'idle':
       return null;
@@ -44,7 +46,7 @@ export function RunMessagesContent({ state, onRetry }: RunMessagesContentProps) 
           {state.messages.map((message) => (
             message.role === 'user'
               ? <UserMessage key={message.id} message={message} />
-              : <AssistantMessage key={message.id} message={message} />
+              : <AssistantMessage agentId={agentId} sessionId={sessionId} key={message.id} message={message} />
           ))}
         </div>
       );

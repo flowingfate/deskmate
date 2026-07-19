@@ -9,7 +9,7 @@ import { agentSessionCacheManager } from '@/lib';
 
 export interface EditingMessageState {
   agentId: string;
-  chatSessionId: string;
+  sessionId: string;
   id: string;
   index: number;
   message: RenderUserMessage;
@@ -19,7 +19,7 @@ export interface EditingMessageState {
 export const editMessageAtom = atom(null as (EditingMessageState | null), (get, set) => {
 
   async function start(
-    chatSessionId: string,
+    sessionId: string,
     index: number,
     message: RenderMessage,
     warningMessage: string | null,
@@ -27,19 +27,19 @@ export const editMessageAtom = atom(null as (EditingMessageState | null), (get, 
   ) {
     if (message.role !== 'user') return;
     const id = message.id;
-    const cache = agentSessionCacheManager.getChatSessionCache(chatSessionId);
+    const cache = agentSessionCacheManager.getChatSessionCache(sessionId);
     if (!cache?.agentId) {
       toast.showToast('Cannot edit: no agentId for session', 'error', undefined, { persistent: true });
       return;
     }
     const agentId = cache.agentId;
     try {
-      const validation = await agentIpc.canEditUserMessage(agentId, chatSessionId, id);
+      const validation = await agentIpc.canEditUserMessage(agentId, sessionId, id);
       if (!validation.canEdit) {
         toast.showToast(validation.error || 'This message can no longer be edited.', 'error', undefined, { persistent: true });
         return;
       }
-      set({ agentId, chatSessionId, id, index, message, warningMessage });
+      set({ agentId, sessionId, id, index, message, warningMessage });
     } catch (error) {
       toast.showToast(
         error instanceof Error ? error.message : 'Failed to validate whether this message can be edited.',
@@ -57,17 +57,17 @@ export const editMessageAtom = atom(null as (EditingMessageState | null), (get, 
   async function save(updatedMessage: UserMessage) {
     const state = get();
     if (!state) return;
-    const { agentId, chatSessionId, id, index } = state;
+    const { agentId, sessionId, id, index } = state;
 
-    const cache = agentSessionCacheManager.getChatSessionCache(chatSessionId);
+    const cache = agentSessionCacheManager.getChatSessionCache(sessionId);
     const messages: RenderMessage[] = cache?.messages ?? [];
     const truncatedMessages: RenderMessage[] = [
       ...messages.slice(0, index),
       updatedMessage,
     ];
 
-    agentSessionCacheManager.clearErrorMessage(chatSessionId);
-    agentSessionCacheManager.replaceMessages(chatSessionId, truncatedMessages, {
+    agentSessionCacheManager.clearErrorMessage(sessionId);
+    agentSessionCacheManager.replaceMessages(sessionId, truncatedMessages, {
       chatStatus: 'idle',
       streamingMessageId: null,
       pendingInteractiveRequests: [],
@@ -77,9 +77,9 @@ export const editMessageAtom = atom(null as (EditingMessageState | null), (get, 
     set(null);
 
     try {
-      await agentIpc.editUserMessage(agentId, chatSessionId, id, updatedMessage);
+      await agentIpc.editUserMessage(agentId, sessionId, id, updatedMessage);
     } catch (error) {
-      agentSessionCacheManager.replaceMessages(chatSessionId, messages, {
+      agentSessionCacheManager.replaceMessages(sessionId, messages, {
         errorMessage: error instanceof Error ? error.message : String(error),
       });
     }

@@ -10,8 +10,8 @@ export type RunMessagesState =
   | { kind: 'error'; message: string };
 
 interface UseRunMessagesOptions {
-  parentAgentId: string;
-  parentSessionId: string;
+  agentId: string;
+  sessionId: string;
   subrunId: SubrunId;
 }
 
@@ -30,8 +30,8 @@ function getFailureMessage(result: SubagentRunLookupFailure): string {
 }
 
 export function useRunMessages({
-  parentAgentId,
-  parentSessionId,
+  agentId,
+  sessionId,
   subrunId,
 }: UseRunMessagesOptions) {
   const [state, setState] = useState<RunMessagesState>({ kind: 'idle' });
@@ -50,8 +50,8 @@ export function useRunMessages({
     async function loadMessages(): Promise<void> {
       try {
         const result = await subagentRunApi.getRunMessages({
-          parentAgentId,
-          parentSessionId,
+          parentAgentId: agentId,
+          parentSessionId: sessionId,
           subrunId,
         });
         if (requestId.current !== currentRequestId) return;
@@ -77,7 +77,7 @@ export function useRunMessages({
         requestId.current += 1;
       }
     };
-  }, [parentAgentId, parentSessionId, requestVersion, subrunId]);
+  }, [agentId, requestVersion, sessionId, subrunId]);
 
   return { state, retry };
 }

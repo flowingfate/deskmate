@@ -1,8 +1,8 @@
 import React, { memo, useEffect } from 'react';
 import ChatContainer from './ChatContainer';
 import { ComposeInput } from './chat-input';
-import { useCurrentChatSessionId, useMessagesWithStream, ChatStatus, CurrentSessionInteractiveRequests } from '../../lib/chat/agentSessionCacheManager';
-import { sendUserMessage } from '@renderer/lib/chat/sendUserMessageOptimistically';
+import { useSessionCache } from './useSessionCache';
+import { sendUserMessage } from '@/lib/chat/sendUserMessageOptimistically';
 import { editMessageAtom } from './message/edit-message.atom';
 import ChatFilePreviewOverlay from '../filePreview/ChatFilePreviewOverlay';
 import { ChatFilePreviewScope } from '../filePreview/filePreviewScope';
@@ -15,21 +15,21 @@ import InteractiveSearchCard from './interactive/SearchCard';
 import { ZeroState } from './zero';
 import ChatRibbon from './ribbon';
 import { JobRunComposer, JobRunEmptyContent } from './JobRunChat';
+import { PendingInteractiveRequest } from '@renderer/lib/chat/session-manager';
 
 interface ChatViewContentProps {
-  // ChatContainer props
+  agentId: string;
+  jobId: string | null;
+  sessionId: string | null;
   isSessionSwitching?: boolean;
-  // Chat status support
-  agentId?: string;
-  chatStatus?: ChatStatus;
   kind: 'regular' | 'job';
 }
 
-function WithInteractive(props: {
+function WithInteractive({ children, list  }: {
   children: React.ReactNode;
+  list: PendingInteractiveRequest[];
 }) {
-  const list = CurrentSessionInteractiveRequests.use();
-  if (list.length === 0) return props.children;
+  if (list.length === 0) return children;
 
   const pending = list[0];
   const card = pending.type === 'device-auth'
@@ -46,33 +46,31 @@ function WithInteractive(props: {
 }
 
 /** 右侧工作区浮层 — 绝对定位覆盖在消息区(messages region)上,不挡 ComposeInput。 */
-function ChatWorkspaceSideOverlay() {
+function ChatWorkspaceSideOverlay({ agentId, sessionId }: { agentId: string; sessionId: string | null }) {
   const [{ visible }] = WorkspaceExplorerAtom.use();
   if (!visible) return null;
+  if (!sessionId) return null;
   return (
     <div className="absolute top-0 right-0 h-full w-95 flex flex-col bg-white border-l border-black/[0.07] shadow-[-8px_0_24px_-12px_rgba(15,23,42,0.18)]">
-      <WorkspaceExplorerSidepane />
+      <WorkspaceExplorerSidepane agentId={agentId} sessionId={sessionId} />
     </div>
   );
 }
 
-
-const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
-  isSessionSwitching = false,
-  agentId,
-  chatStatus,
-  kind,
-}) => {
-  const { messages, streamingMessageId } = useMessagesWithStream();
+const ChatViewContent: React.FC<ChatViewContentProps> = memo((props) => {
+  const { agentId, jobId, sessionId, isSessionSwitching = false, kind } = props;
+  const cache = useSessionCache(sessionId);
+  const messages = cache?.messages ?? [];
+  const streamingMessageId = cache?.streamingMessageId ?? undefined;
+  const chatStatus = cache?.chatStatus;
+  const interactiveList = cache?.pendingInteractiveRequests ?? [];
   const [editingMessageState, editMessageActions] = editMessageAtom.use();
-
-  const currentChatSessionId = useCurrentChatSessionId();
   const filePreviewActions = ChatFilePreviewAtom.useChange();
   // Close preview when switching chat sessions
   useEffect(() => {
     filePreviewActions.cancel();
     editMessageActions.cancel();
-  }, [currentChatSessionId]);
+  }, [sessionId]);
 
   function renderContent() {
     if (isSessionSwitching) {
@@ -84,16 +82,17 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
         </div>
       );
     }
-    if (messages.length === 0) {
+
+    if (!sessionId || messages.length === 0) {
       if (kind === 'job') return <JobRunEmptyContent />;
-      return <ZeroState />;
+      return <ZeroState agentId={agentId} />;
     }
     return (
       <ChatContainer
         messages={messages}
         streamingMessageId={streamingMessageId}
         agentId={agentId}
-        chatSessionId={currentChatSessionId || undefined}
+        sessionId={sessionId}
         chatStatus={chatStatus}
         editingMessage={editingMessageState}
         canEditUserMessage={!(kind === 'job' || isSessionSwitching || (chatStatus && chatStatus !== 'idle'))}
@@ -101,26 +100,33 @@ const ChatViewContent: React.FC<ChatViewContentProps> = memo(({
     );
   }
 
+  function composer() {
+    if (kind === 'job') {
+      return <JobRunComposer agentId={agentId} jobId={jobId} sessionId={sessionId} />;
+    }
+    if (!sessionId) return null;
+    return (
+      <ComposeInput
+        onSendMessage={sendUserMessage}
+        chatStatus={chatStatus}
+        enableContextMenu
+        sessionId={sessionId}
+        agentId={agentId}
+        isInputLocked={!!editingMessageState || isSessionSwitching}
+      />
+    )
+  }
+
   return (
     <ChatFilePreviewScope>
       <div className="relative flex flex-col flex-1 h-full overflow-hidden bg-(--bg-primary) min-w-0">
         <div className="relative flex flex-col flex-1 overflow-hidden">
           {renderContent()}
-          <ChatWorkspaceSideOverlay />
+          <ChatWorkspaceSideOverlay agentId={agentId} sessionId={sessionId} />
         </div>
-        <WithInteractive>
-          <ChatRibbon />
-          {kind === 'job'  ? (
-            <JobRunComposer />
-          ) : (
-            <ComposeInput
-              onSendMessage={sendUserMessage}
-              chatStatus={chatStatus}
-              enableContextMenu
-              chatSessionId={currentChatSessionId}
-              isInputLocked={!!editingMessageState || isSessionSwitching}
-            />
-          )}
+        <WithInteractive list={interactiveList}>
+          <ChatRibbon agentId={agentId} jobId={jobId} sessionId={sessionId} kind={kind} />
+          {composer()}
         </WithInteractive>
         <ChatFilePreviewOverlay />
       </div>

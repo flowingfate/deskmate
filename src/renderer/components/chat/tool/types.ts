@@ -28,6 +28,8 @@ export type {
  * 但比如 chip 想在 executing 时换文案就用得上)。
  */
 export interface ToolSlotProps {
+  agentId: string;
+  sessionId: string;
   toolCall: ToolCall;
   executionStatus: ToolCallExecutionStatus;
 }

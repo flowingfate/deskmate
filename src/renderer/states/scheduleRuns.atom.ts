@@ -95,20 +95,16 @@ persistEvents['schedule:removed']((_e, payload) => {
 // ─────────────── 公共 API ───────────────
 
 /** React Hook：订阅某 agent 的 schedule_run 列表（按 startedAt 倒序）。 */
-export function useAgentScheduleRuns(
-  agentId: string | null | undefined,
-): JobRunRow[] {
+export function useAgentScheduleRuns(agentId: string): JobRunRow[] {
   const s = use();
   useEffect(() => {
     if (agentId) void ensureLoaded(agentId);
   }, [agentId]);
-  if (!agentId) return EMPTY;
   return s.byAgentId[agentId]?.runs ?? EMPTY;
 }
 
 /** 是否已 hydrate（用于 "loading vs empty" 区分）。 */
-export function useAgentScheduleRunsHydrated(agentId: string | null | undefined): boolean {
+export function useAgentScheduleRunsHydrated(agentId: string): boolean {
   const s = use();
-  if (!agentId) return false;
   return !!s.byAgentId[agentId]?.hydrated;
 }

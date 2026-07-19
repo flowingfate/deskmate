@@ -12,6 +12,8 @@ import { CopyButton } from './CopyButton';
 import { AttachmentList } from './AttachmentList';
 
 interface UserMessageProps {
+  agentId: string;
+  sessionId: string;
   message: RenderUserMessage;
   canEditUserMessage?: boolean;
   onEditUserMessage?: () => void;
@@ -33,6 +35,8 @@ const EditIcon: React.FC = () => (
 );
 
 const UserMessageInner: React.FC<UserMessageProps> = ({
+  agentId,
+  sessionId,
   message,
   canEditUserMessage = false,
   onEditUserMessage,
@@ -45,7 +49,7 @@ const UserMessageInner: React.FC<UserMessageProps> = ({
       <div className="animate-[fadeIn_0.3s_ease-out] flex flex-col gap-2 px-2.5 py-0.5 rounded-md bg-[#f2f2f2] w-fit wrap-break-word [word-break:break-word] whitespace-normal">
         <div className="message-content relative wrap-break-word flex flex-col markdown-body">
           <MarkdownView text={text} />
-          <AttachmentList message={message} />
+          <AttachmentList agentId={agentId} sessionId={sessionId} message={message} />
         </div>
       </div>
       <div data-dbg="user-message-actions" className="flex flex-col gap-2 w-fit self-end items-end">

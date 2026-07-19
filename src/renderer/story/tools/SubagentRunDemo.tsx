@@ -5,7 +5,7 @@ import { ToolDetailView } from '@/components/chat/tool/ToolDetailView';
 import { registerBuiltinToolRenderers } from '@/components/chat/tool/registerBuiltins';
 import { subagentRenderer } from '@/components/chat/tool/renderers/subagent';
 import { SubagentRunMessagesDialog } from '@/components/chat/tool/renderers/subagent/message';
-import { currentSessionStore } from '@/states/currentSession.atom';
+import { CurrentSession } from '@/states/currentSession.atom';
 import {
   blockedSubagentCall,
   cancelledSubagentCall,
@@ -32,12 +32,12 @@ registerBuiltinToolRenderers();
 
 function useStorySession(): void {
   useEffect(() => {
-    currentSessionStore.set({
+    CurrentSession.set({
       agentId: storyAgentId,
       jobId: null,
-      chatSessionId: storySessionId,
+      sessionId: storySessionId,
     });
-    return () => currentSessionStore.set({ agentId: null, jobId: null, chatSessionId: null });
+    return () => CurrentSession.set({ agentId: null, jobId: null, sessionId: null });
   }, []);
 }
 
@@ -46,6 +46,8 @@ function SubagentDetailScenario({ title, toolCall }: { title: string; toolCall: 
     <section className="max-w-2xl">
       <h2 className="m-0 mb-2 text-sm font-semibold text-sc-foreground">{title}</h2>
       <ToolDetailView
+        agentId={storyAgentId}
+        sessionId={storySessionId}
         toolCall={toolCall}
         executionStatus="completed"
         renderer={subagentRenderer}
@@ -102,8 +104,8 @@ export function TranscriptDialog() {
       <h2 className="m-0 mb-2 text-sm font-semibold text-sc-foreground">Completed run transcript</h2>
       <p className="mb-3 text-sm text-sc-muted-foreground">Open the dialog to inspect the persisted user, assistant, and tool-call transcript.</p>
       <SubagentRunMessagesDialog
-        parentAgentId={storyAgentId}
-        parentSessionId={storySessionId}
+        agentId={storyAgentId}
+        sessionId={storySessionId}
         subrunId="001"
         agentName="Researcher"
         status="completed"
@@ -124,6 +126,8 @@ export function PendingRun() {
     <section className="max-w-2xl">
       <h2 className="m-0 mb-2 text-sm font-semibold text-sc-foreground">Pending run</h2>
       <ToolDetailView
+        agentId={storyAgentId}
+        sessionId={storySessionId}
         toolCall={pendingSubagentCall}
         executionStatus="executing"
         renderer={subagentRenderer}
@@ -138,6 +142,8 @@ export function ChipStates() {
       <section>
         <h2 className="m-0 mb-2 text-sm font-semibold text-sc-foreground">Completed, failed, and interrupted</h2>
         <ToolCallsSection
+          agentId={storyAgentId}
+          sessionId={storySessionId}
           toolCalls={[completedSubagentCall, executionFailedSubagentCall, interruptedSubagentCall]}
           sectionKey="story-subagent-chip-terminal"
           isLive={false}
@@ -146,6 +152,8 @@ export function ChipStates() {
       <section>
         <h2 className="m-0 mb-2 text-sm font-semibold text-sc-foreground">Executing</h2>
         <ToolCallsSection
+          agentId={storyAgentId}
+          sessionId={storySessionId}
           toolCalls={[pendingSubagentCall]}
           sectionKey="story-subagent-chip-executing"
           isLive
@@ -165,6 +173,8 @@ export function LiveSubagentRun() {
     <section className="max-w-2xl">
       <h2 className="m-0 mb-2 text-sm font-semibold text-sc-foreground">Running and cancelable</h2>
       <ToolDetailView
+        agentId={storyAgentId}
+        sessionId={storySessionId}
         toolCall={pendingSubagentCall}
         executionStatus="executing"
         renderer={subagentRenderer}

@@ -1,35 +1,14 @@
-import React, { memo, useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import AgentLayout from './layout/agent/AgentLayout';
 import { getAgents, getPrimaryAgentId } from '@/states/agents.atom';
-import { useMessagesWithStream, CurrentSessionStatus } from '@/lib/chat/agentSessionCacheManager';
 import { newEntityId } from '@shared/persist/id';
 import { log } from '@/log';
 
 const logger = log.child({ mod: 'AgentPage' });
 
 let hasAutoSelectedPrimaryAgentOnStartup = false;
-
-const DevMonitor = memo(() => {
-  const { messages, streamingMessageId } = useMessagesWithStream();
-  const { chatStatus, chatSessionId } = CurrentSessionStatus.use();
-
-  useEffect(() => {
-    logger.debug({ msg: "📊 Cache Manager Data:", messagesCount: messages.length, chatSessionId, chatStatus, streamingMessageId, streamingMessageIdType: typeof streamingMessageId, isStreaming:
-                      streamingMessageId !== null && streamingMessageId !== undefined, lastMessageId:
-                      messages.length > 0
-                        ? messages[messages.length - 1].id
-                        : 'none' });
-  }, [
-    messages.length,
-    chatSessionId,
-    chatStatus,
-    streamingMessageId,
-  ]);
-
-  return null;
-});
 
 export const AgentPage: React.FC = () => {
   const navigate = useNavigate();
@@ -67,10 +46,5 @@ export const AgentPage: React.FC = () => {
   }, [selectPrimaryAgentOnStartup]);
 
 
-  return (
-    <>
-      <AgentLayout />
-      {process.env.NODE_ENV === 'development' && <DevMonitor />}
-    </>
-  );
+  return <AgentLayout />;
 };

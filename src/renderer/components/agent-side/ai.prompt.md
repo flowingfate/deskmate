@@ -31,7 +31,7 @@
 所有状态从 URL 读出（见 `entries/main.routes.tsx`）：
 
 ```
-/agent                              → 没有 agentId；header 用 cache 兜底，body 不渲染
+/agent                              → 没有 agentId；header 显示未选择状态，body 不渲染；启动期由 AgentPage 选择 primary agent 并导航
 /agent/:agentId                      → loader 生成 regular session ID 后重定向
 /agent/:agentId/:sessionId           → sessions 子屏 + 选中 session
 /agent/:agentId/job                  → jobs 子屏（JobsView）
@@ -120,7 +120,7 @@ const JobRunChatView = () => (<><JobRunBanner /><ChatView kind="job-run" /></>);
 10. assistant 输出 GeneratedScheduleCard：点 Manage → 跳 jobs 子屏；点 Run now → 出现 toast，点 toast 的 "Open schedule run" 跳到对应 run。
 
 ## 注意事项
-- `SessionPanel` 在 URL 缺 agentId（`/agent` 根）时，header 仍渲染 `agentSessionCacheManager.getCurrentAgentId()` 的兜底名；body 显式不渲染。
+- `SessionPanel` 不为缺失的 URL 参数读取 cache / atom 兜底；`agentId / jobId / sessionId` 全部以 URL 为准。`/agent` 根路径只显示未选择状态，等待 `AgentPage` 的启动导航。
 - `AddScheduleOverlay` 同时挂在 JobsView 和 JobRunsView。两个 view 不会同时挂载（URL 互斥），所以两个 overlay 实例不会同时存在。
 - `JobsView` 的搜索框是独立 `useState`，**不**与 `SessionsView` 的 search 共享 —— 这是有意为之，jobs 搜索语义与 sessions 搜索完全不同。
 - `ChatSessionMenuAtom.toggle(agentId, sessionId, title, trigger)` 通过读取 `trigger.dataset.chatSessionMenuSource` 决定菜单语义。`RunRow` 必须同时设置 `data-chat-session-menu-source="schedule"` 和 `data-chat-session-menu-job-id`，使 Download / Delete 都携带 schedule run 的 owner 上下文。

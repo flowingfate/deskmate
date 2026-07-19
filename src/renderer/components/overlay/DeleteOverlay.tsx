@@ -22,6 +22,7 @@ import {
 const logger = log.child({ mod: 'DeleteOverlay' });
 import { useToast, type ToastContextType } from '../ui/ToastProvider';
 import { type NavigateFunction, useNavigate, useLocation } from 'react-router-dom';
+import { CurrentSession } from '@renderer/states/currentSession.atom';
 
 type DeleteTarget =
   | { type: 'agent'; id: string; name: string; isCurrentSession: boolean }
@@ -78,11 +79,11 @@ export const DeleteConfirmAtom = atom<State, DeleteActions>(zeroState, (get, set
     const { type, id, name, isCurrentSession } = state.target;
 
     const { showError, showSuccess } = toast;
+    const currentAgentId = CurrentSession.get().agentId;
     try {
       if (type === 'agent') {
         // Fix: check if Agent switch is needed
         // 1. Check if the deleted chat is the current chat in cache manager
-        const currentAgentId = agentSessionCacheManager.getCurrentAgentId();
         const isDeletingCurrentChat = id === currentAgentId;
 
         // 2. New: check if the current route belongs to the deleted agent (handles deletion from settings page)
@@ -127,7 +128,6 @@ export const DeleteConfirmAtom = atom<State, DeleteActions>(zeroState, (get, set
           );
         }
       } else if (type === 'chat-session') {
-        const currentAgentId = agentSessionCacheManager.getCurrentAgentId();
         if (!currentAgentId) {
           showError('No current agent chat available');
           return;

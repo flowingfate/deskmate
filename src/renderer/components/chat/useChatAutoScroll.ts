@@ -11,7 +11,7 @@ interface ScrollOptions {
 }
 
 interface UseChatAutoScrollArgs {
-  chatSessionId: string | null | undefined;
+  sessionId: string;
   messages: RenderMessage[];
   streamingMessageId: string | undefined;
 }
@@ -25,13 +25,13 @@ interface UseChatAutoScrollResult {
 }
 
 export function useChatAutoScroll({
-  chatSessionId,
+  sessionId,
   messages,
   streamingMessageId,
 }: UseChatAutoScrollArgs): UseChatAutoScrollResult {
   const containerRef = useRef<HTMLDivElement>(null);
   const messageFlowRef = useRef<HTMLDivElement>(null);
-  const previousChatSessionIdRef = useRef<string | null | undefined>(undefined);
+  const previousSessionIdRef = useRef<string | null | undefined>(undefined);
   const previousMessageCountRef = useRef<number | null>(null);
   const latestScrollFrameRef = useRef<number | null>(null);
   const trailingLatestScrollFrameRef = useRef<number | null>(null);
@@ -130,22 +130,22 @@ export function useChatAutoScroll({
   }, [jumpToLatestActions]);
 
   useEffect(() => {
-    const previousChatSessionId = previousChatSessionIdRef.current;
+    const previousSessionId = previousSessionIdRef.current;
     const previousMessageCount = previousMessageCountRef.current;
-    const currentChatSessionId = chatSessionId ?? null;
+    const nextSessionId = sessionId ?? null;
     const isFirstRender = previousMessageCount === null;
-    const didChatSessionChange = currentChatSessionId !== previousChatSessionId;
+    const didSessionChange = nextSessionId !== previousSessionId;
     const didMessageCountIncrease = previousMessageCount !== null && messages.length > previousMessageCount;
-    const shouldForceLatestScroll = isFirstRender || didChatSessionChange || latestMessageRole === 'user';
+    const shouldForceLatestScroll = isFirstRender || didSessionChange || latestMessageRole === 'user';
 
-    if (messages.length > 0 && (isFirstRender || didChatSessionChange || didMessageCountIncrease)) {
+    if (messages.length > 0 && (isFirstRender || didSessionChange || didMessageCountIncrease)) {
       scheduleLatestScroll({ force: shouldForceLatestScroll });
     }
 
-    previousChatSessionIdRef.current = currentChatSessionId;
+    previousSessionIdRef.current = nextSessionId;
     previousMessageCountRef.current = messages.length;
     return clearPendingLatestScroll;
-  }, [chatSessionId, clearPendingLatestScroll, latestMessageRole, messages.length, scheduleLatestScroll]);
+  }, [sessionId, clearPendingLatestScroll, latestMessageRole, messages.length, scheduleLatestScroll]);
 
   const streamingMessageTextLength = useMemo(() => {
     if (!streamingMessageId) return 0;

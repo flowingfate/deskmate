@@ -24,8 +24,8 @@ import { useOpenFilePreview } from '@/components/filePreview/filePreviewScope';
 
 export interface UseFileExplorerSectionParams {
   rootUri: string;
-  currentAgentId: string | null;
-  currentChatSessionId: string | null;
+  agentId: string;
+  sessionId: string;
   readOnly?: boolean;
   revealRequest?: { path: string; nonce: number } | null;
   onRevealHandled?: () => void;
@@ -57,8 +57,8 @@ const extractSourcePath = (file: File): string | undefined => {
  */
 export function useFileExplorerSection({
   rootUri,
-  currentAgentId,
-  currentChatSessionId,
+  agentId,
+  sessionId,
   readOnly,
   revealRequest,
   onRevealHandled,
@@ -113,8 +113,8 @@ export function useFileExplorerSection({
       const resolved = !rootUri
         ? ''
         : await tryResolveUriToPath(rootUri, {
-            agentId: currentAgentId,
-            chatSessionId: currentChatSessionId,
+            agentId,
+            chatSessionId: sessionId,
           });
       if (!cancelled && resolved !== workspacePath) {
         setWorkspacePath(resolved);
@@ -122,7 +122,7 @@ export function useFileExplorerSection({
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rootUri, currentAgentId, currentChatSessionId]);
+  }, [rootUri, agentId, sessionId]);
 
   // 加载文件树（仅加载根目录直接子节点）
   const loadFileTree = useCallback(async (path: string) => {

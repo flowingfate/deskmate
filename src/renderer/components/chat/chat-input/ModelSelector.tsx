@@ -4,15 +4,15 @@ import { updateAgent } from '../../../lib/chat/agentOps';
 import { ModelSelectPopover } from '../ModelSelectPopover';
 
 interface Props {
-  currentAgentId: string | null;
+  agentId: string;
   shouldLockComposeUi: boolean;
 }
 
 function Selector(props: Props) {
-  const { currentAgentId, shouldLockComposeUi } = props;
+  const { agentId, shouldLockComposeUi } = props;
 
   const [pendingModel, setPendingModel] = useState<string | null>(null);
-  const agent = useAgentById(currentAgentId);
+  const agent = useAgentById(agentId);
   const currentModel = agent?.model ?? null;
   const displayModel = pendingModel ?? currentModel;
 
@@ -26,11 +26,11 @@ function Selector(props: Props) {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleModelSelect = async (composite: string) => {
-    if (isLoading || !currentAgentId) return;
+    if (isLoading) return;
     setPendingModel(composite);
     setIsLoading(true);
     try {
-      const result = await updateAgent(currentAgentId, { model: composite });
+      const result = await updateAgent(agentId, { model: composite });
       if (!result.success) {
         setPendingModel(null);
       }

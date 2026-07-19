@@ -16,7 +16,6 @@
 import React, { useMemo } from 'react';
 import type { Attachment,
 UserMessage, } from '@shared/persist/types'
-import { useCurrentSession } from '@/states/currentSession.atom';
 import { toMediaUrl, type MediaUrlContext } from '@/lib/mediaUrl';
 import FileTypeIcon from '../../ui/FileTypeIcon';
 import { cn } from '@/lib/utilities/utils';
@@ -131,6 +130,8 @@ const FileAttachmentCard: React.FC<FileCardProps> = ({ attachment, isSingle, onO
 };
 
 interface AttachmentListProps {
+  agentId: string;
+  sessionId: string;
   message: UserMessage;
 }
 
@@ -155,14 +156,13 @@ function transFiles(ctx: MediaUrlContext, attachments: Attachment[]) {
   return { images, files, imageUrls };
 }
 
-function useFiles(attachments: Attachment[]) {
-  const { agentId, chatSessionId: sessionId } = useCurrentSession();
+function useFiles(agentId: string, sessionId: string, attachments: Attachment[]) {
   const ctx: MediaUrlContext = { agentId, sessionId };
   return useMemo(() => transFiles(ctx, attachments), [agentId, sessionId, attachments]);
 }
 
-export const AttachmentList: React.FC<AttachmentListProps> = ({ message }) => {
-  const { images, files, imageUrls } = useFiles(message.attachments);
+export const AttachmentList: React.FC<AttachmentListProps> = ({ agentId, sessionId, message }) => {
+  const { images, files, imageUrls } = useFiles(agentId, sessionId, message.attachments);
   const imageViewer = ImageViewerAtom.useChange();
   const openFilePreview = useOpenFilePreview();
   const total = images.length + files.length;

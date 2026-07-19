@@ -1,7 +1,6 @@
 // src/renderer/lib/chat/agentSessionCacheManager.ts
-// Singleton chat-session state manager for the frontend
+// Singleton chat-session cache manager for the frontend
 
-import { useState, useEffect } from 'react';
 import type { UserMessage } from '@shared/persist/types'
 import { agentChatEvents } from '@/ipc/agentChat';
 import { persistEvents } from '@/ipc/persist';
@@ -10,13 +9,13 @@ import { external } from '@/atom/external';
 
 
 import type { InteractiveMap } from '@shared/types/interactiveRequestTypes';
-import { EMPTY_CUMULATIVE_TOKEN_USAGE, SessionManager, liftToRender } from './session-manager';
+import { SessionManager, liftToRender } from './session-manager';
 import type { ChatSessionCache, ChatStatus, PendingInteractiveRequest } from './session-manager';
 import type { RenderMessage } from './renderMessage';
 import { RenderItemsManager, type ChatRenderItem } from './render-items-manager';
 import { onRequest } from '@shared/ipc/human-loop';
 import Resolveable from '@shared/resolveable-promise';
-import { currentSessionStore, useCurrentSession } from '@/states/currentSession.atom';
+import { CurrentSession } from '@/states/currentSession.atom';
 import { agentIpc } from './agentIpc';
 import { researchEvents } from '@/ipc/research';
 const logger = log.child({ mod: 'AgentSessionCacheManager' });
@@ -24,7 +23,6 @@ const logger = log.child({ mod: 'AgentSessionCacheManager' });
 export type {
   ChatSessionCache,
   ChatStatus,
-  PendingInteractiveRequest,
 }
 
 /**
@@ -46,22 +44,22 @@ interface Sessions {
  * Direct callback type - used for real-time streaming updates.
  * Invoked synchronously in the same call stack with no async delay.
  */
-export type DirectMessageUpdateCallback = (message: RenderMessage, chatSessionId: string) => void;
-export type ChatSessionCacheLifecycleCallback = (chatSessionId: string) => void;
-export type AfterSessionUpdated = (next: ChatSessionCache) => void;
+type DirectMessageUpdateCallback = (message: RenderMessage, chatSessionId: string) => void;
+type ChatSessionCacheLifecycleCallback = (chatSessionId: string) => void;
 
 /**
  * AgentSessionCacheManager
  *
  * Responsibilities:
- * 1. Manage currentAgentId and currentChatSessionId
- * 2. Manage cache data for all ChatSessions (renderChatHistory, chatStatus, contextTokenUsage)
- * 3. Receive IPC event notifications from the backend AgentChatManager
- * 4. Provide a unified data-access interface and change-subscription mechanism
+ * 1. Manage cache data for all ChatSessions (renderChatHistory, chatStatus, contextTokenUsage)
+ * 2. Receive IPC event notifications from the backend AgentChatManager
+ * 3. Provide cache data access and lifecycle subscriptions
+ * 4. Combine cache updates with CurrentSession when exposing current-session selectors
  *
- * This is the sole place on the frontend that manages these states.
+ * Active agent/job/session identity is owned by CurrentSession and written from the route.
+ * This class owns session cache state only; it does not select the active route identity.
  */
-export class AgentSessionCacheManager {
+class AgentSessionCacheManager {
   private static instance: AgentSessionCacheManager;
 
   private sessions = new SessionManager();
@@ -110,7 +108,7 @@ export class AgentSessionCacheManager {
 
     // Listen for streaming chunks (handles content, tool_call, tool_result, complete, and status_changed)
     // 注：渲染端不再监听主进程推送的 current/cache 生命周期事件——
-    // "哪个 session 活跃" 由路由直接写 currentSessionStore；
+    // "哪个 session 活跃" 由路由直接写 CurrentSession；
     // "cache 数据" 由 ensureCache 主动 pull。
     const cleanupStreamingChunk = agentChatEvents.streamingChunk((_event, chunk) => {
       if (!chunk.chatSessionId) return;
@@ -147,20 +145,6 @@ export class AgentSessionCacheManager {
   // ========== Public API Methods ==========
 
   /**
-   * Get the current AgentId
-   */
-  getCurrentAgentId = (): string | null => {
-    return currentSessionStore.get().agentId;
-  };
-
-  /**
-   * Get the current ChatSessionId
-   */
-  getCurrentChatSessionId = (): string | null => {
-    return currentSessionStore.get().chatSessionId;
-  };
-
-  /**
    * Get the cache for a specific ChatSession
    */
   getChatSessionCache(chatSessionId: string): ChatSessionCache | null {
@@ -168,7 +152,7 @@ export class AgentSessionCacheManager {
   }
 
   getCurrentChatSessionCache(): ChatSessionCache | null {
-    const id = currentSessionStore.get().chatSessionId;
+    const id = CurrentSession.get().sessionId;
     if (!id) return null;
     return this.sessions.getChatSessionCache(id);
   }
@@ -334,20 +318,19 @@ export class AgentSessionCacheManager {
   }
 
   /**
-   * Subscribe to current chat session changes.
-   * Thin wrapper over currentSessionStore — kept for backwards compatibility with
-   * existing consumers (StatusBadges / ContextBadge / SessionPanel / ComposeInput / ...).
-   * Prefer reading from `useCurrentSession` / `useCurrentChatSessionId` directly in new code.
+   * Non-React adapter for subscribing to CurrentSession.sessionId.
+   * Invokes the callback immediately unless skipFirst is true. New callback consumers should
+   * use CurrentSession.listen directly; React components should use CurrentSession.use().
    */
   subscribeToCurrentChatSessionId = (
     callback: (chatSessionId: string | null) => void,
     skipFirst = false,
   ): VoidFunction => {
-    const unsub = currentSessionStore.subscribe(() => {
-      callback(currentSessionStore.get().chatSessionId);
+    const unsub = CurrentSession.listen(() => {
+      callback(CurrentSession.get().sessionId);
     });
     if (!skipFirst) {
-      callback(currentSessionStore.get().chatSessionId);
+      callback(CurrentSession.get().sessionId);
     }
     return unsub;
   };
@@ -394,58 +377,23 @@ export class AgentSessionCacheManager {
     this.sessions.cleanup();
     this.renderItems.clearCaches();
     // Reset the current session (atom) so React components re-render to a clean state.
-    currentSessionStore.set({ agentId: null, jobId: null, chatSessionId: null });
+    CurrentSession.set({ agentId: null, jobId: null, sessionId: null });
 
     logger.debug({ msg: "✅ Cleanup completed, listeners preserved" });
   }
 }
 
-// extractFilePathsFromText 已迁到独立叶子模块,见 ./extractFilePaths.ts。
-// 此处保留 re-export 以维持外部导入兼容(`ChatContainer` 等)。
-export { extractFilePathsFromText } from './extractFilePaths';
 
 export const agentSessionCacheManager = AgentSessionCacheManager.getInstance();
-const manager = agentSessionCacheManager;
 
-export function useCurrentChatSessionId(): string | null {
-  return useCurrentSession().chatSessionId;
-}
-
-export function useHasChatSessionCache(chatSessionId?: string | null): boolean {
-  const [hasCache, setHasCache] = useState<boolean>(() => manager.hasChatSessionCache(chatSessionId));
-
-  useEffect(() => {
-    setHasCache(manager.hasChatSessionCache(chatSessionId));
-    if (!chatSessionId) return;
-
-    return manager.subscribeToChatSessionCacheLifecycle((changedChatSessionId) => {
-      if (changedChatSessionId !== chatSessionId) return;
-      setHasCache(manager.hasChatSessionCache(chatSessionId));
-    });
-  }, [chatSessionId, manager]);
-
-  return hasCache;
-}
-
-/**
- * Reactive hook: get the current agentId (agent ID).
- * Automatically re-renders the component when currentAgentId changes.
- *
- * Note: currentAgentId and currentChatSessionId always change together
- * (both updated in handleCurrentChatSessionIdChanged),
- * so we can reuse subscribeToCurrentChatSessionId to watch agentId changes.
- */
-export function useCurrentAgentId(): string | null {
-  return useCurrentSession().agentId;
-}
 
 // 订阅 current session 变化 + session cache 内容变化 的合成订阅。
 // 用于那些"current session 的字段（status / error / messages 等）变了要重渲染"的场景。
 const SubCurrentSession = external((update) => {
   const m = agentSessionCacheManager;
-  const unsubSession = currentSessionStore.subscribe(update);
+  const unsubSession = CurrentSession.listen(update);
   const unsubLifecycle = m.subscribeToChatSessionCacheLifecycle((id) => {
-    if (id === currentSessionStore.get().chatSessionId) update();
+    if (id === CurrentSession.get().sessionId) update();
   });
   return () => {
     unsubSession();
@@ -454,7 +402,7 @@ const SubCurrentSession = external((update) => {
 });
 
 export const CurrentSessionStatus = SubCurrentSession(() => {
-  const id = agentSessionCacheManager.getCurrentChatSessionId();
+  const { sessionId: id, agentId } = CurrentSession.get();
   if (id) {
     const cache = agentSessionCacheManager.getChatSessionCache(id);
     if (cache) {
@@ -462,69 +410,12 @@ export const CurrentSessionStatus = SubCurrentSession(() => {
       return { agentId, chatSessionId, chatStatus };
     }
   }
-  return {
-    agentId: agentSessionCacheManager.getCurrentAgentId() || undefined,
-    chatSessionId: id || undefined,
-    chatStatus: 'idle' as const,
-  };
+  return { agentId, chatSessionId: id || undefined, chatStatus: 'idle' as const };
 }, (prev, next) => {
   // session id 相同时，chat id 一定相同
   return prev.chatSessionId === next.chatSessionId && prev.chatStatus === next.chatStatus;
 });
 
-export function useStreamingMessageId(): string | null {
-  const currentSessionId = useCurrentChatSessionId();
-  if (!currentSessionId) {
-    return null;
-  }
-  const cache = manager.getChatSessionCache(currentSessionId);
-  return cache?.streamingMessageId || null;
-}
-
-export const CurrentSessionError = SubCurrentSession(() => {
-  const cache = agentSessionCacheManager.getCurrentChatSessionCache();
-  return cache?.errorMessage || null;
-});
-
-const EMPTY_REQUESTS: PendingInteractiveRequest[] = [];
-export const CurrentSessionInteractiveRequests = SubCurrentSession(() => {
-  const cache = agentSessionCacheManager.getCurrentChatSessionCache();
-  return cache?.pendingInteractiveRequests ?? EMPTY_REQUESTS;
-});
-
-const EMPTY_TOKEN_USAGE = { tokenCount: 0, totalMessages: 0, contextMessages: 0, compressionRatio: 1.0 };
-export const CurrentSessionTokenUsage = SubCurrentSession(() => {
-  const cache = agentSessionCacheManager.getCurrentChatSessionCache();
-  return cache?.contextTokenUsage ?? EMPTY_TOKEN_USAGE;
-}, (prev, next) => prev.tokenCount === next.tokenCount);
-
-export const CurrentSessionCumulativeTokenUsage = SubCurrentSession(() => {
-  const cache = agentSessionCacheManager.getCurrentChatSessionCache();
-  return cache?.cumulativeTokenUsage ?? EMPTY_CUMULATIVE_TOKEN_USAGE;
-});
-
-export const { useMessages, useMessagesWithStream } = (() => {
-  const EMPTY_MESSAGES: RenderMessage[] = [];
-  const EMPTY_WITH_STREAM = { messages: EMPTY_MESSAGES, streamingMessageId: undefined as string | undefined };
-
-  const { use: useMessages } = SubCurrentSession(() => {
-    const cache = agentSessionCacheManager.getCurrentChatSessionCache();
-    return cache?.messages ?? EMPTY_MESSAGES;
-  });
-
-  const { use: useMessagesWithStream } = SubCurrentSession(() => {
-    const session = agentSessionCacheManager.getCurrentChatSessionCache();
-    if (session) {
-      const { messages, streamingMessageId: id } = session;
-      return { messages, streamingMessageId: id || undefined };
-    }
-    return EMPTY_WITH_STREAM;
-  }, (prev, next) => {
-    return prev.streamingMessageId === next.streamingMessageId && prev.messages === next.messages;
-  });
-
-  return { useMessages, useMessagesWithStream };
-})();
 
 const EMPTY_RENDER_ITEMS: ChatRenderItem[] = [];
 

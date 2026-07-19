@@ -23,7 +23,7 @@ export function SubagentStatusIcon({ status }: { status: string }) {
   }
 }
 
-export function SubagentFormalResultDetails({ result }: { result: FormalSubagentResult | null }) {
+export function SubagentFormalResultDetails({ agentId, sessionId, result }: { agentId: string; sessionId: string; result: FormalSubagentResult | null }) {
   if (!result) return null;
 
   let title: string | null = null;
@@ -66,7 +66,7 @@ export function SubagentFormalResultDetails({ result }: { result: FormalSubagent
         </ul>
       )}
       {result.deliverables.length > 0 && (
-        <GeneratedFileCards items={result.deliverables.map((fileUri) => ({ fileUri }))} />
+        <GeneratedFileCards agentId={agentId} sessionId={sessionId} items={result.deliverables.map((fileUri) => ({ fileUri }))} />
       )}
     </div>
   );

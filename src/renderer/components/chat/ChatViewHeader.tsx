@@ -2,13 +2,17 @@ import React from 'react';
 
 import StatusBadges from '../ui/StatusBadges';
 import ContextBadge from '../ui/ContextBadge';
-import { useCurrentAgent } from '@/states/agents.atom';
+import { useAgentById } from '@/states/agents.atom';
 import { AgentAvatar } from '../common/AgentAvatar';
 
 
-const ChatViewHeader: React.FC = () => {
-  // Get current agent configuration data - depends on currentAgentId to update on switch
-  const agent = useCurrentAgent();
+interface ChatViewHeaderProps {
+  agentId: string;
+  sessionId: string | null;
+}
+
+const ChatViewHeader: React.FC<ChatViewHeaderProps> = ({ agentId, sessionId }) => {
+  const agent = useAgentById(agentId);
 
   return (
     <>
@@ -25,10 +29,10 @@ const ChatViewHeader: React.FC = () => {
           </span>
         )}
         <span>{agent ? agent.name : 'Chat'}</span>
-        <StatusBadges />
+        <StatusBadges agentId={agentId} />
       </div>
       <div className="flex shrink-0 items-center">
-        <ContextBadge />
+        <ContextBadge agentId={agentId} sessionId={sessionId} />
       </div>
     </>
   );

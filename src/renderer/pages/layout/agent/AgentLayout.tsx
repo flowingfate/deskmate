@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, memo } from 'react';
-import { useCurrentAgentId } from '@/lib/chat/agentSessionCacheManager';
+import { CurrentSession } from '@/states/currentSession.atom';
 import { useToast } from '@/components/ui/ToastProvider';
 import { PasteToWorkspaceProvider } from '@/components/chat/workspace/PasteToWorkspaceProvider';
 import { log } from '@/log';
@@ -20,7 +20,7 @@ const AgentLayout: React.FC = () => {
   const { showToast, showSuccess, showError } = useToast();
 
   // Reactively get the current agentId; auto-updates when switching Agents
-  const reactiveAgentId = useCurrentAgentId();
+  const reactiveAgentId = CurrentSession.use().agentId;
 
   // KB 路径不在 renderer 层穿透 props —— `addFileToKnowledgeBase`
   // 内部用 `knowledge://` 自解析当前 agent 的 KB 根。本组件只负责把 fileTree

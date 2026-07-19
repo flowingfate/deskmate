@@ -10,7 +10,7 @@
  * - 非 URI 输入(已是绝对路径)直接返回,方便迁移期混用。
  */
 import { internalUrlsApi } from '@/ipc/internalUrls';
-import { currentSessionStore } from '@/states/currentSession.atom';
+import { CurrentSession } from '@/states/currentSession.atom';
 
 /** scheme prefix 简易识别;parse 在主进程做。 */
 function isInternalUri(value: string): boolean {
@@ -18,9 +18,9 @@ function isInternalUri(value: string): boolean {
 }
 
 export interface ResolveUriOptions {
-  /** 覆写 agentId(== agentId);省略则取 currentSessionStore。 */
+  /** 覆写 agentId(== agentId);省略则取 CurrentSession。 */
   agentId?: string | null;
-  /** 覆写 chatSessionId;省略则取 currentSessionStore。 */
+  /** 覆写 chatSessionId;省略则取 CurrentSession。 */
   chatSessionId?: string | null;
 }
 
@@ -38,9 +38,9 @@ export async function resolveUriToPath(
     return input;
   }
 
-  const current = currentSessionStore.get();
+  const current = CurrentSession.get();
   const agentId = options.agentId ?? current.agentId;
-  const sessionId = options.chatSessionId ?? current.chatSessionId ?? undefined;
+  const sessionId = options.chatSessionId ?? current.sessionId ?? undefined;
 
   if (!agentId) {
     throw new Error(`Cannot resolve "${input}": no active agent.`);

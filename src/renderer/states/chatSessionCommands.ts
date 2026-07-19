@@ -17,12 +17,12 @@ import { persistApi } from '@/ipc/persist';
 import { agentChatApi } from '@/ipc/agentChat';
 import { chatSessionApi } from '@/ipc/chatSession';
 import { workspaceApi } from '@/ipc/workspace';
-import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { getSessionEntry } from '@/states/sessionIndex.atom';
 import { DeleteConfirmAtom } from '@/components/overlay/DeleteOverlay';
 import { RenameChatSessionAtom } from '@/components/overlay/RenameChatSessionOverlay';
 import { toastAtom } from '@/components/ui/toast.atom';
 import { log } from '@/log';
+import { CurrentSession } from './currentSession.atom';
 
 const logger = log.child({ mod: 'chatSessionCommands' });
 
@@ -39,17 +39,17 @@ export const chatSessionCommands = mutate((use) => (cmd: ChatSessionCommand): vo
   switch (cmd.type) {
     case 'delete': {
       // 携带「是否当前会话」用于删除后的收尾（沿用 DeleteConfirmAtom.showChatSession 语义）。
-      const currentSessionId = agentSessionCacheManager.getCurrentChatSessionId();
-      const isCurrentSession = currentSessionId === cmd.sessionId;
-      const currentAgentId = agentSessionCacheManager.getCurrentAgentId();
-      const entry = getSessionEntry(currentAgentId, cmd.sessionId);
+      const { agentId, sessionId } = CurrentSession.get();
+      const isCurrentSession = sessionId === cmd.sessionId;
+      const entry = getSessionEntry(agentId, cmd.sessionId);
       const sessionTitle = entry?.title || 'Unnamed Session';
       use(DeleteConfirmAtom)[1].showChatSession(cmd.sessionId, sessionTitle, isCurrentSession);
       return;
     }
 
     case 'deleteScheduleRun': {
-      const isCurrentSession = agentSessionCacheManager.getCurrentChatSessionId() === cmd.runId;
+      const { sessionId } = CurrentSession.get();
+      const isCurrentSession = sessionId === cmd.runId;
       use(DeleteConfirmAtom)[1].showScheduleRun(
         cmd.agentId,
         cmd.jobId,
@@ -94,7 +94,7 @@ async function toggleStar(use: UseAtom, agentId: string, sessionId: string, star
 }
 
 async function fork(use: UseAtom, sessionId: string): Promise<void> {
-  const agentId = agentSessionCacheManager.getCurrentAgentId();
+  const agentId = CurrentSession.get().agentId;
   const toast = use(toastAtom)[1];
   if (!agentId) {
     toast.showError('No current agent chat available');
