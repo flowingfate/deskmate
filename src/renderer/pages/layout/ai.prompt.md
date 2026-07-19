@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-18 -->
+<!-- Last verified: 2026-07-19 -->
 # 布局
 
 > 渲染进程 SPA 的外壳：采用 AppShell（Sidebar + StatusBar + Titlebar） + AgentLayout（SessionPanel + 主内容区 + 右侧面板）两层架构。
@@ -97,7 +97,7 @@ RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
 - macOS 标题栏缩放补偿使用直接设置在 `documentElement` 上的 CSS 自定义属性（`--mac-zoom-factor`），以避免 React 渲染延迟引起的抖动。
 - **数据路由（data router）**：路由在 `entries/main.routes.tsx` 用 config-first 对象数组 `const routes: RouteObject[]` 定义、`createBrowserRouter(routes)` 构建，`main.tsx` 用 `<RouterProvider router={router}/>` 挂载。`RouterProvider` 不接受 children，故所有依赖路由 context 的全局节点（`McpConnectionFailureToastListener`、`WindowZoomHotkeys`、MCP dialog）与全局 effect（`navigate:to` 事件、crash 面包屑）都迁进了根路由 `RootLayout`。命令式业务导航统一通过 `lib/navigation/appNavigation.ts` 的 bridge；业务模块禁止 import `entries/main.routes.tsx`。不再有 `AppRoutes` / `AppRoutesWithTitleBar` 组件。
 - **`Component:` vs `element:` 选择**：无 props 的路由用 `Component: X`（传组件类型，react-router 内部 `createElement`，官方推荐、省一层）；**需要给组件传 props 的路由必须用 `element: <X prop=.../>`**（`Component` 与 `element` 互斥且 `Component` 无法传 props）。当前需 `element:` 的两类：`<ChatView kind="job-run"/>`、重定向 `<Navigate to=.../>`。
-- **静态路由 + feature flag**：data router 的路由表是静态对象；只有确有 feature gate 的功能才使用 `element` guard。Delegation 是普通 Agent 的稳定设置 tab，不受 feature flag 控制。
+- **静态路由**：data router 的路由表是静态对象；不要按运行时条件拼接路由表。Delegation 是普通 Agent 的稳定设置 tab。
 - **TitleBar 历史导航（`HistoryNav`）**：`canGoBack/canGoForward` 直接读 react-router 写入 `window.history.state.idx` 的真实历史光标 + `useNavigationType()` 的 `PUSH/POP/REPLACE` 信号，`goBack/goForward` 用 `navigate(-1)/navigate(1)`。**不再维护手搓镜像栈**——旧实现的镜像栈无法区分 push/replace，与真实历史漂移，是“后退无反应”的根因。切勿回退到镜像栈方案。
 - **Settings 导航用 URL 承载意图，不用事件/定时器/sessionStorage**：从 agent editor 进入 Settings 管理页时，“预选某项”的意图放进 URL query（如 `/settings/skills?selected=<name>`），目标视图用 `useSearchParams()` 读取、命中后 `setSearchParams(..., { replace: true })` 清掉 query。数据首帧可能仍在加载，读取 effect 必须在列表非空后才选中并清 query，否则意图丢失。Settings 页 Back（`SettingsPage.handleBack`）依据 `window.history.state.idx`：`idx>0` → `navigate(-1)` 回真实来源，`idx===0`（深链/刷新首屏）→ `resolveSettingsBackFallbackPath()` 兜底到 agent 路由。历史包袱：旧实现曾用 `agent:closeEditor` 死事件 + `setTimeout(100)` + `skills:selectSkill` CustomEvent + `settingsCameFromApp` sessionStorage 哨兵，已全部移除——**切勿回退**。
 

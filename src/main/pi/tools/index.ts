@@ -7,7 +7,7 @@
  * `lazy(spec, () => import(...))` 或 backend 内部 `await import()` 推迟到首调)。
  *
  * 注册顺序对 LLM 看到的工具列表顺序没有语义,但保持稳定有助于 prompt cache
- * 命中率;按"逻辑分组 + feature flag"排,新加工具往对应组里塞,不要散落。
+ * 命中率;按逻辑分组排列,新加工具往对应组里塞,不要散落。
  */
 
 import { tools } from './registry';

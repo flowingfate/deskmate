@@ -7,7 +7,6 @@ import './styles/biz/_index.scss';
 import { log as logger } from '@/log';
 import { installGlobalErrorHandlers } from '@/log/installGlobalHandlers';
 
-import { featureFlagCacheManager } from './lib/featureFlags';
 import { WithStore } from './atom';
 import { appApi } from '@/ipc/app';
 
@@ -166,18 +165,6 @@ if (!container) {
 logger.debug({ msg: "Root element found, creating React root" });
 const root = createRoot(container);
 
-// 🚀 Initialize various cache managers (async, non-blocking for rendering)
-(async () => {
-  // Initialize Feature Flags cache manager
-  try {
-    logger.info({ msg: "[Startup] Initializing feature flags cache manager..." });
-    await featureFlagCacheManager.initialize();
-    logger.info({ msg: "[Startup] Feature flags cache initialized successfully" });
-  } catch (error) {
-    logger.error({ msg: "[Startup] Failed to initialize feature flags cache:", err: error });
-  }
-
-})();
 
 root.render(
   <RootErrorBoundary>

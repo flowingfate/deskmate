@@ -44,7 +44,7 @@ src/renderer/components/...       ← 业务代码通过 `import { xxxApi } from
 
 ### 命名空间一览
 
-共 30+ 个命名空间，覆盖所有 IPC 通道：app、window、auth、signin、featureFlags、misc（folder/debug）、profile、agentChat、chatSession、models、llm、fs、workspace、mcp/mcpAuth、navigate、skills、builtinTools、subagentRun、runtime、sync、update、logViewer（dev-only）。
+共 30+ 个命名空间，覆盖所有 IPC 通道：app、window、auth、signin、misc（folder/debug）、profile、agentChat、chatSession、models、llm、fs、workspace、mcp/mcpAuth、navigate、skills、builtinTools、subagentRun、runtime、sync、update、logViewer（dev-only）。
 
 **例外**：`log:write` 是 renderer → main 的**单向** `send`，不走类型化框架（每条日志加 invoke round-trip 太重）；见下文「日志流」。
 

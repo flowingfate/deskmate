@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-18 (ToolContext Profile 贯穿 AppCommand 与 Internal URL) -->
+<!-- Last verified: 2026-07-19 (ToolContext Profile 贯穿 AppCommand 与 Internal URL) -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -109,7 +109,7 @@ async function loadImpl() {
 - 失败被 registry 收敛成 `{ ok: false }`,LLM 看到的形态与本地工具一致
 - bundle 行为:`impl/<name>` 仍是独立 lazy chunk 输出
 
-## 注册顺序与 feature flag
+## 注册顺序
 
 `index.ts::registerAllTools()`:
 

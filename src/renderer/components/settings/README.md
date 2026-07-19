@@ -321,27 +321,16 @@ const getActiveView = () => {
 在 `sidepanel/index.tsx` 的 `<nav>` 内加：
 
 ```tsx
-{xxxEnabled && (
-  <NavItem
-    icon={<XxxIcon size={20} />}
-    label="Xxx"
-    isActive={activeView === 'xxx'}
-    onClick={() => navigate('/settings/xxx')}
-  />
-)}
+<NavItem
+  icon={<XxxIcon size={20} />}
+  label="Xxx"
+  isActive={activeView === 'xxx'}
+  onClick={() => navigate('/settings/xxx')}
+/>
 ```
 
 `NavItem`（`sidepanel/NavItem.tsx`）基于 shadcn `Button` 封装，`isActive` 切换 `secondary` / `ghost` variant，图标用 lucide（size 20）。
 
-### Step 3: Feature Flag（可选）
-
-```tsx
-const xxxEnabled = useFeatureFlag('deskmateFeatureXxx');
-```
-
-已全量发布的页面不需要 feature flag。
-
----
 
 ## 10. 注册路由
 
@@ -358,26 +347,7 @@ import XxxSettingsView from '../components/settings/xxx/XxxSettingsView';
 
 ---
 
-## 11. Feature Flags
-
-实验性或平台相关页面用 feature flag：
-
-```tsx
-// src/renderer/lib/featureFlags.ts
-export const FEATURE_FLAGS = {
-  deskmateFeatureXxx: {
-    defaultValue: false,
-    platforms: ['darwin', 'win32'],
-    envs: ['development'],
-  }
-}
-```
-
-用法：`const xxxEnabled = useFeatureFlag('deskmateFeatureXxx')`。
-
----
-
-## 12. 新页面 Checklist
+## 11. 新页面 Checklist
 
 - [ ] 建 `xxx/XxxSettingsContentView.tsx`
   - [ ] 根 `flex flex-col p-6 ... h-full overflow-auto` + `max-w-4xl mx-auto w-full`
@@ -393,23 +363,22 @@ export const FEATURE_FLAGS = {
   - [ ] 集中管理 `error`（及需要的 `loading`）
 - [ ] `sidepanel/index.tsx`：`getActiveView()` 映射 + 加 `NavItem`
 - [ ] `main.routes.tsx` 加 `<Route>`
-- [ ] （可选）`featureFlags.ts` 注册 feature flag
 
 ---
 
 ## 现有页面
 
-| 页面 | 路由 | Feature Flag |
-|------|------|--------------|
-| Tools | `/settings/tools` | — |
-| MCP | `/settings/mcp` | — |
-| Skills | `/settings/skills` | — |
-| Screenshot | `/settings/screenshot` | — |
-| Runtime | `/settings/runtime` | — |
-| Provider | `/settings/provider` | — |
-| About | `/settings/about` | — |
-| Local Data | `/settings/persist` | — |
-| Archived Agents | `/settings/archived-agents` | — |
+| 页面 | 路由 |
+|------|------|
+| Tools | `/settings/tools` |
+| MCP | `/settings/mcp` |
+| Skills | `/settings/skills` |
+| Screenshot | `/settings/screenshot` |
+| Runtime | `/settings/runtime` |
+| Provider | `/settings/provider` |
+| About | `/settings/about` |
+| Local Data | `/settings/persist` |
+| Archived Agents | `/settings/archived-agents` |
 
 ---
 

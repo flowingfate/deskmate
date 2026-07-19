@@ -1,7 +1,6 @@
 import { app, Menu, protocol } from 'electron';
 import { log, closeLogs } from '@main/log';
 import { crashCaptureManager } from './lib/crash/CrashCaptureManager';
-import { featureFlagManager } from './lib/featureFlags';
 
 import { appCacheManager } from './lib/appCache';
 import { ProfileRegistry } from './profileRegistry'
@@ -96,12 +95,6 @@ function bootstrap() {
   crashCaptureManager.initialize({ isDev: IS_DEV });
   crashCaptureManager.recordBreadcrumb('lifecycle', 'electron-app-constructor', { isDev: IS_DEV });
 
-  // 🚀 Initialize Feature Flag manager before any feature-gated setup runs.
-  try {
-    featureFlagManager.initialize();
-  } catch (error) {
-    console.warn('[Startup] FeatureFlagManager initialization failed:', error);
-  }
 
   app.on('ready', async () => {
     console.time('[Startup] onReady');

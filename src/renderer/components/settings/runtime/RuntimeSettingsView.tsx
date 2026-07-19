@@ -9,7 +9,6 @@ import SettingsLayout from '../SettingsLayout';
 import RuntimeSettingsContentView, { RuntimeStatus, GitVersion, PythonVersion } from './RuntimeSettingsContentView';
 import { DEFAULT_PYTHON_VERSION } from '../../../lib/runtime/runtimeVersions';
 import { appDataManager } from '../../../lib/userData/appDataManager';
-import { useFeatureFlag } from '../../../lib/featureFlags';
 import type { RuntimeEnvironment } from '../../../lib/userData/types';
 import { runtimeApi } from '@/ipc/runtime';
 import { log } from '@/log';
@@ -28,7 +27,6 @@ const RuntimeSettingsView: React.FC = () => {
   const [newPythonVersion, setNewPythonVersion] = useState<string>(DEFAULT_PYTHON_VERSION);
   const [isPythonLoading, setIsPythonLoading] = useState(false);
   const { showSuccess, showError } = useToast();
-  const isGitEnabled = useFeatureFlag('deskmateUseGit');
 
   // Subscribe to AppDataManager, receive runtimeEnvironment changes in real time
   useEffect(() => {
@@ -66,10 +64,8 @@ const RuntimeSettingsView: React.FC = () => {
       const sts = await runtimeApi.checkStatus();
       setStatus(sts);
 
-      if (isGitEnabled) {
-        const gitSts = await runtimeApi.checkGitVersion();
-        setGitVersion(gitSts);
-      }
+      const gitSts = await runtimeApi.checkGitVersion();
+      setGitVersion(gitSts);
 
       if (sts.uv) {
         loadPythonVersions();
@@ -77,7 +73,7 @@ const RuntimeSettingsView: React.FC = () => {
     } catch (e) {
       logger.error({ msg: String(e) });
     }
-  }, [loadPythonVersions, isGitEnabled]);
+  }, [loadPythonVersions]);
 
   useEffect(() => {
     loadData();
@@ -220,7 +216,6 @@ const RuntimeSettingsView: React.FC = () => {
         pythonVersions={pythonVersions}
         isLoading={isLoading}
         isPythonLoading={isPythonLoading}
-        showGitVersion={isGitEnabled}
         newPythonVersion={newPythonVersion}
         onInstall={handleInstall}
         onVersionChange={handleVersionChange}

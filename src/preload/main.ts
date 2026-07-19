@@ -9,7 +9,6 @@ import invokeDoctor from './invoke/doctor';
 import invokeApp from './invoke/app';
 import invokeWindow from './invoke/window';
 import invokePi from './invoke/pi';
-import invokeFeatureFlags from './invoke/featureFlags';
 import invokePersist from './invoke/persist';
 import invokeAgentChat from './invoke/agentChat';
 import invokeLlm from './invoke/llm';
@@ -57,10 +56,6 @@ export interface ElectronAPI {
     invoke: InvokeFn;
   };
 
-  // Feature Flags APIs - developer feature toggles (read-only)
-  featureFlags: {
-    invoke: InvokeFn;
-  };
 
   // MCP Client Manager APIs
   mcp: {
@@ -247,9 +242,6 @@ export const electronAPI: ElectronAPI = {
   },
   llm: {
     invoke: invokeLlm,
-  },
-  featureFlags: {
-    invoke: invokeFeatureFlags,
   },
   mcp: {
     invoke: invokeMcp,

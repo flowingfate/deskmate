@@ -17,7 +17,6 @@ import handleChatSessionIPC from './chat-session';
 import { registerLogIPC } from './log';
 import { registerLogViewerIPC } from '../../log/viewer-window';
 import handleDoctorIPC from './doctor';
-import handleFeatureFlagsIPC from './featureFlags';
 import setUpToolsIPC from './tools';
 import handleUpdateIPC from './update';
 import handleAttachmentIPC from './attachment';
@@ -53,7 +52,6 @@ export function setUpAllIPCHandlers() {
   handleChatSessionIPC();
   handleResearchIPC();
   handleDoctorIPC();
-  handleFeatureFlagsIPC();
   registerSubagentRunIpc(ipcMain);
   const runtimeManager = RuntimeManager.getInstance();
   // 反转 terminal → runtime 依赖：把 runtime 能力注入下层 terminal 桥。
