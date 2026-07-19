@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-19 (app runtime storage overview) -->
+<!-- Last verified: 2026-07-19 (app runtime storage overview; 集中 preload invoke 模块) -->
 
 # Persist 模块（新布局 store 层）
 
@@ -94,7 +94,7 @@ ProfileRegistry.require(profileId).store → ProfileStore
 | 加 job_run 索引字段 | 同上但走 `JobRunRow` / `JobRun.toJobRunRow` / `JobRunIdx` 路径 | schedule_run 表与 regular 表物理分开，互不影响 |
 | 将 schedule run 继续为 regular session | `session.ts#JobRun.forkToSession` + `RegularSession` data 投影；clone messages/files 后才写 regular `data.json`，最后由 afterPersist 同步 SQL / 事件 | 只接受 terminal run；原 run 不删、不改 |
 | 加 SQLite 偏序索引 | `lib/db/schema.ts` `CREATE INDEX IF NOT EXISTS ix_xxx ON ... WHERE ...;` + 测试 `EXPLAIN QUERY PLAN` 验命中 | 候选索引清单见 [ai.prompt/persist.md §9.2](../../../ai.prompt/persist.md) |
-| 加 IPC 通道 | `src/shared/ipc/persist.ts` 加 channel + `ipc.ts` 加 handler + `preload/persist/invoke.ts` 加 allowlist | renderer 调用走 `persistApi.xxx()` 自动类型推导 |
+| 加 IPC 通道 | `src/shared/ipc/persist.ts` 加 channel + `ipc.ts` 加 handler + `preload/invoke/persist.ts` 加 allowlist | renderer 调用走 `persistApi.xxx()` 自动类型推导 |
 | 加应用级运行时存储分类 | `shared/ipc/persist.ts` 的 `RuntimeStorageCategory` + `storageOverview.ts` 的顶层目录映射 + renderer `storageMeta.ts`；保持 `StorageOverview.totalBytes` 只代表 Profile，运行时统计必须独立 IPC，不能挂进 `shared` |
 | 加 SQLite 单元测试 | `__tests__/sqlite-index.test.ts` 仿 PR-1 模板（tmp 真盘 + ProfileDb.resetForTesting） | better-sqlite3 是 native，无法在 mock fs 跑 |
 | 加 mock fs 集成测试 | 仿 `agent.test.ts` 顶部 `vi.mock('../lib/db/db', () => ({ ProfileDb: { open: () => fakeDb, ... } }))` stub | fakeDb 提供 `db.prepare/get/all/run` no-op；不直接断言 SQL 行 |

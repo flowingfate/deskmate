@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-18 (runtime Profile context injection) -->
+<!-- Last verified: 2026-07-19 (runtime Profile context injection; 集中 preload invoke 模块) -->
 
 
 > 本模块把所有用户附件(拖入 / 粘贴 / 剪贴板图片 / screenshot /
@@ -48,7 +48,7 @@ Profile 的 `ResolveContext`；Internal URL handler 不按 ID 反查 Registry。
 1. 在 `index.ts` 增 `attachFromUrl(url, ctx, profile)` —— 先 fetch 到 Buffer,
    再走 `attachFromBytes`(或 stream 到临时文件再走 `attachFromPath` 拿 reflink 红利)
 2. 加 IPC: `src/shared/ipc/attachment.ts` 加入新 input/handler,
-   `src/main/startup/ipc/attachment.ts` 加 handler,`src/preload/attachment/invoke.ts` 加白名单
+   `src/main/startup/ipc/attachment.ts` 加 handler,`src/preload/invoke/attachment.ts` 加白名单
 
 ### 修改 uploads/ 路径形态(e.g. 按日期分桶)
 - 改 `UPLOADS_DIR` 常量 或 `resolveUploadsDir` 内部 join。

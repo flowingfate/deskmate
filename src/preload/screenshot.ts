@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { LogFields, LogLevel } from '@shared/log/types';
-import invoke from './screenshot/invoke';
+import invoke from './invoke/screenshot';
 
 contextBridge.exposeInMainWorld('electronScreenshot', {
   invoke,

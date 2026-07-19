@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-19 (Profile-owned main-window state; app runtime storage overview) -->
+<!-- Last verified: 2026-07-19 (Profile-owned main-window state; app runtime storage overview; 集中 preload invoke 模块) -->
 
 ## 1. 范围
 
@@ -300,7 +300,7 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 | 加 job_run 索引字段 | 同上但走 `JobRunRow` / `JobRun.toJobRunRow` / `JobRunIdx` 路径 |
 | 将 schedule run 继续为 regular session | `session.ts#JobRun.forkToSession` + persist IPC / preload；clone messages/files/contextState，终态校验在 source JobRun | 原 run 不删、不改 |
 | 加 SQLite 偏序索引 | `lib/db/schema.ts` `CREATE INDEX IF NOT EXISTS ix_xxx ON ... WHERE ...;` + `EXPLAIN QUERY PLAN` 验命中(候选清单见 §9.2) |
-| 加 IPC 通道 | `src/shared/ipc/persist.ts` + `ipc.ts` handler + `preload/persist/invoke.ts` allowlist;renderer 自动类型推导 |
+| 加 IPC 通道 | `src/shared/ipc/persist.ts` + `ipc.ts` handler + `preload/invoke/persist.ts` allowlist;renderer 自动类型推导 |
 | 加新 profile 级共享资源(如 prompts/) | `path.ts` 加路径常量 + 新 store class + `ProfileStore` 字段 + `ProfileRegistry.bootstrap` 装载步骤;仿 `mcp.ts` |
 | 加 SQLite 单元测试 | `__tests__/sqlite-index.test.ts` 模板(tmp 真盘 + `ProfileDb.resetForTesting`);better-sqlite3 是 native,无法 mock fs |
 | 加 mock fs 集成测试 | 仿 `agent.test.ts` 顶部 `vi.mock('../lib/db/db', () => ({ ProfileDb: { open: () => fakeDb, ... } }))` stub;不直接断言 SQL 行 |

@@ -14,7 +14,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { LogFields, LogLevel } from '@shared/log/types';
-import invoke from './research/invoke';
+import invoke from './invoke/research';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
