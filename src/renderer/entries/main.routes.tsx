@@ -3,6 +3,7 @@ import {
   createBrowserRouter,
   Navigate,
   Outlet,
+  redirect,
   useNavigate,
   useLocation,
   type RouteObject,
@@ -29,13 +30,14 @@ import AgentCreationView from '../components/chat/agent-area/AgentCreationView';
 import CreateCustomAgentView from '../components/chat/agent-area/CreateCustomAgentView';
 import { log } from '@/log';
 import { appApi } from '@/ipc/app';
+import { newEntityId } from '@shared/persist/id';
 import { AppShell } from '@renderer/pages/layout/AppShell';
 import { TitleBar } from '../pages/layout/titlebar';
 import WindowZoomHotkeys from '../pages/layout/WindowZoomHotkeys';
 import McpAuthConsentDialog from '../components/mcp/McpAuthConsentDialog';
 import RequestOAuthClientIdDialog from '../components/mcp/RequestOAuthClientIdDialog';
 import { useMcpConnectionFailureToast } from '../lib/mcp/useMcpConnectionFailureToast';
-import { settingsEntryLoader } from '@renderer/lib/navigation/settingsEntry';
+import { agentSettingsEntryLoader, settingsEntryLoader } from '@renderer/lib/navigation/settingsEntry';
 import { registerAppNavigateHandler } from '@renderer/lib/navigation/appNavigation';
 import { ConfirmationDialogHost } from '../components/ui/ConfirmationDialog';
 
@@ -120,13 +122,15 @@ const routes: RouteObject[] = [
               { index: true, Component: ChatView },
               { path: 'creation', Component: AgentCreationView },
               { path: 'creation/custom-agent', Component: CreateCustomAgentView },
-              { path: ':agentId', Component: ChatView },
+              {
+                path: ':agentId',
+                loader: ({ params }) => redirect(`/agent/${params.agentId}/${newEntityId('s')}`),
+              },
               { path: ':agentId/job', element: <ChatView kind="job" /> },
               { path: ':agentId/job/:jobId', element: <ChatView kind="job" /> },
               { path: ':agentId/job/:jobId/:sessionId', element: <ChatView kind="job" /> },
               { path: ':agentId/:sessionId', Component: ChatView },
-              { path: ':agentId/settings', Component: AgentEditingView },
-              { path: ':agentId/settings/*', Component: AgentEditingView },
+              { path: ':agentId/settings/*', loader: agentSettingsEntryLoader, Component: AgentEditingView },
             ],
           },
 

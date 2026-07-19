@@ -17,7 +17,7 @@ const AgentEditingView: React.FC = () => {
     canSaveAll,
     error,
     fieldErrors,
-    handleBackToChat,
+    handleBack,
     handleClearError,
     handleSaveAll,
     handleTabDataChange,
@@ -32,7 +32,7 @@ const AgentEditingView: React.FC = () => {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
         <p>No agent selected. Please select an agent from the left navigation.</p>
-        <Button onClick={handleBackToChat}>Go to Chat</Button>
+        <Button onClick={handleBack}>Go to Chat</Button>
       </div>
     )
   }
@@ -41,7 +41,7 @@ const AgentEditingView: React.FC = () => {
     <AgentPane className="flex h-full w-full flex-col bg-surface-primary">
       <AgentPane.Head>
         <div className="flex min-w-0 items-center gap-2.5">
-          <Button variant="ghost" size="icon-sm" onClick={handleBackToChat} title="Back to Chat">
+          <Button variant="ghost" size="icon-sm" onClick={handleBack} title="Back">
             <ArrowLeft size={18} strokeWidth={1.75} />
           </Button>
           {agentData && (

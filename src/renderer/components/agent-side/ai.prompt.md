@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (direct immutable Profile identity) -->
+<!-- Last verified: 2026-07-19 (agent root routes allocate a session before rendering chat) -->
 # Agent Side Panel
 
 > 中间列（左 nav 与右侧 ChatView 之间）的整块 UI：agent header + sessions / jobs 双模式切换。
@@ -9,7 +9,7 @@
 |------|------|------|
 | `SessionPanel.tsx` | Orchestrator：从 `useParams` / `useMatch` 派生 mode/subScreen，分发到对应 view | ~80 LOC |
 | `header/SessionPanelHeader.tsx` | Agent 名 + alarm icon + agent dropdown 的入口 | ~60 LOC |
-| `header/AlarmToggleButton.tsx` | alarm 图标 + scheduled-unread badge；点击在 sessions ↔ jobs 根 URL 间切换；jobs → sessions 永远回 `/agent/:agentId`，绝不把 job-run ID 伪装成 regular session | ~65 LOC |
+| `header/AlarmToggleButton.tsx` | alarm 图标 + scheduled-unread badge；点击在 sessions ↔ jobs 根 URL 间切换；jobs → sessions 回 `/agent/:agentId`，再由路由生成空 regular session，绝不把 job-run ID 伪装成 regular session | ~65 LOC |
 | `sessions/SessionsView.tsx` | sessions 子屏：search box + SessionList + New Conversation 按钮；新建时直接生成 session ID 并导航到完整 session URL | ~80 LOC |
 | `sessions/SessionList.tsx` | 单 agent 的 regular session 列表：starred 分组、未读高亮、滚动定位、ChatSessionMenuAtom 触发 | ~290 LOC |
 | `jobs/JobsView.tsx` | jobs 子屏：内联 ListSearchBox + 紧凑 JobRow 列表 + 底部 NewScheduleButton + AddScheduleOverlay + 删除确认 AlertDialog；CRUD / toggle / run-now 全部在此完成 | ~275 LOC |
@@ -32,7 +32,7 @@
 
 ```
 /agent                              → 没有 agentId；header 用 cache 兜底，body 不渲染
-/agent/:agentId                      → sessions 子屏，无选中
+/agent/:agentId                      → loader 生成 regular session ID 后重定向
 /agent/:agentId/:sessionId           → sessions 子屏 + 选中 session
 /agent/:agentId/job                  → jobs 子屏（JobsView）
 /agent/:agentId/job/:jobId           → runs 子屏（JobRunsView）
@@ -41,10 +41,10 @@
 
 `SessionPanel.tsx` 用 `useMatch('/agent/:agentId/job/*')` 区分 mode；`useParams()` 给出 `agentId / jobId / sessionId`。**任何"当前在哪个 view / 选中了什么"的状态都不要塞进 atom** —— 切 agent 自然回 sessions（URL 不带 `job` 段），刷新 / 前进后退 / 深链原生支持，0 状态同步代码。
 
-New Conversation 与 agent sidebar 直接生成尚未持久化的 regular session ID，并跳转到 `/agent/:agentId/:sessionId`；不通过 `location.state` 携带 `new-chat` 等隐式导航指令。
+New Conversation 与 agent sidebar 直接生成尚未持久化的 regular session ID，并跳转到 `/agent/:agentId/:sessionId`；不通过 `location.state` 携带 `new-chat` 等隐式导航指令。直接访问 `/agent/:agentId` 也遵循同一 ID 分配规则：route loader 立即重定向到完整 URL，不能让 `ChatView` 在缺少 sessionId 时挂载。
 
 ### Alarm 切换契约
-`AlarmToggleButton` 在 jobs ↔ sessions 间切。jobs → sessions 时总是跳到 `/agent/:agentId`；不能把 job-run 的 `:sessionId` 拼进 regular 路由，否则 ChatView 会按 regular 语义读取并可能触发错误写路径。
+`AlarmToggleButton` 在 jobs ↔ sessions 间切。jobs → sessions 时总是跳到 `/agent/:agentId`；该路由会生成新的 regular session ID。不能把 job-run 的 `:sessionId` 拼进 regular 路由，否则 ChatView 会按 regular 语义读取并可能触发错误写路径。
 
 ### Job 失效保护
 `JobRunsView` 监听 `useSchedulesByAgentId(agentId).find(j => j.id === jobId)`，job 不存在时：
@@ -55,7 +55,7 @@ New Conversation 与 agent sidebar 直接生成尚未持久化的 regular sessio
 Edit / Run now / Delete 唯一入口在 jobs 子屏 `JobRow` 的展开面板里（Edit / Run now / Delete 三个 Button）。runs 子屏 RunsHeader 故意只放返回箭头 —— 它是一层导航,不是动作面;真要删 schedule,先返回 jobs 列表展开对应行。
 
 ### 与右侧 `ChatView` 的关系
-`ChatView` 接受 `kind?: 'regular' | 'job-run'` prop（默认 `'regular'`），由路由显式注入；`entries/main.routes.tsx` 中 `:agentId/job/...` 三条路由全部 `<ChatView kind="job-run" />`，`:agentId` / `:agentId/:sessionId` 走默认。
+`ChatView` 接受 `kind?: 'regular' | 'job'` prop（默认 `'regular'`），由路由显式注入；`entries/main.routes.tsx` 中 `:agentId` 是只负责生成并重定向的 loader，`:agentId/job/...` 三条路由全部 `<ChatView kind="job" />`，`:agentId/:sessionId` 走默认。
 
 `kind` 决定 ChatView 的快照与 capability：
 - `'regular'` → `loadChatSessionSnapshot` + `markSessionRead` → `regular_sessions`；可互动。

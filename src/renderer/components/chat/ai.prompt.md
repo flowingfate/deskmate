@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (direct immutable Profile identity) -->
+<!-- Last verified: 2026-07-19 (agent root allocation and settings entry routing) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -59,7 +59,7 @@
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
 | `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（Basic 的 description、Delegation、上下文增强、知识库、MCP 服务器、技能、系统提示词） | — |
-| `agent-area/AgentEditingView.tsx` + `useAgentEditorState.ts` + `AgentEditorTabs.tsx` | 设置页外壳、跨 tab dirty/save-all 状态和 tab 分发；三者分离以保持组件文件小于 500 行 | — |
+| `agent-area/AgentEditingView.tsx` + `useAgentEditorState.ts` + `AgentEditorTabs.tsx` | 设置页外壳、跨 tab dirty/save-all 状态和 tab 分发；返回优先回到 Agent 设置 loader 记录的入口路径，深链时才走 Agent 根路由 fallback | — |
 | `agent-editor/AgentSettingsNav.tsx` | 设置页左侧导航；数据驱动的 `NAV_ITEMS`（key/label/Lucide 图标），每项带未保存改动小圆点。**新增 Tab 时在此加一项** | 小 |
 | `agent-editor/AgentPresetsTab.tsx` + `PresetEditorDialog.tsx` | 「Quick Prompts」标签页：编辑聊天空态的预设提示词（增删改）。**已接持久化** —— 读写走 `zero/presetPrompts.ts`，落 AGENT.md front-matter `zero.preset_prompts`（cold 字段，`agentDetail.atom` 后端），与 `zero/index.tsx` 空态经 `agent:updated` 事件实时同步。CRUD 即时生效，不进 Save All 管线。新建/编辑走 `PresetEditorDialog`（含图标选择器），删除走 `AlertDialog` 二次确认 | 中 |
 | `zero/index.tsx` + `zero/PresetPromptCard.tsx` | 聊天空态：渲染预设提示词卡片。点击卡片**不发送**，而是把 `prompt` 写入 `composeTextAtom`（ComposeInput 草稿真值）填入输入框；输入框已有内容时弹 `AlertDialog` 确认覆盖。插图区为占位待填 | 中 |
@@ -92,7 +92,7 @@ ChatView (URL→会话同步)
 
 `ChatView` 位于 `/agent/:agentId/:sessionId` 与 `/agent/:agentId/job/:jobId/:sessionId` 路由下。两条路由在 `entries/main.routes.tsx` 用同一个 `ChatView` 组件渲染，由路由显式注入 `kind?: 'regular' | 'job'` prop（默认 `'regular'`）；**kind 是 UI capability boundary，不只是 hydration 选项**：regular 走 `loadChatSessionSnapshot/markSessionRead`，可 compose / edit / retry；job 走 `loadJobRunSnapshot/markJobRunRead`，是只读回放，隐藏 compose、message edit、Retry 和 cancel。已结束 run 的 `JobRunChat` 可经 persist IPC 克隆为新 regular session 并导航过去；原 run 仍是只读调度历史。两条 IPC 路径在 persist 层完全物理隔离，禁止写“按 sessionId 万能取”的混查 helper。
 
-新建 regular session 不经过 `location.state` 中的隐式 intent：入口直接用 `newEntityId('s')` 生成 ID，并导航到完整 `/agent/:agentId/:sessionId` URL。ID 只在 renderer 分配；首次发送消息前不持久化，因此未发送即离开的会话不会留下空壳。`/agent/:agentId` 表示 sessions 子屏无选中，ChatView 明确将 current session 置空。
+新建 regular session 不经过 `location.state` 中的隐式 intent：入口直接用 `newEntityId('s')` 生成 ID，并导航到完整 `/agent/:agentId/:sessionId` URL。`/agent/:agentId` 也由 route loader 按相同规则分配 ID 并重定向，因而 `ChatView` 不会以缺少 sessionId 的 regular 语义挂载。ID 只在 renderer 分配；首次发送消息前不持久化，因此未发送即离开的会话不会留下空壳。
 
 ### 消息渲染管线
 消息通过清晰的管线流转：
@@ -147,7 +147,7 @@ ChatView (URL→会话同步)
 Agent avatar 的 `EmojiPicker` 采用 shadcn `Dialog`：打开时聚焦 Confirm，Radix 负责焦点陷阱、Esc 关闭与触发器焦点恢复；两个调用入口保持不变。
 
 ### 侧边栏和编辑器
-Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `ChatView` 的子组件。Agent 编辑器（`agent-editor/`）在导航到 `/agent/:agentId/settings/*` 时出现。**定时任务（jobs / runs）UI 已搬迁到 [`components/agent-side/`](../agent-side/ai.prompt.md)**：alarm 切换 + jobs CRUD + runs 列表 + AddScheduleOverlay 全部走那条主从二级视图，URL 是真相源；`SchedulesSidepane` / `AgentSchedulesTab` / `SchedulesContentView` 已物理删除。
+Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `ChatView` 的子组件。Agent 编辑器（`agent-editor/`）在导航到 `/agent/:agentId/settings/*` 时出现。首次进入某个 Agent 的设置时，路由 loader 记录前一条完整 URL；同一 Agent 内的 tab 切换不会覆盖它，`AgentEditingView` 顶部返回按钮优先回到该入口。深链 / 刷新没有入口时才回退到 `/agent/:agentId`。**定时任务（jobs / runs）UI 已搬迁到 [`components/agent-side/`](../agent-side/ai.prompt.md)**：alarm 切换 + jobs CRUD + runs 列表 + AddScheduleOverlay 全部走那条主从二级视图，URL 是真相源；`SchedulesSidepane` / `AgentSchedulesTab` / `SchedulesContentView` 已物理删除。
 
 ## 常见变更
 | 场景 | 需要修改的文件 | 备注 |
