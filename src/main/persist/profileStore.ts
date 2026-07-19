@@ -24,6 +24,7 @@ import * as fsp from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import { newEntityId } from '../../shared/persist/id';
 import { nowIso } from '@shared/persist/time';
+import { DEFAULT_AGENT_PERSONA } from '@shared/types/profileTypes';
 import { partialAssign } from '@shared/persist/data';
 import { PersistBase } from './lib/persistBase';
 
@@ -46,7 +47,7 @@ class ProfileSettings extends PersistBase {
   protected async doPersist() {
     const settings = this.toFile();
     await writeJson(PERSIST_PATH.settingsFile(getAppRoot(), this.profileId), settings);
-    emit('settings:updated', { profileId: this.profileId, settings });
+    emit(this.profileId, 'settings:updated', { settings });
   }
 
   public async update(partial: Partial<SettingsFile>) {
@@ -120,8 +121,7 @@ export class AgentRegistry extends PersistBase {
     const file: AgentRegistryFile = { version: 1, items: this.items };
     if (this.primaryAgentId !== undefined) file.primaryAgentId = this.primaryAgentId;
     await writeJson(PERSIST_PATH.agentsIndexFile(getAppRoot(), this.profileId), file);
-    emit('agent:registry:updated', {
-      profileId: this.profileId,
+    emit(this.profileId, 'agent:registry:updated', {
       kind: 'agents',
       items: this.items,
       primaryAgentId: this.primaryAgentId,
@@ -129,32 +129,11 @@ export class AgentRegistry extends PersistBase {
   }
 }
 
-const all = new Map<string, Profile>();
-
-export class Profile {
-  static get(id: string): Profile | undefined {
-    return all.get(id);
-  }
-
-  /** 仅用于测试 / Profiles.remove() 清缓存。 */
-  static evict(id: string): void {
-    all.delete(id);
-  }
-
-  static async getOrLoad(id: string): Promise<Profile> {
-    const cached = all.get(id);
-    if (cached) return cached;
-
-    const profile = new Profile(id);
+export class ProfileStore {
+  public static async load(id: string): Promise<ProfileStore> {
+    const profile = new ProfileStore(id);
     await profile.load();
-    all.set(id, profile);
     return profile;
-  }
-
-  static shutdownAll() {
-    const list: Promise<void>[] = [];
-    for (const item of all) list.push(item[1].shutdown());
-    return Promise.allSettled(list);
   }
 
   public readonly settings: ProfileSettings;
@@ -211,7 +190,8 @@ export class Profile {
         this.agentRegistry.load(),
       ]);
     } else {
-      await this.settings.persist();
+      await this.agentRegistry.load();
+      await this.initializeNewProfile();
     }
     // DB 自愈/初次填充触发条件：
     //  - wasCreated：本次 open 新建 `index.db`（升级 / migrate / 用户拷贝 profile 目录），
@@ -234,6 +214,20 @@ export class Profile {
     }
   }
 
+  private async initializeNewProfile(): Promise<void> {
+    await this.settings.persist();
+    const agent = await this.createAgent({
+      name: DEFAULT_AGENT_PERSONA.name,
+      description: DEFAULT_AGENT_PERSONA.description,
+      version: DEFAULT_AGENT_PERSONA.version ?? '1.0.0',
+      model: DEFAULT_AGENT_PERSONA.model,
+      emoji: DEFAULT_AGENT_PERSONA.emoji,
+      avatar: DEFAULT_AGENT_PERSONA.avatar,
+      systemPrompt: DEFAULT_AGENT_PERSONA.system_prompt,
+    });
+    await this.setPrimaryAgent(agent.id);
+  }
+
   public async patchSettings(partial: Partial<SettingsFile>) {
     return this.settings.update(partial);
   }
@@ -244,7 +238,6 @@ export class Profile {
    */
   public async getSnapshot() {
     return {
-      profileId: this.id,
       settings: this.settings.toFile(),
       agents: this.agentRegistry.items,
       primaryAgentId: this.agentRegistry.primaryAgentId,
@@ -450,7 +443,7 @@ export class Profile {
     await this.agentRegistry.persist();
 
     this.agents.delete(id);
-    emit('agent:removed', { profileId: this.id, agentId: id });
+    emit(this.id, 'agent:removed', { agentId: id });
   }
 
   /** 把 primaryAgent 改为 id（必须是已存在 agent），写盘并 emit。传入 undefined 清空。 */

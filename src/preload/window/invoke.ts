@@ -6,6 +6,7 @@ const invoke = renderToMain.provideInvokeForPreload(ipcRenderer, [
   'maximize',
   'unmaximize',
   'close',
+  'openProfile',
   'isMaximized',
   'isFullScreen',
   'zoomIn',

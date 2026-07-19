@@ -1,26 +1,13 @@
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
+
 import { RegularSession } from './session';
 
-const agents = new Map<string, Agent>();
-
 export class Agent {
-  static get(agentId: string): Agent | undefined {
-    return agents.get(agentId);
-  }
-
-  static getOrCreate(profileId: string, agentId: string): Agent {
-    let agent = agents.get(agentId);
-    if (!agent) {
-      agent = new Agent(profileId, agentId);
-      agents.set(agentId, agent);
-    }
-    return agent;
-  }
 
   public readonly sessions = new Map<string, RegularSession>();
 
-  constructor(
-    public readonly profileId: string,
+  public constructor(
+    private readonly store: ProfileStore,
     public readonly id: string,
   ) {}
 
@@ -37,16 +24,9 @@ export class Agent {
     const cached = this.sessions.get(sessionId);
     if (cached) return cached;
 
-    const profiles = Profiles.get();
-    if (profiles.activeProfileId !== this.profileId) {
-      throw new Error(
-        `[pi/agent] profileId mismatch: requested "${this.profileId}" but active is "${profiles.activeProfileId}"`,
-      );
-    }
-    const profile = await profiles.active();
-    const persistAgent = await profile.getAgent(this.id);
+    const persistAgent = await this.store.getAgent(this.id);
     if (!persistAgent) {
-      throw new Error(`[pi/agent] agent not found in active profile: ${this.id}`);
+      throw new Error(`[pi/agent] agent not found in profile: ${this.store.id}`);
     }
     const existingSession = await persistAgent.getSession(sessionId);
 
@@ -57,12 +37,17 @@ export class Agent {
 
     const persistSession = existingSession ?? await persistAgent.createSession({ id: sessionId });
 
-    const session = new RegularSession(sessionId, this.profileId, this.id, persistSession);
+    const session = new RegularSession(sessionId, this.store.id, this.id, persistSession);
     this.sessions.set(sessionId, session);
     return session;
   }
 
   removeSession(sessionId: string): void {
     this.sessions.delete(sessionId);
+  }
+
+  async dispose(): Promise<void> {
+    await Promise.all([...this.sessions.values()].map((session) => session.stopStream()));
+    this.sessions.clear();
   }
 }

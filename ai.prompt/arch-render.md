@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (Step 12：subagent run transcript Dialog 已接入) -->
+<!-- Last verified: 2026-07-17 (sender-bound multi-window Profile routing) -->
 # DESKMATE AI Studio — 渲染进程架构
 
 关注 `src/renderer/` 和共享 IPC 框架 `src/shared/ipc/`。主进程架构见 [arch-main.md](arch-main.md)。
@@ -51,6 +51,12 @@ src/renderer/
 | `connectRenderToMain` / `connectMainToRender` | 类型化通道工厂 | `src/shared/ipc/base.ts`（见 [ai.prompt.md](../src/shared/ipc/ai.prompt.md)） |
 | `src/renderer/ipc/*.ts` | 功能特定的客户端封装 | 每个子系统一个文件（scheduler、screenshot、teams 等） |
 | `window` DOM 事件（`navigate:to`、`debugWindowReady` 等） | main → renderer 广播 | preload 将主进程事件桥接到 `window.dispatchEvent`。**老的 `tokenMonitor:*` / `auth:monitor` 事件**：main 端仍可能 dispatch（属老 GHC 子系统残留），但 renderer 已无 listener。 |
+
+### 主窗口 Profile owner
+
+每个主窗口 renderer 在创建时绑定一个 Profile，之后不可切换。main 在 `BrowserWindow` 的 `webPreferences.additionalArguments` 写入 `--deskmate-profile-id=<id>`；preload 在 React 之前从 `process.argv` 同步读取，再通过 contextBridge 暴露不可变的 `window.electronAPI.profile.id: string`。这不使用 URL query、不传输 IPC 数据，也没有 snapshot 或 event 时序。
+
+所有主窗口 renderer 的 profile-scoped IPC 不传 `profileId`，main 从 sender 的不可变 owner identity 路由。需要 identity 的 renderer 代码直接读 `window.electronAPI.profile.id`，不得维护镜像 atom 或可切换状态。切换 Profile 的产品操作通过 `window.openProfile(profileId)` 创建或聚焦绑定目标 ID 的主窗口；业务 IPC 不得把它作为可伪造参数传回 main。
 
 ---
 

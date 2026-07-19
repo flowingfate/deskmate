@@ -1,4 +1,4 @@
-import { Profiles } from '../../persist';
+import type { ProfileStore } from '@main/persist';
 
 export interface SkillAvailabilityArgs {
   skillName: string;
@@ -15,18 +15,14 @@ export interface SkillAvailabilityResult {
   reason?: 'CHAT_NOT_FOUND' | 'AGENT_NOT_RESOLVED';
 }
 
-export async function getSkillAvailability(args: SkillAvailabilityArgs): Promise<SkillAvailabilityResult> {
+export async function getSkillAvailability(
+  store: ProfileStore,
+  args: SkillAvailabilityArgs,
+): Promise<SkillAvailabilityResult> {
   const skillName = args.skillName.trim();
+  const installed = store.skills.items.some((skill) => skill.name === skillName);
 
-  let profile;
-  try {
-    profile = await Profiles.get().active();
-  } catch {
-    profile = null;
-  }
-  const installed = !!profile?.skills.items.some((s: { name: string }) => s.name === skillName);
-
-  if (!args.agentId || !profile) {
+  if (!args.agentId) {
     return {
       skillName,
       installed,
@@ -35,7 +31,7 @@ export async function getSkillAvailability(args: SkillAvailabilityArgs): Promise
     };
   }
 
-  const agent = await profile.getAgent(args.agentId);
+  const agent = await store.getAgent(args.agentId);
   if (!agent) {
     return {
       skillName,

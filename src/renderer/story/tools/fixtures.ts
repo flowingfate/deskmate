@@ -1,6 +1,6 @@
 import type { SubAgentRunResult, ToolCall } from '@shared/persist/types';
 import type { SubAgentRuntimeState } from '@shared/types/subAgentRunTypes';
-import { storyAgentId, storyProfileId, storySessionId } from './mockElectron';
+import { storyAgentId, storySessionId } from './mockElectron';
 
 export const appCall: ToolCall = {
   id: 'tool_app',
@@ -248,7 +248,6 @@ export const toolCalls = [appCall, shellCall, webCall, writeCall, completedSubag
 const liveStartedAt = Date.now() - 4_200;
 
 export const liveSubagentState: SubAgentRuntimeState = {
-  profileId: storyProfileId,
   parentAgentId: storyAgentId,
   parentSessionId: storySessionId,
   subrunId: '001',

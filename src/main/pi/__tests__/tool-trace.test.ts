@@ -2,19 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { log } from '@main/log';
 
-// 限定名 route 强制走 MCP 路径，验证 executeToolCall 用 route 中的原始
-// toolName 调 MCP，而非直接把 LLM-facing name 传入。
-vi.mock('@main/pi/mcp', () => ({
-  executeMcpToolOnServer: vi.fn(),
-  listAllMcpTools: vi.fn().mockResolvedValue([]),
-}));
 
 import { executeToolCall, ToolCatalog, type ToolCallInput } from '../tool';
 import type { ToolContext } from '../tools/types';
 import { Tracer } from '@shared/log/trace';
-import { executeMcpToolOnServer } from '../mcp';
+import { testProfile } from '../tools/__tests__/profileFixture';
 
-const mockedExecMcp = vi.mocked(executeMcpToolOnServer);
+let mockedExecMcp = vi.spyOn(testProfile.mcpManager, 'executeToolOnServer');
 
 function makeCatalog(toolName: string): ToolCatalog {
   return new ToolCatalog(
@@ -35,6 +29,7 @@ function makeCtx(call: ToolCallInput, tracer: Tracer): ToolContext {
   });
   return {
     mode: 'agent',
+    profile: testProfile,
     profileId: 'p_test',
     agentId: 'a_test',
     sessionId: 's_test',
@@ -49,8 +44,8 @@ function makeCtx(call: ToolCallInput, tracer: Tracer): ToolContext {
 // 仅断言"主链路日志带 trace 字段"。executeMcpToolOnServer 完全 mocked,不触网络。
 describe('executeToolCall — chat.tool span', () => {
   beforeEach(() => {
-    mockedExecMcp.mockReset();
     vi.restoreAllMocks();
+    mockedExecMcp = vi.spyOn(testProfile.mcpManager, 'executeToolOnServer');
   });
 
   it('emits chat.tool start + ok with tid/sid/psid on success', async () => {
@@ -61,7 +56,12 @@ describe('executeToolCall — chat.tool span', () => {
     const parent = Tracer.startWithSpan('turn');
     const call: ToolCallInput = { id: 'call_1', name: 'foo', arguments: { x: 1 } };
     await executeToolCall(call, makeCatalog(call.name), makeCtx(call, parent));
-    expect(mockedExecMcp).toHaveBeenCalledWith('srv1', 'actual_tool', { x: 1 }, expect.any(AbortSignal));
+    expect(mockedExecMcp).toHaveBeenCalledWith({
+      serverName: 'srv1',
+      toolName: 'actual_tool',
+      toolArgs: { x: 1 },
+      signal: expect.any(AbortSignal),
+    });
 
     const calls = infoSpy.mock.calls.map(([f]) => f as Record<string, unknown>);
     const start = calls.find((c) => c.mod === 'chat.tool' && c.msg === 'tool start');
@@ -104,6 +104,7 @@ describe('executeToolCall — chat.tool span', () => {
     const call: ToolCallInput = { id: 'c', name: 'noop', arguments: {} };
     const noopCtx: ToolContext = {
       mode: 'agent',
+      profile: testProfile,
       profileId: 'p',
       agentId: 'a',
       sessionId: 's',

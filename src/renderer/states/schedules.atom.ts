@@ -10,7 +10,6 @@
  * 比 atom 内自己维护 `agentId × jobId × runState` 的合并逻辑更稳。
  *
  * 订阅通道：
- *   - persist:profile:switched   → 清空 + reload
  *   - persist:schedule:updated   → reload
  *   - persist:schedule:removed   → reload
  *   - persist:schedule:run:updated → reload（runState.startedAt / finishedAt 变化也走 listJobs）
@@ -20,6 +19,7 @@
 
 import { unit } from '@/atom/unit';
 import { persistEvents } from '@/ipc/persist';
+
 import { schedulerApi } from '@/ipc/scheduler';
 import type { SchedulerJob } from '@shared/ipc/scheduler';
 import { log } from '@/log';
@@ -61,20 +61,17 @@ async function reload(): Promise<void> {
   return p;
 }
 
-persistEvents['profile:switched'](() => {
-  change({ jobs: EMPTY, hydrated: false, loading: null });
+
+
+persistEvents['schedule:updated']((_e, payload) => {
   void reload();
 });
 
-persistEvents['schedule:updated'](() => {
+persistEvents['schedule:removed']((_e, payload) => {
   void reload();
 });
 
-persistEvents['schedule:removed'](() => {
-  void reload();
-});
-
-persistEvents['schedule:run:updated'](() => {
+persistEvents['schedule:run:updated']((_e, payload) => {
   void reload();
 });
 

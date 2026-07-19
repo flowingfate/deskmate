@@ -14,6 +14,7 @@ import {
   type RemoveSkillsFromAgentsResult,
   type SkillAgentTarget,
 } from '@main/lib/skill';
+import type { ProfileStore } from '@main/persist';
 import { dedupeSkillNames } from '../_shared';
 
 export interface UnbindSkillArgs {
@@ -39,7 +40,7 @@ export interface UnbindSkillResult {
 
 export async function unbindSkillInternal(
   args: UnbindSkillArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { store: ProfileStore; signal?: AbortSignal },
 ): Promise<UnbindSkillResult> {
   const skillNames = dedupeSkillNames(args.skill_names);
   if (skillNames.length === 0) {
@@ -57,12 +58,15 @@ export async function unbindSkillInternal(
     };
   }
 
-  const result: RemoveSkillsFromAgentsResult = await removeSkillsFromAgents({
-    skillNames,
-    targets: args.targets,
-    agentNames: args.agent_names,
-    removeFromAll: args.remove_from_all,
-  });
+  const result: RemoveSkillsFromAgentsResult = await removeSkillsFromAgents(
+    opts.store,
+    {
+      skillNames,
+      targets: args.targets,
+      agentNames: args.agent_names,
+      removeFromAll: args.remove_from_all,
+    },
+  );
 
   return {
     success: result.success,

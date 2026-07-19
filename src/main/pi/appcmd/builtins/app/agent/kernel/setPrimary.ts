@@ -7,7 +7,7 @@
  * 失败不抛;`signal` 仅做契约形状对齐。
  */
 
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 
 export interface SetPrimaryArgs {
   /** Agent name */
@@ -24,6 +24,7 @@ export interface SetPrimaryResult {
 }
 
 export async function setPrimaryInternal(
+  store: ProfileStore,
   args: SetPrimaryArgs,
   _opts?: { signal?: AbortSignal },
 ): Promise<SetPrimaryResult> {
@@ -47,10 +48,9 @@ export async function setPrimaryInternal(
       };
     }
 
-    const profile = await Profiles.get().active();
-    const records = profile.listAgents();
+    const records = store.listAgents();
 
-    const previousId = profile.getPrimaryAgentId();
+    const previousId = store.getPrimaryAgentId();
     const previousName = previousId ? (records.find((r) => r.id === previousId)?.name ?? '') : '';
 
     const target = records.find((r) => r.name === agentName);
@@ -72,7 +72,7 @@ export async function setPrimaryInternal(
       };
     }
 
-    await profile.setPrimaryAgent(target.id);
+    await store.setPrimaryAgent(target.id);
 
     return {
       success: true,

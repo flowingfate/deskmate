@@ -2,9 +2,6 @@ const mockGetPath = vi.fn();
 const mockRemove = vi.fn();
 const mockActiveSync = vi.fn();
 
-vi.mock('../../../persist', () => ({
-  Profiles: { get: () => ({ activeSync: () => mockActiveSync() }) },
-}));
 
 vi.mock('electron', async () => ({
   app: {
@@ -32,7 +29,7 @@ describe('deleteInstalledSkill', () => {
   });
 
   it('removes the skill via Skills.remove (which owns disk deletion)', async () => {
-    const result = await deleteInstalledSkill('pptx');
+    const result = await deleteInstalledSkill(mockActiveSync(), 'pptx');
 
     expect(result.success).toBe(true);
     expect(result.skillName).toBe('pptx');
@@ -41,7 +38,7 @@ describe('deleteInstalledSkill', () => {
   });
 
   it('trims the skill name before removing', async () => {
-    const result = await deleteInstalledSkill('  pptx  ');
+    const result = await deleteInstalledSkill(mockActiveSync(), '  pptx  ');
 
     expect(result.success).toBe(true);
     expect(mockRemove).toHaveBeenCalledWith('pptx');
@@ -50,21 +47,10 @@ describe('deleteInstalledSkill', () => {
   it('fails with DELETE_PROFILE_FAILED when Skills.remove throws', async () => {
     mockRemove.mockRejectedValueOnce(new Error('boom'));
 
-    const result = await deleteInstalledSkill('pptx');
+    const result = await deleteInstalledSkill(mockActiveSync(), 'pptx');
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('DELETE_PROFILE_FAILED');
   });
 
-  it('fails with DELETE_FILES_FAILED when no active profile', async () => {
-    mockActiveSync.mockImplementationOnce(() => {
-      throw new Error('no profile');
-    });
-
-    const result = await deleteInstalledSkill('pptx');
-
-    expect(result.success).toBe(false);
-    expect(result.error).toBe('DELETE_FILES_FAILED');
-    expect(mockRemove).not.toHaveBeenCalled();
-  });
 });

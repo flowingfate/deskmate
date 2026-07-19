@@ -1,11 +1,10 @@
 import { ipcMain } from 'electron';
 
-import type { Context } from './shared';
 import { FileNameLlmGenerator, McpConfigLlmFormatter, SystemPromptLlmWriter } from '@main/pi';
-import { Profiles } from '@main/persist';
 import { renderToMain } from '@shared/ipc/llm';
+import { requireProfileForSender } from './profileContext';
 
-export default function(ctx: Context) {
+export default function() {
 
   // ===============================
   // LLM related IPC handlers
@@ -14,9 +13,9 @@ export default function(ctx: Context) {
   const handle = renderToMain.bindMain(ipcMain);
 
   // System Prompt optimization
-  handle.improveSystemPrompt(async (_event, userInputPrompt) => {
+  handle.improveSystemPrompt(async (event, userInputPrompt) => {
     try {
-      const result = await SystemPromptLlmWriter.improveSystemPrompt(userInputPrompt, Profiles.get().activeProfileId);
+      const result = await SystemPromptLlmWriter.improveSystemPrompt(userInputPrompt, requireProfileForSender(event).id);
       return { success: true, data: result };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -24,9 +23,9 @@ export default function(ctx: Context) {
   });
 
   // MCP config formatting
-  handle.formatMcpConfig(async (_event, userInputMcpConfig) => {
+  handle.formatMcpConfig(async (event, userInputMcpConfig) => {
     try {
-      const result = await McpConfigLlmFormatter.formatMcpConfig(userInputMcpConfig, Profiles.get().activeProfileId);
+      const result = await McpConfigLlmFormatter.formatMcpConfig(userInputMcpConfig, requireProfileForSender(event).id);
       return { success: true, data: result };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -34,9 +33,9 @@ export default function(ctx: Context) {
   });
 
   // File name generation (auto-generate file name and extension based on content)
-  handle.generateFileName(async (_event, content) => {
+  handle.generateFileName(async (event, content) => {
     try {
-      const result = await FileNameLlmGenerator.generateFileName(content, Profiles.get().activeProfileId);
+      const result = await FileNameLlmGenerator.generateFileName(content, requireProfileForSender(event).id);
       return { success: true, data: result };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

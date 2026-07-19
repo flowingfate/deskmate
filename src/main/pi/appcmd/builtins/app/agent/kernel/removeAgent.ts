@@ -7,7 +7,7 @@
  * `signal` 仅做契约形状对齐 —— archive 是同步快路径。
  */
 
-import { Profiles } from '@main/persist';
+import type { Profile } from '@main/profile';
 
 import { findAgentByName } from './findAgent';
 
@@ -25,6 +25,7 @@ export interface RemoveAgentResult {
 }
 
 export async function removeAgentInternal(
+  profile: Profile,
   args: RemoveAgentArgs,
   _opts?: { signal?: AbortSignal },
 ): Promise<RemoveAgentResult> {
@@ -38,8 +39,7 @@ export async function removeAgentInternal(
     }
 
     const agentName = args.agent_name.trim();
-    const profile = await Profiles.get().active();
-    const found = await findAgentByName(profile, agentName);
+    const found = await findAgentByName(profile.store, agentName);
     if (!found) {
       return {
         success: false,

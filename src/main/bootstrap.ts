@@ -16,11 +16,30 @@
 // E2E：DESKMATE_TEST_USER_DATA_PATH 指定的是业务根，bootstrap 内部追加 /chromium。
 
 import { app } from 'electron';
-import * as fs from 'fs';
-import * as path from 'path';
+import fs from 'fs';
+import path from 'path';
 import { createRequire } from 'node:module';
 import { USER_DATA_DIRNAME } from '@shared/constants/userDataDir';
 import { APP_NAME, APP_ID } from '@shared/constants/branding';
+import { IS_DEV } from './startup/context';
+
+if (IS_DEV) {
+  setImmediate(async () => {
+    const possibleEnvPaths = [
+      path.join(__dirname, '../../.env.local'),
+      path.join(process.cwd(), '.env.local'),
+    ];
+
+    for (const envPath of possibleEnvPaths) {
+      try {
+        await fs.promises.access(envPath, fs.constants.F_OK);
+        process.loadEnvFile(envPath);
+        console.log('[Bootstrap] ✅ Loaded .env.local from:', envPath);
+        break;
+      } catch { }
+    }
+  });
+}
 
 const testUserDataOverride = (() => {
   try {

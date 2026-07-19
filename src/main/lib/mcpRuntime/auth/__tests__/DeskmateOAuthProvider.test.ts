@@ -40,7 +40,11 @@ const cacheMock = {
   }),
 };
 vi.mock('../DeskmateTokenCache', () => ({
-  DeskmateTokenCache: { getInstance: () => cacheMock },
+  DeskmateTokenCache: class {
+    getMcpOAuth = cacheMock.getMcpOAuth;
+    setMcpOAuth = cacheMock.setMcpOAuth;
+    deleteMcpOAuth = cacheMock.deleteMcpOAuth;
+  },
 }));
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -72,13 +76,13 @@ describe('DeskmateOAuthProvider', () => {
   describe('redirectUrl + clientMetadata', () => {
     it('exposes the CallbackServer redirect URI', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       expect(p.redirectUrl).toBe('http://127.0.0.1:33420/callback');
     });
 
     it('clientMetadata declares public PKCE client', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       const m = p.clientMetadata;
       expect(m.token_endpoint_auth_method).toBe('none');
       expect(m.grant_types).toEqual(['authorization_code', 'refresh_token']);
@@ -90,7 +94,7 @@ describe('DeskmateOAuthProvider', () => {
   describe('state', () => {
     it('returns a stable random base64url string within an instance', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       const a = p.state();
       const b = p.state();
       expect(a).toBe(b);
@@ -100,8 +104,8 @@ describe('DeskmateOAuthProvider', () => {
 
     it('generates different state values across instances', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const a = new DeskmateOAuthProvider('s', makeCfg()).state();
-      const b = new DeskmateOAuthProvider('s', makeCfg()).state();
+      const a = new DeskmateOAuthProvider('p_test', 's', makeCfg()).state();
+      const b = new DeskmateOAuthProvider('p_test', 's', makeCfg()).state();
       expect(a).not.toBe(b);
     });
   });
@@ -109,7 +113,7 @@ describe('DeskmateOAuthProvider', () => {
   describe('clientInformation lookup priority', () => {
     it('1. cache wins when populated', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg({ oauth: { clientId: 'from-cfg' } }));
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg({ oauth: { clientId: 'from-cfg' } }));
       storeImpl[p.debugServerKey] = {
         serverName: 's',
         serverUrl: 'https://x',
@@ -123,7 +127,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('2. cfg.oauth.clientId is used when cache is empty', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg({
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg({
         oauth: { clientId: 'from-cfg', clientSecret: 'sec' },
       }));
       const info = await p.clientInformation();
@@ -133,7 +137,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('3. returns undefined when neither cache nor cfg has clientId', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       expect(await p.clientInformation()).toBeUndefined();
     });
   });
@@ -141,7 +145,7 @@ describe('DeskmateOAuthProvider', () => {
   describe('saveClientInformation', () => {
     it('persists the DCR client info into the cache slot', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       await p.saveClientInformation({ client_id: 'abc', client_secret: 'xyz' } as any);
       const stored = storeImpl[p.debugServerKey];
       expect(stored?.clientId).toBe('abc');
@@ -153,13 +157,13 @@ describe('DeskmateOAuthProvider', () => {
   describe('tokens', () => {
     it('returns undefined when cache is empty', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       expect(await p.tokens()).toBeUndefined();
     });
 
     it('returns undefined when accessToken is empty marker (DCR-only state)', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       storeImpl[p.debugServerKey] = {
         serverName: 's',
         serverUrl: 'x',
@@ -172,7 +176,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('returns the token when valid and far from expiry', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       storeImpl[p.debugServerKey] = {
         serverName: 's',
         serverUrl: 'x',
@@ -191,7 +195,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('reports expiring token to trigger SDK refresh (within 5min window)', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       storeImpl[p.debugServerKey] = {
         serverName: 's',
         serverUrl: 'x',
@@ -209,7 +213,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('returns undefined when expired and no refresh token', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       storeImpl[p.debugServerKey] = {
         serverName: 's',
         serverUrl: 'x',
@@ -223,7 +227,7 @@ describe('DeskmateOAuthProvider', () => {
   describe('saveTokens', () => {
     it('persists tokens with computed expiresAt', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       const before = Date.now();
       await p.saveTokens({
         access_token: 'NEW',
@@ -244,7 +248,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('treats tokens with no expires_in AND no refresh_token as non-expiring (GitHub OAuth App)', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       const before = Date.now();
       await p.saveTokens({
         access_token: 'GH-AT',
@@ -264,7 +268,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('falls back to 1-hour expiry when expires_in missing but refresh_token present', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       const before = Date.now();
       await p.saveTokens({
         access_token: 'AT',
@@ -279,7 +283,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('falls back to 1-hour expiry when expires_in missing but a previous refresh_token is preserved', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       // Seed a previous entry with a refresh token (e.g. earlier successful flow).
       storeImpl[p.debugServerKey] = {
         serverName: 's',
@@ -304,7 +308,7 @@ describe('DeskmateOAuthProvider', () => {
   describe('markAccessTokenExpired', () => {
     it('zeros expiresAt while preserving access + refresh tokens and clientId', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       storeImpl[p.debugServerKey] = {
         serverName: 's',
         serverUrl: 'x',
@@ -327,7 +331,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('after marking expired, tokens() surfaces refresh_token so the SDK can refresh', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       storeImpl[p.debugServerKey] = {
         serverName: 's',
         serverUrl: 'x',
@@ -344,7 +348,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('after marking expired with no refresh_token, tokens() returns undefined so SDK starts fresh auth', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       storeImpl[p.debugServerKey] = {
         serverName: 's',
         serverUrl: 'x',
@@ -357,7 +361,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('is a no-op when the cache slot is empty', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       await p.markAccessTokenExpired();
       expect(storeImpl[p.debugServerKey]).toBeUndefined();
     });
@@ -378,7 +382,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('all → wipes the slot', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       seed(p);
       await p.invalidateCredentials('all');
       expect(storeImpl[p.debugServerKey]).toBeUndefined();
@@ -386,7 +390,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('client → clears clientId/clientSecret only', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       seed(p);
       await p.invalidateCredentials('client');
       const stored = storeImpl[p.debugServerKey];
@@ -397,7 +401,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('tokens → clears access/refresh, preserves clientId', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       seed(p);
       await p.invalidateCredentials('tokens');
       const stored = storeImpl[p.debugServerKey];
@@ -409,7 +413,7 @@ describe('DeskmateOAuthProvider', () => {
 
     it('verifier → only clears the in-memory verifier, no cache mutation', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       seed(p);
       await p.saveCodeVerifier('VERIFIER');
       await p.invalidateCredentials('verifier');
@@ -422,14 +426,14 @@ describe('DeskmateOAuthProvider', () => {
   describe('PKCE verifier lifecycle', () => {
     it('saveCodeVerifier + codeVerifier round-trip', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       await p.saveCodeVerifier('abcdef');
       expect(await p.codeVerifier()).toBe('abcdef');
     });
 
     it('codeVerifier throws if not saved', async () => {
       const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-      const p = new DeskmateOAuthProvider('s', makeCfg());
+      const p = new DeskmateOAuthProvider('p_test', 's', makeCfg());
       await expect(p.codeVerifier()).rejects.toThrow();
     });
   });

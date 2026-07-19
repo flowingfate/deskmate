@@ -19,22 +19,22 @@ async function freshModules() {
   vi.resetModules();
   const root = await import('../lib/root');
   root.setRootForTesting(tmpRoot);
-  const profiles = await import('../profiles');
-  profiles.Profiles.resetForTesting();
+  const registry = await import('../../profileRegistry');
+  registry.ProfileRegistry.resetForTesting();
   const dbMod = await import('../lib/db/db');
   dbMod.ProfileDb.resetForTesting();
   return {
-    Profiles: profiles.Profiles,
+    ProfileRegistry: registry.ProfileRegistry,
     ProfileDb: dbMod.ProfileDb,
   };
 }
 
 async function makeAgent() {
   const fresh = await freshModules();
-  await fresh.Profiles.get().bootstrap();
-  const profile = await fresh.Profiles.get().active();
-  const agent = await profile.createAgent({ name: 'T', version: '1' });
-  return { profile, agent, fresh };
+  await fresh.ProfileRegistry.bootstrap();
+  const store = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+  const agent = await store.createAgent({ name: 'T', version: '1' });
+  return { store, agent, fresh };
 }
 
 function readJsonl(file: string): PersistedJsonLine[] {
@@ -70,14 +70,14 @@ afterEach(async () => {
 
 describe('Session.appendToolResponse', () => {
   it('追加 tool_res 行进 pendingMessages，flush 后落到 messages.jsonl', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({});
 
     s.appendToolResponse('tc-1', { time: 1234, status: 'success', result: 'OK', images: [] });
     s.appendToolResponse('tc-2', { time: 5678, status: 'fail', result: 'denied', images: [] });
     await s.flushMessages();
 
-    const file = messagesFilePath(profile.id, agent.id, s.month, s.id);
+    const file = messagesFilePath(store.id, agent.id, s.month, s.id);
     const lines = readJsonl(file);
     expect(lines).toHaveLength(2);
     expect(lines[0]).toEqual({ role: 'tool_res', id: 'tc-1', time: 1234, status: 'success', result: 'OK' } satisfies PersistedToolResponse);
@@ -91,11 +91,11 @@ describe('Session.appendToolResponse', () => {
 
 describe('Session.rewriteMessages', () => {
   it('把 messages.jsonl 整体覆盖写为 dehydrate(messages) 的结果', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({});
 
     // 先写 5 条老消息
-    const file = messagesFilePath(profile.id, agent.id, s.month, s.id);
+    const file = messagesFilePath(store.id, agent.id, s.month, s.id);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
       file,
@@ -120,10 +120,10 @@ describe('Session.rewriteMessages', () => {
   });
 
   it('空数组重写 → 删除 messages.jsonl 文件', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({});
 
-    const file = messagesFilePath(profile.id, agent.id, s.month, s.id);
+    const file = messagesFilePath(store.id, agent.id, s.month, s.id);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ role: 'user', id: 'x', time: 0, content: 'x' }) + '\n');
     expect(fs.existsSync(file)).toBe(true);
@@ -135,7 +135,7 @@ describe('Session.rewriteMessages', () => {
   it('rewriteMessages 后调 appendMessage 不会从前一轮 pending 中复活幽灵尾巴', async () => {
     // 验证 §2.4 描述：rewriteMessages 前清空 pendingMessages，避免 buffer 残留被
     // append 到新文件末尾。
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({});
 
     // 故意往 buffer 塞两条 user message 不 flush
@@ -148,7 +148,7 @@ describe('Session.rewriteMessages', () => {
     ]);
     await s.flushMessages(); // 再 flush，确保 ghost 真的丢了
 
-    const file = messagesFilePath(profile.id, agent.id, s.month, s.id);
+    const file = messagesFilePath(store.id, agent.id, s.month, s.id);
     const lines = readJsonl(file);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatchObject({ id: 'kept', content: 'kept' });
@@ -157,7 +157,7 @@ describe('Session.rewriteMessages', () => {
   it('rehydrate 一轮 dehydrate 的产物得到原始 Domain messages', async () => {
     // 与 messageWire.test.ts 的 round-trip 不同：这里走 Session.rewriteMessages →
     // 真磁盘 → streamMessages 读回 → rehydrate，覆盖落盘 + 读回的端到端链路。
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({});
 
     const original: Message[] = [
@@ -173,7 +173,7 @@ describe('Session.rewriteMessages', () => {
 
     await s.rewriteMessages(original);
 
-    const file = messagesFilePath(profile.id, agent.id, s.month, s.id);
+    const file = messagesFilePath(store.id, agent.id, s.month, s.id);
     const lines = readJsonl(file);
     const { rehydrate } = await import('../messageWire');
     const { messages: restored, orphanResponses } = rehydrate(lines);
@@ -189,44 +189,44 @@ describe('Session.rewriteMessages', () => {
 
 describe('SessionConfig.turn 字段持久化', () => {
   it('未显式设置时 data.json 不含 turn 键', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({});
     await s.persist();
-    const data = JSON.parse(fs.readFileSync(dataFilePath(profile.id, agent.id, s.month, s.id), 'utf8'));
+    const data = JSON.parse(fs.readFileSync(dataFilePath(store.id, agent.id, s.month, s.id), 'utf8'));
     expect('turn' in data).toBe(false);
   });
 
   it('设置 turn.status=running → 落盘 → 重载后 config.turn 可见', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({});
     s.config.turn = { status: 'running', startedAt: 99 };
     await s.persist();
 
-    const raw = JSON.parse(fs.readFileSync(dataFilePath(profile.id, agent.id, s.month, s.id), 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(dataFilePath(store.id, agent.id, s.month, s.id), 'utf8'));
     expect(raw.turn).toEqual({ status: 'running', startedAt: 99 });
 
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const profile2 = await fresh.Profiles.get().active();
-    const reloaded = await (await profile2.getAgent(agent.id))?.getSession(s.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const store2 = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+    const reloaded = await (await store2.getAgent(agent.id))?.getSession(s.id);
     expect(reloaded?.config.turn).toEqual({ status: 'running', startedAt: 99 });
   });
 
   it('turn 从 running 回 idle → 落盘 → 重载', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({});
     s.config.turn = { status: 'running', startedAt: 1 };
     await s.persist();
     s.config.turn = { status: 'idle' };
     await s.persist();
 
-    const raw = JSON.parse(fs.readFileSync(dataFilePath(profile.id, agent.id, s.month, s.id), 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(dataFilePath(store.id, agent.id, s.month, s.id), 'utf8'));
     expect(raw.turn).toEqual({ status: 'idle' });
 
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const profile2 = await fresh.Profiles.get().active();
-    const reloaded = await (await profile2.getAgent(agent.id))?.getSession(s.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const store2 = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+    const reloaded = await (await store2.getAgent(agent.id))?.getSession(s.id);
     expect(reloaded?.config.turn).toEqual({ status: 'idle' });
   });
 });

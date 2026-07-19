@@ -1,5 +1,5 @@
 /**
- * Skill "list" 内核 —— 列出 active profile 内所有已安装 skill。
+ * Skill "list" 内核 —— 列出 owning Profile 内所有已安装 skill。
  *
  * 角色:被 `appcmd/builtins/app/skill/list.ts` 复用。
  *
@@ -9,7 +9,7 @@
  * 失败不抛,通过 envelope 回流;`signal` 仅做契约形状对齐。
  */
 
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 
 export interface SkillListItem {
   name: string;
@@ -25,10 +25,12 @@ export interface ListSkillsResult {
   error?: string;
 }
 
-export async function listSkillsInternal(_opts?: { signal?: AbortSignal }): Promise<ListSkillsResult> {
+export async function listSkillsInternal(
+  store: ProfileStore,
+  _opts?: { signal?: AbortSignal },
+): Promise<ListSkillsResult> {
   try {
-    const profile = await Profiles.get().active();
-    const items = profile.skills.items;
+    const items = store.skills.items;
     const skills: SkillListItem[] = items.map((s) => ({
       name: s.name,
       description: s.description,
@@ -42,7 +44,7 @@ export async function listSkillsInternal(_opts?: { signal?: AbortSignal }): Prom
       message:
         skills.length > 0
           ? `Found ${skills.length} installed skill(s).`
-          : 'No skills installed in the active profile.',
+          : 'No skills installed in the owning profile.',
     };
   } catch (error) {
     return {

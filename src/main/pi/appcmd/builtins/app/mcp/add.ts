@@ -173,7 +173,7 @@ export async function runAdd(argv: string[], ctx: AppCmdContext): Promise<void> 
 
   const createResult: CreateServerResult = await createServerInternal(
     { mcp_config: finalConfig },
-    { signal: ctx.signal },
+    { profile: ctx.profile, signal: ctx.signal },
   );
 
   if (!createResult.success) {

@@ -27,12 +27,12 @@ async function freshModules() {
   vi.resetModules();
   const root = await import('../lib/root');
   root.setRootForTesting(tmpRoot);
-  const profiles = await import('../profiles');
-  profiles.Profiles.resetForTesting();
+  const registry = await import('../../profileRegistry');
+  registry.ProfileRegistry.resetForTesting();
   const dbMod = await import('../lib/db/db');
   dbMod.ProfileDb.resetForTesting();
   return {
-    Profiles: profiles.Profiles,
+    ProfileRegistry: registry.ProfileRegistry,
     ScheduleJob: (await import('../schedule')).ScheduleJob,
     ProfileDb: dbMod.ProfileDb,
   };
@@ -40,12 +40,12 @@ async function freshModules() {
 
 async function makeAgent() {
   const fresh = await freshModules();
-  await fresh.Profiles.get().bootstrap();
-  const profile = await fresh.Profiles.get().active();
-  const agent = await profile.createAgent({
+  await fresh.ProfileRegistry.bootstrap();
+  const store = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+  const agent = await store.createAgent({
     name: 'T', version: '1',
   });
-  return { profile, agent, fresh };
+  return { store, agent, fresh };
 }
 
 beforeEach(() => {
@@ -73,9 +73,9 @@ describe('Session create + append + reload', () => {
 
     // 重载 — 整个 fresh modules（DB 也重打开），messages 能 stream 出来
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const profile2 = await fresh.Profiles.get().active();
-    const reloaded = await (await profile2.getAgent(agent.id))?.getSession(s.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const store2 = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+    const reloaded = await (await store2.getAgent(agent.id))?.getSession(s.id);
     expect(reloaded?.config.title).toBe('hello');
     const items: unknown[] = [];
     if (reloaded) for await (const m of reloaded.streamMessages()) items.push(m);
@@ -89,9 +89,9 @@ describe('Session create + append + reload', () => {
     expect((await agent.listSessionsFlat()).map((e) => e.id)).not.toContain(s.id);
 
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const profile2 = await fresh.Profiles.get().active();
-    const reloaded = await (await profile2.getAgent(agent.id))?.getSession(s.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const store2 = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+    const reloaded = await (await store2.getAgent(agent.id))?.getSession(s.id);
     expect(reloaded).toBeUndefined();
   });
 
@@ -121,14 +121,14 @@ describe('Session create + append + reload', () => {
 
 describe('SessionIdx.rebuildFromDisk', () => {
   it('rebuild 从 data.json 完整重建（覆盖盘存在的所有 regular session）', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({ title: 't' });
 
     // 验证盘上 data.json 存在
-    const dataFile = path.join(tmpRoot, 'profiles', profile.id, 'agents', agent.id, 'sessions', s.month, s.id, 'data.json');
+    const dataFile = path.join(tmpRoot, 'profiles', store.id, 'agents', agent.id, 'sessions', s.month, s.id, 'data.json');
     expect(fs.existsSync(dataFile)).toBe(true);
 
-    const result = await profile.sessionIdx.rebuildFromDisk();
+    const result = await store.sessionIdx.rebuildFromDisk();
     expect(result.inserted).toBeGreaterThanOrEqual(1);
     const flat = await agent.listSessionsFlat();
     expect(flat.map((e) => e.id)).toContain(s.id);
@@ -136,7 +136,7 @@ describe('SessionIdx.rebuildFromDisk', () => {
 
   it('Profile.load 在 wasCreated=true 时自动 rebuild（unlink index.db 后启动可见盘上 sessions）', async () => {
     // 准备：建一个 agent + 两个 session，落到盘
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s1 = await agent.createSession({ title: 'a' });
     const s2 = await agent.createSession({ title: 'b' });
     expect((await agent.listSessionsFlat()).length).toBe(2);
@@ -145,14 +145,14 @@ describe('SessionIdx.rebuildFromDisk', () => {
     //   1) 先关现连接，把 index.db 物理删掉（保留 data.json）
     //   2) freshModules + bootstrap → Profile.load 应检测到 wasCreated=true → rebuild
     const dbMod = await import('../lib/db/db');
-    dbMod.ProfileDb.close(profile.id);
-    dbMod.unlinkProfileDb(profile.id);
-    expect(fs.existsSync(path.join(tmpRoot, 'profiles', profile.id, 'index.db'))).toBe(false);
+    dbMod.ProfileDb.close(store.id);
+    dbMod.unlinkProfileDb(store.id);
+    expect(fs.existsSync(path.join(tmpRoot, 'profiles', store.id, 'index.db'))).toBe(false);
 
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const profile2 = await fresh.Profiles.get().active();
-    const agent2 = await profile2.getAgent(agent.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const store2 = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+    const agent2 = await store2.getAgent(agent.id);
     expect(agent2).toBeDefined();
     const ids = (await agent2!.listSessionsFlat()).map((e) => e.id).sort();
     expect(ids).toEqual([s1.id, s2.id].sort());
@@ -161,28 +161,28 @@ describe('SessionIdx.rebuildFromDisk', () => {
 
 describe('SessionIdx starred 列', () => {
   it('setStar 写 data.json 经 onChange 同步 regular_sessions.starred_at；listStarred 直查 SQL', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s1 = await agent.createSession({ title: 'starred' });
     const _s2 = await agent.createSession({ title: 'plain' });
 
     await s1.setStar({ starredAt: '2026-06-01T00:00:00Z' });
-    const starredAfterAdd = profile.sessionIdx.listStarred();
+    const starredAfterAdd = store.sessionIdx.listStarred();
     expect(starredAfterAdd).toHaveLength(1);
     expect(starredAfterAdd[0].sessionId).toBe(s1.id);
 
     // rebuildFromDisk 应保留 data.json#star 写入的列值
-    await profile.sessionIdx.rebuildFromDisk();
-    const starredAfterRebuild = profile.sessionIdx.listStarred();
+    await store.sessionIdx.rebuildFromDisk();
+    const starredAfterRebuild = store.sessionIdx.listStarred();
     expect(starredAfterRebuild.map((e) => e.sessionId)).toEqual([s1.id]);
   });
 
   it('setStar(undefined) 清空 starred_at，listStarred 不再含该 session', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const s = await agent.createSession({ title: 'tmp' });
     await s.setStar({ starredAt: '2026-06-02T00:00:00Z' });
-    expect(profile.sessionIdx.listStarred()).toHaveLength(1);
+    expect(store.sessionIdx.listStarred()).toHaveLength(1);
     await s.setStar(undefined);
-    expect(profile.sessionIdx.listStarred()).toHaveLength(0);
+    expect(store.sessionIdx.listStarred()).toHaveLength(0);
   });
 
   it('setStar 不刷 updatedAt（star 是 metadata，不该把会话排到最新）', async () => {
@@ -200,30 +200,29 @@ describe('SessionIdx starred 列', () => {
 
 describe('Bootstrap end-to-end', () => {
   it('bootstrap 装载共享注册表 + reconciles agents 无 warning', async () => {
-    const { Profiles } = await freshModules();
-    const { warnings } = await Profiles.get().bootstrap();
+    const { ProfileRegistry } = await freshModules()
+    const { warnings } = await ProfileRegistry.bootstrap();
     expect(warnings).toEqual([]);
-    const profile = await Profiles.get().active();
-    expect(profile.mcp.items).toEqual([]);
-    expect(profile.skills.items).toEqual([]);
-    expect(profile.sessionIdx.listStarred()).toEqual([]);
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    expect(store.mcp.items).toEqual([]);
+    expect(store.skills.items).toEqual([]);
+    expect(store.sessionIdx.listStarred()).toEqual([]);
   });
 
-  it('bootstrap 在 reconcile 删 phantom 时 warn', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
+  it('bootstrap reconcile removes phantom agent records', async () => {
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
     // 注入 phantom：往 agents.json 写一个对应目录不存在的 record
     const { PERSIST_PATH } = await import('@shared/persist/path');
     const { writeJson } = await import('../lib/atomic');
-    await writeJson(PERSIST_PATH.agentsIndexFile(tmpRoot, profile.id), {
+    await writeJson(PERSIST_PATH.agentsIndexFile(tmpRoot, store.id), {
       version: 1,
       items: [{ id: 'a_GHOST', name: 'Ghost', version: '1', createdAt: '', updatedAt: '' }],
     });
     const fresh = await freshModules();
-    const { warnings } = await fresh.Profiles.get().bootstrap();
-    expect(warnings.some((w) => w.includes('reconcileAgents'))).toBe(true);
-    expect((await fresh.Profiles.get().active()).listAgents()).toEqual([]);
+    await fresh.ProfileRegistry.bootstrap();
+    expect((fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store).listAgents()).toEqual([]);
   });
 });
 
@@ -251,9 +250,9 @@ describe('ScheduleJob run lifecycle', () => {
 
     // 重载 — 整 fresh modules + bootstrap + 验证状态机重建
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const profile2 = await fresh.Profiles.get().active();
-    const reloadedJob = await (await profile2.getAgent(agent.id))?.getJob(job.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const store2 = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+    const reloadedJob = await (await store2.getAgent(agent.id))?.getJob(job.id);
     expect(reloadedJob?.config.runState.status).toBe('completed');
     const reloadedRun = await reloadedJob?.getRun(run.id);
     expect(reloadedRun?.config.state.kind).toBe('schedule_run');
@@ -263,7 +262,7 @@ describe('ScheduleJob run lifecycle', () => {
   });
 
   it('deleteRun removes a completed run from source storage and the index', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const job = await agent.createJob({
       name: 'daily', message: 'do stuff', enabled: true,
       scheduleType: 'once', runAt: '2026-06-02T09:00:00Z',
@@ -275,7 +274,7 @@ describe('ScheduleJob run lifecycle', () => {
     expect(agent.jobRunIdx.findById(run.id)).toBeUndefined();
     expect(await job.listRunsOnDisk()).toEqual([]);
     expect(fs.existsSync(path.join(
-      tmpRoot, 'profiles', profile.id, 'agents', agent.id, 'schedules', job.id, 'runs', '202606', run.id,
+      tmpRoot, 'profiles', store.id, 'agents', agent.id, 'schedules', job.id, 'runs', '202606', run.id,
     ))).toBe(false);
   });
 
@@ -305,9 +304,9 @@ describe('ScheduleJob run lifecycle', () => {
     expect(agent.jobRunIdx.findById(run.id)).toBeUndefined();
 
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const profile2 = await fresh.Profiles.get().active();
-    const reloaded = await (await profile2.getAgent(agent.id))?.getJob(job.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const store2 = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+    const reloaded = await (await store2.getAgent(agent.id))?.getJob(job.id);
     expect(reloaded).toBeUndefined();
   });
 });
@@ -361,8 +360,8 @@ describe('JobRun.forkToSession', () => {
     expect(agent.sessionIdx.findById(continued.id)?.agentId).toBe(agent.id);
 
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const reloadedAgent = await (await fresh.Profiles.get().active()).getAgent(agent.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const reloadedAgent = await (fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store).getAgent(agent.id);
     const reloaded = await reloadedAgent?.getSession(continued.id);
     expect(reloaded).toBeDefined();
     if (!reloaded) throw new Error('Converted session did not survive reload');
@@ -450,8 +449,8 @@ describe('Step5/Step9 schedule API', () => {
   });
 
   it('Profile.listJobsFlat 跨 agent 聚合', async () => {
-    const { profile, agent } = await makeAgent();
-    const agentB = await profile.createAgent({
+    const { store, agent } = await makeAgent();
+    const agentB = await store.createAgent({
       name: 'B', version: '1',
     });
     const jobA = await agent.createJob({
@@ -463,23 +462,23 @@ describe('Step5/Step9 schedule API', () => {
       scheduleType: 'cron', cron: '0 * * * *',
     });
 
-    const all = await profile.listJobsFlat();
+    const all = await store.listJobsFlat();
     expect(all.map((x) => x.job.id).sort()).toEqual([jobA.id, jobB.id].sort());
-    const onlyA = await profile.listJobsFlat({ agentId: agent.id });
+    const onlyA = await store.listJobsFlat({ agentId: agent.id });
     expect(onlyA.map((x) => x.job.id)).toEqual([jobA.id]);
     expect(onlyA[0].agent.id).toBe(agent.id);
   });
 
   it('Profile.findJob 单 jobId 反查 owning agent', async () => {
-    const { profile, agent } = await makeAgent();
+    const { store, agent } = await makeAgent();
     const job = await agent.createJob({
       name: 'x', message: 'm', enabled: true,
       scheduleType: 'cron', cron: '0 * * * *',
     });
-    const hit = await profile.findJob(job.id);
+    const hit = await store.findJob(job.id);
     expect(hit?.job.id).toBe(job.id);
     expect(hit?.agent.id).toBe(agent.id);
-    const miss = await profile.findJob('j_nonexistent');
+    const miss = await store.findJob('j_nonexistent');
     expect(miss).toBeUndefined();
   });
 });

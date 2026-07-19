@@ -35,7 +35,7 @@ DESCRIPTION
 
 OPTIONS
   --agent-name <n>   Target the named agent. Repeatable to bind multiple.
-  --all-agents       Bind to every agent in the active profile.
+  --all-agents       Bind to every agent in the owning profile.
   --dry-run          Show resolved targets without writing.
   --json             Output the bind envelope as JSON.
   --help, -h         Show this help.
@@ -107,7 +107,7 @@ export async function runBind(argv: string[], ctx: AppCmdContext): Promise<void>
     targetDesc = `agent(s) [${agentNames.join(', ')}]`;
     bindArgs = { skill_name: skillName, agent_names: agentNames };
   } else {
-    const def = await resolveDefaultAgentTarget(ctx.agentId);
+    const def = await resolveDefaultAgentTarget(ctx.profile.store, ctx.agentId);
     if (!def.ok) {
       ctx.printErr(`skill bind: ${def.error}\n`);
       ctx.setExitCode(1);
@@ -135,6 +135,7 @@ export async function runBind(argv: string[], ctx: AppCmdContext): Promise<void>
   }
 
   const result: BindSkillResult = await bindSkillInternal(bindArgs, {
+    store: ctx.profile.store,
     signal: ctx.signal,
   });
 

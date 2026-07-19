@@ -27,6 +27,7 @@ import type { ContextState } from '@shared/persist/types'
 import type { ThinkingLevel } from '@shared/persist/types'
 
 import { CancellationError } from '@main/lib/utilities/errors';
+import { ProfileRegistry } from '@main/profileRegistry';
 
 import { readAgentRuntimeConfig, type AgentConfig } from '../utils/config';
 import { resolveCredentials, getModelInfo } from '../model';
@@ -384,7 +385,9 @@ export abstract class BaseSession {
     }
     const { model: baseModel, capabilities: cap } = resolved;
     const systemPrompt = await buildSystemPrompt({ agentCfg, profileId, agentId, sessionId: id });
-    const catalog = cap.tools ? await buildToolCatalogForAgent(agentCfg) : ToolCatalog.empty();
+    const catalog = cap.tools
+      ? await buildToolCatalogForAgent(agentCfg, ProfileRegistry.require(profileId))
+      : ToolCatalog.empty();
     return { agentCfg, baseModel, systemPrompt, catalog, maxTurns: MAX_TURN_ITERATIONS };
   }
 

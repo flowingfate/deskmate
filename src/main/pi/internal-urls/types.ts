@@ -14,6 +14,7 @@
  *    delegate execution 存在时，Knowledge/Skill 再按独立 delegate context 选择执行 Agent。
  */
 import type { AgentExecution, DelegateExecution, ToolContext } from '../tools/types';
+import type { Profile } from '@main/profile';
 
 /**
  * Handler 返回给 router 的原始资源 payload。`immutable` 由 router 从
@@ -48,6 +49,7 @@ export interface InternalResource {
 
 /** Internal URL handler 的公共 session/profile 上下文。 */
 interface ResolveContextBase {
+  readonly profile: Profile;
   readonly profileId: string;
   readonly sessionId: string;
   readonly signal?: AbortSignal;
@@ -159,6 +161,7 @@ export interface UrlCompletion {
 
 /** `write` handler 使用的同形 execution context，单独命名以区分读写入口。 */
 interface WriteContextBase {
+  readonly profile: Profile;
   readonly profileId: string;
   readonly sessionId: string;
   readonly signal?: AbortSignal;
@@ -195,6 +198,7 @@ export function toResolveContext(ctx: ToolContext): ResolveContext {
   if (ctx.mode === 'delegate') {
     return {
       mode: 'delegate',
+      profile: ctx.profile,
       profileId: ctx.profileId,
       agentId: ctx.agentId,
       sessionId: ctx.sessionId,
@@ -203,6 +207,7 @@ export function toResolveContext(ctx: ToolContext): ResolveContext {
     };
   }
   return {
+    profile: ctx.profile,
     mode: 'agent',
     profileId: ctx.profileId,
     agentId: ctx.agentId,
@@ -219,6 +224,7 @@ export function toResolveContext(ctx: ToolContext): ResolveContext {
 export function toWriteContext(ctx: ToolContext): WriteContext {
   if (ctx.mode === 'delegate') {
     return {
+      profile: ctx.profile,
       mode: 'delegate',
       profileId: ctx.profileId,
       agentId: ctx.agentId,
@@ -228,6 +234,7 @@ export function toWriteContext(ctx: ToolContext): WriteContext {
     };
   }
   return {
+    profile: ctx.profile,
     mode: 'agent',
     profileId: ctx.profileId,
     agentId: ctx.agentId,

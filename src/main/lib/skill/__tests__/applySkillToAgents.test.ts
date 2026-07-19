@@ -4,9 +4,6 @@ import type { SkillBindings } from '@shared/persist/types'
 
 const mockActive = vi.fn();
 
-vi.mock('../../../persist', () => ({
-  Profiles: { get: () => ({ active: () => mockActive() }) },
-}));
 
 interface TestAgentConfig {
   name: string;
@@ -57,7 +54,7 @@ describe('applySkillToAgents', () => {
       getAgent: async (id: string) => agentsById[id],
     });
 
-    const result = await applySkillToAgents({
+    const result = await applySkillToAgents(await mockActive(), {
       skillName: 'pptx',
       targets: [
         { agentId: 'chat-1', agentName: 'Deck Builder' },

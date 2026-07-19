@@ -1,7 +1,7 @@
 import { applySkillToAgents } from './applySkillToAgents';
 import { getSkillAvailability } from './skillAvailability';
 import { addSkillFromDevice } from './skillDeviceImporter';
-import { Profiles } from '../../persist';
+import type { ProfileStore } from '@main/persist';
 
 type SkillSource = { type: 'device-path'; value: string };
 
@@ -57,21 +57,15 @@ export interface InstallAndActivateSkillResult {
   inputType?: 'zip' | 'skill' | 'folder';
 }
 
-async function resolveCurrentAgentTarget(agentId?: string, _agentName?: string): Promise<SkillActivationTarget | null> {
-  if (!agentId) {
-    return null;
-  }
+async function resolveCurrentAgentTarget(
+  store: ProfileStore,
+  agentId?: string,
+  _agentName?: string,
+): Promise<SkillActivationTarget | null> {
+  if (!agentId) return null;
 
-  let profile;
-  try {
-    profile = await Profiles.get().active();
-  } catch {
-    return null;
-  }
-  const agent = await profile.getAgent(agentId);
-  if (!agent) {
-    return null;
-  }
+  const agent = await store.getAgent(agentId);
+  if (!agent) return null;
   return { agentId, agentName: agent.config.name };
 }
 
@@ -120,6 +114,7 @@ function buildResult(args: {
 }
 
 export async function installAndActivateSkill(
+  store: ProfileStore,
   args: InstallAndActivateSkillArgs,
 ): Promise<InstallAndActivateSkillResult> {
   let skillName = '';
@@ -128,7 +123,7 @@ export async function installAndActivateSkill(
   let isOverwrite = false;
 
   try {
-    const installResult = await addSkillFromDevice(args.source.value, args.confirmOverwrite);
+    const installResult = await addSkillFromDevice(store, args.source.value, args.confirmOverwrite);
     if (!installResult.success || !installResult.skillName) {
       const result = buildResult({
         success: false,
@@ -146,7 +141,7 @@ export async function installAndActivateSkill(
     inputType = installResult.inputType;
     isOverwrite = !!installResult.isOverwrite;
 
-    const availabilityBeforeApply = await getSkillAvailability({
+    const availabilityBeforeApply = await getSkillAvailability(store, {
       skillName,
       agentId: args.activation.agentId,
       agentName: args.activation.agentName,
@@ -173,7 +168,7 @@ export async function installAndActivateSkill(
 
     let targets: SkillActivationTarget[] | undefined;
     if (args.activation.mode === 'current-agent') {
-      const currentTarget = await resolveCurrentAgentTarget(args.activation.agentId, args.activation.agentName);
+      const currentTarget = await resolveCurrentAgentTarget(store, args.activation.agentId, args.activation.agentName);
       if (!currentTarget) {
         const result = buildResult({
           success: true,
@@ -194,11 +189,10 @@ export async function installAndActivateSkill(
     } else if (args.activation.mode === 'selected-agents') {
       targets = args.activation.targets;
     } else if (args.activation.mode === 'all-agents') {
-      const profile = await Profiles.get().active();
-      const records = profile.listAgents();
+      const records = store.listAgents();
       targets = [];
       for (const rec of records) {
-        const agent = await profile.getAgent(rec.id);
+        const agent = await store.getAgent(rec.id);
         if (agent) targets.push({ agentId: rec.id, agentName: agent.config.name });
       }
     }
@@ -220,13 +214,13 @@ export async function installAndActivateSkill(
       return result;
     }
 
-    const applyResult = await applySkillToAgents({
+    const applyResult = await applySkillToAgents(store, {
       skillName,
       targets,
       requestSource: args.requestSource,
     });
 
-    const availabilityAfterApply = await getSkillAvailability({
+    const availabilityAfterApply = await getSkillAvailability(store, {
       skillName,
       agentId: args.activation.agentId,
       agentName: args.activation.agentName,

@@ -115,10 +115,10 @@ async function freshModules() {
   vi.resetModules();
   const root = await import('../lib/root');
   root.setRootForTesting(ROOT);
-  const profiles = await import('../profiles');
-  profiles.Profiles.resetForTesting();
+  const registry = await import('../../profileRegistry');
+  registry.ProfileRegistry.resetForTesting();
   return {
-    Profiles: profiles.Profiles,
+    ProfileRegistry: registry.ProfileRegistry,
     Agent:    (await import('../agent')).Agent,
   };
 }
@@ -127,12 +127,12 @@ beforeEach(() => { resetMemFs(); });
 
 describe('Agent.persist + load round-trip', () => {
   it('writes AGENT.md and reads it back identically', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const profile = await reg.active();
+    const store = reg.require(reg.defaultProfileId).store
 
-    const agent = await profile.createAgent({
+    const agent = await store.createAgent({
       name: 'Otto',
       version: '1.0.0',
       model: 'claude-sonnet-4.6',
@@ -144,10 +144,10 @@ describe('Agent.persist + load round-trip', () => {
     expect(await agent.knowledge.exists()).toBe(true);
 
     const fresh = await freshModules();
-    const reg2 = fresh.Profiles.get();
+    const reg2 = fresh.ProfileRegistry;
     await reg2.bootstrap();
-    const profile2 = await reg2.active();
-    const reloaded = await profile2.getAgent(agent.id);
+    const store2 = reg2.require(reg2.defaultProfileId).store
+    const reloaded = await store2.getAgent(agent.id);
     expect(reloaded).toBeDefined();
     expect(reloaded?.config.name).toBe('Otto');
     expect(reloaded?.config.version).toBe('1.0.0');
@@ -155,33 +155,34 @@ describe('Agent.persist + load round-trip', () => {
   });
 
   it('createAgent appends to agents.json items', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const a = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const initialIds = store.listAgents().map((record) => record.id);
+    const a = await store.createAgent({
       name: 'A', version: '1',
     });
-    const b = await profile.createAgent({
+    const b = await store.createAgent({
       name: 'B', version: '1',
     });
-    const list = profile.listAgents();
-    expect(list.map((r) => r.id)).toEqual([a.id, b.id]);
+    const list = store.listAgents();
+    expect(list.map((r) => r.id)).toEqual([...initialIds, a.id, b.id]);
   });
 });
 
 describe('Agent rename via patchFront', () => {
   it('renaming does not change id; AGENT.md round-trip survives reload', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'OldName', version: '1',
     });
 
     await agent.patchFront({ name: 'NewName' });
     expect(agent.config.name).toBe('NewName');
 
-    const reloaded = await (await Profiles.get().active()).getAgent(agent.id);
+    const reloaded = await (ProfileRegistry.require(ProfileRegistry.defaultProfileId).store).getAgent(agent.id);
     expect(reloaded?.id).toBe(agent.id);
     expect(reloaded?.config.name).toBe('NewName');
   });
@@ -192,10 +193,10 @@ describe('Agent rename via patchFront', () => {
    * Step 2 修：patchFront 内自动调 AgentRegistry.syncRecord（注入的 registry）。
    */
   it('patchFront immediately syncs agents.json record (no stale)', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'OldName', version: '1.0.0',
       model: 'old-model',
     });
@@ -203,7 +204,7 @@ describe('Agent rename via patchFront', () => {
     await agent.patchFront({ name: 'NewName', model: 'new-model', version: '2.0.0' });
 
     // listAgents 立刻反映新值，不必再触发任何额外的 createAgent / archive
-    const list = profile.listAgents();
+    const list = store.listAgents();
     const rec = list.find((r) => r.id === agent.id);
     expect(rec?.name).toBe('NewName');
     expect(rec?.model).toBe('new-model');
@@ -225,10 +226,10 @@ describe('Agent rename via patchFront', () => {
    * 14 行 createAgent 流程的内存实例不走 load，不会触发；必须显式从盘 reload。
    */
   it('reload + patchFront updates AGENT.md and agents.json without throwing', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'M', version: '1',
       model: 'old::m',
     });
@@ -236,9 +237,9 @@ describe('Agent rename via patchFront', () => {
 
     // 模拟"app 重启" —— 用 freshModules 重新 bootstrap，强制走 Agent.load
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const profile2 = await fresh.Profiles.get().active();
-    const reloaded = await profile2.getAgent(agentId);
+    await fresh.ProfileRegistry.bootstrap();
+    const store2 = fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store
+    const reloaded = await store2.getAgent(agentId);
     expect(reloaded).toBeDefined();
     // createdAt/updatedAt 必须从 agents.json record 回填，不能是空串
     expect(reloaded!.createdAt).not.toBe('');
@@ -248,30 +249,30 @@ describe('Agent rename via patchFront', () => {
     await expect(reloaded!.patchFront({ model: 'new::m' })).resolves.toBeUndefined();
 
     // agents.json items 必须立刻反映新 model（syncRecord 走通）
-    const list = profile2.listAgents();
+    const list = store2.listAgents();
     expect(list.find((r) => r.id === agentId)?.model).toBe('new::m');
   });
 
   it('toRecord() carries model field (hot list-level cache)', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'M', version: '1',
       model: 'gh::sonnet',
     });
     const rec = agent.toRecord();
     expect(rec.model).toBe('gh::sonnet');
     // listAgents 取出的 record 也含 model
-    const list = profile.listAgents();
+    const list = store.listAgents();
     expect(list.find((r) => r.id === agent.id)?.model).toBe('gh::sonnet');
   });
 
   it('toDetail() returns cold cluster only; no record fields except agentId', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'D', version: '1',
       model: 'gh::sonnet',
       systemPrompt: 'sp',
@@ -302,10 +303,10 @@ describe('Agent rename via patchFront', () => {
    * 的语义透传到持久化层。
    */
   it('patchFront({ thinkingLevel: null }) clears the field; AGENT.md round-trip drops it', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'TL', version: '1',
       model: 'gh::sonnet', systemPrompt: 'sp',
     });
@@ -318,8 +319,8 @@ describe('Agent rename via patchFront', () => {
     // round-trip：reload 后字段彻底缺席（toFrontMatter 的 !== undefined 守卫保证
     // 不会写出 `thinkingLevel: null`）
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const reloaded = await (await fresh.Profiles.get().active()).getAgent(agent.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const reloaded = await (fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store).getAgent(agent.id);
     expect(reloaded?.config.thinkingLevel).toBeUndefined();
 
     // undefined 时 patchFront 不修改既有值
@@ -338,10 +339,10 @@ describe('Agent rename via patchFront', () => {
    * "默认全开"的运行语义由 `pi/__tests__/toolCatalog.test.ts` 覆盖。
    */
   it('patchFront({ tools }) 落盘 + reload round-trip;空数组与具体列表都保留', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'T', version: '1',
       model: 'gh::sonnet', systemPrompt: 'sp',
     });
@@ -351,8 +352,8 @@ describe('Agent rename via patchFront', () => {
     expect(agent.config.tools).toEqual(['read', 'write']);
 
     const fresh1 = await freshModules();
-    await fresh1.Profiles.get().bootstrap();
-    const reloaded1 = await (await fresh1.Profiles.get().active()).getAgent(agent.id);
+    await fresh1.ProfileRegistry.bootstrap();
+    const reloaded1 = await (fresh1.ProfileRegistry.require(fresh1.ProfileRegistry.defaultProfileId).store).getAgent(agent.id);
     expect(reloaded1?.config.tools).toEqual(['read', 'write']);
     expect(reloaded1?.toDetail().tools).toEqual(['read', 'write']);
 
@@ -362,8 +363,8 @@ describe('Agent rename via patchFront', () => {
     expect(reloaded1!.config.tools).toEqual([]);
 
     const fresh2 = await freshModules();
-    await fresh2.Profiles.get().bootstrap();
-    const reloaded2 = await (await fresh2.Profiles.get().active()).getAgent(agent.id);
+    await fresh2.ProfileRegistry.bootstrap();
+    const reloaded2 = await (fresh2.ProfileRegistry.require(fresh2.ProfileRegistry.defaultProfileId).store).getAgent(agent.id);
     expect(reloaded2?.config.tools).toEqual([]);
   });
 
@@ -378,10 +379,10 @@ describe('Agent rename via patchFront', () => {
    * 意图为准；invariant 兜底不能覆盖显式语义。
    */
   it('patchFront({ model }) clears thinkingLevel; same-model noop preserves; explicit thinkingLevel wins', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'M', version: '1',
       model: 'openai::o3', systemPrompt: 'sp',
     });
@@ -412,15 +413,15 @@ describe('Agent rename via patchFront', () => {
   });
 
   it('Profile.getAgentDetail(id) returns null for unknown id; ok for known', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'G', version: '1',
       systemPrompt: 'be cool',
     });
-    expect(await profile.getAgentDetail('a_nope')).toBeNull();
-    const d = await profile.getAgentDetail(agent.id);
+    expect(await store.getAgentDetail('a_nope')).toBeNull();
+    const d = await store.getAgentDetail(agent.id);
     expect(d?.systemPrompt).toBe('be cool');
     expect(d?.agentId).toBe(agent.id);
   });
@@ -428,84 +429,85 @@ describe('Agent rename via patchFront', () => {
 
 describe('Profile.archiveAgent + restoreAgent', () => {
   it('archives agent dir under archive/agents/{id}_{ts}/ and removes from index + primary', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'Doomed', version: '1',
     });
-    await profile.setPrimaryAgent(agent.id);
+    await store.setPrimaryAgent(agent.id);
 
-    await profile.archiveAgent(agent.id);
+    await store.archiveAgent(agent.id);
 
-    expect(profile.getPrimaryAgentId()).toBeUndefined();
-    expect(profile.listAgents().map((r) => r.id)).not.toContain(agent.id);
+    expect(store.getPrimaryAgentId()).toBeUndefined();
+    expect(store.listAgents().map((r) => r.id)).not.toContain(agent.id);
 
-    const archived = await profile.archive.listArchivedAgents();
+    const archived = await store.archive.listArchivedAgents();
     expect(archived).toHaveLength(1);
     expect(archived[0].id).toBe(agent.id);
     expect(archived[0].name).toBe('Doomed');
   });
 
   it('restoreAgent moves agent back and reappears in listAgents', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const agent = await profile.createAgent({
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const agent = await store.createAgent({
       name: 'Phoenix', version: '1',
     });
-    await profile.archiveAgent(agent.id);
-    const [archived] = await profile.archive.listArchivedAgents();
-    await profile.restoreAgent(archived.archivedId);
+    await store.archiveAgent(agent.id);
+    const [archived] = await store.archive.listArchivedAgents();
+    await store.restoreAgent(archived.archivedId);
 
-    expect(profile.listAgents().map((r) => r.id)).toContain(agent.id);
+    expect(store.listAgents().map((r) => r.id)).toContain(agent.id);
     // 重新通过磁盘加载，确保 AGENT.md 跟着搬回来了
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const reloaded = await (await fresh.Profiles.get().active()).getAgent(agent.id);
+    await fresh.ProfileRegistry.bootstrap();
+    const reloaded = await (fresh.ProfileRegistry.require(fresh.ProfileRegistry.defaultProfileId).store).getAgent(agent.id);
     expect(reloaded?.config.name).toBe('Phoenix');
   });
 });
 
 describe('Profile.reconcileAgents', () => {
   it('drops missing dirs from agents.json items and clears primary if pointing to ghost', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const a = await profile.createAgent({ name: 'A', version: '1' });
-    const ghost = await profile.createAgent({ name: 'Ghost', version: '1' });
-    await profile.setPrimaryAgent(ghost.id);
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const initialIds = store.listAgents().map((record) => record.id);
+    const a = await store.createAgent({ name: 'A', version: '1' });
+    const ghost = await store.createAgent({ name: 'Ghost', version: '1' });
+    await store.setPrimaryAgent(ghost.id);
 
     // 手动把 ghost 的目录干掉，让 reconcile 察觉漂移
     await (await import('node:fs/promises')).rm(
-      `${ROOT}/profiles/${profile.id}/agents/${ghost.id}`,
+      `${ROOT}/profiles/${store.id}/agents/${ghost.id}`,
       { recursive: true, force: true },
     );
 
-    const result = await profile.reconcileAgents();
+    const result = await store.reconcileAgents();
     expect(result.droppedFromIndex).toEqual([ghost.id]);
     expect(result.primaryCleared).toBe(true);
-    expect(profile.listAgents().map((r) => r.id)).toEqual([a.id]);
-    expect(profile.getPrimaryAgentId()).toBeUndefined();
+    expect(store.listAgents().map((r) => r.id)).toEqual([...initialIds, a.id]);
+    expect(store.getPrimaryAgentId()).toBeUndefined();
   });
 });
 
 describe('Profile.resolveDelegates', () => {
   it('normalizes configured IDs and keeps self, missing, and archived targets unavailable', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
-    const parent = await profile.createAgent({ name: 'Parent', version: '1' });
-    const available = await profile.createAgent({ name: 'Available', version: '1' });
-    const archived = await profile.createAgent({ name: 'Archived', version: '1' });
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const parent = await store.createAgent({ name: 'Parent', version: '1' });
+    const available = await store.createAgent({ name: 'Available', version: '1' });
+    const archived = await store.createAgent({ name: 'Archived', version: '1' });
 
     await parent.patchFront({
       delegates: [' ', ` ${available.id} `, parent.id, 'a_missing', archived.id, available.id],
     });
-    await profile.archiveAgent(archived.id);
+    await store.archiveAgent(archived.id);
 
-    const availableRecords = profile.listAgents().filter((record) => record.id === available.id);
-    expect(await profile.resolveDelegates(parent.id)).toEqual({
+    const availableRecords = store.listAgents().filter((record) => record.id === available.id);
+    expect(await store.resolveDelegates(parent.id)).toEqual({
       available: availableRecords,
       unavailableIds: [parent.id, 'a_missing', archived.id],
     });
@@ -514,28 +516,29 @@ describe('Profile.resolveDelegates', () => {
 
 describe('Profile.getSnapshot (Step 3 lazy AGENT.md)', () => {
   it('does not touch AGENT.md files when assembling snapshot for N agents', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const profile = await Profiles.get().active();
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    const initialCount = store.listAgents().length;
 
     // Seed 3 agents（每个都会写 AGENT.md，但写时记录的 readFile 在 setup 阶段，
     // 我们 spy 是在 setup 之后才装的）
-    await profile.createAgent({ name: 'A', version: '1', model: 'm' });
-    await profile.createAgent({ name: 'B', version: '1', model: 'm' });
-    await profile.createAgent({ name: 'C', version: '1', model: 'm' });
+    await store.createAgent({ name: 'A', version: '1', model: 'm' });
+    await store.createAgent({ name: 'B', version: '1', model: 'm' });
+    await store.createAgent({ name: 'C', version: '1', model: 'm' });
 
     // 接着 freshModules 模拟 cold start：Profile cache 清空 + 重新 bootstrap +
     // 立刻 spy readFile，然后调 getSnapshot —— 期望 0 次 AGENT.md 读。
     const fresh = await freshModules();
-    const reg = fresh.Profiles.get();
+    const reg = fresh.ProfileRegistry;
     await reg.bootstrap();
-    const p2 = await reg.active();
+    const p2 = reg.require(reg.defaultProfileId).store;
 
     const fsp = await import('node:fs/promises');
     const readSpy = vi.spyOn(fsp, 'readFile');
 
     const snap = await p2.getSnapshot();
-    expect(snap.agents).toHaveLength(3);
+    expect(snap.agents).toHaveLength(initialCount + 3);
 
     const agentMdReads = readSpy.mock.calls.filter((args) => String(args[0]).endsWith('AGENT.md'));
     expect(agentMdReads).toEqual([]);

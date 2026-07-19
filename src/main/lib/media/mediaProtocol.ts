@@ -16,14 +16,14 @@
  *   复用,本模块不重复实现一遍。
  * - `<path…>` = 内层路径,renderer 每段 `encodeURIComponent`;本模块每段
  *   `decodeURIComponent` 还原后拼回 `<authority>://<path>` 交给 router。
- * - `<query>` = 解析上下文 + 传输提示:
+ *     - `profile` —— 主窗口在构造时注入的不可变 Profile ID
  *     - `agent`   —— ULID，同时映射 ResolveContext executor 与 session owner
  *     - `session` —— ULID,resolveToPath 的 sessionId(local 必填;knowledge 不消费)
  *     - `mime`    —— URL-encoded,直接作为 Content-Type(必填;主进程不读字节嗅探,
  *                    renderer 持久化的 attachment 已知 mime,由它权威给出)
  *
- * profileId **不进 query** —— 主进程内部用 active profile,防跨 profile 越权;
- * 与 [internal-urls IPC](../../startup/ipc/internal-urls.ts) 同纪律。
+ * profileId 必须在 URI 中：protocol handler 不持有 IPC sender，不能从 selected Profile
+ * 推断请求的 owner。InternalUrlRouter 仍会用 profileId 精确路由 ProfileStore。
  *
  * 扩展点(设计预留,本期未实现):
  * - `?download=1` → 回 `Content-Disposition: attachment`
@@ -37,8 +37,8 @@ import { Readable } from 'node:stream';
 import { protocol } from 'electron';
 
 import { log } from '@main/log';
-import { Profiles } from '@main/persist';
 import { InternalUrlRouter, type ResolveContext } from '@main/pi';
+import { ProfileRegistry } from '@main/profileRegistry';
 
 const logger = log.child({ mod: 'MediaProtocol' });
 
@@ -55,9 +55,9 @@ interface MediaAuthority {
   /** 委托解析路径的 internal-url scheme,例如 `'local'`。 */
   readonly innerScheme: string;
   /** 除 `mime` 外必填的 query 参数(缺一个回 400)。`mime` 始终必填,单列在校验里。 */
-  readonly requiredContext: readonly ('agent' | 'session')[];
-  /** 从 query + active profileId 组装 router 需要的 {@link ResolveContext}。 */
-  buildContext(searchParams: URLSearchParams, profileId: string): ResolveContext;
+  readonly requiredContext: readonly ('profile' | 'agent' | 'session')[];
+  /** 从 query 组装 router 需要的 {@link ResolveContext}。 */
+  buildContext(searchParams: URLSearchParams): ResolveContext;
 }
 
 /**
@@ -68,12 +68,12 @@ const MEDIA_AUTHORITIES: Record<string, MediaAuthority> = {
   local: {
     authority: 'local',
     innerScheme: 'local',
-    // local sandbox 是 session 级 —— agent + session 都必填。
-    requiredContext: ['agent', 'session'],
-    buildContext(q, profileId): ResolveContext {
+    requiredContext: ['profile', 'agent', 'session'],
+    buildContext(q): ResolveContext {
       return {
         mode: 'agent',
-        profileId,
+        profile: ProfileRegistry.require(q.get('profile') ?? ''),
+        profileId: q.get('profile') ?? '',
         agentId: q.get('agent') ?? '',
         sessionId: q.get('session') ?? '',
       };
@@ -82,12 +82,12 @@ const MEDIA_AUTHORITIES: Record<string, MediaAuthority> = {
   knowledge: {
     authority: 'knowledge',
     innerScheme: 'knowledge',
-    // knowledge 是 agent 级 —— 只需 agent;sessionId 塞空串(handler 不消费)。
-    requiredContext: ['agent'],
-    buildContext(q, profileId): ResolveContext {
+    requiredContext: ['profile', 'agent'],
+    buildContext(q): ResolveContext {
       return {
         mode: 'agent',
-        profileId,
+        profile: ProfileRegistry.require(q.get('profile') ?? ''),
+        profileId: q.get('profile') ?? '',
         agentId: q.get('agent') ?? '',
         sessionId: '',
       };
@@ -158,8 +158,7 @@ export async function resolveMediaRequest(rawUrl: string): Promise<Response> {
 
   let absPath: string;
   try {
-    const profile = await Profiles.get().active();
-    const ctx = authority.buildContext(parsed.searchParams, profile.id);
+    const ctx = authority.buildContext(parsed.searchParams);
     // resolveToPath 复用沙盒边界检查 + agent/session 校验;越界 / 缺失会抛。
     absPath = await InternalUrlRouter.get().resolveToPath(innerUri, ctx);
   } catch (error) {
@@ -197,7 +196,7 @@ export async function resolveMediaRequest(rawUrl: string): Promise<Response> {
  * 的前置条件)。scheme 本身的 privileged 声明在 `main.ts` 的
  * `registerSchemesAsPrivileged`(MUST 在 app ready 前)。
  */
-export function registerMediaProtocol(): void {
+export function handleMediaProtocol(): void {
   protocol.handle('media', (request) => resolveMediaRequest(request.url));
   logger.info({ msg: 'media protocol registered', authorities: Object.keys(MEDIA_AUTHORITIES) });
 }

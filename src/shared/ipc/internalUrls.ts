@@ -5,7 +5,7 @@
  * - Renderer 在调老 fs IPC(`fsApi.readFile` / `getWorkspaceFileTree` / 等)前,
  *   用本通道把 `local://...` / `knowledge://...` 翻成绝对路径 —— UI 层享受 URI
  *   抽象,fs IPC 通道保持纯绝对路径契约。
- * - **不接受 profileId** —— 主进程内部用 active profile,避免渲染层学 profile id。
+ * - **不接受 `profileId`** —— 主进程从 IPC sender 解析 owning Profile，避免 renderer 伪造或重复传递窗口 identity。
  * - 需要 agentId / sessionId 由调用方传入(同 attachment IPC 纪律):
  *   - `local://` 需要 agentId + sessionId
  *   - `knowledge://` 需要 agentId(sessionId 可空,handler 不消费)

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (Step 13：顶层 subagent 是唯一委派入口) -->
+<!-- Last verified: 2026-07-18 (ToolContext Profile 贯穿 AppCommand 与 Internal URL) -->
 # pi/tools — 本地工具子系统(pi-native)
 
 > 主进程"本地工具"独立 registry。**不是 MCP server** —— 每个工具直接是
@@ -10,13 +10,13 @@
 |------|------|------|
 | `types.ts` | `LocalTool` / `ToolContext` / `ToolResult` / `LazyHandlerLoader` 契约 | 小 |
 | `registry.ts` | `ToolsRegistry` 类 + 模块级单例 `tools` 的注册/查询；`executeLocalTool(tool,args,ctx)` 是 catalog local route 共用的取消/异常收敛边界；`ensureToolsRegistered()` 触发首次注册 | 小 |
-| `index.ts` | 启动期把所有工具 register 进 `tools`;按“批”分组。`subagent` 与 app/web 同为顶层 facade；handler 按当前 `Profile` 取得其 cached command facade，首次创建时绑定 manager，同一 LocalTool 对象加入 delegated catalog 黑名单以禁止嵌套 | 小 |
+| `index.ts` | 启动期把所有工具 register 进 `tools`;按“批”分组。`subagent` 与 app/web 同为顶层 facade；handler 直接使用 `ToolContext.profile` 的 cached command facade，同一 LocalTool 对象加入 delegated catalog 黑名单以禁止嵌套 | 小 |
 | `lazy.ts` | `lazy(spec, loader)` 工厂:spec 立刻可见(LLM 列表/IPC `getAll` 不阻塞),handler 首调时 `await loader()` 动态 import 真实实现。并发首调共享同一 inflight promise | 小 |
 | `schema.ts` | `jsonSchema(literal)`:把 plain JSON Schema 字面量装成 pi-ai `TSchema`(pi-ai provider 全部按裸 JSON Schema 读 `tool.parameters`)。spec 模块加载期同步构造,无法 dynamic-import typebox | 小 |
 | `impl/` | 重模块的实现仓库 —— 目前仅剩 `readOfficeFile.ts`(被 `read/backends/office.ts` 通过 `await import('../../impl/readOfficeFile')` 推迟到首调,与旧 `lazy(...)` wrapper 同语义、同性能、同 chunk-split 行为)| ~660 LOC |
 | `app.ts` | 显式定义 `app` LocalTool：schema/description/handler 与 `appCommands` router 并列可读；handler 复用 `executeCommandFacade(appCommand, ...)` | 极小 |
 | `web.ts` | 显式定义 `web` LocalTool：schema/description/handler 与 `webCommands` router 并列可读；handler 复用 `executeCommandFacade(webCommand, ...)`。不进 `appCommands`,`app web ...` 已废弃 | 极小 |
-| `subagent.ts` | 根据显式 ToolContext profile 取 active `Profile`，以 `WeakMap<Profile, AppCommand>` 缓存并复用 command facade；其绑定 `SubAgentManager.forProfile(profile)`，不持有全局 manager | 小 |
+| `subagent.ts` | 直接使用 `ToolContext.profile`，再以 `WeakMap<Profile, AppCommand>` 缓存并复用 command facade；manager 仅由 `Profile.getSubAgentManager()` 暴露 | 小 |
 | `*.ts`(具体工具) | 每个工具一个文件:`spec` literal + `handler(args, ctx)`。所有工具都是 native inline 形态(无 wrapper / 无桥接) | 各 ~10–600 LOC |
 
 ## 架构
@@ -43,14 +43,15 @@ interface LocalTool<TParams extends TSchema = TSchema> {
 
 ```ts
 type ToolContext =
-  | { mode: 'agent'; agentId: string; sessionId: string; /* common fields */ }
-  | { mode: 'delegate'; agentId: string; sessionId: string; delegateId: string; /* common fields */ };
+  | { profile: Profile; mode: 'agent'; agentId: string; sessionId: string; /* common fields */ }
+  | { profile: Profile; mode: 'delegate'; agentId: string; sessionId: string; delegateId: string; /* common fields */ };
 ```
 
-- 正常 execution 没有 delegate context，继续用 ToolContext 的 parent identity。
-- 只有 delegated run 外层的 `DelegateExecutionContext` 影响 capability；Local 始终用 context parent identity，Knowledge/Skill 使用 `delegateId ?? ctx.agentId`。
-- RegularSession/JobRun、executeToolCall 与 InternalUrlRouter 不建立或补充 scope；Step 8 是唯一 scope root。
-- `getParentContextSummary` 是新 `subagent run --with-parent-summary` 的正式 seam；旧配置读取不进入 ToolContext。
+- `profile` 是 turn 创建时注入的 owning runtime `Profile`；LocalTool / AppCommand / MCP 执行直接使用它，禁止在执行链中重新按 ID 反查 registry。
+- `profileId` 仍保留作 trace、持久化 URI 与只接收 ID 的下游 API 参数；它不是 runtime service 的第二个来源。
+- `toResolveContext` / `toWriteContext` 必须保留同一个 `profile`；Internal URL handler 直接使用 `ctx.profile.store`。media protocol 与 renderer IPC 等非工具入口在各自边界解析一次 Profile 后再构造 context。
+- 正常 execution 没有 delegate context，继续用 ToolContext 的 parent identity；只有 delegated run 外层的 `DelegateExecutionContext` 影响 capability。
+- RegularSession/JobRun、executeToolCall 与 InternalUrlRouter 不建立或补充 scope；Step 8 是唯一 scope root。`getParentContextSummary` 是新 `subagent run --with-parent-summary` 的正式 seam；旧配置读取不进入 ToolContext。
 
 ### per-turn ToolCatalog(`pi/tool.ts` 的 catalog 段)
 
@@ -131,7 +132,7 @@ async function loadImpl() {
 | 新增纯本地工具(无 ctx 依赖) | 新建 `pi/tools/<name>.ts`(spec + handler);`index.ts` 加 register | spec 用 `jsonSchema({ ... })`;args interface 在文件内声明 + handler 入口 cast |
 | 新增需要 ctx 的工具 | 同上;handler 直接读 `ctx.chunkStream / ctx.callId / ctx.eventSender / ctx.tracer / ctx.signal` | `ctx.chunkStream` null 走早返;**不要**回到任何静态字段 |
 | 新增重依赖工具 | 用 `lazy(spec, () => import('./impl/<name>').then((m) => m.handler))`;impl 文件放 `pi/tools/impl/` | spec 必须模块加载期就有,**不能**进 loader 内 |
-| 新增 Agent 委派入口 | 新路径使用 `pi/subagent/commands/` + `tools/subagent.ts`；handler 按 `ToolContext.profileId` 取得 Profile，并复用其 command facade（首次才用 `SubAgentManager.forProfile(profile)` 创建） | 不扩写 app command；同一 `LocalTool` 对象必须加入 delegated catalog 黑名单 |
+| 新增 Agent 委派入口 | 新路径使用 `pi/subagent/commands/` + `tools/subagent.ts`；handler 直接使用 `ctx.profile` 并复用其 command facade（首次由 `Profile.getSubAgentManager()` 创建） | 不扩写 app command；同一 `LocalTool` 对象必须加入 delegated catalog 黑名单 |
 | 改 tool spec / description | 直接改 `pi/tools/<name>.ts`,无需碰别处 | LLM cache 会被打穿,刻意 stable |
 
 ## 注意事项
@@ -175,10 +176,10 @@ async function loadImpl() {
   `readHtml.ts` 同样走 node-only 路径。
 - 依赖:[Scheduler](../../lib/scheduler/) —— `appcmd/builtins/app/schedule/kernel/` 的
   `createJobInternal` / `listJobsInternal` / `updateJobInternal` / `deleteJobInternal`
-  / `runJobNowInternal` 业务内核调 `schedulerManager` 底层 helper。
+  / `runJobNowInternal` 直接接收 `AppCmdContext.profile`，并使用其 profile-bound scheduler；不得按 `profileId` 反查 Registry。
 - 依赖:[Skills](../../lib/skill/) —— `appcmd/builtins/app/skill/kernel/` 的
-  `installSkill` / `uninstallSkill` / `bindSkill` / `unbindSkill` /
-  `listSkills` / `getSkillStatus` / `searchLibrary` 业务内核调底层 helper
-  (`installAndActivateSkill` / `deleteInstalledSkill` / `applySkillToAgents`
-  / `removeSkillsFromAgents`)。远程 marketplace 搜索(ClawHub/GitHub)已于
-  2026-07-11 整体移除,`searchLibrary` 现在只查本地 `profile.skills`。
+  `installSkill` / `uninstallSkill` / `bindSkill` / `unbindSkill` 直接接收
+  `AppCmdContext.profile.store`，再调底层 helper（`installAndActivateSkill` /
+  `deleteInstalledSkill` / `applySkillToAgents` / `removeSkillsFromAgents`）。远程
+  marketplace 搜索(ClawHub/GitHub)已于 2026-07-11 整体移除，`searchLibrary`
+  现在只查本地 `profile.skills`。

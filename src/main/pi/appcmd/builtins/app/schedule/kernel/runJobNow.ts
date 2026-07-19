@@ -11,7 +11,7 @@
  * 已执行轮次走 `schedule list` 看 `last_started_at`。
  */
 
-import { schedulerManager } from '@main/lib/scheduler';
+import type { Profile } from '@main/profile';
 
 export interface RunJobNowArgs {
   job_id: string;
@@ -23,10 +23,10 @@ export type RunJobNowResult =
 
 export async function runJobNowInternal(
   args: RunJobNowArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { profile: Profile; signal?: AbortSignal },
 ): Promise<RunJobNowResult> {
   try {
-    const result = await schedulerManager.runJobNow(args.job_id);
+    const result = await opts.profile.scheduler.runJobNow(args.job_id);
     if (!result.success) {
       return {
         success: false,

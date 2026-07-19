@@ -50,10 +50,7 @@ class FeatureFlagManager {
    * Get the singleton instance
    */
   public static getInstance(): FeatureFlagManager {
-    if (!FeatureFlagManager.instance) {
-      FeatureFlagManager.instance = new FeatureFlagManager();
-    }
-    return FeatureFlagManager.instance;
+    return FeatureFlagManager.instance ??= new FeatureFlagManager();
   }
 
   /**

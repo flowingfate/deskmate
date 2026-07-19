@@ -25,12 +25,10 @@ export interface McpAuthConsentPayload {
 // ──────────────────────────────────────────────
 // mcp — server status, tool execution, OAuth reset
 // ──────────────────────────────────────────────
-
 type McpRenderToMain = {
   getServerStatus: { call: []; return: { success: boolean; data?: McpServerRuntimeState[]; error?: string } };
   resetOAuth: { call: [serverName: string, scope?: 'tokens' | 'all']; return: { success: boolean; error?: string } };
 
-  // Server CRUD（Step 7 PR-3 从老 profile 通道搬入；纯包装 mcpClientManager.*）
   addServer:        { call: [serverName: string, serverConfig: McpServerConfig]; return: { success: boolean; error?: string } };
   updateServer:     { call: [serverName: string, serverConfig: McpServerConfig]; return: { success: boolean; error?: string } };
   deleteServer:     { call: [serverName: string]; return: { success: boolean; error?: string } };
@@ -38,7 +36,6 @@ type McpRenderToMain = {
   reconnectServer:  { call: [serverName: string]; return: { success: boolean; error?: string } };
   disconnectServer: { call: [serverName: string]; return: { success: boolean; error?: string } };
 };
-
 type McpMainToRender = {
   serverStatesUpdated: McpServerRuntimeState[];
 };

@@ -20,11 +20,13 @@ import { Tracer } from '@shared/log/trace';
 // `pi/tools/registry.ts` 对 `./index` 的 dynamic import 形成 mixed-import,被 repo lint 拒。
 import { tools, ensureToolsRegistered } from '@main/pi';
 
-import type { Context } from './shared';
-export default function setUpToolsIPC(_ctx: Context) {
+import { requireProfileForSender } from './profileContext';
+
+
+export default function setUpToolsIPC() {
   const handle = renderToMain.bindMain(ipcMain);
 
-  handle.execute(async (_event, name, args) => {
+  handle.execute(async (event, name, args) => {
     try {
       await ensureToolsRegistered();
       const tool = tools.get(name);
@@ -33,9 +35,11 @@ export default function setUpToolsIPC(_ctx: Context) {
       // (signal/eventSender 等都不可用),非 chat 工具(无 ctx 依赖)才能跑通,
       // chat 工具(executeCommand / spawn / 等)会因 ctx 不全在 handler 内抛错。
       const controller = new AbortController();
+      const profile = requireProfileForSender(event);
       const result = await tool.handler(args as never, {
         mode: 'agent',
-        profileId: '',
+        profile,
+        profileId: profile.id,
         agentId: '',
         sessionId: '',
         signal: controller.signal,

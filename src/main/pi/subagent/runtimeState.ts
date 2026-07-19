@@ -19,7 +19,6 @@ export function createPendingRuntimeState(
   const request = subrun.request;
   const policy = subrun.execution.policy;
   return {
-    profileId: subrun.profileId,
     parentAgentId: subrun.parentAgentId,
     parentSessionId: subrun.parentSessionId,
     subrunId: subrun.subrunId,
@@ -73,7 +72,6 @@ export function completeRuntimeState(
   if (state.status !== 'running') return null;
 
   const base = {
-    profileId: state.profileId,
     parentAgentId: state.parentAgentId,
     parentSessionId: state.parentSessionId,
     subrunId: state.subrunId,

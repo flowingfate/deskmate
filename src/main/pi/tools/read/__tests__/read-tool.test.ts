@@ -21,8 +21,8 @@ import * as path from 'node:path';
 import { read } from '../../read';
 import { InternalUrlRouter } from '@main/pi/internal-urls/router';
 import { SkillProtocolHandler } from '@main/pi/internal-urls/handlers/skill-protocol';
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import { ProfileStore } from '@main/persist/profileStore'
+import { ProfileRegistry } from '@main/profileRegistry'
 import { Skills } from '@main/persist/skills';
 import { setRootForTesting } from '@main/persist/lib/root';
 import type { ToolContext } from '../../types';
@@ -35,6 +35,7 @@ const PROFILE_ID = 'p_TEST';
 function makeCtx(): ToolContext {
   return {
     mode: 'agent',
+    profile: ProfileRegistry.require(PROFILE_ID),
     profileId: PROFILE_ID,
     agentId,
     sessionId: 's',
@@ -47,10 +48,10 @@ function makeCtx(): ToolContext {
 }
 
 async function seedSkill(name: string, content: string): Promise<void> {
-  const profile = await Profile.getOrLoad(PROFILE_ID);
-  let agent = agentId ? await profile.getAgent(agentId) : undefined;
+  const store = await (await ProfileRegistry.getOrLoad(PROFILE_ID)).store
+  let agent = agentId ? await store.getAgent(agentId) : undefined;
   if (!agent) {
-    agent = await profile.createAgent({ name: 'Read Tool Test Agent', version: '1.0.0' });
+    agent = await store.createAgent({ name: 'Read Tool Test Agent', version: '1.0.0' });
     agentId = agent.id;
   }
   await agent.patchFront({
@@ -59,20 +60,20 @@ async function seedSkill(name: string, content: string): Promise<void> {
   await new Skills(PROFILE_ID).writeMarkdown(name, content);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'read-tool-it-'));
   agentId = '';
   setRootForTesting(tmpRoot);
-  Profile.evict(PROFILE_ID);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   InternalUrlRouter.resetForTesting();
+  await ProfileRegistry.getOrLoad(PROFILE_ID);
   // 本测试需要 router 真注册 skill handler,因为 read.handler 走 dispatch →
   // internal-url backend → router.resolve。
   InternalUrlRouter.get().register(new SkillProtocolHandler());
 });
 
 afterEach(() => {
-  Profile.evict(PROFILE_ID);
+  ProfileRegistry.resetForTesting();
   setRootForTesting(null);
   try {
     fs.rmSync(tmpRoot, { recursive: true, force: true });

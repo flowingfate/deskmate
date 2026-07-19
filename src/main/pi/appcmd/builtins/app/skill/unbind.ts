@@ -31,7 +31,7 @@ DESCRIPTION
 
 OPTIONS
   --agent-name <n>   Target the named agent. Repeatable.
-  --all-agents       Unbind from every agent in the active profile.
+  --all-agents       Unbind from every agent in the owning profile.
   --dry-run          Show resolved targets without writing.
   --json             Output the unbind envelope as JSON.
   --help, -h         Show this help.
@@ -99,7 +99,7 @@ export async function runUnbind(argv: string[], ctx: AppCmdContext): Promise<voi
     targetDesc = `agent(s) [${agentNames.join(', ')}]`;
     unbindArgs = { skill_names: skillNames, agent_names: agentNames };
   } else {
-    const def = await resolveDefaultAgentTarget(ctx.agentId);
+    const def = await resolveDefaultAgentTarget(ctx.profile.store, ctx.agentId);
     if (!def.ok) {
       ctx.printErr(`skill unbind: ${def.error}\n`);
       ctx.setExitCode(1);
@@ -127,6 +127,7 @@ export async function runUnbind(argv: string[], ctx: AppCmdContext): Promise<voi
   }
 
   const result: UnbindSkillResult = await unbindSkillInternal(unbindArgs, {
+    store: ctx.profile.store,
     signal: ctx.signal,
   });
 

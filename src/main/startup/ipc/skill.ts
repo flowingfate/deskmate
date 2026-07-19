@@ -1,8 +1,6 @@
-import { app, ipcMain, shell, dialog } from 'electron';
+import { BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-
-import type { Context } from './shared';
 
 import {
   installAndActivateSkill,
@@ -13,11 +11,10 @@ import {
   importForeignAgentSkills,
 } from "@main/lib/skill";
 import { getProfileSkillsDir } from "@main/persist/lib/path";
-import { Profiles } from '@main/persist';
 import { skillsRenderToMain } from '@shared/ipc/skill';
-import { mainWindow } from '@main/startup/wins';
+import { requireProfileForSender } from './profileContext';
 
-export default function(ctx: Context) {
+export default function() {
 
   const handleSkills = skillsRenderToMain.bindMain(ipcMain);
 
@@ -28,10 +25,11 @@ export default function(ctx: Context) {
   //    内层 symlink 指向机密,词法检查看不出来。故对已存在最深前缀做 realpath,要求落在
   //    skill 根的 realpath 内(跟随根链接是预期的)。返回可安全访问的绝对路径,否则 null。
   const resolveSkillSubPath = async (
+    profileId: string,
     skillName: string,
     relativePath: string,
   ): Promise<string | null> => {
-    const skillsDir = path.resolve(getProfileSkillsDir(Profiles.get().activeProfileId));
+    const skillsDir = path.resolve(getProfileSkillsDir(profileId));
     const base = path.resolve(skillsDir, skillName);
     if (path.dirname(base) !== skillsDir) return null;
     const full = path.resolve(base, relativePath);
@@ -69,14 +67,16 @@ export default function(ctx: Context) {
     return dialogResult.filePaths[0];
   };
 
-  const selectSkillArtifactPath = async (titles?: {
-    mode?: string;
-    file?: string;
-    folder?: string;
-    detail?: string;
-  }): Promise<string | undefined> => {
-    const win = mainWindow();
-    if (!win) {
+  const selectSkillArtifactPath = async (
+    window: BrowserWindow,
+    titles?: {
+      mode?: string;
+      file?: string;
+      folder?: string;
+      detail?: string;
+    },
+  ): Promise<string | undefined> => {
+    if (window.isDestroyed()) {
       return undefined;
     }
 
@@ -88,7 +88,7 @@ export default function(ctx: Context) {
     // Windows cannot reliably support selecting files and folders in one native dialog.
     // Ask for input type first, then open the matching dialog to keep behavior consistent across platforms.
     if (process.platform === 'win32') {
-      const modeResult = await dialog.showMessageBox(win, {
+      const modeResult = await dialog.showMessageBox(window, {
         type: 'question',
         title: modeTitle,
         message: 'Choose how you want to import the skill.',
@@ -107,7 +107,7 @@ export default function(ctx: Context) {
       }
 
       if (selectedMode === 1) {
-        const fileResult = await dialog.showOpenDialog(win, {
+        const fileResult = await dialog.showOpenDialog(window, {
           title: fileTitle,
           properties: ['openFile'],
           filters: [
@@ -117,14 +117,14 @@ export default function(ctx: Context) {
         return resolveSingleSelectedPath(fileResult);
       }
 
-      const folderResult = await dialog.showOpenDialog(win, {
+      const folderResult = await dialog.showOpenDialog(window, {
         title: folderTitle,
         properties: ['openDirectory'],
       });
       return resolveSingleSelectedPath(folderResult);
     }
 
-    const result = await dialog.showOpenDialog(win, {
+    const result = await dialog.showOpenDialog(window, {
       title: fileTitle,
       properties: ['openFile', 'openDirectory'],
       filters: [
@@ -136,8 +136,11 @@ export default function(ctx: Context) {
   };
 
   // Install skill from a known file path (e.g., from file card / assistant message attachment)
-  handleSkills.installSkillFromFilePath(async (_event, filePath: string, options?: { agentId?: string; applyToCurrentAgent?: boolean; agentName?: string; requestSource?: string }) => {
+  handleSkills.installSkillFromFilePath(async (event, filePath: string, options?: { agentId?: string; applyToCurrentAgent?: boolean; agentName?: string; requestSource?: string }) => {
     try {
+      const store = requireProfileForSender(event).store
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (!window) return { success: false, error: 'Profile main window is unavailable' };
 
       if (!filePath) {
         return { success: false, error: 'File path is required' };
@@ -146,12 +149,7 @@ export default function(ctx: Context) {
 
       // Create confirmation callback for overwrite scenarios
       const confirmCallback = async (skillName: string): Promise<boolean> => {
-        const win = mainWindow();
-        if (!win) {
-          return false;
-        }
-
-        const confirmResult = await dialog.showMessageBox(win, {
+        const confirmResult = await dialog.showMessageBox(window, {
           type: 'warning',
           title: 'Skill Already Exists',
           message: `A skill named "${skillName}" already exists.`,
@@ -167,7 +165,7 @@ export default function(ctx: Context) {
           return (confirmResult as any).response === 1;
         }
       };
-      const importResult = await installAndActivateSkill({
+      const importResult = await installAndActivateSkill(store, {
         source: { type: 'device-path', value: filePath },
         activation: {
           mode: options?.applyToCurrentAgent ? 'current-agent' : 'install-only',
@@ -196,17 +194,20 @@ export default function(ctx: Context) {
   });
 
   // Add skill from local device (.zip, .skill, or folder)
-  handleSkills.addSkillFromDevice(async (_event, selectedPath?: string, options?: { agentId?: string; applyToCurrentAgent?: boolean; agentName?: string; requestSource?: string }) => {
+  handleSkills.addSkillFromDevice(async (event, selectedPath?: string, options?: { agentId?: string; applyToCurrentAgent?: boolean; agentName?: string; requestSource?: string }) => {
     try {
+      const store = requireProfileForSender(event).store
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (!window) return { success: false, error: 'Profile main window is unavailable' };
 
-      if (!mainWindow()) {
+      if (!window) {
         return { success: false, error: 'No main window available' };
       }
 
       let skillInputPath = selectedPath;
 
       if (!skillInputPath) {
-        skillInputPath = await selectSkillArtifactPath();
+        skillInputPath = await selectSkillArtifactPath(window);
       }
 
       if (!skillInputPath) {
@@ -217,12 +218,7 @@ export default function(ctx: Context) {
 
       // Create confirmation callback for overwrite scenarios
       const confirmCallback = async (skillName: string): Promise<boolean> => {
-        const win = mainWindow();
-        if (!win) {
-          return false;
-        }
-
-        const confirmResult = await dialog.showMessageBox(win, {
+        const confirmResult = await dialog.showMessageBox(window, {
           type: 'warning',
           title: 'Skill Already Exists',
           message: `A skill named "${skillName}" already exists.`,
@@ -239,7 +235,7 @@ export default function(ctx: Context) {
           return (confirmResult as any).response === 1; // New API format - use type assertion
         }
       };
-      const importResult = await installAndActivateSkill({
+      const importResult = await installAndActivateSkill(store, {
         source: { type: 'device-path', value: skillInputPath },
         activation: {
           mode: options?.applyToCurrentAgent ? 'current-agent' : 'install-only',
@@ -267,9 +263,9 @@ export default function(ctx: Context) {
     }
   });
 
-  handleSkills.applySkillToAgents(async (_event, skillName, targets) => {
+  handleSkills.applySkillToAgents(async (event, skillName, targets) => {
     try {
-      const result = await applySkillToAgents({
+      const result = await applySkillToAgents(requireProfileForSender(event).store, {
         skillName,
         targets,
       });
@@ -303,22 +299,24 @@ export default function(ctx: Context) {
     return scanForeignAgentSkills();
   });
 
-  handleSkills.importForeignAgentSkills(async (_event, items) => {
-    return importForeignAgentSkills(items);
+  handleSkills.importForeignAgentSkills(async (event, items) => {
+    return importForeignAgentSkills(requireProfileForSender(event).store, items);
   });
 
   // Update skill from local device (.zip, .skill, or folder); target skill name is
   // auto-detected from the selected package's own SKILL.md — caller no longer names
   // it ahead of time. The renderer already gates this behind its own confirmation
   // dialog, so no second native confirm here.
-  handleSkills.updateSkillFromDevice(async () => {
+  handleSkills.updateSkillFromDevice(async (event) => {
     try {
+      const store = requireProfileForSender(event).store
+      const window = BrowserWindow.fromWebContents(event.sender);
 
-      if (!mainWindow()) {
+      if (!window) {
         return { success: false, error: 'No main window available' };
       }
 
-      const selectedPath = await selectSkillArtifactPath({
+      const selectedPath = await selectSkillArtifactPath(window, {
         mode: 'Select Skill Artifact Type to Update',
         file: 'Select Skill Artifact to Update',
         folder: 'Select Skill Folder to Update',
@@ -328,7 +326,7 @@ export default function(ctx: Context) {
         return { success: false, error: 'File selection canceled' };
       }
 
-      const importResult = await updateSkillFromDevice(selectedPath);
+      const importResult = await updateSkillFromDevice(store, selectedPath);
 
       return importResult;
     } catch (error) {
@@ -338,11 +336,10 @@ export default function(ctx: Context) {
 
   // Skills - AUTHORIZED
   // Get SKILL.md file content for Skill
-  handleSkills.getSkillMarkdown(async (_event, skillName: string) => {
+  handleSkills.getSkillMarkdown(async (event, skillName: string) => {
     try {
-
-      const profile = Profiles.get().activeSync();
-      const content = await profile.skills.readMarkdown(skillName);
+      const store = requireProfileForSender(event).store
+      const content = await store.skills.readMarkdown(skillName);
       if (content === undefined) {
         return { success: false, error: `SKILL.md not found for skill: ${skillName}` };
       }
@@ -353,10 +350,9 @@ export default function(ctx: Context) {
   });
 
   // Get list of files and directories in Skill directory
-  handleSkills.getSkillDirectoryContents(async (_event, skillName: string, relativePath: string = '') => {
+  handleSkills.getSkillDirectoryContents(async (event, skillName: string, relativePath: string = '') => {
     try {
-
-      const fullPath = await resolveSkillSubPath(skillName, relativePath);
+      const fullPath = await resolveSkillSubPath(requireProfileForSender(event).id, skillName, relativePath);
       if (fullPath === null) {
         return { success: false, error: 'Invalid path: attempted to access outside skill directory' };
       }
@@ -411,14 +407,13 @@ export default function(ctx: Context) {
   });
 
   // Read file content in Skill directory
-  handleSkills.getSkillFileContent(async (_event, skillName: string, relativePath: string) => {
+  handleSkills.getSkillFileContent(async (event, skillName: string, relativePath: string) => {
     try {
-
       if (!relativePath) {
         return { success: false, error: 'File path is required' };
       }
 
-      const fullPath = await resolveSkillSubPath(skillName, relativePath);
+      const fullPath = await resolveSkillSubPath(requireProfileForSender(event).id, skillName, relativePath);
       if (fullPath === null) {
         return { success: false, error: 'Invalid path: attempted to access outside skill directory' };
       }
@@ -476,9 +471,9 @@ export default function(ctx: Context) {
   });
 
   // Delete Skill (delete cache config, profile.json config, and folder)
-  handleSkills.deleteSkill(async (_event, skillName: string) => {
+  handleSkills.deleteSkill(async (event, skillName: string) => {
     try {
-      const deleteResult = await deleteInstalledSkill(skillName);
+      const deleteResult = await deleteInstalledSkill(requireProfileForSender(event).store, skillName);
       if (!deleteResult.success) {
         return { success: false, error: deleteResult.error || 'Failed to delete skill' };
       }
@@ -490,11 +485,9 @@ export default function(ctx: Context) {
   });
 
   // Open Skill folder (in Finder/File Explorer)
-  handleSkills.openSkillFolder(async (_event, skillName: string) => {
+  handleSkills.openSkillFolder(async (event, skillName: string) => {
     try {
-
-      // Build Skill directory path
-      const skillPath = path.join(getProfileSkillsDir(Profiles.get().activeProfileId), skillName);
+      const skillPath = path.join(getProfileSkillsDir(requireProfileForSender(event).id), skillName);
 
       // Check if directory exists
       if (!fs.existsSync(skillPath)) {

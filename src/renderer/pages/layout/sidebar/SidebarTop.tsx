@@ -6,7 +6,6 @@ import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { useAgentUnreadSummaryMap } from '@/lib/chat/useAgentUnreadSummary';
 import { newEntityId } from '@shared/persist/id';
 import { useAgents } from '@/states/agents.atom';
-import { getProfileId } from '@/states/profile.atom';
 import { SidebarAgentItem } from './SidebarAgentItem';
 
 const SIDEBAR_ICON_SIZE = 14;
@@ -17,7 +16,7 @@ export const SidebarTop: React.FC = () => {
   const navigate = useNavigate();
 
   const allAgentIds = useMemo(() => agents.map(a => a.id), [agents]);
-  const unreadSummaryMap = useAgentUnreadSummaryMap(allAgentIds, getProfileId());
+  const unreadSummaryMap = useAgentUnreadSummaryMap(allAgentIds);
 
   const currentAgentId = useMemo(() => {
     const match = location.pathname.match(/\/agent\/(?!creation(?:\/|$))([^/]+)/);

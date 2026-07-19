@@ -21,8 +21,8 @@ import * as path from 'node:path';
 import { resolveMediaRequest } from '../mediaProtocol';
 import { InternalUrlRouter, KnowledgeProtocolHandler, LocalProtocolHandler } from '@main/pi';
 
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import { ProfileStore } from '@main/persist/profileStore'
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting } from '@main/persist/lib/root';
 import { ProfileDb } from '@main/persist/lib/db/db';
 
@@ -33,15 +33,13 @@ let sessionId = '';
 let sessionFilesDir = '';
 
 async function seedProfileAgentSession(): Promise<void> {
-  const profile = await Profile.getOrLoad(profileId);
-  const agent = await profile.createAgent({ name: 'TestAgent', version: '1.0.0' });
+  const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+  const agent = await store.createAgent({ name: 'TestAgent', version: '1.0.0' });
   agentId = agent.id;
   const session = await agent.createSession({ title: 'sandbox' });
   sessionId = session.id;
   sessionFilesDir = session.filesDir();
   await fsp.mkdir(sessionFilesDir, { recursive: true });
-  // handler 走 Profiles.active() 取 profileId —— 把 active 指到本 profile。
-  Profiles.get().activeProfileId = profileId;
 }
 
 function mediaUrl(
@@ -56,7 +54,7 @@ function mediaUrl(
 beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'media-protocol-it-'));
   setRootForTesting(tmpRoot);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   InternalUrlRouter.resetForTesting();
@@ -68,8 +66,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  Profile.evict(profileId);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   setRootForTesting(null);
@@ -94,6 +92,7 @@ describe('resolveMediaRequest — local', () => {
 
     const res = await resolveMediaRequest(
       mediaUrl('local', 'uploads/shot.png', {
+        profile: profileId,
         agent: agentId,
         session: sessionId,
         mime: 'image/png',
@@ -114,6 +113,7 @@ describe('resolveMediaRequest — local', () => {
 
     const res = await resolveMediaRequest(
       mediaUrl('local', `uploads/${encodeURIComponent('my shot.png')}`, {
+        profile: profileId,
         agent: agentId,
         session: sessionId,
         mime: 'image/png',
@@ -126,14 +126,14 @@ describe('resolveMediaRequest — local', () => {
 
   it('缺 mime → 400', async () => {
     const res = await resolveMediaRequest(
-      mediaUrl('local', 'uploads/shot.png', { agent: agentId, session: sessionId }),
+      mediaUrl('local', 'uploads/shot.png', { profile: profileId, agent: agentId, session: sessionId }),
     );
     expect(res.status).toBe(400);
   });
 
   it('缺 session → 400', async () => {
     const res = await resolveMediaRequest(
-      mediaUrl('local', 'uploads/shot.png', { agent: agentId, mime: 'image/png' }),
+      mediaUrl('local', 'uploads/shot.png', { profile: profileId, agent: agentId, mime: 'image/png' }),
     );
     expect(res.status).toBe(400);
   });
@@ -141,6 +141,7 @@ describe('resolveMediaRequest — local', () => {
   it('沙盒 `..` 越界 → 404', async () => {
     const res = await resolveMediaRequest(
       mediaUrl('local', '../../etc/passwd', {
+        profile: profileId,
         agent: agentId,
         session: sessionId,
         mime: 'text/plain',
@@ -152,6 +153,7 @@ describe('resolveMediaRequest — local', () => {
   it('文件不存在 → 404', async () => {
     const res = await resolveMediaRequest(
       mediaUrl('local', 'uploads/nope.png', {
+        profile: profileId,
         agent: agentId,
         session: sessionId,
         mime: 'image/png',
@@ -174,7 +176,7 @@ describe('resolveMediaRequest — knowledge', () => {
     await fsp.writeFile(absPath, bytes);
 
     const res = await resolveMediaRequest(
-      mediaUrl('knowledge', 'diagram.png', { agent: agentId, mime: 'image/png' }),
+      mediaUrl('knowledge', 'diagram.png', { profile: profileId, agent: agentId, mime: 'image/png' }),
     );
 
     expect(res.status).toBe(200);

@@ -14,7 +14,7 @@
  * `signal` 仅形状对齐。
  */
 
-import { schedulerManager } from '@main/lib/scheduler';
+import type { Profile } from '@main/profile';
 
 export interface DeleteJobArgs {
   job_id: string;
@@ -26,10 +26,10 @@ export type DeleteJobResult =
 
 export async function deleteJobInternal(
   args: DeleteJobArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { profile: Profile; signal?: AbortSignal },
 ): Promise<DeleteJobResult> {
   try {
-    const ok = await schedulerManager.deleteJob(args.job_id);
+    const ok = await opts.profile.scheduler.deleteJob(args.job_id);
     if (!ok) {
       return {
         success: false,

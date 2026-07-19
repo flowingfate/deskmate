@@ -59,18 +59,15 @@ const RequestOAuthClientIdDialog: React.FC = () => {
     const cleanup = mcpAuthEvents.requestClientId((_event, data) => {
       setState((prev) => {
         if (prev.isOpen) {
-          // Avoid duplicate-requestId enqueues (the same request being
-          // re-sent due to renderer hot-reload, fire-twice IPC quirks, …).
           if (
             prev.payload.requestId === data.requestId ||
-            queueRef.current.some((p) => p.requestId === data.requestId)
+            queueRef.current.some((payload) => payload.requestId === data.requestId)
           ) {
             return prev;
           }
           queueRef.current.push(data);
           return prev;
         }
-        // Fast path — nothing showing, render immediately.
         setClientId('');
         setClientSecret('');
         setCopied(false);
@@ -146,6 +143,9 @@ const RequestOAuthClientIdDialog: React.FC = () => {
           </DialogTitle>
           <DialogDescription>
             <strong>{state.payload.serverName}</strong> needs an OAuth Client ID.
+            <span className="block text-xs text-gray-500 dark:text-gray-400">
+              Profile: <code>{window.electronAPI.profile.id}</code>
+            </span>
             Register an OAuth app with {state.payload.providerLabel}, then paste the Client ID below.
           </DialogDescription>
         </DialogHeader>

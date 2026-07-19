@@ -36,7 +36,7 @@ SUBCOMMANDS
   remove <name>       Remove (archive) an installed agent. Requires --yes (destructive).
   list                List all installed agent names.
   status <name>       Show the status of an agent (NotAdded / Added + details).
-  set-primary <name>  Set the primary agent for the active profile.
+  set-primary <name>  Set the primary agent for the owning profile.
 
 GLOBAL OPTIONS (recognised by every subcommand)
   --help, -h     Show subcommand help.

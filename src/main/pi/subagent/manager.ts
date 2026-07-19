@@ -7,7 +7,7 @@ import type {
   SubrunId,
 } from '@shared/persist/types';
 import type { SubAgentRunStep, SubAgentRuntimeState } from '@shared/types/subAgentRunTypes';
-import type { ListSubrunsResult, Profile, Session, Subrun } from '@main/persist';
+import type { ListSubrunsResult, ProfileStore, Session, Subrun } from '@main/persist';
 import { log } from '@main/log';
 
 import type {
@@ -31,6 +31,19 @@ export type SubAgentRuntimeStateListener = (state: SubAgentRuntimeState) => void
 
 const MAX_PARALLEL_RUNS = 5;
 const MAX_TOTAL_RESERVATIONS = 20;
+
+function notifyStateListeners(
+  listeners: ReadonlySet<SubAgentRuntimeStateListener>,
+  state: SubAgentRuntimeState,
+): void {
+  for (const listener of listeners) {
+    try {
+      listener(state);
+    } catch (error) {
+      log.warn({ msg: 'Subrun state listener failed', mod: 'pi.subagent.manager', err: error });
+    }
+  }
+}
 
 export interface SubAgentParent {
   profileId: string;
@@ -66,32 +79,19 @@ interface PreparedSubrunAdmission {
 
 /** 委派运行的唯一授权、reservation、timeout、cancellation 与 live-state owner。 */
 export class SubAgentManager {
-  private static readonly managers = new WeakMap<Profile, SubAgentManager>();
-  private static readonly stateUpdateListeners = new Set<SubAgentRuntimeStateListener>();
-
-  public static forProfile(profile: Profile): SubAgentManager {
-    const existing = SubAgentManager.managers.get(profile);
-    if (existing) return existing;
-
-    const manager = new SubAgentManager(profile);
-    SubAgentManager.managers.set(profile, manager);
-    return manager;
-  }
-
-  public static subscribeStateUpdates(listener: SubAgentRuntimeStateListener): () => void {
-    SubAgentManager.stateUpdateListeners.add(listener);
-    return () => SubAgentManager.stateUpdateListeners.delete(listener);
-  }
 
   private readonly activeRuns = new Map<string, Map<SubrunId, ActiveRun>>();
   private readonly parentLocks = new Map<string, Promise<void>>();
   private readonly stateListeners = new Set<SubAgentRuntimeStateListener>();
 
-  private constructor(private readonly profile: Profile) {}
+  public constructor(
+    private readonly store: ProfileStore,
+    private readonly onStateUpdate?: (state: SubAgentRuntimeState) => void,
+  ) {}
 
   public async listDelegates(scope: SubAgentCommandScope): Promise<SubAgentListDelegatesOutcome> {
 
-    const delegates = await this.profile.resolveDelegates(scope.parentAgentId);
+    const delegates = await this.store.resolveDelegates(scope.parentAgentId);
     if (!delegates) return { kind: 'rejected', error: 'Parent Agent configuration is unavailable.' };
 
     return {
@@ -114,7 +114,7 @@ export class SubAgentManager {
     const delegate = await this.authorizeDelegate(scope.parentAgentId, delegateAgentId);
     if (!delegate.ok) return delegate.outcome;
 
-    const detail = await this.profile.getAgentDetail(delegate.record.id);
+    const detail = await this.store.getAgentDetail(delegate.record.id);
     if (!detail) {
       return {
         kind: 'rejected',
@@ -317,7 +317,7 @@ export class SubAgentManager {
     { ok: true; session: Session }
     | { ok: false; outcome: { kind: 'rejected'; error: string } }
   > {
-    const agent = await this.profile.getAgent(parent.parentAgentId);
+    const agent = await this.store.getAgent(parent.parentAgentId);
     if (!agent) return { ok: false, outcome: { kind: 'rejected', error: 'Parent Agent is unavailable.' } };
 
     const session = await agent.findSessionAcrossKinds(parent.parentSessionId);
@@ -333,7 +333,7 @@ export class SubAgentManager {
     { ok: true; record: AgentRecord }
     | { ok: false; outcome: { kind: 'rejected'; error: string } }
   > {
-    const delegates = await this.profile.resolveDelegates(parentAgentId);
+    const delegates = await this.store.resolveDelegates(parentAgentId);
     if (!delegates) {
       return { ok: false, outcome: { kind: 'rejected', error: 'Parent Agent configuration is unavailable.' } };
     }
@@ -445,20 +445,11 @@ export class SubAgentManager {
   }
 
   private publish(state: SubAgentRuntimeState): void {
-    SubAgentManager.notifyStateListeners(this.stateListeners, state);
-    SubAgentManager.notifyStateListeners(SubAgentManager.stateUpdateListeners, state);
-  }
-
-  private static notifyStateListeners(
-    listeners: ReadonlySet<SubAgentRuntimeStateListener>,
-    state: SubAgentRuntimeState,
-  ): void {
-    for (const listener of listeners) {
-      try {
-        listener(state);
-      } catch (error) {
-        log.warn({ msg: 'Subrun state listener failed', mod: 'pi.subagent.manager', err: error });
-      }
+    notifyStateListeners(this.stateListeners, state);
+    try {
+      this.onStateUpdate?.(state);
+    } catch (error) {
+      log.warn({ msg: 'Subrun state update callback failed', mod: 'pi.subagent.manager', err: error });
     }
   }
 

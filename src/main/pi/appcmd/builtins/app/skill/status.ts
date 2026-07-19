@@ -22,7 +22,7 @@ const HELP = `USAGE
   skill status <name>
 
 DESCRIPTION
-  Show the current status of a skill in the active profile. Read-only.
+  Show the current status of a skill in the owning profile. Read-only.
 
   Status values:
     NotInstalled   not installed on the device
@@ -68,6 +68,7 @@ export async function runStatus(argv: string[], ctx: AppCmdContext): Promise<voi
   const { name } = nameResult;
 
   const result: GetSkillStatusResult = await getSkillStatusInternal(
+    ctx.profile.store,
     { skill_name: name, current_agent_id: ctx.agentId },
     { signal: ctx.signal },
   );

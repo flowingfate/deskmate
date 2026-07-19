@@ -161,7 +161,10 @@ export async function runUpdate(argv: string[], ctx: AppCmdContext): Promise<voi
     return;
   }
 
-  const result: UpdateJobResult = await updateJobInternal(updates, { signal: ctx.signal });
+  const result: UpdateJobResult = await updateJobInternal(
+    updates,
+    { profile: ctx.profile, signal: ctx.signal },
+  );
 
   if (!result.success) {
     if (isJson(parsed.flags)) {

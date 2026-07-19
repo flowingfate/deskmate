@@ -288,8 +288,7 @@ export class ScheduleJob extends PersistBase {
     await removeDirIfExists(runDir);
     this.jobRunIdx.remove(runId);
     this.runs.delete(runId);
-    emit('schedule:run:removed', {
-      profileId: this.profileId,
+    emit(this.profileId, 'schedule:run:removed', {
       agentId: this.agentId,
       jobId: this.id,
       sessionId: runId,

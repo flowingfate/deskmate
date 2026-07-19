@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-17 (Subrun 唯一磁盘 schema + RuntimeState 投影) -->
+<!-- Last verified: 2026-07-19 (Profile-owned main-window state) -->
 
 ## 1. 范围
 
@@ -56,6 +56,7 @@
         ├── auth.json, auth.pi.json                # 未登录态不存在
         ├── index.db, index.db-wal, index.db-shm   # SQLite WAL;regular_sessions + job_runs
         ├── scheduler-state.json                   # scheduler cold-start catch-up
+        ├── window.json                            # 本 Profile 主窗口的 bounds / zoom / maximized
         ├── agents/
         │   ├── agents.json                        # items[] + primaryAgentId(替代旧 profile.json)
         │   └── a_{ulid}/
@@ -89,7 +90,7 @@
 | `sessions/index.json` | Step 9 切 SQLite 后物理消失 |
 | `starred-sessions.json` | Starred 收口到 `regular_sessions.starred_at` 列 |
 | `chat_workspaces/` | `agent.workspace`(用户托管项目)已删;待后续单独立项 |
-| `ChatConfig` / `ChatAgent` / `ChatConfigRuntime` / `chat_type` / `chat_id` | Chat 层概念整体重命名为 `AgentEnvelope` / `AgentPersona` / `agent_id`，并删去 `chat_type`、`Profile.chats`、`Profile['starred-chat-sessions']`、`DEFAULT_PROFILE` 等死字段 / 死常量 |
+| `ChatConfig` / `ChatAgent` / `ChatConfigRuntime` / `chat_type` / `chat_id` | Chat 层概念整体重命名为 `AgentEnvelope` / `AgentPersona` / `agent_id`，并删去 `chat_type`、`ProfileStore.chats`、`ProfileStore['starred-chat-sessions']`、`DEFAULT_PROFILE` 等死字段 / 死常量 |
 | `chat.skill_snapshot` / `data.json#interaction_history` | 派生数据不落盘 |
 | `agent.role` / `agent.enabled_plugins` / `agent.context_enhancement` / `profile.syncSettings` | 产品决策放弃 |
 
@@ -98,17 +99,14 @@
 ## 4. 调用链(**严格遵守**)
 
 ```
-Profiles.get().active()        → Profile
-  .getAgent(id)                → Agent
-    .getSession(id)            → RegularSession
-    .getJob(id)                → ScheduleJob
-      .getRun(id)              → JobRun
+ProfileRegistry.require(profileId).store → ProfileStore
+  .getAgent(id)                        → Agent
+    .getSession(id)                    → RegularSession
+    .getJob(id)                        → ScheduleJob
+      .getRun(id)                      → JobRun
 ```
 
-- ❌ 平铺裸 id:`persistence.sessions.append(profileId, agentId, sessionId, item)`
-- ✅ 链式取到子实体后再操作:`session.appendMessage(item)`
-
-每层 store 自管 `persist()`;子实体懒加载 + 单实例 Map 缓存(`Profile.agents` / `Agent.sessions` / `Agent.jobs` / `ScheduleJob.runs`)。
+`ProfileRegistry` 是唯一 app-scoped owner：它在闭包中同时持有 `profiles.json` index 与 runtime Profile，启动时先加载 index、再加载所有 entries，并合并同 profile 的并发 `getOrLoad`。每个 runtime `Profile` 拥有自己的 Pi、MCP 与 scheduler 服务；业务调用方沿 sender / ToolContext / 已运行任务持有的 Profile identity 调 `require(profileId)`，不存在 ambient selected accessor。`defaultProfileId` 只用于首次启动、无显式目标的新窗口和 headless eval。每个主窗口在构造时把自己的 Profile ID 写入 `BrowserWindowMeta.profileId` 与 `webPreferences.additionalArguments`；preload 从 `process.argv` 同步读取，既有窗口永不改变 owner，也不接收 profile switch 事件。`ProfileStore` 只管理一个 profile 的持久化对象图与 SQLite。
 
 `Session` 是抽象基类(messages.jsonl I/O + files sandbox + 节流 persist + 元数据 mutate)，也只作为 parent owner 暴露 `createSubrun/getSubrun/listSubruns`；这些 API 始终以当前 Session 实例限定三位 ID，Subrun 本身不注册为 Session。主会话消息接口分三招:`appendDomainMessage(m: Message)` 写 user / assistant 行,`appendToolResponse(toolCallId, result)` 写 `tool_res` 行,`rewriteMessages(messages: Message[])` 整段重写 jsonl(`dehydrate` 序列化,emit `session:messages:rewritten`)。读取走 `loadDomainMessages()` 折回 Domain `{ messages, orphanResponses }`。`RegularSession` 与 `JobRun` 是子类,路径树各自实现,永不共用同一容器。要分支判断用 `instanceof`。
 
@@ -120,22 +118,16 @@ Subrun 首次 execution 是 `pending → running → terminal`；terminal 后 `S
 
 ## 5. Bootstrap 顺序
 
-`Profiles.get().bootstrap()` 跑(幂等,二次调用直接 no-op):
+`ProfileRegistry.bootstrap()` 跑（幂等，二次调用直接 no-op）：
 
-1. `profilesIndexStore.ensure()` —— items 为空则初始化一个未登录 profile 作 active
-2. `profilesIndexStore.resolveActive()` —— 决定 `activeProfileId`,不在 items 中 → fallback `items[0]`
-3. profile.config + settings 装载
-4. **`ProfileDb.open()` + integrity_check** —— 打开 `profiles/{p}/index.db`;不存在则建表 + 写 `_meta.schema_version`
-5. profile.mcp / skills / models 装载
-6. agent registry 装载 —— **只读 `agents.json`**,不 fan-out 读 N 个 AGENT.md
-7. `agentStore.reconcile()` —— `agents.json#items` ↔ `agents/{id}/` 目录双向对账,缺目录的 item 剔除并清空 `primaryAgentId` 命中
-8. `archiveStore.gc()` —— 保留期外的归档清理
+1. `ProfileRegistry` 确保 `profiles.json` 至少有一个 entry，并解析只读 `defaultProfileId`。
+2. registry 对全部 entry 并行 `getOrLoad()`；同一 profile 的并发调用共享 loading promise，单 profile load 失败只进入 warnings，不阻断其他 profile。
+3. `ProfileStore.load()` 为单 profile 装载 config/settings、`ProfileDb.open()` + integrity check、MCP/skills/models、agent registry、reconcile 与 archive GC。
+4. `Profile.start()` 为该 runtime Profile 依次启动其 scheduler 与 MCP；scheduler 的 task 注册、cold-start catch-up 与 `scheduler-state.json#isActive` 均归该 Profile。
 
-**DB 自愈 / 初次填充**:第 4 步若 `ProfileDb.wasCreated`(升级 / migrate / 拷贝 profile 目录场景,新建空表)或 `checkIntegrity() === false`(DB 损坏 → 删盘 → 重 open)→ 都跑 `SessionIdx.rebuildFromDisk()` + `JobRunIdx.rebuildFromDisk()` 扫所有 `data.json` 重建。源真值在磁盘,理论无数据丢失。
+**DB 自愈 / 初次填充**：`ProfileDb.wasCreated`（升级 / migrate / 拷贝 profile 目录场景，新建空表）或 `checkIntegrity() === false`（DB 损坏 → 删盘 → 重 open）都会跑 `SessionIdx.rebuildFromDisk()` + `JobRunIdx.rebuildFromDisk()` 扫所有 `data.json` 重建。源真值在磁盘，理论无数据丢失。
 
-每步异常汇集到 `warnings`,不让单步失败拖累整体启动。
-
-启动期 / `getSnapshot` **不读任何 AGENT.md**。cold 字段由 renderer 按需通过 `getAgentDetail` IPC 单读(见 §7)。
+启动期 / `getSnapshot` **不读任何 AGENT.md**。cold 字段由 renderer 按需通过 `getAgentDetail` IPC 单读（见 §7）。
 
 ---
 
@@ -147,27 +139,19 @@ Subrun 首次 execution 是 `pending → running → terminal`；terminal 后 `S
 
 | 通道 | 用途 |
 |---|---|
-| `getSnapshot` | 一次性拉取 active profile + agent registry + settings + starred(含 inflight 合并) |
-| `switchProfile` | 切换 active profile；切换成功后调用启动期注入的生命周期回调，scheduler 以新旧 Profile 后台重建任务 |
-| `listAllSessions(agentId)` | 该 agent 全部 regular session entries,按 `updatedAt` 倒序(SQL 直查) |
-| `listAllScheduleRuns(agentId)` | 跨 job 聚合 schedule_run,按 `startedAt` 倒序,返 `JobRunRow[]` |
-| `getSession(agentId, sessionId)` | 单条 `SessionDataFile` |
-| `getSessionMessages(agentId, sessionId)` | `data.json` + `messages.jsonl` 全量 |
-| `getSessionFilesDir(agentId, sessionId)` | session 私有 sandbox 绝对路径 |
-| `createAgent / patchAgentFront / archiveAgent / unarchiveAgent / duplicateAgent / setPrimaryAgent / listArchivedAgents` | Agent CRUD；create/patch 支持 description/delegates，duplicate 复制 description 与 outgoing delegates |
-| `getAgentDetail(agentId)` | 懒读单个 agent 的 cold 字段（含 delegates，解析对应 AGENT.md） |
-| `renameSession / setSessionStarred / deleteSession / deleteScheduleRun / forkJobRunToSession` | regular session 与已结束的 schedule run 写路径；fork 会创建新 regular session，原 run 保留；运行中的 run 拒绝删除或 fork |
-| `getUnreadSummary(agentId)` | 未读统计(regular 全量 + schedule_run 窗口),两条 SQL |
-| `updateConfirmationSettings` | confirmation settings 写入 |
-| `updateWebSearchSettings` | webSearch settings 写入(Tavily API key) |
-| `getStorageOverview` | 本地数据透明:**以 agent 为组**统计私有数据(会话/定时/知识/配置 → `AgentStorageGroup`)+ profile 级共享分类(skills/mcp/models/搜索索引/归档/设置 → `StorageCategory`)。返回 `StorageOverview`。`/settings/persist` 页用 |
-| `revealStoragePath(absPath)` | 在系统文件管理器中打开 profile 目录树内的路径(越界拒绝) |
+| `profile-scoped persist` | renderer 不传 `profileId`；main 从 IPC sender 所属 BrowserWindow 解析 owner，再执行 snapshot / Agent / Session / settings / storage 操作 |
+| `listAllSessions(agentId)` | owning Profile 的该 agent 全部 regular session entries，按 updatedAt 倒序(SQL 直查) |
+| `listAllScheduleRuns(agentId)` | owning Profile 跨 job 聚合 schedule_run，按 startedAt 倒序 |
+| `getSession(agentId, sessionId)` / `getSessionMessages(agentId, sessionId)` / `getSessionFilesDir(agentId, sessionId)` | owning Profile 的 session 数据、完整消息或 sandbox 路径 |
+| `createAgent / patchAgentFront / archiveAgent / unarchiveAgent / duplicateAgent / setPrimaryAgent / listArchivedAgents / getAgentDetail` | owning Profile 的 Agent CRUD 与 cold detail |
+| `renameSession / setSessionStarred / deleteSession / deleteScheduleRun / forkJobRunToSession / getUnreadSummary` | owning Profile 的 session 与 run 写路径 / 未读统计 |
+| `updateConfirmationSettings` / `updateWebSearchSettings` | owning Profile 的 settings 写入 |
+| `getStorageOverview` / `revealStoragePath(absPath)` | owning Profile 的本地数据透明视图与目录树内 reveal |
 
 ### 6.2 Main → Renderer(send / on,按域 150ms 防抖)
 
 | 通道 | payload 要点 | 触发点 |
 |---|---|---|
-| `profile:switched` | `{ profileId, previous }` | `Profiles.setActive()` |
 | `agent:registry:updated` | `{ profileId, kind, items, primaryAgentId? }`(`kind` 可为 `agents` / `skills` / `mcp`) | agents.json(含 `primaryAgentId`)/ skills / mcp 写盘 |
 | `agent:updated` | `{ profileId, agentId, record, detail }`（record 含 hot description，detail 含 cold delegates） | `Agent.persist()`（按 agentId 防抖） |
 | `agent:removed` | `{ profileId, agentId }` | `Agent.archive()` |
@@ -178,10 +162,10 @@ Subrun 首次 execution 是 `pending → running → terminal`；terminal 后 `S
 | `schedule:removed` | `{ profileId, agentId, jobId }` | `Agent.deleteJob` |
 | `schedule:run:updated` | `{ profileId, agentId, jobId, sessionId, status }` | `JobRun.afterPersist` |
 | `schedule:run:removed` | `{ profileId, agentId, jobId, sessionId }` | `ScheduleJob.deleteRun` |
-| `settings:updated` | `{ profileId, settings }` | `Profile.settings` 写盘 |
+| `settings:updated` | `{ profileId, settings }` | `ProfileStore.settings` 写盘 |
 | `starred:updated` | `{ profileId, items }` | `RegularSession.setStar` 引发的 starred 集合变化 |
 
-**profile 切换瞬间**所有非 `profile:switched` 通道禁用至 bootstrap 完成,避免新旧数据竞态。
+每个 renderer window 的 Profile 在创建时固定，因此不存在 profile 切换时的新旧数据竞态。
 
 ### 6.3 Renderer atom 一览
 
@@ -189,7 +173,6 @@ Subrun 首次 execution 是 `pending → running → terminal`；terminal 后 `S
 
 | atom | 订阅 | 备注 |
 |---|---|---|
-| `profile.atom` | `profile:switched` | — |
 | `agents.atom` | `agent:registry:updated[kind=agents]` / `agent:updated` / `agent:removed` | 只持 `AgentRecord`(hot list 字段);含 `primaryAgentId` |
 | `agentDetail.atom` | `agent:updated`(拿 `payload.detail` 刷 cache)/ `agent:removed` | cold 字段 `AgentDetail`;按 agentId lazy fetch via `getAgentDetail`,命中 cache 同步返;并发同 id 合并 |
 | `sessionIndex.atom` | `session:index:updated` / `session:updated` | 按 agentId slot |
@@ -219,15 +202,15 @@ AGENT.md 是源真值;`AgentRecord` 是其同名字段的派生缓存。
 ### Agent graph resolver
 
 - `Agent.patchFront({ delegates })` 按类型化输入原样落盘，不额外建立 normalization helper。
-- `Profile.resolveDelegates(parentId)` 是授权与 prompt 的唯一解析入口，返回 `ResolvedAgentDelegates | null`；parent 缺失返回 null，调用方必须显式分支。
+- `ProfileStore.resolveDelegates(parentId)` 是授权与 prompt 的唯一解析入口，返回 `ResolvedAgentDelegates | null`；parent 缺失返回 null，调用方必须显式分支。
 - resolver 解析时 trim/忽略空值/稳定去重；available 按配置顺序 join active `AgentRecord`，self/归档/不存在目标进入 unavailable。
 - resolver 只按需读取父 Agent 的 AGENT.md，不读取 target details；runtime 每次真正 run 前必须重新调用。archive 不改 incoming references，restore 后 dangling 自动恢复；duplicate 复制 description 与 outgoing delegates。
 
 ### 唯一写入口
 
 - `Agent.patchFront(partial)`(async)→ 先写 `AGENT.md`,再回调注入的 `AgentRegistry.syncRecord(this.toRecord())`。
-- `Profile.createAgent` / `duplicateAgent` → 新建时直接 `agentRegistry.items.push(agent.toRecord())`,整条写。
-- `Profile.archiveAgent` / `restoreAgent` → 整条删 / 整条加。
+- `ProfileStore.createAgent` / `duplicateAgent` → 新建时直接 `agentRegistry.items.push(agent.toRecord())`,整条写。
+- `ProfileStore.archiveAgent` / `restoreAgent` → 整条删 / 整条加。
 
 **绕过这些入口手动 mutate `agentRegistry.items` 或单独写 `AGENT.md`**:record stale,sidebar / chat header 显示旧 name / model 直到下次 `patchFront` 触发。
 
@@ -245,7 +228,7 @@ AGENT.md 是源真值;`AgentRecord` 是其同名字段的派生缓存。
 
 ### 为什么不在 bootstrap 做 reconcile
 
-bootstrap 期间对所有 agents 做 record ↔ markdown 对账等于把"启动期不读 AGENT.md"的设计目标推翻。本架构选了**写路径同步**而不是**读路径 reconcile**。手动入口 `Profile.reconcileRecordFromMarkdown(id?)`(当前未实现,按需添加)给 Doctor / migrate 后置脚本用。
+bootstrap 期间对所有 agents 做 record ↔ markdown 对账等于把"启动期不读 AGENT.md"的设计目标推翻。本架构选了**写路径同步**而不是**读路径 reconcile**。手动入口 `ProfileStore.reconcileRecordFromMarkdown(id?)`(当前未实现,按需添加)给 Doctor / migrate 后置脚本用。
 
 ### Renderer 端 `agent:updated` 同时下推
 
@@ -318,7 +301,7 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 | 将 schedule run 继续为 regular session | `session.ts#JobRun.forkToSession` + persist IPC / preload；clone messages/files/contextState，终态校验在 source JobRun | 原 run 不删、不改 |
 | 加 SQLite 偏序索引 | `lib/db/schema.ts` `CREATE INDEX IF NOT EXISTS ix_xxx ON ... WHERE ...;` + `EXPLAIN QUERY PLAN` 验命中(候选清单见 §9.2) |
 | 加 IPC 通道 | `src/shared/ipc/persist.ts` + `ipc.ts` handler + `preload/persist/invoke.ts` allowlist;renderer 自动类型推导 |
-| 加新 profile 级共享资源(如 prompts/) | `path.ts` 加路径常量 + 新 store class + Profile 字段 + Profiles.bootstrap 装载步骤;仿 `mcp.ts` |
+| 加新 profile 级共享资源(如 prompts/) | `path.ts` 加路径常量 + 新 store class + `ProfileStore` 字段 + `ProfileRegistry.bootstrap` 装载步骤;仿 `mcp.ts` |
 | 加 SQLite 单元测试 | `__tests__/sqlite-index.test.ts` 模板(tmp 真盘 + `ProfileDb.resetForTesting`);better-sqlite3 是 native,无法 mock fs |
 | 加 mock fs 集成测试 | 仿 `agent.test.ts` 顶部 `vi.mock('../lib/db/db', () => ({ ProfileDb: { open: () => fakeDb, ... } }))` stub;不直接断言 SQL 行 |
 
@@ -331,11 +314,11 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 - ⚠️ **`name` 不是主键**。`agents.json` 允许重名;所有引用走 `a_{ulid}` id。重命名 agent 时 id 不变；skills 沿用 name 作 id。
 - ⚠️ **messages.jsonl 是 append-only**。常态走 `Session.appendDomainMessage(m)` / `appendToolResponse(id, result)` 进 buffer,`flushMessages` 才落盘;`Session.persist()` 内部会同时 flush。**整段覆盖**走 `rewriteMessages(messages)`(edit / retry / 导入路径),不要单独覆盖写 messages.jsonl。
 - ⚠️ **Session 删除走 `Agent.deleteSession(id)` / `Agent.deleteJob(id)`**,会同时删 dir + SQL 行 + emit 相应 `*:index:updated`(op='remove') / `schedule:removed`。**不要**直接 `session.deleteFromDisk()`。
-- ⚠️ **Agent 软删走 `Profile.archiveAgent(id)`**。写顺序:archive move dir → agents.json 剔除(含 `primaryAgentId` 命中清空)。中途崩溃下次启动 `reconcileAgents()` 自愈。
+- ⚠️ **Agent 软删走 `ProfileStore.archiveAgent(id)`**。写顺序:archive move dir → agents.json 剔除(含 `primaryAgentId` 命中清空)。中途崩溃下次启动 `reconcileAgents()` 自愈。
 - ⚠️ **AgentRecord ↔ AGENT.md 同步走唯一入口** `Agent.patchFront`(见 §7)。绕过 = renderer stale。`createdAt / updatedAt` 只挂 `agents.json`,`Agent.load` 必须从 `registry.items` 回填到实例,否则 patchFront 路径上 `emit('agent:updated')` 会被 `createdAt === ''` 兜底吞、`toRecord()` 抛 not initialized。
 - ⚠️ **Starred 入口**:starred 真值是 `regular_sessions.starred_at` 列。`setSessionStarred` IPC 走 `RegularSession.setStar(star)` → 写 data.json → afterPersist 同步本列(**不刷 updatedAt**,与 `setReadStatus` 同语义)。**没有** `SessionIdx.setStarred` 入口。`setStar` 仅存在于 `RegularSession`,对 `JobRun` 无定义。
-- ⚠️ **DB 自愈/初次填充**:`Profile.load` 拿到 `ProfileDb.open(id)` 后看 `wasCreated` 或 `checkIntegrity() === false`,两条路径都跑两表 `rebuildFromDisk` 把 DB 与盘上 `data.json` 拉齐。
-- ⚠️ **进程退出 flush**:`main.ts onBeforeQuit` 在 logger close 之前调 `Profiles.get().shutdown()`(Phase 3.5,5s 超时)。**绝不**让 `Profiles.shutdown` 变 fire-and-forget —— 早期实现漏 `await Profile.shutdownAll()` 会丢最后一批 `messages.jsonl` 行 + SQLite WAL 不 checkpoint。
+- ⚠️ **DB 自愈/初次填充**:`ProfileStore.load` 拿到 `ProfileDb.open(id)` 后看 `wasCreated` 或 `checkIntegrity() === false`,两条路径都跑两表 `rebuildFromDisk` 把 DB 与盘上 `data.json` 拉齐。
+- ⚠️ **进程退出 flush**:`main.ts onBeforeQuit` 在 logger close 之前调 `ProfileRegistry.shutdownAll()`（5s 超时）。它按每个 runtime Profile 的所有权链关闭 scheduler、Pi、MCP、persist 与 SQLite；绝不 fire-and-forget，否则会丢最后一批 `messages.jsonl` 行或跳过 SQLite close。
 - ⚠️ **测试 mock fs 时 helper 不能单放 `_*.ts`** —— vitest 的 include 模式 `__tests__/**/*.ts` 全扫;要么内嵌进 test 文件,要么改后缀。`session-schedule.test.ts` 整文件改走 tmp 真盘(SQLite 是 native,无法被 `vi.mock('node:fs')` 拦截)。
 
 ---
@@ -370,7 +353,7 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 
 | 文件 | Schema 类型 | 引入 version 的位置 |
 |---|---|---|
-| `profiles.json` | `ProfilesIndexFile` | `Profiles.toFile()` |
+| `profiles.json` | `ProfilesIndexFile` | `ProfileRegistry` 内部 `toFile()` |
 | `p_/settings.json` | `SettingsFile` | `ProfileSettings.toFile()` |
 | `p_/auth.pi.json` | `PiAuthFile` | `PiAuthManager` 写入路径 |
 | `p_/scheduler-state.json` | `SchedulerStateFile` | `SchedulerState.toFile()` |

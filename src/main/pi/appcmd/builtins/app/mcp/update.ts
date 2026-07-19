@@ -9,7 +9,6 @@
  * 应该先 `mcp status <name>` 看现状再决定。
  */
 
-import { Profiles } from '@main/persist';
 import {
   updateServerInternal,
   type UpdateServerResult,
@@ -85,8 +84,8 @@ export async function runUpdate(argv: string[], ctx: AppCmdContext): Promise<voi
   const { name } = nameResult;
 
   // 1. 确认 server 已安装
-  const profile = await Profiles.get().active();
-  const existing = profile.mcp.get(name);
+  const store = ctx.profile.store;
+  const existing = store.mcp.get(name);
   if (!existing) {
     ctx.printErr(
       `mcp update: server "${name}" is not installed.\n` +
@@ -137,7 +136,7 @@ export async function runUpdate(argv: string[], ctx: AppCmdContext): Promise<voi
 
   const result: UpdateServerResult = await updateServerInternal(
     { mcp_config: patch },
-    { signal: ctx.signal },
+    { profile: ctx.profile, signal: ctx.signal },
   );
 
   if (!result.success) {

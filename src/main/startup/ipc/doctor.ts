@@ -1,16 +1,15 @@
 import { ipcMain } from 'electron';
 import { renderToMain } from '@shared/ipc/doctor';
-import type { Context } from './shared';
-import { doctorManager } from '../../lib/doctor/manager';
+import { requireProfileForSender } from './profileContext';
 
-export default function handleDoctorIPC(ctx: Context) {
+export default function handleDoctorIPC() {
   const handle = renderToMain.bindMain(ipcMain);
 
-  handle.submitDoctorInquiry(async (_event, payload) => {
-    return doctorManager.submitInquiry(payload);
+  handle.submitDoctorInquiry(async (event, payload) => {
+    return requireProfileForSender(event).doctor.submitInquiry(payload, event.sender);
   });
 
-  handle.submitAgentAnswer(async (_event, payload) => {
-    doctorManager.receiveAnswer(payload.taskId, payload.answers);
+  handle.submitAgentAnswer(async (event, payload) => {
+    requireProfileForSender(event).doctor.receiveAnswer(payload.taskId, payload.answers, event.sender);
   });
 }

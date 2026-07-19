@@ -33,6 +33,7 @@ vi.mock('../skillInstall', async () => ({
 
 describe('skillDeviceImporter.updateSkillFromDevice', () => {
   let tempRoot: string;
+  const store = { id: 'p_test' };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -87,7 +88,7 @@ describe('skillDeviceImporter.updateSkillFromDevice', () => {
   it('updates a skill from a folder path', async () => {
     const { skillDir } = createSkillFolder('2.3.0');
 
-    const result = await updateSkillFromDevice(skillDir);
+    const result = await updateSkillFromDevice(store, skillDir);
 
     expect(result).toEqual({
       success: true,
@@ -96,6 +97,7 @@ describe('skillDeviceImporter.updateSkillFromDevice', () => {
       inputType: 'folder',
     });
     expect(installSkill).toHaveBeenCalledWith(
+      store,
       expect.objectContaining({
         name: 'pdf',
         description: 'PDF skill',
@@ -103,7 +105,7 @@ describe('skillDeviceImporter.updateSkillFromDevice', () => {
       }),
       expect.any(String),
     );
-    const installPath = (installSkill as Mock).mock.calls[0][1] as string;
+    const installPath = (installSkill as Mock).mock.calls[0][2] as string;
     expect(path.basename(installPath)).toBe('pdf');
   });
 
@@ -111,7 +113,7 @@ describe('skillDeviceImporter.updateSkillFromDevice', () => {
     (checkSkillExists as Mock).mockReturnValue(null);
     const { skillDir } = createSkillFolder('2.3.0');
 
-    const result = await updateSkillFromDevice(skillDir);
+    const result = await updateSkillFromDevice(store, skillDir);
 
     expect(result).toEqual({
       success: false,
@@ -123,7 +125,7 @@ describe('skillDeviceImporter.updateSkillFromDevice', () => {
   it('rejects a direct SKILL.md path', async () => {
     const { skillMdPath } = createSkillFolder('2.4.0');
 
-    const result = await updateSkillFromDevice(skillMdPath);
+    const result = await updateSkillFromDevice(store, skillMdPath);
 
     expect(result).toEqual({
       success: false,

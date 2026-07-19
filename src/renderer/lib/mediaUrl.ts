@@ -8,12 +8,12 @@
  *
  * URL 形态与 [main/lib/media/mediaProtocol.ts](../../main/lib/media/mediaProtocol.ts)
  * 的 handler 契约一一对应:
- *   media://<authority>/<path…>?agent=&session=&mime=
+ *   media://<authority>/<path…>?profile=&agent=&session=&mime=
  *
  * - authority = 内层 internal-url scheme 名(`local` / `knowledge`)。
  * - path 每段 `encodeURIComponent`(handler 侧逐段 `decodeURIComponent`)。
- * - agent / session / mime 经 `URLSearchParams` 编码;profileId 不进 URL
- *   (主进程用 active profile)。
+ * - profile / agent / session / mime 经 `URLSearchParams` 编码；profile 由不可变
+ *   `window.electronAPI.profile.id` 提供，protocol handler 据此避免读取 selected Profile。
  *
  * 必填上下文缺失(无 agent、local 缺 session)→ 返回 `null`,调用方据此走
  * 图标兜底,不构造半成品 URL。
@@ -59,6 +59,7 @@ export function toMediaUrl(uri: string, mime: string, ctx: MediaUrlContext): str
   if (path === '') return null;
 
   const params = new URLSearchParams();
+  params.set('profile', window.electronAPI.profile.id);
   params.set('agent', ctx.agentId);
   if (requiresSession && ctx.sessionId) params.set('session', ctx.sessionId);
   params.set('mime', mime);

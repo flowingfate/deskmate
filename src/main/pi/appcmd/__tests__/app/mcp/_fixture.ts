@@ -17,6 +17,7 @@ import { vi } from 'vitest';
 
 import { Tracer } from '@shared/log/trace';
 import type { AgentToolContext } from '@main/pi/tools/types';
+import { testProfile } from '../../../../tools/__tests__/profileFixture';
 
 // ---------------------------------------------------------------------------
 // 被 mock 模块的 stub state(必须 hoisted —— vi.mock factory 在 import 前跑)
@@ -39,8 +40,6 @@ const mcpMocks = vi.hoisted(() => ({
   getMcpServerRuntimeState: vi.fn(),
 
   profileMcpGet: vi.fn(),
-  profileActive: vi.fn(),
-  profileActiveSync: vi.fn(),
 }));
 
 /**
@@ -63,8 +62,14 @@ vi.mock('@main/pi/appcmd/builtins/app/mcp/kernel/getStatus', () => ({
   getStatusInternal: mcpMocks.getStatusInternal,
 }));
 
-
 vi.mock('@main/lib/mcpRuntime', () => ({
+  MCPClientManager: class {
+    delete = mcpMocks.mcpDelete;
+    connect = mcpMocks.mcpConnect;
+    disconnect = mcpMocks.mcpDisconnect;
+    reconnect = mcpMocks.mcpReconnect;
+    getMcpServerRuntimeState = mcpMocks.getMcpServerRuntimeState;
+  },
   mcpClientManager: {
     delete: mcpMocks.mcpDelete,
     connect: mcpMocks.mcpConnect,
@@ -74,14 +79,6 @@ vi.mock('@main/lib/mcpRuntime', () => ({
   },
 }));
 
-vi.mock('@main/persist', () => ({
-  Profiles: {
-    get: () => ({
-      active: mcpMocks.profileActive,
-      activeSync: mcpMocks.profileActiveSync,
-    }),
-  },
-}));
 
 // ---------------------------------------------------------------------------
 // dispatch helper —— 必须在 vi.mock 之后再 import 被测对象。
@@ -91,10 +88,12 @@ import { dispatchAppCommand, formatAppCmdContent } from '@main/pi/appcmd/dispatc
 // side-effect import:把 helloCommand / mcpCommand 注册进单例 appCommands。
 // 单测在 `router.test.ts` 里直接对 `appCommands.has('mcp')` 做断言。
 import '@main/pi/appcmd/builtins/app';
+vi.spyOn(testProfile.store.mcp, 'get').mockImplementation(mcpMocks.profileMcpGet);
 import { mcpCommand } from '@main/pi/appcmd/builtins/app/mcp';
 
 function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
+    profile: testProfile,
     profileId: 'profile-test',
     agentId: 'agent-test',
     sessionId: 'session-test',
@@ -140,14 +139,12 @@ export async function runMcp(
   };
 }
 
-/** beforeEach 默认状态 —— 没有 active profile 失败 / 没有 server 安装 / 空 runtime。 */
+/** beforeEach 重置注入 Profile 的 MCP state。 */
 export function resetMcpMocks(): void {
   for (const fn of Object.values(mcpMocks)) {
     fn.mockReset();
   }
   mcpMocks.profileMcpGet.mockReturnValue(undefined);
-  mcpMocks.profileActive.mockResolvedValue({ mcp: { get: mcpMocks.profileMcpGet } });
-  mcpMocks.profileActiveSync.mockReturnValue({ mcp: { get: mcpMocks.profileMcpGet } });
   mcpMocks.getMcpServerRuntimeState.mockReturnValue(undefined);
 }
 
@@ -168,8 +165,6 @@ describe('mcp fixture sanity', () => {
         'mcpDelete',
         'mcpDisconnect',
         'mcpReconnect',
-        'profileActive',
-        'profileActiveSync',
         'profileMcpGet',
         'updateServerInternal',
       ].sort(),

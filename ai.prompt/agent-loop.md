@@ -21,7 +21,7 @@
 | **持久化形态独立** | `messages.jsonl` 行类型是 `PersistedJsonLine = PersistedUserMessage \| PersistedAssistantMessage \| PersistedToolResponse`(`shared/persist/types/message.ts`),与 Domain Message 通过 `main/persist/messageWire.ts` 的 `rehydrate` / `dehydrate` 互转。Persisted 只是空字段省略后的 Domain。 |
 | **pi-ai 只在 pi/ 内 import** | 例外清单:`session/{base,regular,job}.ts` / `model.ts` / `tool.ts` / `auth.ts` / `utils/utilityCompletion.ts`。其它任何模块 `import '@earendil-works/pi-ai'` 一律违规。 |
 | **profile 永远存在,登录是给 profile 贴身份** | 不要求用户登录任何 provider 才能启动;profile bootstrap 永远成功,认证态由 `pi/auth.ts` 一处管理。 |
-| **依赖规则** | `agent → session → prompt / tool / mcp / compression → utils/internal`。无环、无双向回调、按需注入纯函数 hook。 |
+| **依赖规则** | `agent → session → prompt / tool / compression → utils/internal`。无环、无双向回调、按需注入纯函数 hook。 |
 | **tracer 入口注入,不入 persist** | `BaseSession.sessionTracer` 是 `Tracer` 实例,IPC 入口透传,内部 `derive` 出 chat.turn / chat.llm / chat.tool / chat.compress span。`messages.jsonl` / `data.json` 不写 tid/sid。 |
 
 ---
@@ -462,7 +462,7 @@ onTurnComplete → IDLE
 
 ## 15. Agent 委派
 
-生产路径为 `subagent` LocalTool → `SubAgentManager.forProfile(profile)` → parent-scoped persisted `Subrun` → `SubAgentSession`。每个 Profile 绑定唯一 manager；它授权 delegate、持久 reservation/parallel gate、timeout/cancel、stale-running recovery 与有界 runtime state。`run` 创建初始 Subrun；`continue` 在重新授权后复用同一 transcript/contextState 执行一轮新的 persisted continuation，不分配新 reservation。父 RegularSession stop 时先取得所属 Profile 的 manager，再按完整 parent identity 取消 active delegated runs；不存在第二套委派 backend。
+生产路径为 `subagent` LocalTool → `Profile.getSubAgentManager()` → parent-scoped persisted `Subrun` → `SubAgentSession`。每个 Profile 直接构造并缓存唯一 manager；它授权 delegate、持久 reservation/parallel gate、timeout/cancel、stale-running recovery 与有界 runtime state。`run` 创建初始 Subrun；`continue` 在重新授权后复用同一 transcript/contextState 执行一轮新的 persisted continuation，不分配新 reservation。父 RegularSession stop 时先取得所属 Profile 的 manager，再按完整 parent identity 取消 active delegated runs；不存在第二套委派 backend。
 
 ---
 

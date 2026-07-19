@@ -22,17 +22,17 @@
 
 import { ipcMain } from 'electron';
 
-import type { Context } from './shared';
 import { getModelInfo, getPiAuthManager, listModels, type ResolvedModel } from '@main/pi';
 import { parseAgentModel } from '@shared/utils/agentModelId';
-import { Profiles } from '@main/persist';
 import { renderToMain, mainToRender, type PiModelListItem, type PiModelInfo } from '@shared/ipc/pi';
+import { requireProfileForSender } from './profileContext';
 
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
 
 interface LoginSession {
   sessionId: string;
   provider: string;
+  profileId: string;
   abortController: AbortController;
   timeoutHandle: NodeJS.Timeout;
   /** onPrompt / onSelect 的 resolver；同一 sessionId 一次只有一个挂起 */
@@ -64,16 +64,14 @@ function failSession(s: LoginSession, error: string): void {
   }
 }
 
-export default function (ctx: Context) {
+export default function() {
   const handle = renderToMain.bindMain(ipcMain);
 
   // ─── auth ──────────────────────────────────────────────────────────────
 
-  handle.listAccounts(async () => {
+  handle.listAccounts(async (event) => {
     try {
-      const profileId = Profiles.get().activeProfileId;
-      if (!profileId) return { success: true, data: [] };
-      const data = await getPiAuthManager(profileId).listProviders();
+      const data = await getPiAuthManager(requireProfileForSender(event).id).listProviders();
       return { success: true, data };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
@@ -82,7 +80,7 @@ export default function (ctx: Context) {
 
   handle.startLogin(async (event, provider) => {
     try {
-      const profileId = Profiles.get().activeProfileId;
+      const profileId = requireProfileForSender(event).id;
 
       const sessionId = nextSessionId();
       const abortController = new AbortController();
@@ -92,6 +90,7 @@ export default function (ctx: Context) {
       }, LOGIN_TIMEOUT_MS);
 
       const session: LoginSession = {
+        profileId,
         sessionId,
         provider,
         abortController,
@@ -148,34 +147,36 @@ export default function (ctx: Context) {
     }
   });
 
-  handle.cancelLogin(async (_event, sessionId) => {
-    const s = sessions.get(sessionId);
-    if (s) failSession(s, 'Cancelled by user');
+  handle.cancelLogin(async (event, sessionId) => {
+    const profileId = requireProfileForSender(event).id;
+    const session = sessions.get(sessionId);
+    if (session && session.profileId === profileId) failSession(session, 'Cancelled by user');
     return { success: true };
   });
 
-  handle.submitPrompt(async (_event, sessionId, value) => {
-    const s = sessions.get(sessionId);
-    if (!s || !s.pendingResolver) return { success: false, error: 'No pending prompt' };
-    s.pendingResolver.resolve(value);
-    s.pendingResolver = undefined;
+  handle.submitPrompt(async (event, sessionId, value) => {
+    const profileId = requireProfileForSender(event).id;
+    const session = sessions.get(sessionId);
+    if (!session || session.profileId !== profileId || !session.pendingResolver) {
+      return { success: false, error: 'No pending prompt' };
+    }
+    session.pendingResolver.resolve(value);
+    session.pendingResolver = undefined;
     return { success: true };
   });
 
-  handle.setApiKey(async (_event, provider, apiKey, baseUrl) => {
+  handle.setApiKey(async (event, provider, apiKey, baseUrl) => {
     try {
-      const profileId = Profiles.get().activeProfileId;
-      await getPiAuthManager(profileId).setApiKey(provider, apiKey, baseUrl);
+      await getPiAuthManager(requireProfileForSender(event).id).setApiKey(provider, apiKey, baseUrl);
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   });
 
-  handle.logout(async (_event, provider) => {
+  handle.logout(async (event, provider) => {
     try {
-      const profileId = Profiles.get().activeProfileId;
-      await getPiAuthManager(profileId).logout(provider);
+      await getPiAuthManager(requireProfileForSender(event).id).logout(provider);
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };

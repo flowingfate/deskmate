@@ -54,15 +54,15 @@ async function setupProfile(): Promise<{
   manager: SubAgentManager;
 }> {
   const root = await import('../../../persist/lib/root');
-  const { Profiles } = await import('../../../persist/profiles');
+  const { ProfileRegistry } = await import('../../../profileRegistry');
   const { ProfileDb } = await import('../../../persist/lib/db/db');
   root.setRootForTesting(tmpRoot);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.resetForTesting();
-  await Profiles.get().bootstrap();
-  const profile = await Profiles.get().active();
-  const parent = await profile.createAgent({ name: 'Parent', version: '1', model: 'model-parent' });
-  const delegate = await profile.createAgent({
+  await ProfileRegistry.bootstrap();
+  const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+  const parent = await store.createAgent({ name: 'Parent', version: '1', model: 'model-parent' });
+  const delegate = await store.createAgent({
     name: 'Delegate',
     description: 'Reviews reports.',
     version: '1',
@@ -76,10 +76,10 @@ async function setupProfile(): Promise<{
   await parent.patchFront({ delegates: [delegate.id, 'a_missing'] });
 
   return {
-    profileId: profile.id,
+    profileId: store.id,
     parentId: parent.id,
     delegateId: delegate.id,
-    manager: SubAgentManager.forProfile(profile),
+    manager: new SubAgentManager(store),
   };
 }
 

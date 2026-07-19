@@ -1,96 +1,87 @@
 /**
  * Persist 模块的 IPC handler。注册 `persist:*` 通道并把 renderer 调用映射到
- * `Profiles` / `Agent` / `Session` 上。类型签名见
+ * `ProfileRegistry` / `Agent` / `Session` 上。类型签名见
  * [`src/shared/ipc/persist.ts`](../../shared/ipc/persist.ts)。
  */
 
 import { shell, type IpcMain } from 'electron';
 
 import { renderToMain, type PersistResult, type PersistSnapshot } from '../../shared/ipc/persist';
-import { Profiles } from './profiles';
+import { ProfileRegistry } from '@main/profileRegistry';
 import { emit } from './lib/emit';
 import { getAppRoot } from './lib/root';
 import { PERSIST_PATH } from '../../shared/persist/path';
 import { computeStorageOverview, resolveRevealTarget } from './storageOverview';
 import type { AgentRecord, ArchivedAgentEntry } from '../../shared/persist/types';
+import type { ProfileStore } from '@main/persist';
+import { requireProfileForSender } from '@main/startup/ipc/profileContext';
 
 function err(error: unknown): { success: false; error: string } {
   return { success: false, error: error instanceof Error ? error.message : String(error) };
 }
 
-export async function querySession(agentId: string, sessionId: string) {
-  const profile = await Profiles.get().active();
-  const agent = await profile.getAgent(agentId);
+export async function querySession(store: ProfileStore, agentId: string, sessionId: string) {
+  const agent = await store.getAgent(agentId);
   if (!agent) return { success: false, error: `Agent not found: ${agentId}` } as const;
   const session = await agent.getSession(sessionId);
   if (!session) return { success: false, error: `Session not found: ${sessionId}` } as const;
-  return { success: true, profile, agent, session } as const;
+  return { success: true, store, agent, session } as const;
 }
 
-export async function queryJobRun(agentId: string, jobId: string, runId: string) {
-  const profile = await Profiles.get().active();
-  const agent = await profile.getAgent(agentId);
+export async function queryJobRun(store: ProfileStore, agentId: string, jobId: string, runId: string) {
+  const agent = await store.getAgent(agentId);
   if (!agent) return { success: false, error: `Agent not found: ${agentId}` } as const;
   const job = await agent.getJob(jobId);
   if (!job) return { success: false, error: `Job not found: ${jobId}` } as const;
   const run = await job.getRun(runId);
   if (!run) return { success: false, error: `Run not found: ${runId}` } as const;
-  return { success: true, profile, agent, job, run } as const;
+  return { success: true, store, agent, job, run } as const;
 }
 
 export function registerPersistIpc(ipc: IpcMain): void {
   const handle = renderToMain.bindMain(ipc);
-
-  // getSnapshot 同 tick 并发合并：renderer 端 atom 模块加载与 profile 切换会触发
-  // 多窗口 / 多 atom 并发调用；本地内存里 Profile/Agent class 都已缓存，重新 build
-  // snapshot 只是 CPU 拼装，但 N 次并发仍会重复拼装 + IPC 序列化。inflight 合并
-  // 把同一 tick 内未结束的调用收成一份共享 Promise，结束即释放，下一次仍然 fresh。
-  let inflight: Promise<PersistResult<PersistSnapshot>> | null = null;
-  handle.getSnapshot(async () => {
-    if (inflight) return inflight;
+  // 同一窗口 Profile 的 atom fan-out 合并为一个 snapshot；不同窗口绝不能共享它。
+  const inflight = new Map<string, Promise<PersistResult<PersistSnapshot>>>();
+  handle.getSnapshot(async (event) => {
+    const store = requireProfileForSender(event).store
+    const existing = inflight.get(store.id);
+    if (existing) return existing;
     const pending = (async (): Promise<PersistResult<PersistSnapshot>> => {
       try {
-        const profile = await Profiles.get().active();
-        return { success: true, data: await profile.getSnapshot() };
+        return { success: true, data: await store.getSnapshot() };
       } catch (e) { return err(e); }
     })();
-    inflight = pending;
+    inflight.set(store.id, pending);
     try {
       return await pending;
     } finally {
-      if (inflight === pending) inflight = null;
+      if (inflight.get(store.id) === pending) inflight.delete(store.id);
     }
   });
 
-  handle.switchProfile(async (_e, profileId) => {
-    try {
-      await Profiles.get().switch(profileId);
-      return { success: true };
-    } catch (e) { return err(e); }
-  });
 
-  handle.listAllSessions(async (_e, agentId) => {
+  handle.listAllSessions(async (event, agentId) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
+      const store = requireProfileForSender(event).store
+      const agent = await store.getAgent(agentId);
       if (!agent) return { success: false, error: `agent not found: ${agentId}` };
       return { success: true, data: await agent.listSessionsFlat({ kind: 'regular' }) };
     } catch (e) { return err(e); }
   });
 
-  handle.listAllScheduleRuns(async (_e, agentId) => {
+  handle.listAllScheduleRuns(async (event, agentId) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
+      const store = requireProfileForSender(event).store
+      const agent = await store.getAgent(agentId);
       if (!agent) return { success: false, error: `agent not found: ${agentId}` };
       return { success: true, data: await agent.listAllScheduleRuns() };
     } catch (e) { return err(e); }
   });
 
-  handle.getSession(async (_e, agentId, sessionId) => {
+  handle.getSession(async (event, agentId, sessionId) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
+      const store = requireProfileForSender(event).store
+      const agent = await store.getAgent(agentId);
       if (!agent) return { success: false, error: `agent not found: ${agentId}` };
       const session = await agent.getSession(sessionId);
       if (!session) return { success: true, data: null };
@@ -101,10 +92,10 @@ export function registerPersistIpc(ipc: IpcMain): void {
     } catch (e) { return err(e); }
   });
 
-  handle.getSessionFilesDir(async (_e, agentId, sessionId) => {
+  handle.getSessionFilesDir(async (event, agentId, sessionId) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
+      const store = requireProfileForSender(event).store
+      const agent = await store.getAgent(agentId);
       if (!agent) return { success: false, error: `agent not found: ${agentId}` };
       // 跨形态查 session：renderer 在 job-run 路由下也会调本 IPC（WorkspaceExplorer
       // 的 session-files 区段对两种 session 都展示）。findSessionAcrossKinds 命中
@@ -117,10 +108,10 @@ export function registerPersistIpc(ipc: IpcMain): void {
 
   // ─────────── Agent CRUD ───────────
 
-  handle.createAgent(async (_e, input) => {
+  handle.createAgent(async (event, input) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.createAgent({
+      const store = requireProfileForSender(event).store
+      const agent = await store.createAgent({
         name: input.name,
         description: input.description,
         version: input.version ?? '1.0.0',
@@ -136,10 +127,10 @@ export function registerPersistIpc(ipc: IpcMain): void {
     } catch (e) { return err(e); }
   });
 
-  handle.patchAgentFront(async (_e, agentId, patch, systemPrompt) => {
+  handle.patchAgentFront(async (event, agentId, patch, systemPrompt) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
+      const store = requireProfileForSender(event).store
+      const agent = await store.getAgent(agentId);
       if (!agent) return { success: false, error: `agent not found: ${agentId}` };
       // systemPrompt 在 patchFront 前赋值，让单次写盘同时覆盖 body 与 front-matter。
       if (systemPrompt !== undefined) agent.systemPrompt = systemPrompt;
@@ -148,53 +139,53 @@ export function registerPersistIpc(ipc: IpcMain): void {
     } catch (e) { return err(e); }
   });
 
-  handle.archiveAgent(async (_e, agentId) => {
+  handle.archiveAgent(async (event, agentId) => {
     try {
-      const profile = await Profiles.get().active();
-      await profile.archiveAgent(agentId);
+      const store = requireProfileForSender(event).store
+      await store.archiveAgent(agentId);
       return { success: true };
     } catch (e) { return err(e); }
   });
 
-  handle.unarchiveAgent(async (_e, agentId) => {
+  handle.unarchiveAgent(async (event, agentId) => {
     try {
-      const profile = await Profiles.get().active();
+      const store = requireProfileForSender(event).store
       // 取同 id 中 archivedAt 最大的归档项恢复。
-      const archived = await profile.archive.listArchivedAgents();
+      const archived = await store.archive.listArchivedAgents();
       const candidates = archived.filter((a) => a.id === agentId);
       if (candidates.length === 0) return { success: false, error: 'archived agent not found' };
       candidates.sort((a, b) => (a.archivedAt < b.archivedAt ? 1 : a.archivedAt > b.archivedAt ? -1 : 0));
-      await profile.restoreAgent(candidates[0].archivedId);
+      await store.restoreAgent(candidates[0].archivedId);
       return { success: true };
     } catch (e) { return err(e); }
   });
 
-  handle.duplicateAgent(async (_e, sourceAgentId, newName) => {
+  handle.duplicateAgent(async (event, sourceAgentId, newName) => {
     try {
       if (typeof newName !== 'string' || !newName.trim()) {
         return { success: false, error: 'invalid agent name' };
       }
-      const profile = await Profiles.get().active();
-      const dup = await profile.duplicateAgent(sourceAgentId, newName.trim());
+      const store = requireProfileForSender(event).store
+      const dup = await store.duplicateAgent(sourceAgentId, newName.trim());
       return { success: true, data: { id: dup.id } };
     } catch (e) { return err(e); }
   });
 
-  handle.setPrimaryAgent(async (_e, agentId) => {
+  handle.setPrimaryAgent(async (event, agentId) => {
     try {
-      const profile = await Profiles.get().active();
-      await profile.setPrimaryAgent(agentId);
+      const store = requireProfileForSender(event).store
+      await store.setPrimaryAgent(agentId);
       return { success: true };
     } catch (e) { return err(e); }
   });
 
-  handle.listArchivedAgents(async () => {
+  handle.listArchivedAgents(async (event) => {
     try {
-      const profile = await Profiles.get().active();
-      const items = await profile.archive.listArchivedAgents();
+      const store = requireProfileForSender(event).store
+      const items = await store.archive.listArchivedAgents();
       const out: ArchivedAgentEntry[] = [];
       for (const item of items) {
-        const md = await profile.archive.readMarkdown(item.archivedId);
+        const md = await store.archive.readMarkdown(item.archivedId);
         // 历史 _record.json 未写 model 字段（重构前归档）；优先取 record，回退到 AGENT.md。
         const model = item.model ?? md?.frontMatter.model ?? '';
         const base = {
@@ -215,61 +206,60 @@ export function registerPersistIpc(ipc: IpcMain): void {
     } catch (e) { return err(e); }
   });
 
-  handle.getAgentDetail(async (_e, agentId) => {
+  handle.getAgentDetail(async (event, agentId) => {
     try {
-      const profile = await Profiles.get().active();
-      return { success: true, data: await profile.getAgentDetail(agentId) };
+      const store = requireProfileForSender(event).store
+      return { success: true, data: await store.getAgentDetail(agentId) };
     } catch (e) { return err(e); }
   });
 
   // ─────────── Session 写路径 ───────────
 
-  handle.renameSession(async (_e, agentId, sessionId, newTitle) => {
+  handle.renameSession(async (event, agentId, sessionId, newTitle) => {
     try {
-      const query = await querySession(agentId, sessionId);
+      const query = await querySession(requireProfileForSender(event).store, agentId, sessionId);
       if (!query.success) return query;
       await query.session.setTitle(newTitle);
       return { success: true };
     } catch (e) { return err(e); }
   });
 
-  handle.setSessionStarred(async (_e, agentId, sessionId, starred) => {
+  handle.setSessionStarred(async (event, agentId, sessionId, starred) => {
     try {
-      const query = await querySession(agentId, sessionId);
+      const query = await querySession(requireProfileForSender(event).store, agentId, sessionId);
       if (!query.success) return query;
       const now = new Date().toISOString();
       // session.setStar 写 data.json#star → onChange 触发 `sessionIdx.upsert` 同步 starred_at +
       // emit `session:index:updated`。下一行补一次 `starred:updated`，让跨 agent 订阅 starred 列表
       // 的 renderer atom（starred.atom）即时刷新（onChange 路径只发 session:index:updated）。
       await query.session.setStar(starred ? { starredAt: now } : undefined);
-      emit('starred:updated', {
-        profileId: query.profile.id,
-        items: query.profile.sessionIdx.listStarred(),
+      emit(query.store.id, 'starred:updated', {
+        items: query.store.sessionIdx.listStarred(),
       });
       return { success: true };
     } catch (e) { return err(e); }
   });
-  handle.deleteSession(async (_e, agentId, sessionId) => {
+  handle.deleteSession(async (event, agentId, sessionId) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
+      const store = requireProfileForSender(event).store
+      const agent = await store.getAgent(agentId);
       if (!agent) return { success: false, error: `agent not found: ${agentId}` };
       // 只有"被删 session 之前确实 star 过"才广播 starred:updated；否则跳过整列广播。
       // `sessionIdx.remove` 自己只 emit `session:index:updated`(op='remove')，无 starred 含义。
-      const wasStarred = profile.sessionIdx.findById(sessionId)?.starredAt != null;
+      const wasStarred = store.sessionIdx.findById(sessionId)?.starredAt != null;
       if (!await agent.deleteSession(sessionId)) {
         return { success: false, error: `session not found: ${sessionId}` };
       }
       if (wasStarred) {
-        emit('starred:updated', { profileId: profile.id, items: profile.sessionIdx.listStarred() });
+        emit(store.id, 'starred:updated', { items: store.sessionIdx.listStarred() });
       }
       return { success: true };
     } catch (e) { return err(e); }
   });
-  handle.deleteScheduleRun(async (_e, agentId, jobId, runId) => {
+  handle.deleteScheduleRun(async (event, agentId, jobId, runId) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
+      const store = requireProfileForSender(event).store
+      const agent = await store.getAgent(agentId);
       if (!agent) return { success: false, error: `agent not found: ${agentId}` };
       const job = await agent.getJob(jobId);
       if (!job) return { success: false, error: `schedule job not found: ${jobId}` };
@@ -279,28 +269,28 @@ export function registerPersistIpc(ipc: IpcMain): void {
       return { success: true };
     } catch (e) { return err(e); }
   });
-  handle.forkJobRunToSession(async (_e, agentId, jobId, runId) => {
+  handle.forkJobRunToSession(async (event, agentId, jobId, runId) => {
     try {
-      const query = await queryJobRun(agentId, jobId, runId);
+      const query = await queryJobRun(requireProfileForSender(event).store, agentId, jobId, runId);
       if (!query.success) return query;
       const session = await query.run.forkToSession(query.agent.sessionIdx);
       return { success: true, data: { sessionId: session.id } };
     } catch (e) { return err(e); }
   });
 
-  handle.getSessionMessages(async (_e, agentId, sessionId) => {
+  handle.getSessionMessages(async (event, agentId, sessionId) => {
     try {
-      const query = await querySession(agentId, sessionId);
+      const query = await querySession(requireProfileForSender(event).store, agentId, sessionId);
       if (!query.success) return { success: true, data: null };
       const messages = await query.session.loadMessagesAll();
       return { success: true, data: { data: query.session.toDataFile(), messages } };
     } catch (e) { return err(e); }
   });
 
-  handle.getUnreadSummary(async (_e, agentId) => {
+  handle.getUnreadSummary(async (event, agentId) => {
     try {
-      const profile = await Profiles.get().active();
-      const agent = await profile.getAgent(agentId);
+      const store = requireProfileForSender(event).store
+      const agent = await store.getAgent(agentId);
       if (!agent) {
         return {
           success: true,
@@ -314,39 +304,38 @@ export function registerPersistIpc(ipc: IpcMain): void {
 
   // ─────────── Settings ───────────
 
-  handle.updateConfirmationSettings(async (_e, settings) => {
+  handle.updateConfirmationSettings(async (event, settings) => {
     try {
-      const profile = await Profiles.get().active();
-      await profile.patchSettings({ confirmation: settings });
+      const store = requireProfileForSender(event).store
+      await store.patchSettings({ confirmation: settings });
       return { success: true };
     } catch (e) { return err(e); }
   });
 
-  handle.updateWebSearchSettings(async (_e, settings) => {
+  handle.updateWebSearchSettings(async (event, settings) => {
     try {
-      const profile = await Profiles.get().active();
-      await profile.patchSettings({ webSearch: settings });
+      const store = requireProfileForSender(event).store
+      await store.patchSettings({ webSearch: settings });
       return { success: true };
     } catch (e) { return err(e); }
   });
 
   // ─────────── 本地数据透明（/settings/persist） ───────────
 
-  handle.getStorageOverview(async () => {
+  handle.getStorageOverview(async (event) => {
     try {
-      const profiles = Profiles.get();
-      const profile = await profiles.active();
-      const data = await computeStorageOverview(profile, profiles);
+      const registry = ProfileRegistry;
+      const store = requireProfileForSender(event).store
+      const data = await computeStorageOverview(store, registry);
       return { success: true, data };
     } catch (e) { return err(e); }
   });
 
-  handle.revealStoragePath(async (_e, absPath) => {
+  handle.revealStoragePath(async (event, absPath) => {
     try {
-      const profiles = Profiles.get();
-      const profile = await profiles.active();
+      const store = requireProfileForSender(event).store
       const root = getAppRoot();
-      const profileRoot = PERSIST_PATH.profileDir(root, profile.id);
+      const profileRoot = PERSIST_PATH.profileDir(root, store.id);
       const resolved = await resolveRevealTarget(profileRoot, root, absPath);
       if (!resolved) return { success: false, error: 'Path is outside the profile directory or does not exist' };
       if (resolved.isFile) {

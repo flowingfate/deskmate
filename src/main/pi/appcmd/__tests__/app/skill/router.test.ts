@@ -188,6 +188,7 @@ describe('skill status', () => {
 
     await runSkill('status pptx');
     expect(skillMocks.getSkillStatusInternal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.any(String) }),
       { skill_name: 'pptx', current_agent_id: 'agent-test' },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );

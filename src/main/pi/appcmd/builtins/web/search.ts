@@ -20,7 +20,6 @@
  * 不支持 `--dry-run`(纯只读 + 副作用受控,演练无意义)。
  */
 
-import { Profiles } from '@main/persist';
 
 import {
   TavilySearchTool,
@@ -146,14 +145,10 @@ export async function runSearch(argv: string[], ctx: AppCmdContext): Promise<voi
     return;
   }
 
-  // API key:settings.json 优先,环境变量兜底。两者都空 → fail-fast。
+  // API key:owning Profile settings 优先,环境变量兜底。两者都空 → fail-fast。
   let apiKey: string | undefined;
-  try {
-    const key = Profiles.get().activeSync().settings.webSearch?.tavilyApiKey;
-    if (typeof key === 'string' && key.trim() !== '') apiKey = key.trim();
-  } catch {
-    // 无 active profile(未登录 / 测试环境)—— 落到环境变量。
-  }
+  const key = ctx.profile.store.settings.webSearch?.tavilyApiKey;
+  if (typeof key === 'string' && key.trim() !== '') apiKey = key.trim();
   if (apiKey === undefined) {
     const env = process.env.TAVILY_API_KEY;
     if (typeof env === 'string' && env.trim() !== '') apiKey = env.trim();

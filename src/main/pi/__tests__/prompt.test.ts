@@ -10,7 +10,7 @@ vi.mock('../utils/globalSystemPrompt', () => ({
 
 
 
-// Profiles 链：mock active() 返回受控 profile 对象
+// Registry 按显式 profileId 返回受控 runtime Profile。
 const profile: {
   id: string;
   skills: {
@@ -27,8 +27,13 @@ const profile: {
   },
 };
 
-vi.mock('@main/persist', () => ({
-  Profiles: { get: () => ({ active: async () => profile }) },
+vi.mock('@main/profileRegistry', () => ({
+  ProfileRegistry: {
+    require: (id: string) => {
+      if (id !== profile.id) throw new Error(`profileId mismatch: ${id}`);
+      return { store: profile };
+    },
+  },
 }));
 
 import { buildSystemPrompt } from '../prompt';

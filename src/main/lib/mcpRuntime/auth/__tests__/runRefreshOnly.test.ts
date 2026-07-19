@@ -49,16 +49,18 @@ vi.mock('../CallbackServer', () => ({
 
 let storeImpl: Record<string, any> = {};
 vi.mock('../DeskmateTokenCache', () => ({
-  DeskmateTokenCache: {
-    getInstance: () => ({
-      getMcpOAuth: vi.fn(async (key: string) => storeImpl[key] ?? null),
-      setMcpOAuth: vi.fn(async (key: string, entry: any) => {
-        storeImpl[key] = entry;
-      }),
-      deleteMcpOAuth: vi.fn(async (key: string) => {
-        delete storeImpl[key];
-      }),
-    }),
+  DeskmateTokenCache: class {
+    async getMcpOAuth(key: string): Promise<unknown> {
+      return storeImpl[key] ?? null;
+    }
+
+    async setMcpOAuth(key: string, entry: unknown): Promise<void> {
+      storeImpl[key] = entry;
+    }
+
+    async deleteMcpOAuth(key: string): Promise<void> {
+      delete storeImpl[key];
+    }
   },
 }));
 
@@ -88,7 +90,7 @@ describe('runRefreshOnly', () => {
     sdkAuthMock.mockResolvedValueOnce('AUTHORIZED');
     const { runRefreshOnly } = await import('../performOAuthFlow');
     const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-    const provider = new DeskmateOAuthProvider('s', makeCfg());
+    const provider = new DeskmateOAuthProvider('p_test', 's', makeCfg());
 
     await expect(runRefreshOnly(provider, 's', 'https://api.example.com/mcp'))
       .resolves.toBeUndefined();
@@ -112,7 +114,7 @@ describe('runRefreshOnly', () => {
     });
     const { runRefreshOnly } = await import('../performOAuthFlow');
     const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-    const provider = new DeskmateOAuthProvider('s', makeCfg());
+    const provider = new DeskmateOAuthProvider('p_test', 's', makeCfg());
 
     await expect(runRefreshOnly(provider, 's', 'https://api.example.com/mcp'))
       .rejects.toThrow(/REFRESH_ONLY: SDK attempted to open browser/);
@@ -126,7 +128,7 @@ describe('runRefreshOnly', () => {
     sdkAuthMock.mockRejectedValueOnce(new Error('HTTP 502 from token endpoint'));
     const { runRefreshOnly } = await import('../performOAuthFlow');
     const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-    const provider = new DeskmateOAuthProvider('s', makeCfg());
+    const provider = new DeskmateOAuthProvider('p_test', 's', makeCfg());
 
     await expect(runRefreshOnly(provider, 's', 'https://api.example.com/mcp'))
       .rejects.toThrow(/HTTP 502/);
@@ -140,7 +142,7 @@ describe('runRefreshOnly', () => {
     ctrl.abort();
     const { runRefreshOnly } = await import('../performOAuthFlow');
     const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-    const provider = new DeskmateOAuthProvider('s', makeCfg());
+    const provider = new DeskmateOAuthProvider('p_test', 's', makeCfg());
 
     await expect(
       runRefreshOnly(provider, 's', 'https://api.example.com/mcp', { signal: ctrl.signal }),
@@ -167,7 +169,7 @@ describe('runRefreshOnly', () => {
 
     const { runRefreshOnly } = await import('../performOAuthFlow');
     const { DeskmateOAuthProvider } = await import('../DeskmateOAuthProvider');
-    const provider = new DeskmateOAuthProvider('s', makeCfg());
+    const provider = new DeskmateOAuthProvider('p_test', 's', makeCfg());
 
     await runRefreshOnly(provider, 's', 'https://api.example.com/mcp');
 

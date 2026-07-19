@@ -17,10 +17,12 @@ import { appCommands } from '../../appcmd/builtins/app';
 import { app } from '../app';
 import type { ToolContext } from '../types';
 import { Tracer } from '@shared/log/trace';
+import { testProfile } from './profileFixture';
 
 function makeCtx(): ToolContext {
   return {
     mode: 'agent',
+    profile: testProfile,
     profileId: 'p',
     agentId: 'a',
     sessionId: 's',

@@ -38,13 +38,12 @@ const PersistSettingsView: React.FC = () => {
     load()
   }, [load])
 
-  // 存储量随会话 / agent 增删、agent 新建变化：切 profile、删 session、agent 增删后自动重扫。
+  // 存储量随会话 / agent 增删变化：删 session、agent 增删后自动重扫。
   useEffect(() => {
     const onRegistry = (_e: unknown, payload: { kind: string }) => {
       if (payload.kind === 'agents') load()
     }
     const unsubs = [
-      persistEvents['profile:switched'](() => load()),
       persistEvents['session:index:updated'](() => load()),
       persistEvents['agent:removed'](() => load()),
       persistEvents['agent:registry:updated'](onRegistry),

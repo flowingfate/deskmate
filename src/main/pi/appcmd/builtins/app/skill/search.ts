@@ -65,7 +65,7 @@ export async function runSearch(argv: string[], ctx: AppCmdContext): Promise<voi
   }
   const query = parsed.positional[0];
 
-  const result: SearchLibraryResult = await searchLibraryInternal({
+  const result: SearchLibraryResult = await searchLibraryInternal(ctx.profile.store, {
     query,
     current_agent_id: ctx.agentId,
   });

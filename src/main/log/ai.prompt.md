@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-05 -->
+<!-- Last verified: 2026-07-18 -->
 # Main 日志子系统（`src/main/log/`）
 
 > Main / worker 进程统一日志入口：pino → worker_thread transport → better-sqlite3。
@@ -37,7 +37,7 @@ log.info({ mod, msg, ... })
 
 **字段命名**：`mod / tid / sid / psid / dur / err` 是代码侧短名（日志调用密集，长名噪音翻倍）。sqlite 列仍是完整词 `component / trace_id / span_id / parent_span_id`，由 `sqlite-transport.cjs` 做映射；`dur` 不入列，落到 `fields` JSON。`psid` 用于嵌套 span（sub-agent / 工具内再触发 LLM 等场景）重建调用树；顶层 span 留空。schema 改动必须同步 `sqlite-transport.cjs` 内联 DDL + INSERT_SQL + `src/shared/log/types.ts` `LogRow` + `src/shared/log/query/schema.ts` 文档串 + `src/shared/log/query/filter.ts` `SELECT_FIELDS` + `src/main/lib/doctor/tools/traceTimeline.ts` SELECT 列表 + `scripts/log.ts` 两处 SELECT 列表。
 
-**life_id**：标记一次完整 app 生命周期（启动 → 彻底退出）。worker transport 启动时算一次（`SELECT life_id FROM app_logs ORDER BY id DESC LIMIT 1` → `prevLife`），整轮 app 共享该值并由 transport 写入每条 INSERT。调用方无感、无法 override。值域 `[1, maxRows]`：`(prevLife % maxRows) + 1`，保证不超过日志行数上限、永不为 0。分析时用 `WHERE life_id = ?` 把单次运行的日志与其他运行隔离。
+**life_id**：标记一次完整 app 生命周期（启动 → 彻底退出）。worker transport 启动时算一次（`SELECT life_id FROM app_logs ORDER BY id DESC LIMIT 1` → `prevLife`），整轮 app 共享。值域 `[1, maxRows]`：`(prevLife % maxRows) + 1`，保证不超过日志行数上限、永不为 0。分析时用 `WHERE life_id = ?` 把单次运行的日志与其他运行隔离。
 
 **dev / prod 判别**：`isDevLogDb()` 是唯一入口（`!app.isPackaged`）。任何「我要根据 dev/prod 选 db 路径或做特殊处理」的 reader 都用它，避免各处独立 `app.isPackaged` 漂移。
 
@@ -52,7 +52,7 @@ log.info({ mod, msg, ... })
 ## 注意事项
 
 - **bootstrap 顺序**：`src/main/bootstrap.ts` 必须最早执行 `app.setPath('userData', ~/.deskmate)`，否则 pino transport 把 db 写到默认 `~/Library/Application Support/Electron/`。bootstrap 与 main 是两个独立 bundle，`bootstrap.ts` 末尾用 `createRequire(__filename)('./main.js')` 动态 require 避免 rolldown 把 main hoist 到 bootstrap 之前。
-- **登录关键路径**：`log:write` IPC handler 注册必须在 `setUpIPC` **最早一句**，避免 preload ready 后丢失启动期 renderer 日志。
+- **登录关键路径**：`log:write` IPC handler 注册必须在 `setUpAllIPCHandlers` **最早一句**，避免 preload ready 后丢失启动期 renderer 日志。
 - **viewer 是 dev-only**：`registerLogViewerIPC()` 内首句 `if (app.isPackaged) return;`，菜单项 `visible:!app.isPackaged`。生产包不存在 viewer 通道与窗口。
 - **viewer 自身防成环**：viewer preload **故意不**暴露 `log.write`。viewer 内部异常只走 `console.warn`，不调 `log.error`。否则 viewer error → IPC → sqlite → broadcast → viewer 刷新 → viewer error 死循环。
 

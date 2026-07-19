@@ -1,3 +1,5 @@
+import type { ProfileStore } from '@main/persist';
+import type { SchedulerManager } from '../manager';
 import type { CronWatchdogTaskRuntimeMeta } from '../cronWatchdog';
 
 vi.mock('node-cron', async () => ({
@@ -11,22 +13,34 @@ vi.mock('node-cron', async () => ({
 const persistFindJobMock = vi.fn(async (_jobId: string): Promise<unknown> => undefined);
 const persistListJobsFlatMock = vi.fn(async (_filter?: { agentId?: string }) => [] as unknown[]);
 const persistGetAgentMock = vi.fn(async (_agentId: string): Promise<unknown> => undefined);
-const fakePersistProfile = {
+const fakePersistProfile: ProfileStore = Object.assign(Object.create(null), {
   id: 'p_test',
   findJob: persistFindJobMock,
   listJobsFlat: persistListJobsFlatMock,
   getAgent: persistGetAgentMock,
-};
+  schedulerState: {
+    load: vi.fn(async () => undefined),
+    getBaseline: vi.fn(() => null),
+    getPending: vi.fn(() => ({})),
+    markActivated: vi.fn(async () => undefined),
+    markDeactivated: vi.fn(async () => undefined),
+    dequeueCatchUp: vi.fn(async () => undefined),
+    enqueueCatchUp: vi.fn(async () => undefined),
+  },
+});
 
 // JobRun 是 turn loop —— 测试里不真跑模型，默认 success。
 const jobRunMock = vi.fn(async () => ({ messageCount: 1 }));
+const jobRunAbortMock = vi.fn(async () => undefined);
 vi.mock('@main/pi', async () => {
   const actual = await vi.importActual<typeof import('@main/pi')>('@main/pi');
   return {
     ...actual,
     JobRun: class {
       run = jobRunMock;
-      async abort() {}
+      async abort() {
+        await jobRunAbortMock();
+      }
     },
   };
 });
@@ -35,6 +49,26 @@ const showSessionCompletionNotificationMock = vi.fn();
 vi.mock('@main/lib/notification/sessionCompletion', async () => ({
   showSessionCompletionNotification: showSessionCompletionNotificationMock,
 }));
+
+const schedulerManagers = new Set<SchedulerManager>();
+
+async function createSchedulerManager(
+  store: ProfileStore = fakePersistProfile,
+): Promise<SchedulerManager> {
+  const { SchedulerManager } = await import('../manager');
+  const manager = new SchedulerManager(store);
+  schedulerManagers.add(manager);
+  await manager.start();
+  return manager;
+}
+
+async function disposeSchedulerManagers(): Promise<void> {
+  await Promise.allSettled(
+    [...schedulerManagers].map((manager) => manager.dispose('manual-debug')),
+  );
+  schedulerManagers.clear();
+  vi.useRealTimers();
+}
 
 /**
  * 构造一个 mock ScheduleJob 实例 + 关联 Agent + 注入 persist mock 链。
@@ -91,22 +125,13 @@ function setupSchedulableJob(opts: {
 describe('SchedulerManager cold-start catch-up', () => {
   beforeEach(async () => {
     vi.resetModules();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
-  afterEach(async () => {
-    try {
-      const { schedulerManager } = await import('../manager');
-      await schedulerManager.dispose('manual-debug');
-    } catch {
-      // Ignore cleanup failures in tests that never loaded the module.
-    }
-
-    vi.useRealTimers();
-  });
+  afterEach(disposeSchedulerManagers);
 
   it('returns a manual run chatSessionId only after the scheduled session is ready', async () => {
-    const { schedulerManager } = await import('../manager');
+    const schedulerManager = await createSchedulerManager();
 
     const { fakeJob, fakeAgent, startRunMock } = setupSchedulableJob({
       id: 'job-manual-1',
@@ -118,7 +143,6 @@ describe('SchedulerManager cold-start catch-up', () => {
     // startRun 解 resolve 后 onReady 即触发；这里立即返回，验证调用链通畅。
     startRunMock.mockResolvedValue({ id: 'run-manual-1', title: 'r' } as never);
 
-    await schedulerManager.initialize(fakePersistProfile);
 
     const result = await schedulerManager.runJobNow('job-manual-1');
 
@@ -128,6 +152,67 @@ describe('SchedulerManager cold-start catch-up', () => {
     });
     expect(startRunMock).toHaveBeenCalledTimes(1);
     expect(jobRunMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts and awaits an active JobRun before scheduler state deactivation', async () => {
+    const runCompletion = Promise.withResolvers<{ messageCount: number }>();
+    jobRunMock.mockImplementationOnce(() => runCompletion.promise);
+    jobRunAbortMock.mockImplementationOnce(async () => {
+      runCompletion.reject(new Error('Job cancelled'));
+    });
+
+    const { fakeJob, fakeAgent, startRunMock, finishRunMock } = setupSchedulableJob({
+      id: 'job-dispose-1',
+      agentId: 'agent-1',
+      cron: '0 * * * *',
+    });
+    persistListJobsFlatMock.mockResolvedValue([{ agent: fakeAgent, job: fakeJob, entry: {} } as never]);
+    persistFindJobMock.mockResolvedValue({ agent: fakeAgent, job: fakeJob } as never);
+    startRunMock.mockResolvedValue({ id: 'run-dispose-1', title: 'r' } as never);
+    const schedulerManager = await createSchedulerManager();
+
+    await expect(schedulerManager.runJobNow('job-dispose-1')).resolves.toEqual({
+      success: true,
+      chatSessionId: 'run-dispose-1',
+    });
+    await schedulerManager.dispose('manual-debug');
+
+    expect(jobRunAbortMock).toHaveBeenCalledTimes(1);
+    expect(finishRunMock).toHaveBeenCalledWith(
+      'run-dispose-1',
+      expect.objectContaining({ status: 'failed', error: 'Job cancelled' }),
+    );
+    expect(showSessionCompletionNotificationMock).not.toHaveBeenCalled();
+  });
+
+  it('closes the execution gate before persisting scheduler deactivation', async () => {
+    let schedulerManager: SchedulerManager;
+    const markDeactivated = vi.fn(async () => {
+      await expect(schedulerManager.runJobNow('missing')).resolves.toEqual({
+        success: false,
+        error: 'Scheduler is not running for this profile.',
+      });
+    });
+    const store: ProfileStore = Object.assign(Object.create(null), {
+      id: 'p_stop_order',
+      findJob: vi.fn(async () => undefined),
+      listJobsFlat: vi.fn(async () => []),
+      getAgent: vi.fn(async () => undefined),
+      schedulerState: {
+        load: vi.fn(async () => undefined),
+        getBaseline: vi.fn(() => null),
+        getPending: vi.fn(() => ({})),
+        markActivated: vi.fn(async () => undefined),
+        markDeactivated,
+        dequeueCatchUp: vi.fn(async () => undefined),
+        enqueueCatchUp: vi.fn(async () => undefined),
+      },
+    });
+    schedulerManager = await createSchedulerManager(store);
+
+    await schedulerManager.dispose('manual-debug');
+
+    expect(markDeactivated).toHaveBeenCalledTimes(1);
   });
 
   it('runs a watchdog catch-up when node-cron misses an occurrence while the app stays alive', async () => {
@@ -397,19 +482,11 @@ describe('SchedulerManager cold-start catch-up', () => {
 describe('SchedulerManager resume-catchup dedup', () => {
   beforeEach(async () => {
     vi.resetModules();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
 
   });
 
-  afterEach(async () => {
-    try {
-      const { schedulerManager } = await import('../manager');
-      await schedulerManager.dispose('manual-debug');
-    } catch {
-      // Ignore cleanup failures
-    }
-    vi.useRealTimers();
-  });
+  afterEach(disposeSchedulerManagers);
 
   it('skips resume-catchup for a job that already ran via normal cron', async () => {
     vi.useFakeTimers().setSystemTime(new Date('2026-05-11T01:25:00.000Z'));
@@ -425,8 +502,7 @@ describe('SchedulerManager resume-catchup dedup', () => {
     persistListJobsFlatMock.mockResolvedValue([{ agent: fakeAgent, job: fakeJob, entry: {} } as never]);
     persistFindJobMock.mockResolvedValue({ agent: fakeAgent, job: fakeJob } as never);
 
-    const { schedulerManager } = await import('../manager');
-    await schedulerManager.initialize(fakePersistProfile);
+    const schedulerManager = await createSchedulerManager();
 
     await schedulerManager.handleSystemResume(
       Date.parse('2026-05-09T08:26:27.338Z'),
@@ -449,8 +525,7 @@ describe('SchedulerManager resume-catchup dedup', () => {
     persistListJobsFlatMock.mockResolvedValue([{ agent: fakeAgent, job: fakeJob, entry: {} } as never]);
     persistFindJobMock.mockResolvedValue({ agent: fakeAgent, job: fakeJob } as never);
 
-    const { schedulerManager } = await import('../manager');
-    await schedulerManager.initialize(fakePersistProfile);
+    const schedulerManager = await createSchedulerManager();
 
     // Clear any calls from cold-start-catchup during initialize
     startRunMock.mockClear();
@@ -467,19 +542,11 @@ describe('SchedulerManager resume-catchup dedup', () => {
 describe('SchedulerManager toggleJobsByAgent', () => {
   beforeEach(async () => {
     vi.resetModules();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
 
   });
 
-  afterEach(async () => {
-    try {
-      const { schedulerManager } = await import('../manager');
-      await schedulerManager.dispose('manual-debug');
-    } catch {
-      // Ignore cleanup failures
-    }
-    vi.useRealTimers();
-  });
+  afterEach(disposeSchedulerManagers);
 
   it('toggleJobsByAgent(false) only disables enabled jobs, skips already disabled', async () => {
     const baseFile = (id: string, enabled: boolean) => ({
@@ -520,8 +587,7 @@ describe('SchedulerManager toggleJobsByAgent', () => {
       return found ? { agent: {} as never, job: found as never } : undefined;
     });
 
-    const { schedulerManager } = await import('../manager');
-    await schedulerManager.initialize(fakePersistProfile);
+    const schedulerManager = await createSchedulerManager();
 
     const count = await schedulerManager.toggleJobsByAgent('agent-x', false);
 
@@ -562,8 +628,7 @@ describe('SchedulerManager toggleJobsByAgent', () => {
       return found ? { agent: {} as never, job: found as never } : undefined;
     });
 
-    const { schedulerManager } = await import('../manager');
-    await schedulerManager.initialize(fakePersistProfile);
+    const schedulerManager = await createSchedulerManager();
 
     const count = await schedulerManager.toggleJobsByAgent('agent-x', true);
 
@@ -574,21 +639,13 @@ describe('SchedulerManager toggleJobsByAgent', () => {
   });
 });
 
-describe('SchedulerManager profile switch re-init', () => {
+describe('SchedulerManager profile isolation', () => {
   beforeEach(async () => {
     vi.resetModules();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
-  afterEach(async () => {
-    try {
-      const { schedulerManager } = await import('../manager');
-      await schedulerManager.dispose('manual-debug');
-    } catch {
-      // Ignore cleanup failures
-    }
-    vi.useRealTimers();
-  });
+  afterEach(disposeSchedulerManagers);
 
   // 构造一个持有单个 cron job + schedulerState 桩的 fake profile。
   function makeProfileWithCronJob(profileId: string, jobId: string) {
@@ -599,7 +656,7 @@ describe('SchedulerManager profile switch re-init', () => {
     const job = { id: jobId, toFile: () => file, config: { enabled: true, runState: { status: 'pending' as const } } };
     const markDeactivated = vi.fn(async () => undefined);
     const markActivated = vi.fn(async () => undefined);
-    const profile = {
+    const profile: ProfileStore = Object.assign(Object.create(null), {
       id: profileId,
       listJobsFlat: vi.fn(async () => [{ agent: {}, job, entry: {} }]),
       findJob: vi.fn(async (id: string) => (id === jobId ? { agent: {}, job } : undefined)),
@@ -613,23 +670,23 @@ describe('SchedulerManager profile switch re-init', () => {
         dequeueCatchUp: vi.fn(async () => undefined),
         enqueueCatchUp: vi.fn(async () => undefined),
       },
-    };
+    });
     return { profile, markDeactivated, jobId };
   }
 
-  it('switches profiles by deactivating the previous profile and replacing active tasks', async () => {
+  it('keeps profile schedulers isolated when one profile stops', async () => {
     const a = makeProfileWithCronJob('p_alice', 'job-a');
     const b = makeProfileWithCronJob('p_bob', 'job-b');
-    const { schedulerManager } = await import('../manager');
+    const managerA = await createSchedulerManager(a.profile);
+    const managerB = await createSchedulerManager(b.profile);
 
-    await schedulerManager.initialize(a.profile);
-    expect(schedulerManager.getRuntimeDiagnostics().activeJobIds).toEqual(['job-a']);
+    expect(managerA.getRuntimeDiagnostics().activeJobIds).toEqual(['job-a']);
+    expect(managerB.getRuntimeDiagnostics().activeJobIds).toEqual(['job-b']);
 
-    await schedulerManager.switch(b.profile, a.profile);
+    await managerA.dispose('manual-debug');
 
     expect(a.markDeactivated).toHaveBeenCalledTimes(1);
-    const diag = schedulerManager.getRuntimeDiagnostics();
-    expect(diag.profileId).toBe('p_bob');
-    expect(diag.activeJobIds).toEqual(['job-b']);
+    expect(managerA.getRuntimeDiagnostics().activeJobIds).toEqual([]);
+    expect(managerB.getRuntimeDiagnostics().activeJobIds).toEqual(['job-b']);
   });
 });

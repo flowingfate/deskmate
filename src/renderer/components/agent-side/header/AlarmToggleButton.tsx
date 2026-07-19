@@ -4,7 +4,6 @@ import { AlarmClock } from 'lucide-react';
 import { Button } from '@/shadcn/button';
 import { cn } from '@/lib/utilities/utils';
 import UnreadCountBadge from '@/components/common/UnreadCountBadge';
-import { useProfileId } from '@/states/profile.atom';
 import { useAgentUnreadSummary } from '@/lib/chat/useAgentUnreadSummary';
 
 export type SessionPanelMode = 'sessions' | 'jobs';
@@ -19,8 +18,7 @@ interface AlarmToggleButtonProps {
 /** Header alarm icon + scheduled-unread badge. Clicking switches between the sessions and jobs roots. */
 const AlarmToggleButton: React.FC<AlarmToggleButtonProps> = ({ agentId, mode }) => {
   const navigate = useNavigate();
-  const profileId = useProfileId();
-  const { scheduledUnreadCount } = useAgentUnreadSummary(agentId, profileId);
+  const { scheduledUnreadCount } = useAgentUnreadSummary(agentId);
 
   const handleClick = useCallback(() => {
     if (!agentId) return;

@@ -99,10 +99,7 @@ export class WorkspaceOpsManager {
   }
 
   static getInstance(): WorkspaceOpsManager {
-    if (!WorkspaceOpsManager.instance) {
-      WorkspaceOpsManager.instance = new WorkspaceOpsManager();
-    }
-    return WorkspaceOpsManager.instance;
+    return WorkspaceOpsManager.instance ??= new WorkspaceOpsManager();
   }
 
   /**

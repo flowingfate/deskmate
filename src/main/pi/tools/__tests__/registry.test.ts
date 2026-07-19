@@ -19,10 +19,12 @@ import { executeLocalTool, ToolsRegistry } from '../registry';
 import { lazy } from '../lazy';
 import type { AgentToolContext, LocalTool, ToolContext } from '../types';
 import { Tracer } from '@shared/log/trace';
+import { testProfile } from './profileFixture';
 
 /** 构造一个最小可用 ToolContext。caller 可按需 override 单个字段。 */
 function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
+    profile: testProfile,
     profileId: 'p',
     agentId: 'a',
     sessionId: 's',

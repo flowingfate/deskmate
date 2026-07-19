@@ -12,10 +12,7 @@ export class EncoderCache {
   private constructor() {}
 
   static getInstance(): EncoderCache {
-    if (!EncoderCache.instance) {
-      EncoderCache.instance = new EncoderCache();
-    }
-    return EncoderCache.instance;
+    return EncoderCache.instance ??= new EncoderCache();
   }
 
   /**

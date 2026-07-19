@@ -1,4 +1,4 @@
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 import { log } from '@main/log';
 import type {
   ImportForeignAgentSkillsResult,
@@ -54,13 +54,12 @@ function successResult(
   };
 }
 
-async function resolveImportItems(items: ImportForeignSkillItem[]): Promise<{
+async function resolveImportItems(store: ProfileStore, items: ImportForeignSkillItem[]): Promise<{
   resolved: ResolvedImportItem[];
   failures: ImportForeignSkillItemResult[];
 }> {
   const failures: ImportForeignSkillItemResult[] = [];
   const resolved: ResolvedImportItem[] = [];
-  const profile = Profiles.get().activeSync();
 
   for (const item of items) {
     if (!isAllowedForeignSkillPath(item.sourceId, item.sourcePath)) {
@@ -84,7 +83,7 @@ async function resolveImportItems(items: ImportForeignSkillItem[]): Promise<{
       continue;
     }
 
-    const existing = profile.skills.get(skill.name) ?? null;
+    const existing = store.skills.get(skill.name) ?? null;
     const finalVersion = determineVersion(skill.version, undefined, existing);
     const sourceLabel = sourceLabelFor(item.sourceId);
     const config: SkillConfig = {
@@ -132,8 +131,8 @@ function summarize(results: ImportForeignSkillItemResult[], batchError?: string)
   };
 }
 
-async function importCopy(item: ResolvedImportItem): Promise<ImportForeignSkillItemResult> {
-  const result = await addSkillFromDevice(item.input.sourcePath, async () => item.input.overwrite);
+async function importCopy(store: ProfileStore, item: ResolvedImportItem): Promise<ImportForeignSkillItemResult> {
+  const result = await addSkillFromDevice(store, item.input.sourcePath, async () => item.input.overwrite);
   if (!result.success || !result.skillName) {
     return failedResult(item.input, result.error || 'Failed to copy skill', item.existing !== null);
   }
@@ -143,9 +142,8 @@ async function importCopy(item: ResolvedImportItem): Promise<ImportForeignSkillI
   // ⚠️ 这次 upsert 失败**不代表安装失败** —— skill 已装好，仅缺溯源字段。故降级为 warn +
   // 仍报 success，避免误报 failed 让用户以为没装（重试还会撞 checkSkillExists 卡死）。
   try {
-    const profile = Profiles.get().activeSync();
-    const written = profile.skills.get(result.skillName);
-    await profile.skills.upsert({
+    const written = store.skills.get(result.skillName);
+    await store.skills.upsert({
       name: result.skillName,
       description: written?.description ?? item.config.description,
       version: written?.version ?? item.config.version,
@@ -161,8 +159,8 @@ async function importCopy(item: ResolvedImportItem): Promise<ImportForeignSkillI
   return successResult(item.input, result.skillName, item.existing !== null);
 }
 
-async function importLink(item: ResolvedImportItem): Promise<ImportForeignSkillItemResult> {
-  const result = await linkSkill(item.config, item.input.sourcePath);
+async function importLink(store: ProfileStore, item: ResolvedImportItem): Promise<ImportForeignSkillItemResult> {
+  const result = await linkSkill(store, item.config, item.input.sourcePath);
   if (!result.success) {
     return failedResult(item.input, result.error || 'Failed to link skill', item.existing !== null);
   }
@@ -170,6 +168,7 @@ async function importLink(item: ResolvedImportItem): Promise<ImportForeignSkillI
 }
 
 export async function importForeignAgentSkills(
+  store: ProfileStore,
   items: ImportForeignSkillItem[],
 ): Promise<ImportForeignAgentSkillsResult> {
   if (items.length === 0) {
@@ -179,7 +178,7 @@ export async function importForeignAgentSkills(
   let resolved: ResolvedImportItem[];
   let failures: ImportForeignSkillItemResult[];
   try {
-    const preflight = await resolveImportItems(items);
+    const preflight = await resolveImportItems(store, items);
     resolved = preflight.resolved;
     failures = preflight.failures;
   } catch (error) {
@@ -206,9 +205,9 @@ export async function importForeignAgentSkills(
     }
 
     if (item.input.installMode === 'link') {
-      results.push(await importLink(item));
+      results.push(await importLink(store, item));
     } else {
-      results.push(await importCopy(item));
+      results.push(await importCopy(store, item));
     }
   }
 

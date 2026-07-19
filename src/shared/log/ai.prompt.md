@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-08 (revised: LogQueryFilter 新增 lifeId 字段 + traceId 段) -->
+<!-- Last verified: 2026-07-18 -->
 # Shared 日志类型与查询库（`src/shared/log/`）
 
 > 跨进程共享：types（main / renderer / worker / CLI / viewer 都引用）+ 纯函数查询库（buildWhere / buildQuery / format / parser）。

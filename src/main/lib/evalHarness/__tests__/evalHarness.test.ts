@@ -37,15 +37,15 @@ vi.mock('../../chat/agentChatManager', () => ({
   },
 }));
 
-vi.mock('../../../persist', () => ({
-  Profiles: {
-    get: () => ({
-      active: async () => ({
+vi.mock('../../../profileRegistry', () => ({
+  ProfileRegistry: {
+    require: () => ({
+      store: {
         id: 'p_mock',
         getAgent: async (id: string) => (id === 'chat-1' ? { id } : undefined),
         getPrimaryAgentId: () => 'chat-1',
         listAgents: () => [{ id: 'chat-1', name: 'Otto' }],
-      }),
+      },
     }),
   },
 }));

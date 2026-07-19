@@ -7,6 +7,7 @@ import { Tracer } from '@shared/log/trace';
 import { createUserMessage } from '@shared/utils/messageFactory';
 
 import { runWithDelegateExecution } from '@main/lib/delegateExecutionScope';
+import { ProfileRegistry } from '@main/profileRegistry';
 import { buildToolCatalogForAgent, deriveToolTracer, executeToolCall, ToolCatalog, type ToolCallInput } from '../tool';
 import {
   BaseSession,
@@ -138,7 +139,7 @@ export class SubAgentSession extends BaseSession {
       execution: this.execution,
     });
     const catalog = resolved.capabilities.tools
-      ? (await buildToolCatalogForAgent(cfg.agent)).withSubmitResult(createSubmitResultTool(this.controller))
+      ? (await buildToolCatalogForAgent(cfg.agent, ProfileRegistry.require(this.profileId))).withSubmitResult(createSubmitResultTool(this.controller))
       : ToolCatalog.empty();
 
     this.hasAvailableTools = catalog.specs.length > 0;
@@ -197,6 +198,7 @@ export class SubAgentSession extends BaseSession {
     parent: Tracer,
     catalog: ToolCatalog,
   ): Promise<void> {
+    const profile = ProfileRegistry.require(this.profileId);
     const settled = await Promise.all(toolCalls.map(async (toolCall) => {
       const call: ToolCallInput = {
         id: toolCall.id,
@@ -214,6 +216,7 @@ export class SubAgentSession extends BaseSession {
       });
       const ctx: ToolContext = {
         mode: 'delegate',
+        profile,
         profileId: this.profileId,
         agentId: this.agentId,
         delegateId: this.delegateAgentId,

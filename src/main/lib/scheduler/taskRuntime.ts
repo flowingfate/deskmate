@@ -3,9 +3,9 @@ import { log } from '@main/log';
 import type { SchedulerJob } from '@shared/ipc/scheduler';
 import type { SchedulerContext } from './context';
 import { runCronWatchdog } from './cronWatchdog';
-import { executeSchedulerJob } from './execution';
 import type {
   ActiveTask,
+  SchedulerJobExecutor,
   SchedulerRuntimeDiagnostics,
   SchedulerTaskRuntimeMeta,
   SchedulerTaskUnregisterReason,
@@ -28,7 +28,10 @@ export class SchedulerTaskRuntime {
   private taskSequence = 0;
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
-  constructor(private readonly context: SchedulerContext) {}
+  constructor(
+    private readonly context: SchedulerContext,
+    private readonly executeJob: SchedulerJobExecutor,
+  ) {}
 
   getRuntimeDiagnostics(): SchedulerRuntimeDiagnostics {
     const activeJobIds = Array.from(this.activeTasks.keys());
@@ -142,11 +145,9 @@ export class SchedulerTaskRuntime {
             : null
         ),
         executeJob: async (job: SchedulerJob): Promise<void> => {
-          await executeSchedulerJob({
+          await this.executeJob({
             job,
             triggerSource: 'watchdog-catchup',
-            context: this.context,
-            taskRuntime: this,
             expectedGeneration: schedulerGeneration,
           });
         },
@@ -203,11 +204,9 @@ export class SchedulerTaskRuntime {
       }
 
       logger.info({ msg: 'Dispatching cron job execution', jobId: job.id, profileId: this.context.profileId, schedulerGeneration: runtimeMeta.schedulerGeneration, taskSequence: runtimeMeta.taskSequence, firedAt });
-      await executeSchedulerJob({
+      await this.executeJob({
         job: latestJob,
         triggerSource: 'scheduled',
-        context: this.context,
-        taskRuntime: this,
         expectedGeneration: runtimeMeta.schedulerGeneration,
       });
     });
@@ -257,11 +256,9 @@ export class SchedulerTaskRuntime {
         if (!latestJob || !latestJob.enabled || latestJob.scheduleType !== 'once') {
           return;
         }
-        await executeSchedulerJob({
+        await this.executeJob({
           job: latestJob,
           triggerSource: 'scheduled',
-          context: this.context,
-          taskRuntime: this,
           expectedGeneration: schedulerGeneration,
         });
       }, nextDelayMs);
@@ -276,12 +273,9 @@ export class SchedulerTaskRuntime {
 
   /** once 任务在触发时已过期（runAt 落在过去）：注销 timer 并把 job 落盘置为 disabled。 */
   private async markOneTimeJobExpired(jobId: string): Promise<void> {
-    const profile = this.context.profile;
-    if (!profile) {
-      return;
-    }
+    const store = this.context.store
     this.unregisterTask(jobId, 'once-job-expired');
-    const hit = await profile.findJob(jobId);
+    const hit = await store.findJob(jobId);
     if (hit) {
       hit.job.applyUpdate({ enabled: false });
       await hit.job.persist();

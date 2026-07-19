@@ -1,109 +1,107 @@
-import { ipcMain, Menu } from 'electron';
+import { BrowserWindow, ipcMain, Menu } from 'electron';
+import { createMainWindow } from '../main-win';
 
 import { renderToMain } from '@shared/ipc/window';
-import type { Context } from './shared';
-import { mainWindow } from '@main/startup/wins';
+import { getMenuTemplate } from '../menu';
+import { zoomLevel as winZoomLevel } from '../wins';
 
-export default function(ctx: Context) {
+export default function() {
   const handle = renderToMain.bindMain(ipcMain);
 
-  handle.minimize(() => mainWindow()?.minimize());
-  handle.maximize(() => mainWindow()?.maximize());
-  handle.unmaximize(() => mainWindow()?.unmaximize());
-  handle.close(() => mainWindow()?.close());
-  handle.isMaximized(() => mainWindow()?.isMaximized() || false);
-  handle.isFullScreen(() => mainWindow()?.isFullScreen() || false);
+  handle.openProfile(async (_event, profileId) => {
+    await createMainWindow(profileId);
+  });
 
-  const syncWindowZoomWithPersistedState = async () => {
-    const zoomLevel = await ctx.getPersistedWindowZoomLevel();
-    return ctx.applyWindowZoomLevel(zoomLevel);
+  const windowForSender = (event: Electron.IpcMainInvokeEvent): BrowserWindow | null => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return window && !window.isDestroyed() ? window : null;
   };
 
-  handle.zoomIn(async () => {
-    return ctx.stepWindowZoomLevel(0.5);
+  handle.minimize((event) => windowForSender(event)?.minimize());
+  handle.maximize((event) => windowForSender(event)?.maximize());
+  handle.unmaximize((event) => windowForSender(event)?.unmaximize());
+  handle.close((event) => windowForSender(event)?.close());
+  handle.isMaximized((event) => windowForSender(event)?.isMaximized() || false);
+  handle.isFullScreen((event) => windowForSender(event)?.isFullScreen() || false);
+
+  const syncWindowZoomWithPersistedState = async (event: Electron.IpcMainInvokeEvent) => {
+    const window = windowForSender(event);
+    if (!window) return 0;
+    const zoomLevel = await winZoomLevel.get(window);
+    return winZoomLevel.apply(window, zoomLevel);
+  };
+
+  handle.zoomIn(async (event) => {
+    const window = windowForSender(event);
+    return window ? winZoomLevel.step(window, 0.5) : 0;
   });
-  handle.zoomOut(async () => {
-    return ctx.stepWindowZoomLevel(-0.5);
+  handle.zoomOut(async (event) => {
+    const window = windowForSender(event);
+    return window ? winZoomLevel.step(window, -0.5) : 0;
   });
-  handle.resetZoom(async () => {
-    return ctx.resetWindowZoomLevel();
+  handle.resetZoom(async (event) => {
+    const window = windowForSender(event);
+    return window ? winZoomLevel.reset(window) : 0;
   });
-  handle.getZoomLevel(async () => {
-    return syncWindowZoomWithPersistedState();
+  handle.getZoomLevel(async (event) => {
+    return syncWindowZoomWithPersistedState(event);
   });
 
-  handle.showAppMenu((_event, x, y) => {
-    const template = ctx.getMenuTemplate();
-    const menu = Menu.buildFromTemplate(template);
-    menu.popup({ window: mainWindow() || undefined });
+  handle.showAppMenu((event) => {
+    const menu = Menu.buildFromTemplate(getMenuTemplate());
+    menu.popup({ window: windowForSender(event) || undefined });
     return true;
   });
 
-  handle.setAlwaysOnTop((_event, flag) => {
-    const win = mainWindow();
-    if (win) {
-      win.setAlwaysOnTop(flag, 'floating');
-      return true;
-    }
-    return false;
+  handle.setAlwaysOnTop((event, flag) => {
+    const window = windowForSender(event);
+    if (!window) return false;
+    window.setAlwaysOnTop(flag, 'floating');
+    return true;
   });
 
-  handle.isAlwaysOnTop(() => {
-    return mainWindow()?.isAlwaysOnTop() || false;
+  handle.isAlwaysOnTop((event) => windowForSender(event)?.isAlwaysOnTop() || false);
+
+  handle.setSize((event, width, height) => {
+    const window = windowForSender(event);
+    if (!window) return false;
+    window.setSize(width, height);
+    window.center();
+    return true;
   });
 
-  handle.setSize((_event, width, height) => {
-    const win = mainWindow();
-    if (win) {
-      win.setSize(width, height);
-      win.center();
-      return true;
-    }
-    return false;
+  handle.getSize((event) => {
+    const window = windowForSender(event);
+    if (!window) return { width: 1200, height: 800 };
+    const [width, height] = window.getSize();
+    return { width, height };
   });
 
-  handle.getSize(() => {
-    const win = mainWindow();
-    if (win) {
-      const [width, height] = win.getSize();
-      return { width, height };
-    }
-    return { width: 1200, height: 800 };
+  handle.setMinSize((event, width, height) => {
+    const window = windowForSender(event);
+    if (!window) return false;
+    window.setMinimumSize(width, height);
+    return true;
   });
 
-  handle.setMinSize((_event, width, height) => {
-    const win = mainWindow();
-    if (win) {
-      win.setMinimumSize(width, height);
-      return true;
-    }
-    return false;
+  handle.setMaxSize((event, width, height) => {
+    const window = windowForSender(event);
+    if (!window) return false;
+    window.setMaximumSize(width, height);
+    return true;
   });
 
-  handle.setMaxSize((_event, width, height) => {
-    const win = mainWindow();
-    if (win) {
-      win.setMaximumSize(width, height);
-      return true;
-    }
-    return false;
+  handle.getMinSize((event) => {
+    const window = windowForSender(event);
+    if (!window) return { width: 800, height: 600 };
+    const [width, height] = window.getMinimumSize();
+    return { width, height };
   });
 
-  handle.getMinSize(() => {
-    const win = mainWindow();
-    if (win) {
-      const [width, height] = win.getMinimumSize();
-      return { width, height };
-    }
-    return { width: 800, height: 600 };
-  });
-
-  handle.getMaxSize(() => {
-    const win = mainWindow();
-    if (win) {
-      const [width, height] = win.getMaximumSize();
-      return { width, height };
-    }
-    return { width: 0, height: 0 };
+  handle.getMaxSize((event) => {
+    const window = windowForSender(event);
+    if (!window) return { width: 0, height: 0 };
+    const [width, height] = window.getMaximumSize();
+    return { width, height };
   });
 }

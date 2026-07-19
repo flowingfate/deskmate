@@ -2,22 +2,6 @@ import { BrowserWindow, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 
-import type { UpdateManager } from '../../lib/autoUpdate/updateManager';
-
-export interface Context {
-  readonly updateManager: Promise<UpdateManager>;
-  readonly isDev: boolean;
-  readonly isAgentChatReady: boolean;
-
-  readonly onBeforeQuit: (event: Electron.Event) => Promise<void>
-  readonly getPersistedWindowZoomLevel: () => Promise<number>;
-  readonly applyWindowZoomLevel: (level: number) => number;
-  readonly stepWindowZoomLevel: (level: number) => Promise<number>;
-  readonly resetWindowZoomLevel: () => Promise<number>;
-  readonly getMenuTemplate: () => Electron.MenuItemConstructorOptions[];
-}
-
-
 export type ImportConflictResolution = 'reject' | 'prompt' | 'replace' | 'keep-both' | 'skip';
 
 export interface PlannedImportItem {

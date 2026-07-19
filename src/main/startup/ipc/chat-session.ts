@@ -1,10 +1,10 @@
 import { app, ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import type { Context } from './shared';
-import { queryJobRun, querySession } from '@main/persist/ipc';
+import type { ProfileStore } from '@main/persist';
 import type { ChatSessionFile } from '@shared/persist/types'
 import { renderToMain } from '@shared/ipc/chatSession';
+import { requireProfileForSender } from './profileContext';
 
 type DownloadableSession = {
   id: string;
@@ -12,6 +12,24 @@ type DownloadableSession = {
   config: { updatedAt: string; contextState: ChatSessionFile['contextState'] };
   loadMessagesAll(): Promise<ChatSessionFile['messages']>;
 };
+
+async function querySessionForProfile(store: ProfileStore, agentId: string, sessionId: string) {
+  const agent = await store.getAgent(agentId);
+  if (!agent) return { success: false, error: `Agent not found: ${agentId}` } as const;
+  const session = await agent.getSession(sessionId);
+  if (!session) return { success: false, error: `Session not found: ${sessionId}` } as const;
+  return { success: true, session } as const;
+}
+
+async function queryJobRunForProfile(store: ProfileStore, agentId: string, jobId: string, runId: string) {
+  const agent = await store.getAgent(agentId);
+  if (!agent) return { success: false, error: `Agent not found: ${agentId}` } as const;
+  const job = await agent.getJob(jobId);
+  if (!job) return { success: false, error: `Job not found: ${jobId}` } as const;
+  const run = await job.getRun(runId);
+  if (!run) return { success: false, error: `Run not found: ${runId}` } as const;
+  return { success: true, run } as const;
+}
 
 async function writeSessionDownload(
   session: DownloadableSession,
@@ -39,18 +57,18 @@ async function writeSessionDownload(
   return { filePath, fileName };
 }
 
-export default function handleChatSessionIPC(_ctx: Context): void {
+export default function handleChatSessionIPC(): void {
   const handle = renderToMain.bindMain(ipcMain);
 
   // Download ChatSession to Downloads directory
   handle.downloadChatSession(async (
-    _event,
+    event,
     agentId,
     sessionId,
-    title
+    title,
   ) => {
     try {
-      const query = await querySession(agentId, sessionId);
+      const query = await querySessionForProfile(requireProfileForSender(event).store, agentId, sessionId);
       if (!query.success) return query;
       const download = await writeSessionDownload(query.session, title);
       return { success: true, ...download };
@@ -61,9 +79,9 @@ export default function handleChatSessionIPC(_ctx: Context): void {
       };
     }
   });
-  handle.downloadScheduleRun(async (_event, agentId, jobId, runId, title) => {
+  handle.downloadScheduleRun(async (event, agentId, jobId, runId, title) => {
     try {
-      const query = await queryJobRun(agentId, jobId, runId);
+      const query = await queryJobRunForProfile(requireProfileForSender(event).store, agentId, jobId, runId);
       if (!query.success) return query;
       const download = await writeSessionDownload(query.run, title);
       return { success: true, ...download };
@@ -76,12 +94,12 @@ export default function handleChatSessionIPC(_ctx: Context): void {
   });
 
   handle.getFilePath(async (
-    _event,
+    event,
     agentId,
     sessionId,
   ) => {
     try {
-      const query = await querySession(agentId, sessionId);
+      const query = await querySessionForProfile(requireProfileForSender(event).store, agentId, sessionId);
       if (!query.success) return query;
       return { success: true, filePath: path.dirname(query.session.filesDir()) };
     } catch (error) {
@@ -91,9 +109,9 @@ export default function handleChatSessionIPC(_ctx: Context): void {
       };
     }
   });
-  handle.getScheduleRunFilePath(async (_event, agentId, jobId, runId) => {
+  handle.getScheduleRunFilePath(async (event, agentId, jobId, runId) => {
     try {
-      const query = await queryJobRun(agentId, jobId, runId);
+      const query = await queryJobRunForProfile(requireProfileForSender(event).store, agentId, jobId, runId);
       if (!query.success) return query;
       return { success: true, filePath: path.dirname(query.run.filesDir()) };
     } catch (error) {

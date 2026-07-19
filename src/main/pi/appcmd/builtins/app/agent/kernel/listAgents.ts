@@ -1,5 +1,5 @@
 /**
- * Agent "list" 内核 —— 列出当前 active profile 内所有 agent 名(去重)。
+ * Agent "list" 内核 —— 列出 owning Profile 内所有 agent 名(去重)。
  *
  * 角色:被 `appcmd/builtins/app/agent/list.ts` 与 `search.ts --installed` 共享。
  * 等同于 `mcp/kernel/searchLibrary.ts::listInstalledInternal` —— 一个 subcommand
@@ -8,7 +8,7 @@
  * 失败不抛,统一通过 envelope 回流;`signal` 仅做契约形状对齐。
  */
 
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 
 export interface ListAgentsResult {
   success: boolean;
@@ -19,10 +19,12 @@ export interface ListAgentsResult {
   message: string;
 }
 
-export async function listAgentsInternal(_opts?: { signal?: AbortSignal }): Promise<ListAgentsResult> {
+export async function listAgentsInternal(
+  store: ProfileStore,
+  _opts?: { signal?: AbortSignal },
+): Promise<ListAgentsResult> {
   try {
-    const profile = await Profiles.get().active();
-    const records = profile.listAgents();
+    const records = store.listAgents();
 
     // 去重(agentName 可能重复展示,但工具历史行为是去重列出)
     const agentNames: string[] = [];

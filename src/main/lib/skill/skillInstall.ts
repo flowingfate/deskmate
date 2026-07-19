@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { log } from '@main/log';
-import { Profiles } from '../../persist';
+import type { ProfileStore } from '@main/persist';
 import { PERSIST_PATH } from '@shared/persist/path';
 import { getAppRoot } from '@main/persist/lib/root';
 import { getTmpDir } from '@main/persist/lib/path';
@@ -139,41 +139,29 @@ export function validateSkillPackage(extractedDir: string, expectedName?: string
   }
 }
 
-/**
- * 检查 active profile 中是否已存在同名 skill。
- */
-export async function checkSkillExists(skillName: string): Promise<SkillConfig | null> {
-  try {
-    const profile = Profiles.get().activeSync();
-    return profile.skills.get(skillName) ?? null;
-  } catch {
-    return null;
-  }
+/** 检查明确 Profile 中是否已存在同名 skill。 */
+export function checkSkillExists(store: ProfileStore, skillName: string): SkillConfig | null {
+  return store.skills.get(skillName) ?? null;
 }
 
-/** 将 skill 安装/更新到 active profile。 */
+/** 将 skill 安装/更新到明确 Profile。 */
 export async function installSkill(
+  store: ProfileStore,
   skillConfig: SkillConfig,
   sourceDir: string,
 ): Promise<SkillOperationResult> {
   try {
-    let profile;
-    try {
-      profile = Profiles.get().activeSync();
-    } catch {
-      return { success: false, error: 'No active profile' };
-    }
     if (!pathExists(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
       return { success: false, error: 'Source skill directory not found' };
     }
 
-    const userSkillsDir = PERSIST_PATH.skillsDir(getAppRoot(), profile.id);
+    const userSkillsDir = PERSIST_PATH.skillsDir(getAppRoot(), store.id);
     fs.mkdirSync(userSkillsDir, { recursive: true });
     const skillRootDir = path.join(userSkillsDir, skillConfig.name);
     const swap = swapSkillTarget(sourceDir, skillRootDir, skillConfig.name);
 
     try {
-      await profile.skills.upsert(skillConfig);
+      await store.skills.upsert(skillConfig);
     } catch {
       swap.rollback();
       return { success: false, error: 'Failed to save skill configuration to profile' };
@@ -189,31 +177,26 @@ export async function installSkill(
   }
 }
 
-/** 将外部 skill 目录以软链接 / junction 形式安装到 active profile。 */
+/** 将外部 skill 目录以软链接 / junction 形式安装到明确 Profile。 */
 export async function linkSkill(
+  store: ProfileStore,
   skillConfig: SkillConfig,
   sourceDir: string,
 ): Promise<SkillOperationResult> {
   const stagedLink = createSwapPath(skillConfig.name);
   try {
-    let profile;
-    try {
-      profile = Profiles.get().activeSync();
-    } catch {
-      return { success: false, error: 'No active profile' };
-    }
     if (!pathExists(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
       return { success: false, error: 'Source skill directory not found' };
     }
 
-    const userSkillsDir = PERSIST_PATH.skillsDir(getAppRoot(), profile.id);
+    const userSkillsDir = PERSIST_PATH.skillsDir(getAppRoot(), store.id);
     fs.mkdirSync(userSkillsDir, { recursive: true });
     createDirectoryLink(sourceDir, stagedLink);
 
     const skillRootDir = path.join(userSkillsDir, skillConfig.name);
     const swap = swapSkillTarget(stagedLink, skillRootDir, skillConfig.name);
     try {
-      await profile.skills.upsert(skillConfig);
+      await store.skills.upsert(skillConfig);
     } catch {
       swap.rollback();
       return { success: false, error: 'Failed to save skill configuration to profile' };

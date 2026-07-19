@@ -15,6 +15,7 @@ vi.mock('../lib/db/db', () => ({
 }));
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { LegacyAuthFile } from '../../../shared/persist/types';
+import { DEFAULT_AGENT_PERSONA } from '../../../shared/types/profileTypes';
 
 function makeAuth(): LegacyAuthFile {
   return {
@@ -42,10 +43,13 @@ interface MemFs {
   dirs: Set<string>;
 }
 
+let failNextWrite = false;
+
 let state: MemFs = { files: new Map(), dirs: new Set(['/']) };
 
 function resetMemFs(): void {
   state = { files: new Map(), dirs: new Set(['/']) };
+  failNextWrite = false;
 }
 
 function dirname(p: string): string {
@@ -83,6 +87,10 @@ const memFsPromises = {
     return v;
   },
   async writeFile(p: string, content: string) {
+    if (failNextWrite) {
+      failNextWrite = false;
+      throw new Error('disk full');
+    }
     ensureParents(dirname(p));
     state.files.set(p, content);
   },
@@ -150,10 +158,10 @@ async function freshModules() {
   vi.resetModules();
   const root = await import('../lib/root');
   root.setRootForTesting(ROOT);
-  const profiles = await import('../profiles');
-  const profile = await import('../profile');
-  profiles.Profiles.resetForTesting();
-  return { Profiles: profiles.Profiles, Profile: profile.Profile };
+  const registry = await import('../../profileRegistry');
+  const profile = await import('../profileStore');
+  registry.ProfileRegistry.resetForTesting();
+  return { ProfileRegistry: registry.ProfileRegistry, ProfileStore: profile.ProfileStore };
 }
 
 beforeEach(() => {
@@ -162,77 +170,184 @@ beforeEach(() => {
 
 describe('Profiles bootstrap', () => {
   it('initializes a guest profile when index file is missing', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
 
     expect(reg.items).toHaveLength(1);
     expect(reg.items[0].kind).toBe('guest');
-    expect(reg.activeProfileId).toBe(reg.items[0].id);
+    expect(reg.defaultProfileId).toBe(reg.items[0].id);
+  });
+
+  it('merges concurrent bootstrap calls into one initialized index', async () => {
+    const { ProfileRegistry } = await freshModules();
+    const [first, second] = await Promise.all([
+      ProfileRegistry.bootstrap(),
+      ProfileRegistry.bootstrap(),
+    ]);
+
+    expect(first.warnings).toEqual([]);
+    expect(second.warnings).toEqual([]);
+    expect(ProfileRegistry.items).toHaveLength(1);
   });
 
   it('falls back to items[0] when activeProfileId is stale', async () => {
-    const { Profiles } = await freshModules();
-    await Profiles.get().bootstrap();
-    const id = Profiles.get().items[0].id;
+    const { ProfileRegistry } = await freshModules()
+    await ProfileRegistry.bootstrap();
+    const id = ProfileRegistry.items[0].id;
 
     const { writeJson } = await import('../lib/atomic');
     await writeJson(`${ROOT}/profiles/profiles.json`, {
       version: 1,
       activeProfileId: 'p_NONEXISTENT',
-      items: [Profiles.get().items[0]],
+      items: [ProfileRegistry.items[0]],
     });
 
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    expect(fresh.Profiles.get().activeProfileId).toBe(id);
+    await fresh.ProfileRegistry.bootstrap();
+    expect(fresh.ProfileRegistry.defaultProfileId).toBe(id);
   });
 });
 
 describe('Profiles CRUD', () => {
-  it('creates additional profiles and switches active', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+  it('creates additional profiles without changing the startup default', async () => {
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const firstId = reg.activeProfileId;
+    const firstId = reg.defaultProfileId;
 
     const second = await reg.create({ displayName: 'Second' });
     expect(reg.items).toHaveLength(2);
     expect(second.id).not.toBe(firstId);
+    expect(reg.defaultProfileId).toBe(firstId);
+  });
 
-    await reg.switch(second.id);
-    expect(reg.activeProfileId).toBe(second.id);
+  it('initializes a newly created profile with the default primary agent', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+
+    const profile = await ProfileRegistry.create({ displayName: 'Second' });
+    const [record] = profile.store.listAgents();
+    if (!record) throw new Error('Expected the default agent to be created.');
+
+    expect(profile.store.listAgents()).toHaveLength(1);
+    expect(record.name).toBe(DEFAULT_AGENT_PERSONA.name);
+    expect(record.model).toBe(DEFAULT_AGENT_PERSONA.model);
+    expect(record.emoji).toBe(DEFAULT_AGENT_PERSONA.emoji);
+    expect(profile.store.getPrimaryAgentId()).toBe(record.id);
+    expect((await profile.store.getAgent(record.id))?.systemPrompt)
+      .toBe(DEFAULT_AGENT_PERSONA.system_prompt);
+  });
+
+  it('persists profile display name updates without changing identity', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+    const profile = await ProfileRegistry.create({ displayName: 'Before' });
+
+    const updated = await ProfileRegistry.updateMetadata(profile.id, { displayName: 'After' });
+    expect(updated).toMatchObject({ id: profile.id, displayName: 'After', kind: 'guest' });
+
+    const fresh = await freshModules();
+    await fresh.ProfileRegistry.bootstrap();
+    expect(fresh.ProfileRegistry.getEntry(profile.id)?.displayName).toBe('After');
+  });
+
+  it('only removes a closed noncurrent profile when another profile remains', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+    const currentProfileId = ProfileRegistry.defaultProfileId;
+    const target = await ProfileRegistry.create({ displayName: 'Target' });
+
+    expect(await ProfileRegistry.removeClosed(currentProfileId, currentProfileId))
+      .toEqual({ kind: 'blocked', reason: 'current' });
+    expect(await ProfileRegistry.removeClosed(target.id, currentProfileId))
+      .toEqual({ kind: 'deleted' });
+    expect(ProfileRegistry.getEntry(target.id)).toBeUndefined();
+  });
+
+  it('never removes the last remaining profile through managed deletion', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+
+    expect(await ProfileRegistry.removeClosed(ProfileRegistry.defaultProfileId, 'p_other'))
+      .toEqual({ kind: 'blocked', reason: 'last' });
+  });
+
+  it('serializes concurrent creation so every profile survives reload', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+
+    const [first, second] = await Promise.all([
+      ProfileRegistry.create({ displayName: 'First' }),
+      ProfileRegistry.create({ displayName: 'Second' }),
+    ]);
+    const expectedIds = new Set([
+      ProfileRegistry.defaultProfileId,
+      first.id,
+      second.id,
+    ]);
+
+    const fresh = await freshModules();
+    await fresh.ProfileRegistry.bootstrap();
+    expect(new Set(fresh.ProfileRegistry.items.map((entry) => entry.id))).toEqual(expectedIds);
+  });
+
+  it('keeps the committed index unchanged when writing a new profile fails', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+    const before = ProfileRegistry.items.map((entry) => entry.id);
+
+    failNextWrite = true;
+    await expect(ProfileRegistry.create({ displayName: 'Unpersisted' })).rejects.toThrow('disk full');
+
+    expect(ProfileRegistry.items.map((entry) => entry.id)).toEqual(before);
   });
 
   it('refuses to delete the last profile', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    await expect(reg.remove(reg.activeProfileId)).rejects.toThrow(/last profile/);
+    await expect(reg.remove(reg.defaultProfileId)).rejects.toThrow(/last profile/);
   });
 
-  it('deletes a non-last profile and re-points active', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+  it('re-points the startup default when removing its profile', async () => {
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const firstId = reg.activeProfileId;
+    const firstId = reg.defaultProfileId;
     const second = await reg.create({});
-    await reg.switch(second.id);
-    await reg.remove(second.id);
+
+    await reg.remove(firstId);
+
     expect(reg.items).toHaveLength(1);
-    expect(reg.activeProfileId).toBe(firstId);
+    expect(reg.defaultProfileId).toBe(second.id);
+  });
+
+  it('removes the complete Profile directory after removing its index entry', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+    const id = ProfileRegistry.defaultProfileId;
+    const store = ProfileRegistry.require(id).store;
+    await store.auth.write(makeAuth());
+    await ProfileRegistry.create({ displayName: 'Remaining' });
+
+    expect(state.files.has(`${ROOT}/profiles/${id}/auth.json`)).toBe(true);
+    await Promise.all([ProfileRegistry.remove(id), ProfileRegistry.remove(id)]);
+
+    expect([...state.files.keys()].some((file) => file.startsWith(`${ROOT}/profiles/${id}/`))).toBe(false);
+    expect(ProfileRegistry.getEntry(id)).toBeUndefined();
   });
 });
 
 describe('Profile auth attach/detach', () => {
   it('attachAuth flips entry kind to signed_in', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const id = reg.activeProfileId;
+    const id = reg.defaultProfileId;
 
-    const profile = await reg.active();
-    await profile.auth.write(makeAuth());
+    const store = reg.require(reg.defaultProfileId).store
+    await store.auth.write(makeAuth());
 
     await reg.attachAuth(id, 'ghc', 'alice');
     const entry = reg.getEntry(id);
@@ -244,98 +359,111 @@ describe('Profile auth attach/detach', () => {
   });
 
   it('detachAuth flips back to guest and clear() removes file', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const id = reg.activeProfileId;
-    const profile = await reg.active();
-    await profile.auth.write(makeAuth());
+    const id = reg.defaultProfileId;
+    const store = reg.require(reg.defaultProfileId).store
+    await store.auth.write(makeAuth());
     await reg.attachAuth(id, 'ghc', 'alice');
 
-    await profile.auth.clear();
+    await store.auth.clear();
     await reg.detachAuth(id);
-    expect(profile.auth.exists()).toBe(false);
     expect(reg.getEntry(id)?.kind).toBe('guest');
+  });
+
+  it('does not expose mutable index entry references', async () => {
+    const { ProfileRegistry } = await freshModules();
+    await ProfileRegistry.bootstrap();
+    const id = ProfileRegistry.defaultProfileId;
+    const entry = ProfileRegistry.getEntry(id);
+    if (!entry) throw new Error('Expected profile index entry.');
+
+    entry.displayName = 'Mutated outside ProfileRegistry';
+    expect(ProfileRegistry.getEntry(id)?.displayName).toBe('Guest');
   });
 });
 
 describe('Profile persist/load round-trip', () => {
   it('writes settings.json and reloads it', async () => {
-    const { Profiles, Profile } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry, ProfileStore } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const id = reg.activeProfileId;
-    const profile = await reg.active();
-    await profile.patchSettings({ confirmation: { inlineEditRegenerate: { skipConfirmation: true } } });
+    const id = reg.defaultProfileId;
+    const store = reg.require(reg.defaultProfileId).store
+    await store.patchSettings({ confirmation: { inlineEditRegenerate: { skipConfirmation: true } } });
 
     const fresh = await freshModules();
-    await fresh.Profiles.get().bootstrap();
-    const reloaded = await fresh.Profile.getOrLoad(id);
+    await fresh.ProfileRegistry.bootstrap();
+    const reloaded = (await fresh.ProfileRegistry.getOrLoad(id)).store;
     expect(reloaded.settings.confirmation).toEqual({ inlineEditRegenerate: { skipConfirmation: true } });
   });
 });
 
-describe('Profiles bootstrap idempotency + activeSync', () => {
+describe('Profiles bootstrap idempotency + explicit lookup', () => {
   it('bootstrap() repeated call is no-op', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     const first = await reg.bootstrap();
     expect(first.warnings).toEqual([]);
-    const id = reg.activeProfileId;
+    const id = reg.defaultProfileId;
     // 重入 —— activeProfileId 不变，items 不重复增长
     const second = await reg.bootstrap();
     expect(second.warnings).toEqual([]);
-    expect(reg.activeProfileId).toBe(id);
+    expect(reg.defaultProfileId).toBe(id);
     expect(reg.items).toHaveLength(1);
   });
 
-  it('activeSync() throws before bootstrap and returns the profile after', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
-    expect(() => reg.activeSync()).toThrow(/bootstrap/);
+  it('require() rejects unloaded IDs and resolves the explicit default after bootstrap', async () => {
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
+    expect(() => reg.require('p_NOT_LOADED')).toThrow(/not loaded/);
+
     await reg.bootstrap();
-    const sync = reg.activeSync();
-    const async_ = await reg.active();
-    expect(sync.id).toBe(async_.id);
+
+    const profile = reg.require(reg.defaultProfileId);
+    expect(profile.id).toBe(reg.defaultProfileId);
   });
 
-  it('activeSync() follows switch() to a different profile', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+  it('created runtime is explicitly addressable without changing the default', async () => {
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
+    const firstId = reg.defaultProfileId;
     const second = await reg.create({ displayName: 'Second' });
-    await reg.switch(second.id);
-    expect(reg.activeSync().id).toBe(second.id);
+
+    expect(reg.require(second.id)).toBe(second);
+    expect(reg.defaultProfileId).toBe(firstId);
   });
 });
 
 describe('Profile patchSettings', () => {
   it('only writes fields present in partial', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const profile = await reg.active();
-    profile.settings.confirmation = { inlineEditRegenerate: { skipConfirmation: true } };
-    await profile.settings.persist();
+    const store = reg.require(reg.defaultProfileId).store
+    store.settings.confirmation = { inlineEditRegenerate: { skipConfirmation: true } };
+    await store.settings.persist();
 
     // 空 partial：partialAssign 仅写传入字段，不应清掉已存在的 confirmation
-    await profile.patchSettings({});
-    expect(profile.settings.confirmation?.inlineEditRegenerate?.skipConfirmation).toBe(true);
+    await store.patchSettings({});
+    expect(store.settings.confirmation?.inlineEditRegenerate?.skipConfirmation).toBe(true);
 
     // 传入 confirmation 时正常更新
-    await profile.patchSettings({ confirmation: { inlineEditRegenerate: { skipConfirmation: false } } });
-    expect(profile.settings.confirmation?.inlineEditRegenerate?.skipConfirmation).toBe(false);
+    await store.patchSettings({ confirmation: { inlineEditRegenerate: { skipConfirmation: false } } });
+    expect(store.settings.confirmation?.inlineEditRegenerate?.skipConfirmation).toBe(false);
   });
 });
 
 describe('Profile duplicateAgent', () => {
   it('clones front-matter + systemPrompt with new id', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const profile = await reg.active();
+    const store = reg.require(reg.defaultProfileId).store
 
-    const src = await profile.createAgent({
+    const src = await store.createAgent({
       name: 'Otto',
       version: '2.0.0',
       
@@ -345,7 +473,7 @@ describe('Profile duplicateAgent', () => {
     await src.patchFront({ skills: { 'skill-a': 'live' } });
 
     await src.knowledge.remove();
-    const dst = await profile.duplicateAgent(src.id, 'Otto Clone');
+    const dst = await store.duplicateAgent(src.id, 'Otto Clone');
     expect(await dst.knowledge.exists()).toBe(true);
     expect(dst.id).not.toBe(src.id);
     expect(dst.config.name).toBe('Otto Clone');
@@ -355,21 +483,21 @@ describe('Profile duplicateAgent', () => {
     expect(dst.systemPrompt).toBe('You are Otto.');
 
     // 出现在 agents.json items
-    const list = profile.listAgents();
+    const list = store.listAgents();
     expect(list.find((r) => r.id === dst.id)).toBeDefined();
   });
 
-  it('repairs missing knowledge directory when a legacy agent loads', async () => {
-    const { Profiles, Profile } = await freshModules();
-    const reg = Profiles.get();
+  it('repairs missing knowledge directory when a legacy profile starts', async () => {
+    const { ProfileRegistry, ProfileStore } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const profile = await reg.active();
-    const agent = await profile.createAgent({ name: 'Legacy', version: '1.0.0' });
+    const store = reg.require(reg.defaultProfileId).store
+    const agent = await store.createAgent({ name: 'Legacy', version: '1.0.0' });
     await agent.knowledge.remove();
 
-    Profile.evict(profile.id);
-    const reloaded = await Profile.getOrLoad(profile.id);
-    expect(await agent.knowledge.exists()).toBe(false);
+    ProfileRegistry.resetForTesting();
+    const reloaded = await (await ProfileRegistry.getOrLoad(store.id)).store;
+    expect(await agent.knowledge.exists()).toBe(true);
     const repaired = await reloaded.getAgent(agent.id);
     expect(repaired).toBeDefined();
     if (!repaired) return;
@@ -377,17 +505,17 @@ describe('Profile duplicateAgent', () => {
   });
 
   it('rejects empty newName and unknown srcId', async () => {
-    const { Profiles } = await freshModules();
-    const reg = Profiles.get();
+    const { ProfileRegistry } = await freshModules()
+    const reg = ProfileRegistry;
     await reg.bootstrap();
-    const profile = await reg.active();
-    await expect(profile.duplicateAgent('a_GHOST', 'x')).rejects.toThrow(/unknown agent id/);
+    const store = reg.require(reg.defaultProfileId).store
+    await expect(store.duplicateAgent('a_GHOST', 'x')).rejects.toThrow(/unknown agent id/);
 
-    const src = await profile.createAgent({
+    const src = await store.createAgent({
       name: 'X',
       version: '1.0.0',
       
     });
-    await expect(profile.duplicateAgent(src.id, '   ')).rejects.toThrow(/newName/);
+    await expect(store.duplicateAgent(src.id, '   ')).rejects.toThrow(/newName/);
   });
 });

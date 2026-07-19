@@ -67,7 +67,10 @@ export async function runRun(argv: string[], ctx: AppCmdContext): Promise<void> 
   }
   const { jobId } = jobIdResult;
 
-  const result: RunJobNowResult = await runJobNowInternal({ job_id: jobId }, { signal: ctx.signal });
+  const result: RunJobNowResult = await runJobNowInternal(
+    { job_id: jobId },
+    { profile: ctx.profile, signal: ctx.signal },
+  );
 
   if (!result.success) {
     if (isJson(parsed.flags)) {

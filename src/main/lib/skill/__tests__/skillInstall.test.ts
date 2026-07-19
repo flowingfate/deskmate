@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PERSIST_PATH } from '@shared/persist/path';
-import { Profiles } from '@main/persist/profiles';
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting } from '@main/persist/lib/root';
 import { ProfileDb } from '@main/persist/lib/db/db';
 
@@ -16,24 +16,24 @@ let tempRoot = '';
 beforeEach(async () => {
   tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-install-test-'));
   setRootForTesting(tempRoot);
-  Profiles.resetForTesting();
-  await Profiles.get().bootstrap();
+  ProfileRegistry.resetForTesting();
+  await ProfileRegistry.bootstrap();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.resetForTesting();
   setRootForTesting(null);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
 async function seedInstalledSkill(): Promise<{ skillRoot: string }> {
-  const profile = await Profiles.get().active();
-  const skillRoot = path.join(PERSIST_PATH.skillsDir(tempRoot, profile.id), 'pdf');
+  const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+  const skillRoot = path.join(PERSIST_PATH.skillsDir(tempRoot, store.id), 'pdf');
   fs.mkdirSync(skillRoot, { recursive: true });
   fs.writeFileSync(path.join(skillRoot, 'SKILL.md'), 'old skill');
-  await profile.skills.upsert({ name: 'pdf', description: 'old', version: '1.0.0' });
+  await store.skills.upsert({ name: 'pdf', description: 'old', version: '1.0.0' });
   return { skillRoot };
 }
 
@@ -44,14 +44,15 @@ describe('skill installation replacement', () => {
     fs.mkdirSync(sourceDir, { recursive: true });
     fs.writeFileSync(path.join(sourceDir, 'SKILL.md'), 'new skill');
 
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
     await expect(installSkill(
+      store,
       { name: 'pdf', description: 'new', version: '2.0.0' },
       sourceDir,
     )).resolves.toEqual({ success: true, skillName: 'pdf' });
 
-    const profile = await Profiles.get().active();
     expect(fs.readFileSync(path.join(skillRoot, 'SKILL.md'), 'utf-8')).toBe('new skill');
-    expect(profile.skills.get('pdf')).toEqual({ name: 'pdf', description: 'new', version: '2.0.0' });
+    expect(store.skills.get('pdf')).toEqual({ name: 'pdf', description: 'new', version: '2.0.0' });
   });
 
   it('installs a linked directory and commits its new index record', async () => {
@@ -59,7 +60,9 @@ describe('skill installation replacement', () => {
     fs.mkdirSync(sourceDir, { recursive: true });
     fs.writeFileSync(path.join(sourceDir, 'SKILL.md'), 'external skill');
 
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
     await expect(linkSkill(
+      store,
       {
         name: 'pdf',
         description: 'external',
@@ -75,10 +78,9 @@ describe('skill installation replacement', () => {
       sourceDir,
     )).resolves.toEqual({ success: true, skillName: 'pdf' });
 
-    const profile = await Profiles.get().active();
-    const skillRoot = path.join(PERSIST_PATH.skillsDir(tempRoot, profile.id), 'pdf');
+    const skillRoot = path.join(PERSIST_PATH.skillsDir(tempRoot, store.id), 'pdf');
     expect(fs.lstatSync(skillRoot).isSymbolicLink()).toBe(true);
-    expect(profile.skills.get('pdf')).toEqual(expect.objectContaining({ name: 'pdf', version: '2.0.0' }));
+    expect(store.skills.get('pdf')).toEqual(expect.objectContaining({ name: 'pdf', version: '2.0.0' }));
   });
   it('restores the old directory when the new install cannot persist its index', async () => {
     const { skillRoot } = await seedInstalledSkill();
@@ -86,16 +88,17 @@ describe('skill installation replacement', () => {
     fs.mkdirSync(sourceDir, { recursive: true });
     fs.writeFileSync(path.join(sourceDir, 'SKILL.md'), 'new skill');
 
-    const profile = await Profiles.get().active();
-    vi.spyOn(profile.skills, 'upsert').mockRejectedValueOnce(new Error('disk full'));
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    vi.spyOn(store.skills, 'upsert').mockRejectedValueOnce(new Error('disk full'));
 
     await expect(installSkill(
+      store,
       { name: 'pdf', description: 'new', version: '2.0.0' },
       sourceDir,
     )).resolves.toEqual({ success: false, error: 'Failed to save skill configuration to profile' });
 
     expect(fs.readFileSync(path.join(skillRoot, 'SKILL.md'), 'utf-8')).toBe('old skill');
-    expect(profile.skills.get('pdf')).toEqual({ name: 'pdf', description: 'old', version: '1.0.0' });
+    expect(store.skills.get('pdf')).toEqual({ name: 'pdf', description: 'old', version: '1.0.0' });
   });
 
   it('restores the old directory when the new link cannot persist its index', async () => {
@@ -104,10 +107,11 @@ describe('skill installation replacement', () => {
     fs.mkdirSync(sourceDir, { recursive: true });
     fs.writeFileSync(path.join(sourceDir, 'SKILL.md'), 'external skill');
 
-    const profile = await Profiles.get().active();
-    vi.spyOn(profile.skills, 'upsert').mockRejectedValueOnce(new Error('disk full'));
+    const store = ProfileRegistry.require(ProfileRegistry.defaultProfileId).store
+    vi.spyOn(store.skills, 'upsert').mockRejectedValueOnce(new Error('disk full'));
 
     await expect(linkSkill(
+      store,
       {
         name: 'pdf',
         description: 'external',

@@ -86,8 +86,7 @@ export class SessionIdx {
         created_at  = excluded.created_at,
         updated_at  = excluded.updated_at
     `).run(row);
-    emit('session:index:updated', {
-      profileId: this.profileId,
+    emit(this.profileId, 'session:index:updated', {
       agentId: row.agentId,
       op: 'upsert',
       entry: toEntry(row),
@@ -103,8 +102,7 @@ export class SessionIdx {
       .prepare('DELETE FROM regular_sessions WHERE id = ? RETURNING agent_id AS agentId')
       .get(id) as { agentId: string } | undefined;
     if (!row) return;
-    emit('session:index:updated', {
-      profileId: this.profileId,
+    emit(this.profileId, 'session:index:updated', {
       agentId: row.agentId,
       op: 'remove',
       id,

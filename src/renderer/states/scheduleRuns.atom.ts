@@ -6,7 +6,6 @@
  * `persist:listAllScheduleRuns` 一次性拉全量；增量靠订阅 schedule 通道重拉。
  *
  * 订阅通道：
- *   - persist:profile:switched       → 清空整张表
  *   - persist:schedule:run:updated   → 全量重 fetch 该 agent（粒度粗，单 agent 通常 <数百 run）
  *   - persist:schedule:run:removed   → 全量重 fetch（单条 run 删除）
  *   - persist:schedule:removed       → 全量重 fetch（job 被删时连带清掉它的 run）
@@ -18,6 +17,7 @@
 import { useEffect } from 'react';
 import { unit } from '@/atom/unit';
 import { persistApi, persistEvents } from '@/ipc/persist';
+
 import type { JobRunRow } from '@shared/persist/types';
 import { log } from '@/log';
 
@@ -78,9 +78,7 @@ function reloadAgent(agentId: string): void {
 
 // ────────── 通道订阅 ──────────
 
-persistEvents['profile:switched'](() => {
-  change({ byAgentId: {} });
-});
+
 
 persistEvents['schedule:run:updated']((_e, payload) => {
   reloadAgent(payload.agentId);

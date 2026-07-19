@@ -1,19 +1,18 @@
 /**
- * Agent "create" 内核 —— by-config 落到 `Profiles.active().createAgent` + `agent.patchFront`,
+ * Agent "create" 内核 —— by-config 落到显式注入的 `ProfileStore.createAgent` + `agent.patchFront`,
  * 把 front-matter 字段(mcpServers / skills)一次性写进 AGENT.md。
  *
  * 角色:被 `appcmd/builtins/app/agent/add.ts` 调用,业务逻辑的真家。与
  * `mcp/kernel/createServer.ts` 完全对称。
  *
- * 与 `Profiles.active().createAgent` 的边界:本函数只做"参数校验 + 调
+ * 与 `ProfileStore.createAgent` 的边界:本函数只做"参数校验 + 调
  * createAgent + 后续 patchFront",**不**涉及 UI 通知 / 任何 IPC。
  *
  * `signal` 仅做契约形状对齐 —— 该路径下持久化是同步快路径,内部没有可取消的 I/O。
  */
 
-import { Profiles } from '@main/persist';
-import type { AgentMcpServer } from '@shared/persist/types';
-import type { SkillBindings } from '@shared/persist/types'
+import type { ProfileStore } from '@main/persist';
+import type { AgentMcpServer, SkillBindings } from '@shared/persist/types';
 
 export interface CreateAgentArgs {
   name: string;
@@ -49,6 +48,7 @@ const DEFAULT_EMOJI = '🤖';
  * 按 success 字段分支处理。
  */
 export async function createAgentInternal(
+  store: ProfileStore,
   args: CreateAgentArgs,
   _opts?: { signal?: AbortSignal },
 ): Promise<CreateAgentResult> {
@@ -62,9 +62,8 @@ export async function createAgentInternal(
     }
 
     const agentName = args.name.trim();
-    const profile = await Profiles.get().active();
 
-    const records = profile.listAgents();
+    const records = store.listAgents();
     if (records.some((r) => r.name === agentName)) {
       return {
         success: false,
@@ -75,7 +74,7 @@ export async function createAgentInternal(
 
     const version = args.version || '1.0.0';
 
-    const agent = await profile.createAgent({
+    const agent = await store.createAgent({
       name: agentName,
       version,
       model: args.model,

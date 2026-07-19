@@ -104,13 +104,14 @@ export interface AppConfig {
   rightSidebarWidth?: number;
 
   /**
-   * Page zoom level (global, unrelated to user profile)
-   * 0 means 100%; each ±0.5 is approximately ±10%; range -3 ~ 3
+   * 旧版全局缩放值。仅在 Profile 尚未写入自己的窗口状态时作为迁移回退；
+   * 新写入位于 `state/windows/{profileId}.json`。
    */
   zoomLevel?: number;
 
   /**
-   * Whether the main window is maximized (global application-level window preference)
+   * 旧版全局最大化状态。仅在 Profile 尚未写入自己的窗口状态时作为迁移回退；
+   * 新写入位于 `state/windows/{profileId}.json`。
    */
   mainWindowMaximized?: boolean;
 }

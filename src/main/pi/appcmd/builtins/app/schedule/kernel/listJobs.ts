@@ -8,7 +8,7 @@
  * 没有挂中止的实际意义。
  */
 
-import { schedulerManager } from '@main/lib/scheduler';
+import type { Profile } from '@main/profile';
 
 import { jobToView, type JobView } from './types';
 
@@ -23,10 +23,10 @@ export type ListJobsResult =
 
 export async function listJobsInternal(
   args: ListJobsArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { profile: Profile; signal?: AbortSignal },
 ): Promise<ListJobsResult> {
   try {
-    const jobs = await schedulerManager.listJobs(args.agent_id);
+    const jobs = await opts.profile.scheduler.listJobs(args.agent_id);
     return { success: true, schedules: jobs.map(jobToView) };
   } catch (error) {
     return {

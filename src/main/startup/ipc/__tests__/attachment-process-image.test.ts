@@ -14,8 +14,8 @@ import * as path from 'node:path';
 import sharp from 'sharp';
 
 import { processImageAttachment } from '../attachment';
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import type { Profile } from '@main/profile';
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting } from '@main/persist/lib/root';
 import { ProfileDb } from '@main/persist/lib/db/db';
 import { InternalUrlRouter, LocalProtocolHandler } from '@main/pi';
@@ -39,15 +39,15 @@ async function pngBytes(width: number, height: number): Promise<Uint8Array> {
 beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'attach-procimg-'));
   setRootForTesting(tmpRoot);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   InternalUrlRouter.resetForTesting();
   InternalUrlRouter.get().register(new LocalProtocolHandler());
 
   profileId = `p_TEST_${Math.random().toString(36).slice(2, 8)}`;
-  profile = await Profile.getOrLoad(profileId);
-  const agent = await profile.createAgent({ name: 'ProcessImageTest', version: '1.0.0' });
+  profile = await ProfileRegistry.getOrLoad(profileId);
+  const agent = await profile.store.createAgent({ name: 'ProcessImageTest', version: '1.0.0' });
   agentId = agent.id;
 });
 
@@ -58,7 +58,7 @@ afterEach(() => {
 
 describe('processImageAttachment', () => {
   it('大图(解码 ≥ 256KB)→ sandbox,原图落盘,未落盘会话被补建', async () => {
-    const agent = await profile.getAgent(agentId);
+    const agent = await profile.store.getAgent(agentId);
     // 前置:该 session 尚未落盘。
     expect(await agent!.findSessionAcrossKinds(LAZY_SESSION_ID)).toBeUndefined();
 
@@ -85,7 +85,7 @@ describe('processImageAttachment', () => {
   });
 
   it('小图(解码 < 256KB)→ inline,base64 == 原始字节,不落盘', async () => {
-    const agent = await profile.getAgent(agentId);
+    const agent = await profile.store.getAgent(agentId);
     const bytes = await pngBytes(200, 150); // 解码 = 200*150*4 = 120KB < 256KB
     const outcome = await processImageAttachment(
       profile,

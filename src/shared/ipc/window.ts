@@ -9,6 +9,7 @@ type RenderToMain = {
   maximize: { call: []; return: void };
   unmaximize: { call: []; return: void };
   close: { call: []; return: void };
+  openProfile: { call: [profileId: string]; return: void };
   isMaximized: { call: []; return: boolean };
   isFullScreen: { call: []; return: boolean };
   zoomIn: { call: []; return: number };

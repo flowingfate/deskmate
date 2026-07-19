@@ -3,7 +3,6 @@ import { renderToMain } from '@shared/ipc/persist';
 
 const invoke = renderToMain.provideInvokeForPreload(ipcRenderer, [
   'getSnapshot',
-  'switchProfile',
   'listAllSessions',
   'listAllScheduleRuns',
   'getSession',

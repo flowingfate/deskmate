@@ -4,9 +4,6 @@ import type { SkillBindings } from '@shared/persist/types'
 
 const mockActive = vi.fn();
 
-vi.mock('../../../persist', () => ({
-  Profiles: { get: () => ({ active: () => mockActive() }) },
-}));
 
 interface TestAgentConfig {
   name: string;
@@ -63,7 +60,7 @@ describe('removeSkillsFromAgents', () => {
     const a3 = makeAgent('chat-3', 'Reviewer', ['jira']);
     mockActive.mockResolvedValue(buildProfile([a1, a2, a3]));
 
-    const result = await removeSkillsFromAgents({
+    const result = await removeSkillsFromAgents(await mockActive(), {
       skillNames: ['pptx', 'jira'],
       targets: [
         { agentId: 'chat-1', agentName: 'Deck Builder' },
@@ -85,7 +82,7 @@ describe('removeSkillsFromAgents', () => {
     const a1 = makeAgent('chat-1', 'Deck Builder', ['figma']);
     mockActive.mockResolvedValue(buildProfile([a1]));
 
-    const result = await removeSkillsFromAgents({
+    const result = await removeSkillsFromAgents(await mockActive(), {
       skillNames: ['pptx'],
       targets: [{ agentId: 'chat-1', agentName: 'Deck Builder' }],
     });
@@ -103,7 +100,7 @@ describe('removeSkillsFromAgents', () => {
     const a1 = makeAgent('chat-1', 'Deck Builder', ['legacy-skill']);
     mockActive.mockResolvedValue(buildProfile([a1]));
 
-    const result = await removeSkillsFromAgents({
+    const result = await removeSkillsFromAgents(await mockActive(), {
       skillNames: ['legacy-skill'],
       targets: [{ agentId: 'chat-1', agentName: 'Deck Builder' }],
     });
@@ -118,7 +115,7 @@ describe('removeSkillsFromAgents', () => {
     const a1 = makeAgent('chat-1', 'Deck Builder', { pptx: 'live', pdf: 'lazy' });
     mockActive.mockResolvedValue(buildProfile([a1]));
 
-    const result = await removeSkillsFromAgents({
+    const result = await removeSkillsFromAgents(await mockActive(), {
       skillNames: ['pptx'],
       targets: [{ agentId: 'chat-1', agentName: 'Deck Builder' }],
     });

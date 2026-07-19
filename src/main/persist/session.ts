@@ -268,8 +268,7 @@ export abstract class Session extends PersistBase {
     const text = batch.map((m) => JSON.stringify(m)).join('\n') + '\n';
     this.flushing = appendText(this.messagesFile(), text)
       .then(() => {
-        emit('session:messages:appended', {
-          profileId: this.profileId,
+        emit(this.profileId, 'session:messages:appended', {
           agentId: this.agentId,
           sessionId: this.id,
           items: batch,
@@ -421,8 +420,7 @@ export abstract class Session extends PersistBase {
     })();
     this.flushing = work
       .then(() => {
-        emit('session:messages:rewritten', {
-          profileId: this.profileId,
+        emit(this.profileId, 'session:messages:rewritten', {
           agentId: this.agentId,
           sessionId: this.id,
           items: lines,
@@ -700,8 +698,7 @@ export class RegularSession extends Session {
    */
   protected override afterPersist(): void {
     this.sessionIdx.upsert(this.toRegularRow());
-    emit('session:updated', {
-      profileId: this.profileId,
+    emit(this.profileId, 'session:updated', {
       agentId: this.agentId,
       sessionId: this.id,
       data: this.toDataFile(),
@@ -882,8 +879,7 @@ export class JobRun extends Session {
   protected override afterPersist(): void {
     const row = this.toJobRunRow();
     this.jobRunIdx.upsert(row);
-    emit('schedule:run:updated', {
-      profileId: this.profileId,
+    emit(this.profileId, 'schedule:run:updated', {
       agentId: this.agentId,
       jobId: this.jobId,
       sessionId: this.id,

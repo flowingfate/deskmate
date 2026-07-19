@@ -1,25 +1,28 @@
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, BrowserWindow } from 'electron';
 
 import { crashCaptureManager } from '../../lib/crash/CrashCaptureManager';
 import { appCacheManager } from '../../lib/appCache';
 import { renderToMain } from '@shared/ipc/app';
 import { APP_VERSION } from '@shared/constants/branding';
 
-import type { Context } from './shared';
 import { getOrCreateInstallationDeviceId } from "../../lib/utilities/idFactory";
 import { getAppDataPath } from "@main/persist/lib/path";
+import { IS_DEV } from '../context';
 
-export default function(ctx: Context) {
+export default function() {
   const handle = renderToMain.bindMain(ipcMain);
 
   handle.getVersion(() => APP_VERSION);
   handle.getName(() => app.getName());
-  handle.isDev(() => ctx.isDev);
+  handle.isDev(() => IS_DEV);
 
-  handle.isReady(() => ({
-    success: true,
-    data: ctx.isAgentChatReady,
-  }));
+  handle.isReady((event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return {
+      success: true,
+      data: Boolean(window && !window.isDestroyed()),
+    };
+  });
 
   handle.getPlatformInfo(() => {
     const platform = process.platform;

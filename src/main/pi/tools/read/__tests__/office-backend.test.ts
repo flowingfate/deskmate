@@ -40,10 +40,12 @@ vi.mock('../impl/readOfficeFile', () => {
 import { readOffice } from '../backends/office';
 import type { ToolContext } from '../../types';
 import { Tracer } from '@shared/log/trace';
+import { testProfile } from '../../__tests__/profileFixture';
 
 function makeCtx(): ToolContext {
   return {
     mode: 'agent',
+    profile: testProfile,
     profileId: 'p',
     agentId: 'a',
     sessionId: 's',

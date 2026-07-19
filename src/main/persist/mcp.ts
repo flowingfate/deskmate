@@ -24,8 +24,9 @@ export class Mcp extends PersistBase {
 
   protected async doPersist(): Promise<void> {
     await writeJson(this.file(), this.toFile());
-    emit('agent:registry:updated', {
-      profileId: this.profileId, kind: 'mcp', items: this.items,
+    emit(this.profileId, 'agent:registry:updated', {
+      kind: 'mcp',
+      items: this.items,
     });
   }
 

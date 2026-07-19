@@ -228,7 +228,6 @@ export const mockedEmptyTest = base.extend<MockedEmptyFixtures>({
       // (consistent with the return format of real handlers in src/main/main.ts)
 
       // 🚀 app:isReady → immediately return true (skip backend initialization wait)
-      // Real handler requires isAgentChatReady; mock returns true directly.
       safeHandle('app:isReady', () => ({
         success: true,
         data: true,

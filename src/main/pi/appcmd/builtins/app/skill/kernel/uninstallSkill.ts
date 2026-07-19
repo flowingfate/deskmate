@@ -10,7 +10,7 @@
  * `signal` 仅做契约形状对齐 —— 卸载路径下没有可中断的 I/O。
  */
 
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 import { deleteInstalledSkill } from '@main/lib/skill';
 import { dedupeSkillNames } from '../_shared';
 
@@ -29,7 +29,7 @@ export interface UninstallSkillResult {
 
 export async function uninstallSkillInternal(
   args: UninstallSkillArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { store: ProfileStore; signal?: AbortSignal },
 ): Promise<UninstallSkillResult> {
   const skillNames = dedupeSkillNames(args.skill_names);
   if (skillNames.length === 0) {
@@ -43,21 +43,7 @@ export async function uninstallSkillInternal(
     };
   }
 
-  let profile;
-  try {
-    profile = Profiles.get().activeSync();
-  } catch {
-    return {
-      success: false,
-      message: 'No current user session found. Please ensure you are logged in.',
-      uninstalled_count: 0,
-      uninstalled_skills: [],
-      skipped_skills: [],
-      error: 'NO_USER_SESSION',
-    };
-  }
-
-  const installedSkillNames = new Set(profile.skills.items.map((s) => s.name));
+  const installedSkillNames = new Set(opts.store.skills.items.map((s) => s.name));
   const uninstalledSkills: string[] = [];
   const skippedSkills: Array<{ skill_name: string; reason: string }> = [];
 
@@ -67,7 +53,7 @@ export async function uninstallSkillInternal(
       continue;
     }
 
-    const deleteResult = await deleteInstalledSkill(skillName);
+    const deleteResult = await deleteInstalledSkill(opts.store, skillName);
     if (deleteResult.success) {
       uninstalledSkills.push(skillName);
       installedSkillNames.delete(skillName);

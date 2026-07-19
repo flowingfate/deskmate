@@ -1,8 +1,8 @@
 /**
- * Typed registry of pending main-process MCP auth prompts awaiting a
- * renderer response. Replaces the previous `(global as any).__pending…`
- * pattern so the IPC handler in `ipc/mcp.ts` and the dispatcher in
- * `McpAuthService` share the same statically-typed handle map.
+ * Typed registry of pending MCP auth prompts awaiting a renderer response.
+ * It is owned by exactly one profile-bound `McpAuthService`; the IPC handler
+ * resolves the sender's `MCPClientManager` first, then dispatches into this
+ * instance. No process-global prompt state exists.
  *
  * Two independent maps because the response shapes are disjoint:
  *
@@ -22,18 +22,23 @@ export type McpAuthConsentDecision = 'cancel' | 'allow-this-time';
 export type ConsentHandler = (decision: McpAuthConsentDecision) => void;
 export type ClientIdHandler = (response: McpAuthClientIdResponse) => void;
 
-class McpAuthPromptRegistry {
-  private consentHandlers = new Map<string, ConsentHandler>();
-  private clientIdHandlers = new Map<string, ClientIdHandler>();
+/**
+ * 一个 MCP runtime Profile 对应一个 registry。响应由 sender 所属的
+ * MCPClientManager 直接消费，因而不需要进程级 handler map 或 profileId 二次筛选。
+ */
+export class McpAuthPromptRegistry {
+  private readonly consentHandlers = new Map<string, ConsentHandler>();
+  private readonly clientIdHandlers = new Map<string, ClientIdHandler>();
 
   registerConsent(requestId: string, handler: ConsentHandler): void {
     this.consentHandlers.set(requestId, handler);
   }
 
   takeConsent(requestId: string): ConsentHandler | undefined {
-    const h = this.consentHandlers.get(requestId);
+    const handler = this.consentHandlers.get(requestId);
+    if (!handler) return undefined;
     this.consentHandlers.delete(requestId);
-    return h;
+    return handler;
   }
 
   cancelConsent(requestId: string): void {
@@ -45,9 +50,10 @@ class McpAuthPromptRegistry {
   }
 
   takeClientId(requestId: string): ClientIdHandler | undefined {
-    const h = this.clientIdHandlers.get(requestId);
+    const handler = this.clientIdHandlers.get(requestId);
+    if (!handler) return undefined;
     this.clientIdHandlers.delete(requestId);
-    return h;
+    return handler;
   }
 
   cancelClientId(requestId: string): void {
@@ -65,12 +71,4 @@ class McpAuthPromptRegistry {
   __listClientIdIdsForTests(): string[] {
     return Array.from(this.clientIdHandlers.keys());
   }
-
-  /** Test-only: drop all pending handlers. */
-  __resetForTests(): void {
-    this.consentHandlers.clear();
-    this.clientIdHandlers.clear();
-  }
 }
-
-export const mcpAuthPromptRegistry = new McpAuthPromptRegistry();

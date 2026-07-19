@@ -7,7 +7,7 @@
 //
 // processType / windowId 在此覆写：main 是这两个字段的唯一权威 writer，
 // renderer 即便传了同名字段也以此为准（数据一致性，非 trust boundary）。
-// 注意：必须在 setUpIPC 入口最早注册，避免 startup 阶段 renderer 日志丢失。
+// 注意：必须在 setUpAllIPCHandlers 入口最早注册，避免 startup 阶段 renderer 日志丢失。
 
 import { ipcMain, type IpcMainEvent } from 'electron';
 import { log } from '@main/log';

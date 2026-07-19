@@ -7,6 +7,7 @@ import { agentChatEvents } from '@/ipc/agentChat';
 import { useAgentSessions, useAgentSessionsHydrated } from '@/states/sessionIndex.atom';
 import { cn } from '@/lib/utilities/utils';
 
+
 const SCROLL_THRESHOLD_PX = 80;
 
 // ─── SessionItem ───

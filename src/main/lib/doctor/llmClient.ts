@@ -19,20 +19,17 @@ import type {
   Tool as PiTool,
 } from '@earendil-works/pi-ai';
 
-import { Profiles } from '@main/persist';
 import { resolveModel, resolveCredentials } from '@main/pi';
 import { parseAgentModel } from '@shared/utils/agentModelId';
 
 export async function callDoctorLlm(
+  profileId: string,
   systemPrompt: string,
   messages: PiMessage[],
   tools: PiTool[],
   modelKey: string,
+  signal: AbortSignal,
 ): Promise<PiAssistantMessage> {
-  const profileId = Profiles.get().activeProfileId;
-  if (!profileId) {
-    throw new Error('Doctor agent requires an active profile.');
-  }
 
   // 模型完全由用户在 renderer 选定；无内置默认。
   const parsed = parseAgentModel(modelKey);
@@ -54,5 +51,6 @@ export async function callDoctorLlm(
   return pi.complete(model, context, {
     apiKey,
     temperature: 0.3,
+    signal,
   });
 }

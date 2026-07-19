@@ -15,8 +15,8 @@ import sharp from 'sharp';
 
 import { dispatchRead } from '../read/dispatch';
 import type { ToolContext } from '../types';
-import { Profile } from '@main/persist/profile';
-import { Profiles } from '@main/persist/profiles';
+import { ProfileStore } from '@main/persist/profileStore'
+import { ProfileRegistry } from '@main/profileRegistry'
 import { setRootForTesting } from '@main/persist/lib/root';
 import { ProfileDb } from '@main/persist/lib/db/db';
 import { InternalUrlRouter } from '@main/pi/internal-urls';
@@ -35,6 +35,7 @@ const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
 function makeCtx(): ToolContext {
   return {
     mode: 'agent',
+    profile: ProfileRegistry.require(profileId),
     profileId,
     agentId,
     sessionId,
@@ -49,15 +50,15 @@ function makeCtx(): ToolContext {
 beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'read-image-it-'));
   setRootForTesting(tmpRoot);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   InternalUrlRouter.resetForTesting();
   InternalUrlRouter.get().register(new LocalProtocolHandler());
 
   profileId = `p_TEST_${Math.random().toString(36).slice(2, 8)}`;
-  const profile = await Profile.getOrLoad(profileId);
-  const agent = await profile.createAgent({ name: 'ImageUriTest', version: '1.0.0' });
+  const store = await (await ProfileRegistry.getOrLoad(profileId)).store
+  const agent = await store.createAgent({ name: 'ImageUriTest', version: '1.0.0' });
   agentId = agent.id;
   const session = await agent.createSession({ title: 'sandbox' });
   sessionId = session.id;
@@ -65,8 +66,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  Profile.evict(profileId);
-  Profiles.resetForTesting();
+  ProfileRegistry.resetForTesting();
+  ProfileRegistry.resetForTesting();
   ProfileDb.closeAll();
   ProfileDb.resetForTesting();
   setRootForTesting(null);

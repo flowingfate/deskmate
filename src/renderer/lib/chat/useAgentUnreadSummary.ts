@@ -80,7 +80,6 @@ async function fetchSummary(agentId: string): Promise<AgentUnreadSummary> {
 
 export function useAgentUnreadSummaryMap(
   agentIds: string[],
-  profileId: string | null,
 ): Record<string, AgentUnreadSummary> {
   const agentIdsKey = useMemo(
     () => Array.from(new Set(agentIds.filter(Boolean))).sort().join('|'),
@@ -93,7 +92,7 @@ export function useAgentUnreadSummaryMap(
   const [summaryMap, setSummaryMap] = useState<Record<string, AgentUnreadSummary>>({});
 
   useEffect(() => {
-    if (!profileId || normalizedAgentIds.length === 0) {
+    if (normalizedAgentIds.length === 0) {
       setSummaryMap({});
       return;
     }
@@ -111,13 +110,13 @@ export function useAgentUnreadSummaryMap(
     return () => {
       cancelled = true;
     };
-  }, [profileId, agentIdsKey, normalizedAgentIds]);
+  }, [agentIdsKey, normalizedAgentIds]);
 
   // 订阅 persist 事件：任何对当前可见 agent 的 session/index 改动都触发重拉对应 agent 的 summary。
   // 同一次主进程写入会先 emit `session:updated` 再 emit `session:index:updated`；
   // 用 50ms trailing debounce（按 agentId）合并成单次 IPC，避免重复 getUnreadSummary。
   useEffect(() => {
-    if (!profileId || normalizedAgentIds.length === 0) return;
+    if (normalizedAgentIds.length === 0) return;
 
     const visibleAgentIds = new Set(normalizedAgentIds);
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -161,16 +160,15 @@ export function useAgentUnreadSummaryMap(
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
     };
-  }, [profileId, agentIdsKey, normalizedAgentIds]);
+  }, [agentIdsKey, normalizedAgentIds]);
 
   return summaryMap;
 }
 
 export function useAgentUnreadSummary(
   agentId: string | null,
-  profileId: string | null,
 ): AgentUnreadSummary {
-  const summaryMap = useAgentUnreadSummaryMap(agentId ? [agentId] : [], profileId);
+  const summaryMap = useAgentUnreadSummaryMap(agentId ? [agentId] : []);
 
   if (!agentId) {
     return EMPTY_AGENT_UNREAD_SUMMARY;

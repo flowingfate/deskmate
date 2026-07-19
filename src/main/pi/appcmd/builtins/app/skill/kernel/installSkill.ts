@@ -11,6 +11,7 @@
  */
 
 import { installAndActivateSkill } from '@main/lib/skill';
+import type { ProfileStore } from '@main/persist';
 
 export interface InstallSkillArgs {
   /** Skill name(用于结果展示) */
@@ -30,7 +31,7 @@ export interface InstallSkillResult {
 
 export async function installSkillInternal(
   args: InstallSkillArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { store: ProfileStore; signal?: AbortSignal },
 ): Promise<InstallSkillResult> {
   const skillName = args.skill_name?.trim();
   if (!skillName) {
@@ -52,7 +53,7 @@ export async function installSkillInternal(
   }
 
   try {
-    const result = await installAndActivateSkill({
+    const result = await installAndActivateSkill(opts.store, {
       source: { type: 'device-path', value: args.path.trim() },
       requestSource: args.request_source ?? 'chat-tool',
       activation: { mode: 'install-only' },

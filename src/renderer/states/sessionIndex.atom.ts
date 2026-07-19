@@ -5,7 +5,6 @@
  * 真值在 main 端 `regular_sessions` SQLite 表；renderer 通过 persist IPC 同步。
  *
  * 订阅通道：
- *   - persist:profile:switched      → 清空整张表
  *   - persist:session:index:updated → 单条 op（'upsert' / 'remove'）增量合并（Step 9 起，
  *     从老模型"整月 entries 数组"改为"单条 op + entry/id"）
  *   - persist:session:updated       → upsert 单条 entry（kind / star / readStatus / title 等可能变化）
@@ -19,6 +18,7 @@
 import { useEffect } from 'react';
 import { unit } from '@/atom/unit';
 import { persistApi, persistEvents } from '@/ipc/persist';
+
 import type { RegularSessionIndexEntry } from '@shared/persist/types';
 import { log } from '@/log';
 
@@ -84,9 +84,7 @@ function ensureLoaded(agentId: string): Promise<void> {
 
 // ────────── 通道订阅 ──────────
 
-persistEvents['profile:switched'](() => {
-  change({ byAgentId: {} });
-});
+
 
 persistEvents['session:index:updated']((_e, payload) => {
   const slot = get().byAgentId[payload.agentId];

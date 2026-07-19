@@ -82,10 +82,7 @@ export class UserInputPlaceholderParser {
    * Get singleton instance
    */
   static getInstance(): UserInputPlaceholderParser {
-    if (!UserInputPlaceholderParser.instance) {
-      UserInputPlaceholderParser.instance = new UserInputPlaceholderParser();
-    }
-    return UserInputPlaceholderParser.instance;
+    return UserInputPlaceholderParser.instance ??= new UserInputPlaceholderParser();
   }
 
   /**

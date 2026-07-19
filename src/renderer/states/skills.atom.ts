@@ -5,12 +5,12 @@
  * 字段：name / description / version。
  *
  * 订阅通道：
- *   - persist:profile:switched                    → 清空 + hydrate
  *   - persist:agent:registry:updated [kind=skills] → payload.items 直接替换
  */
 
 import { unit } from '@/atom/unit';
 import { persistEvents } from '@/ipc/persist';
+
 import { getInitialSnapshot } from '@/states/_snapshot';
 import type { SkillRecord } from '@shared/persist/types';
 import { log } from '@/log';
@@ -36,10 +36,7 @@ async function hydrate(): Promise<void> {
   change({ items: res.data.skills, hydrated: true });
 }
 
-persistEvents['profile:switched']((_e, _payload) => {
-  change({ items: [], hydrated: false });
-  void hydrate();
-});
+
 
 persistEvents['agent:registry:updated']((_e, payload) => {
   if (payload.kind !== 'skills') return;

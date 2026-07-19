@@ -1,7 +1,13 @@
 import { HttpTransport } from '../wire/HttpTransport';
+import type { McpAuthTokenOptions, McpAuthTokenProvider, McpResolvedAuthMetadata } from '../../auth';
 
 const mockResolveMetadata = vi.fn();
 const mockGetTokenForServer = vi.fn();
+const authService: McpAuthTokenProvider = {
+  getTokenForServer(serverName, metadata, options) {
+    return mockGetTokenForServer(serverName, metadata, options);
+  },
+};
 
 vi.mock('../../auth', async () => ({
   McpAuthMetadataService: {
@@ -18,9 +24,6 @@ vi.mock('../../auth', async () => ({
         scopes,
       };
     },
-  },
-  mcpAuthService: {
-    getTokenForServer: (...args: unknown[]) => mockGetTokenForServer(...args),
   },
 }));
 
@@ -60,11 +63,9 @@ describe('HttpTransport auth retry', () => {
     });
     mockGetTokenForServer.mockResolvedValue('test-access-token');
 
-    const transport = new HttpTransport({
-      serverName: 'example-mcp',
-      url: 'https://mcp.example.com/mcp',
-      headers: {},
-    });
+    const transport = new HttpTransport({ authService, serverName: 'example-mcp',
+    url: 'https://mcp.example.com/mcp',
+    headers: {}, });
 
     await transport.start();
     await transport.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }));
@@ -79,6 +80,51 @@ describe('HttpTransport auth retry', () => {
     const secondCall = fetchMock.mock.calls[1];
     const secondCallInit = secondCall?.[1] as RequestInit | undefined;
     expect((secondCallInit?.headers as Record<string, string> | undefined)?.Authorization).toBe('Bearer test-access-token');
+  });
+
+  it('cancels a pending OAuth token request when the transport stops', async () => {
+    vi.spyOn(global, 'fetch' as any).mockResolvedValueOnce(new Response('Unauthorized', {
+      status: 401,
+      headers: {
+        'WWW-Authenticate': 'Bearer resource_metadata="https://example.com/.well-known/oauth-protected-resource/mcp"',
+      },
+    }));
+    mockResolveMetadata.mockResolvedValue({
+      authorizationServerUrl: 'https://login.example.com',
+      authorizationServerMetadata: {
+        issuer: 'https://login.example.com',
+        authorization_endpoint: 'https://login.example.com/authorize',
+        token_endpoint: 'https://login.example.com/token',
+      },
+      scopes: [],
+      providerLabel: 'Identity Provider',
+      telemetry: {
+        resourceMetadataSource: 'header',
+        serverMetadataSource: 'resourceMetadata',
+      },
+    });
+    mockGetTokenForServer.mockImplementation(
+      (_serverName: string, _metadata: McpResolvedAuthMetadata, options?: McpAuthTokenOptions) =>
+        new Promise<string | undefined>((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(new Error('OAuth request aborted')), { once: true });
+        }),
+    );
+
+    const transport = new HttpTransport({
+      authService,
+      serverName: 'example-mcp',
+      url: 'https://mcp.example.com/mcp',
+      headers: {},
+    });
+    await transport.start();
+    const send = transport.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }));
+
+    await vi.waitFor(() => {
+      expect(mockGetTokenForServer).toHaveBeenCalledOnce();
+    });
+    await transport.stop();
+
+    await expect(send).rejects.toThrow('OAuth request aborted');
   });
 
   it('reuses auth metadata before the first fetch and force-refreshes after an authorized 401', async () => {
@@ -119,11 +165,9 @@ describe('HttpTransport auth retry', () => {
       .mockResolvedValueOnce('second-token')
       .mockResolvedValueOnce('refreshed-token');
 
-    const transport = new HttpTransport({
-      serverName: 'example-mcp',
-      url: 'https://mcp.example.com/mcp',
-      headers: {},
-    });
+    const transport = new HttpTransport({ authService, serverName: 'example-mcp',
+    url: 'https://mcp.example.com/mcp',
+    headers: {}, });
 
     (transport as any).authMetadata = {
       authorizationServerUrl: 'https://login.microsoftonline.com/organizations/v2.0',
@@ -219,11 +263,9 @@ describe('HttpTransport auth retry', () => {
       }),
     ]);
 
-    const transport = new HttpTransport({
-      serverName: 'github',
-      url: 'https://api.githubcopilot.com/mcp/',
-      headers: { Authorization: 'Bearer ghp_valid_token' },
-    });
+    const transport = new HttpTransport({ authService, serverName: 'github',
+    url: 'https://api.githubcopilot.com/mcp/',
+    headers: { Authorization: 'Bearer ghp_valid_token' }, });
 
     await transport.start();
     await transport.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }));
@@ -264,11 +306,9 @@ describe('HttpTransport auth retry', () => {
     });
     mockGetTokenForServer.mockResolvedValue('oauth-issued-token');
 
-    const transport = new HttpTransport({
-      serverName: 'github',
-      url: 'https://api.githubcopilot.com/mcp/',
-      headers: { Authorization: 'Bearer ghp_expired_or_revoked' },
-    });
+    const transport = new HttpTransport({ authService, serverName: 'github',
+    url: 'https://api.githubcopilot.com/mcp/',
+    headers: { Authorization: 'Bearer ghp_expired_or_revoked' }, });
 
     await transport.start();
     await transport.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }));
@@ -328,11 +368,9 @@ describe('HttpTransport auth retry', () => {
     });
     mockGetTokenForServer.mockResolvedValue('oauth-issued-token');
 
-    const transport = new HttpTransport({
-      serverName: 'gitlab',
-      url: 'https://gitlab.com/api/v4/mcp',
-      headers: {},
-    });
+    const transport = new HttpTransport({ authService, serverName: 'gitlab',
+    url: 'https://gitlab.com/api/v4/mcp',
+    headers: {}, });
 
     await transport.start();
     await expect(
@@ -359,11 +397,9 @@ describe('HttpTransport auth retry', () => {
       return new Response('', { status: 404 });
     }) as any);
 
-    const transport = new HttpTransport({
-      serverName: 'legacy-sse',
-      url: 'https://example.com/sse-only',
-      headers: {},
-    });
+    const transport = new HttpTransport({ authService, serverName: 'legacy-sse',
+    url: 'https://example.com/sse-only',
+    headers: {}, });
 
     await transport.start();
     // _sseFallbackWithMessage handles errors by setting transport state to

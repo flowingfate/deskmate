@@ -68,6 +68,7 @@ function buildAppCmdContext(
   if (toolCtx.mode === 'delegate') {
     return {
       mode: 'delegate',
+      profile: toolCtx.profile,
       profileId: toolCtx.profileId,
       agentId: toolCtx.agentId,
       sessionId: toolCtx.sessionId,
@@ -87,6 +88,7 @@ function buildAppCmdContext(
 
   return {
     mode: 'agent',
+    profile: toolCtx.profile,
     profileId: toolCtx.profileId,
     agentId: toolCtx.agentId,
     sessionId: toolCtx.sessionId,

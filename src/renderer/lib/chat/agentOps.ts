@@ -12,7 +12,6 @@
 import { AgentEnvelope, AgentPersona, DEFAULT_AGENT_PERSONA } from '@shared/types/profileTypes';
 import { persistApi } from '@/ipc/persist';
 import { getAgentById, getAgents } from '@/states/agents.atom';
-import { getProfileId } from '@/states/profile.atom';
 import type { AgentDetail, AgentFrontPatch, AgentRecord } from '@shared/persist/types';
 
 export interface AgentOperationResult {
@@ -70,9 +69,7 @@ function agentRecordToConfig(record: AgentRecord, detail: AgentDetail | null): A
 }
 
 function validateUser(): string {
-  const id = getProfileId();
-  if (!id) throw new Error('No user authenticated. Please sign in first.');
-  return id;
+  return window.electronAPI.profile.id;
 }
 
 export async function addAgentConfig(envelope: Partial<AgentEnvelope>): Promise<AgentOperationResult> {

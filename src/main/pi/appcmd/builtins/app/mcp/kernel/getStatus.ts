@@ -8,8 +8,9 @@
  * Error / Disconnecting / Connecting / NeedsUserInteraction。
  */
 
-import { mcpClientManager } from '@main/lib/mcpRuntime'
-import { Profiles } from '@main/persist';
+import type { Profile } from '@main/profile';
+import type { MCPServerRuntimeState } from '@main/lib/mcpRuntime';
+import type { McpServerConfig } from '@shared/persist/types';
 
 /** MCP server status type。 */
 export type McpStatus =
@@ -45,7 +46,7 @@ export interface GetStatusResult {
  */
 export async function getStatusInternal(
   args: GetStatusArgs,
-  _opts?: { signal?: AbortSignal },
+  opts: { profile: Profile; signal?: AbortSignal },
 ): Promise<GetStatusResult> {
   try {
     if (!args.mcp_name || typeof args.mcp_name !== 'string' || !args.mcp_name.trim()) {
@@ -58,23 +59,15 @@ export async function getStatusInternal(
     }
 
     const mcpName = args.mcp_name.trim();
-
-    let serverInfo;
+    let serverInfo: {
+      config: McpServerConfig | null;
+      runtime: MCPServerRuntimeState | null;
+    };
     try {
-      let profile;
-      try {
-        profile = Profiles.get().activeSync();
-      } catch {
-        return {
-          success: false,
-          mcp_name: mcpName,
-          status: 'NotAdded',
-          message: 'No active user session found. Please sign in first.',
-        };
-      }
+      const { store, mcpManager } = opts.profile;
       serverInfo = {
-        config: profile.mcp.get(mcpName) ?? null,
-        runtime: mcpClientManager.getMcpServerRuntimeState(mcpName) ?? null,
+        config: store.mcp.get(mcpName) ?? null,
+        runtime: mcpManager.getMcpServerRuntimeState(mcpName) ?? null,
       };
     } catch (error) {
       return {

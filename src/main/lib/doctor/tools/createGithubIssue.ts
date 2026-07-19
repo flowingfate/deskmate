@@ -43,17 +43,17 @@ interface IssueToken {
 let cached: IssueToken | null = null;
 const EXPIRATION_BUFFER = 5 * 60 * 1000; // 5 minutes
 
-async function getToken(): Promise<string> {
+async function getToken(taskId: string, signal: AbortSignal): Promise<string> {
   if (cached && cached.expires_at > Date.now() + EXPIRATION_BUFFER) {
     return cached.token;
   }
   let base = ONELINE_API_URL_BASE;
   // local 开发调试用
   // base = 'http://localhost:8787';
-  const res = await fetch(base + '/v1/github/issue-token');
+  const res = await fetch(base + '/v1/github/issue-token', { signal });
   if (!res.ok) {
     const error = await res.text();
-    appendDebugLog('Failed to get issue token', `Status: ${res.status}\nResponse: ${error}`);
+    appendDebugLog(taskId, 'Failed to get issue token', `Status: ${res.status}\nResponse: ${error}`);
     throw new Error(`Failed to get token: ${res.status} - ${error}`);
   }
   const data: IssueToken = await res.json();
@@ -67,8 +67,14 @@ interface GitHubIssue {
   state: string;
 }
 
-async function createIssue(title: string, body: string, labels: string[] = []): Promise<GitHubIssue> {
-  const token = await getToken();
+async function createIssue(
+  taskId: string,
+  title: string,
+  body: string,
+  signal: AbortSignal,
+  labels: string[] = [],
+): Promise<GitHubIssue> {
+  const token = await getToken(taskId, signal);
   const res = await fetch(`${GIT_REPO_API_URL_BASE}/issues`, {
     method: "POST",
     headers: {
@@ -77,22 +83,27 @@ async function createIssue(title: string, body: string, labels: string[] = []): 
       "X-GitHub-Api-Version": "2022-11-28",
     },
     body: JSON.stringify({ title, body, labels }),
-  });
+    signal,
 
+  });
   if (!res.ok) {
     const error = await res.text();
-    appendDebugLog('Failed to create GitHub issue', `Status: ${res.status}\nResponse: ${error}`);
+    appendDebugLog(taskId, 'Failed to create GitHub issue', `Status: ${res.status}\nResponse: ${error}`);
     throw new Error(`Failed to create issue: ${res.status} - ${error}`);
   }
 
   return res.json();
 }
 
-export async function executeCreateGithubIssue(args: {
-  title: string;
-  body: string;
-  labels?: string[];
-}): Promise<string> {
+export async function executeCreateGithubIssue(
+  args: {
+    title: string;
+    body: string;
+    labels?: string[];
+  },
+  taskId: string,
+  signal: AbortSignal,
+): Promise<string> {
   const { title, labels } = args;
   let { body } = args;
   if (!title || !body) {
@@ -106,9 +117,10 @@ export async function executeCreateGithubIssue(args: {
   }
 
   const allLabels = ['doctor', ...(labels || [])];
-  const issue = await createIssue(title, body, ['doctor']);
+  const issue = await createIssue(taskId, title, body, signal, ['doctor']);
 
   appendDebugLog(
+    taskId,
     `create_github_issue → #${issue.number}`,
     [
       `**URL:** ${issue.html_url}`,

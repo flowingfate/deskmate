@@ -5,8 +5,7 @@
  * 设计:
  *   - 所有 kernel `*Internal()` 都用 `vi.hoisted` 替成 spy fn,subcommand 实测
  *     时拿到的就是这些 mock 的返回值。
- *   - persist 层(`Profiles.get().active() / activeSync()` + `profile.skills.items`
- *     + `getAgent`)统一 mock 为对一个内部状态 obj 的读写,beforeEach 重置。
+ *   - owning `Profile.store` 的 skills / getAgent 绑定到内部状态,beforeEach 重置。
  *   - `runSkill('install foo --dry-run')` 直接走真实 dispatcher,确保 dispatcher
  *     + parseFlags + 子命令路由都被测到,不只是 unit-test 单 subcommand。
  *
@@ -20,6 +19,7 @@ import { vi } from 'vitest';
 
 import { Tracer } from '@shared/log/trace';
 import type { AgentToolContext } from '@main/pi/tools/types';
+import { testProfile } from '../../../../tools/__tests__/profileFixture';
 
 // ---------------------------------------------------------------------------
 // 被 mock 模块的 stub state(必须 hoisted —— vi.mock factory 在 import 前跑)
@@ -36,10 +36,7 @@ const skillMocks = vi.hoisted(() => ({
   getSkillStatusInternal: vi.fn(),
   searchLibraryInternal: vi.fn(),
 
-  // persist 层(uninstall.ts 走 activeSync 做 dry-run 提示;
-  // _shared.resolveDefaultAgentTarget 走 activeSync + getAgent;
-  // bind.ts kernel 自己也读 activeSync 但是 kernel 已被 mock 掉了)
-  profileActiveSync: vi.fn(),
+  // owning Profile store state
   profileGetAgent: vi.fn(),
   profileSkillsItems: vi.fn(),
 }));
@@ -74,13 +71,8 @@ vi.mock('@main/pi/appcmd/builtins/app/skill/kernel/searchLibrary', () => ({
   searchLibraryInternal: skillMocks.searchLibraryInternal,
 }));
 
-vi.mock('@main/persist', () => ({
-  Profiles: {
-    get: () => ({
-      activeSync: skillMocks.profileActiveSync,
-    }),
-  },
-}));
+
+vi.spyOn(testProfile.store, 'getAgent').mockImplementation((id) => skillMocks.profileGetAgent(id));
 
 // ---------------------------------------------------------------------------
 // dispatch helper —— 必须在 vi.mock 之后再 import 被测对象。
@@ -93,6 +85,7 @@ import { skillCommand } from '@main/pi/appcmd/builtins/app/skill';
 
 function makeCtx(overrides: Partial<AgentToolContext> = {}): AgentToolContext {
   return {
+    profile: testProfile,
     profileId: 'profile-test',
     agentId: 'agent-test',
     sessionId: 'session-test',
@@ -128,6 +121,7 @@ export async function runSkill(
     : argvOrCmdline.trim() === ''
       ? []
       : argvOrCmdline.trim().split(/\s+/);
+  testProfile.store.skills.items = skillMocks.profileSkillsItems();
   const ctx = makeCtx(overrides);
   const internal = await dispatchAppCommand(skillCommand, argv, ctx);
   return {
@@ -138,21 +132,14 @@ export async function runSkill(
   };
 }
 
-/**
- * beforeEach 默认状态:
- *   - profile.activeSync() 成功(空 skills,getAgent → undefined)
- *   - 所有 kernel mock 未配置(测试自己 mockResolvedValue / mockReturnValue)
- */
+/** beforeEach 重置所有 kernel 与 owning Profile store state。 */
 export function resetSkillMocks(): void {
   for (const fn of Object.values(skillMocks)) {
     fn.mockReset();
   }
   skillMocks.profileSkillsItems.mockReturnValue([]);
   skillMocks.profileGetAgent.mockResolvedValue(undefined);
-  skillMocks.profileActiveSync.mockImplementation(() => ({
-    skills: { items: skillMocks.profileSkillsItems() },
-    getAgent: skillMocks.profileGetAgent,
-  }));
+  testProfile.store.skills.items = [];
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +156,6 @@ describe('skill fixture sanity', () => {
         'getSkillStatusInternal',
         'installSkillInternal',
         'listSkillsInternal',
-        'profileActiveSync',
         'profileGetAgent',
         'profileSkillsItems',
         'searchLibraryInternal',

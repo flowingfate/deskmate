@@ -16,7 +16,7 @@ export interface CronWatchdogTaskRuntimeMeta {
 }
 
 export interface CronWatchdogOptions {
-  profileId: string | null;
+  profileId: string;
   heartbeatIntervalMs: number;
   cronJobIds: string[];
   getRuntimeMeta: (jobId: string) => CronWatchdogTaskRuntimeMeta | undefined;
@@ -32,9 +32,6 @@ export interface CronWatchdogOptions {
 
 export async function runCronWatchdog(options: CronWatchdogOptions): Promise<void> {
   const profileId = options.profileId;
-  if (!profileId) {
-    return;
-  }
 
   const checkedAtMs = options.nowMs ?? Date.now();
   const eligibleUntilMs = checkedAtMs - options.heartbeatIntervalMs;

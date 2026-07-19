@@ -8,7 +8,6 @@
  *   fetch + cache + re-render），并发同 id 合并为同一 Promise（inflight 模式）。
  *
  * 订阅通道：
- *   - persist:profile:switched → 清空整张表
  *   - persist:agent:updated    → 用 payload.detail 直接刷 cache（main 端写盘后下推
  *                                avoid 一次再 invoke 的 round-trip）
  *   - persist:agent:removed    → 删 entry
@@ -65,9 +64,7 @@ async function fetchDetail(agentId: string): Promise<void> {
 
 // ────────── 通道订阅 ──────────
 
-persistEvents['profile:switched'](() => {
-  change({ byId: {} });
-});
+
 
 persistEvents['agent:updated']((_e, payload) => {
   // detail 直接来自 main 端事件 payload，无需再 invoke。

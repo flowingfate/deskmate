@@ -9,9 +9,7 @@ import {
   MAX_RESUME_CATCH_UP_DELAY_MS,
   shouldCatchUpMissedOccurrence,
 } from './cronRecovery';
-import { executeSchedulerJob } from './execution';
-import type { SchedulerTaskRuntime } from './taskRuntime';
-import type { SchedulerExecutionResult } from './types';
+import type { SchedulerExecutionResult, SchedulerJobExecutor } from './types';
 
 const logger = log.child({ mod: 'SchedulerCatchUp' });
 const MAX_CATCH_UP_CONCURRENCY = 2;
@@ -41,19 +39,15 @@ export function getOrphanedPendingCatchUpJobIds(
 export class SchedulerCatchUp {
   constructor(
     private readonly context: SchedulerContext,
-    private readonly taskRuntime: SchedulerTaskRuntime,
+    private readonly executeJob: SchedulerJobExecutor,
   ) {}
 
   async recoverInterruptedScheduledSessions(): Promise<void> {
-    const profile = this.context.profile;
-    if (!profile) {
-      logger.info({ msg: 'Skipped interrupted-run recovery', profileId: this.context.profileId, schedulerGeneration: this.context.generation, reason: 'no-active-profile' });
-      return;
-    }
+    const store = this.context.store
 
     let totalRecovered = 0;
     try {
-      const flat = await profile.listJobsFlat();
+      const flat = await store.listJobsFlat();
       const completedAt = new Date().toISOString();
       const error = 'Interrupted by app shutdown';
       for (const { job } of flat) {
@@ -79,8 +73,7 @@ export class SchedulerCatchUp {
 
   async handleSystemResume(suspendedAtMs: number, resumedAtMs: number): Promise<void> {
     if (
-      !this.context.profileId
-      || !Number.isFinite(suspendedAtMs)
+      !Number.isFinite(suspendedAtMs)
       || !Number.isFinite(resumedAtMs)
       || resumedAtMs <= suspendedAtMs
     ) {
@@ -128,11 +121,9 @@ export class SchedulerCatchUp {
       const settled = await settleWithConcurrency(
         candidates,
         MAX_CATCH_UP_CONCURRENCY,
-        (job) => executeSchedulerJob({
+        (job) => this.executeJob({
           job,
           triggerSource: 'resume-catchup',
-          context: this.context,
-          taskRuntime: this.taskRuntime,
           expectedGeneration: schedulerGeneration,
         }),
       );
@@ -152,8 +143,8 @@ export class SchedulerCatchUp {
     pendingCatchUps: PendingCatchUps,
     schedulerGeneration: number,
   ): Promise<void> {
-    const profile = this.context.profile;
-    if (!profile || !this.context.isCurrentGeneration(schedulerGeneration)) {
+    const store = this.context.store
+    if (!this.context.isCurrentGeneration(schedulerGeneration)) {
       return;
     }
 
@@ -161,7 +152,7 @@ export class SchedulerCatchUp {
       (job): job is CronSchedulerJob => job.enabled && job.scheduleType === 'cron',
     );
     for (const jobId of getOrphanedPendingCatchUpJobIds(jobs, pendingCatchUps)) {
-      await profile.schedulerState.dequeueCatchUp(jobId);
+      await store.schedulerState.dequeueCatchUp(jobId);
       logger.info({ msg: 'Dropped orphaned pending catch-up', profileId: this.context.profileId, jobId, pendingOccurrenceAt: pendingCatchUps[jobId].occurrenceAt });
     }
 
@@ -178,7 +169,7 @@ export class SchedulerCatchUp {
 
       const pendingOccurrence = new Date(pendingCatchUp.occurrenceAt);
       if (!shouldCatchUpMissedOccurrence(pendingOccurrence, startupAtMs)) {
-        await profile.schedulerState.dequeueCatchUp(job.id);
+        await store.schedulerState.dequeueCatchUp(job.id);
         logger.info({ msg: 'Dropped stale pending catch-up', profileId: this.context.profileId, jobId: job.id, name: job.name, pendingOccurrenceAt: pendingCatchUp.occurrenceAt, recordedAt: pendingCatchUp.recordedAt });
         continue;
       }
@@ -258,13 +249,13 @@ export class SchedulerCatchUp {
     alreadyPending: boolean,
     schedulerGeneration: number,
   ): Promise<SchedulerExecutionResult> {
-    const profile = this.context.profile;
-    if (!profile || !this.context.isCurrentGeneration(schedulerGeneration)) {
+    const store = this.context.store
+    if (!this.context.isCurrentGeneration(schedulerGeneration)) {
       return { success: false, error: 'Scheduler generation is no longer active.' };
     }
 
     if (!alreadyPending) {
-      await profile.schedulerState.enqueueCatchUp(job.id, occurrenceAt, new Date().toISOString());
+      await store.schedulerState.enqueueCatchUp(job.id, occurrenceAt, new Date().toISOString());
     }
     if (!this.context.isCurrentGeneration(schedulerGeneration)) {
       return { success: false, error: 'Scheduler generation is no longer active.' };
@@ -275,15 +266,13 @@ export class SchedulerCatchUp {
       return { success: false, error: 'Schedule is no longer an enabled cron job.' };
     }
 
-    const result = await executeSchedulerJob({
+    const result = await this.executeJob({
       job: latestJob,
       triggerSource: 'cold-start-catchup',
-      context: this.context,
-      taskRuntime: this.taskRuntime,
       expectedGeneration: schedulerGeneration,
     });
     if (result.success && this.context.isCurrentGeneration(schedulerGeneration)) {
-      await profile.schedulerState.dequeueCatchUp(job.id);
+      await store.schedulerState.dequeueCatchUp(job.id);
     }
     return result;
   }

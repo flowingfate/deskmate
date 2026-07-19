@@ -10,9 +10,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 
-vi.mock('@main/pi/mcp', () => ({
-  listAllMcpTools: vi.fn(),
-}));
 
 // pi-ai 是 ESM-only 动态 import;mock 它的 Type.Unsafe 让 catalog 构造的
 // `parameters` 是可被断言的对象(原 schema 透传)。
@@ -22,7 +19,7 @@ vi.mock('@earendil-works/pi-ai', async () => ({
   },
 }));
 
-import { listAllMcpTools } from '../mcp';
+import { testProfile } from '../tools/__tests__/profileFixture';
 import { buildToolCatalogForAgent, ToolCatalog, type ToolRoute } from '../tool';
 import { tools as localRegistry } from '../tools/registry';
 
@@ -31,7 +28,7 @@ import { tools as localRegistry } from '../tools/registry';
 // 静态 toolsReady promise 已经 resolved —— 不会再重新注册。
 import '../tools/index';
 
-const mockedListAllMcp = vi.mocked(listAllMcpTools);
+const mockedGetAllMcpTools = vi.spyOn(testProfile.mcpManager, 'getAllTools');
 
 function freshRegistry(): void {
   const internalEntries = (localRegistry as unknown as { entries: Map<string, unknown> }).entries;
@@ -63,15 +60,15 @@ function localRoute(name: string): ToolRoute {
 describe('buildToolCatalogForAgent', () => {
   beforeEach(() => {
     freshRegistry();
-    mockedListAllMcp.mockReset();
-    mockedListAllMcp.mockResolvedValue([]);
+    mockedGetAllMcpTools.mockReset();
+    mockedGetAllMcpTools.mockResolvedValue([]);
   });
 
   it('tools 缺席 ⇒ 全开本地工具', async () => {
     const catalog = await buildToolCatalogForAgent({
       emoji: '', name: 'A', model: 'p::m',
       mcpServers: [], systemPrompt: '',
-    });
+    }, testProfile);
     expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a', 'local_b']);
     expect(catalog.getRoute('local_a')).toMatchObject({ kind: 'local', tool: { spec: { name: 'local_a' } } });
     expect(catalog.getRoute('local_b')).toMatchObject({ kind: 'local', tool: { spec: { name: 'local_b' } } });
@@ -82,7 +79,7 @@ describe('buildToolCatalogForAgent', () => {
     const catalog = await buildToolCatalogForAgent({
       emoji: '', name: 'A', model: 'p::m',
       tools: [], mcpServers: [], systemPrompt: '',
-    });
+    }, testProfile);
     expect(catalog.specs.length).toBe(3);
   });
 
@@ -90,12 +87,12 @@ describe('buildToolCatalogForAgent', () => {
     const catalog = await buildToolCatalogForAgent({
       emoji: '', name: 'A', model: 'p::m',
       tools: ['local_a', 'nonexistent'], mcpServers: [], systemPrompt: '',
-    });
+    }, testProfile);
     expect(catalog.specs.map((s) => s.name)).toEqual(['local_a']);
   });
 
   it('mcpServers 以 serverName/toolName 注入 LLM 目录', async () => {
-    mockedListAllMcp.mockResolvedValue([
+    mockedGetAllMcpTools.mockResolvedValue([
       { serverName: 'srv1', name: 'mcp_x', description: 'x', inputSchema: { type: 'object' } },
       { serverName: 'srv2', name: 'mcp_y', description: 'y', inputSchema: { type: 'object' } },
     ]);
@@ -104,27 +101,27 @@ describe('buildToolCatalogForAgent', () => {
       tools: [],
       mcpServers: [{ name: 'srv1', tools: [] }],
       systemPrompt: '',
-    });
+    }, testProfile);
     expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a', 'local_b', 'srv1/mcp_x']);
     expect(catalog.getRoute('srv1/mcp_x')).toEqual({ kind: 'mcp', serverName: 'srv1', toolName: 'mcp_x' });
     expect(catalog.getRoute('srv2/mcp_y')).toBeUndefined();
   });
 
   it('本地与 MCP 同名 tool 可同时暴露', async () => {
-    mockedListAllMcp.mockResolvedValue([
+    mockedGetAllMcpTools.mockResolvedValue([
       { serverName: 'srv1', name: 'local_a', description: 'collision', inputSchema: { type: 'object' } },
     ]);
     const catalog = await buildToolCatalogForAgent({
       emoji: '', name: 'A', model: 'p::m',
       tools: [], mcpServers: [{ name: 'srv1', tools: [] }], systemPrompt: '',
-    });
+    }, testProfile);
     expect(catalog.specs.map((s) => s.name).sort()).toEqual(['app', 'local_a', 'local_b', 'srv1/local_a']);
     expect(catalog.getRoute('local_a')).toMatchObject({ kind: 'local', tool: { spec: { name: 'local_a' } } });
     expect(catalog.getRoute('srv1/local_a')).toEqual({ kind: 'mcp', serverName: 'srv1', toolName: 'local_a' });
   });
 
   it('两个 MCP server 的同名 tool 可同时暴露', async () => {
-    mockedListAllMcp.mockResolvedValue([
+    mockedGetAllMcpTools.mockResolvedValue([
       { serverName: 'srv1', name: 'shared', description: 'x', inputSchema: { type: 'object' } },
       { serverName: 'srv2', name: 'shared', description: 'y', inputSchema: { type: 'object' } },
     ]);
@@ -136,7 +133,7 @@ describe('buildToolCatalogForAgent', () => {
         { name: 'srv2', tools: [] },
       ],
       systemPrompt: '',
-    });
+    }, testProfile);
     expect(catalog.specs.map((s) => s.name).sort()).toEqual(['srv1/shared', 'srv2/shared']);
     expect(catalog.getRoute('srv1/shared')).toEqual({ kind: 'mcp', serverName: 'srv1', toolName: 'shared' });
     expect(catalog.getRoute('srv2/shared')).toEqual({ kind: 'mcp', serverName: 'srv2', toolName: 'shared' });

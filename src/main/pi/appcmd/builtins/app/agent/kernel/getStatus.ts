@@ -1,5 +1,5 @@
 /**
- * Agent "status" 内核 —— 按名字查询 agent 在当前 active profile 中的状态。
+ * Agent "status" 内核 —— 按名字查询 owning Profile 中的 agent 状态。
  *
  * 角色:被 `appcmd/builtins/app/agent/status.ts` 调用。
  *
@@ -9,7 +9,7 @@
  * 失败不抛,`signal` 仅做契约形状对齐。
  */
 
-import { Profiles } from '@main/persist';
+import type { ProfileStore } from '@main/persist';
 
 export type AgentStatus = 'NotAdded' | 'Added';
 
@@ -31,6 +31,7 @@ export interface GetStatusResult {
 }
 
 export async function getStatusInternal(
+  store: ProfileStore,
   args: GetStatusArgs,
   _opts?: { signal?: AbortSignal },
 ): Promise<GetStatusResult> {
@@ -45,9 +46,7 @@ export async function getStatusInternal(
     }
 
     const agentName = args.agent_name.trim();
-
-    const profile = await Profiles.get().active();
-    const records = profile.listAgents();
+    const records = store.listAgents();
     const rec = records.find((r) => r.name === agentName);
 
     if (!rec) {
@@ -59,7 +58,7 @@ export async function getStatusInternal(
       };
     }
 
-    const agent = await profile.getAgent(rec.id);
+    const agent = await store.getAgent(rec.id);
     return {
       success: true,
       agent_name: agentName,

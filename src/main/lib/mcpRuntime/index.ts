@@ -1,5 +1,5 @@
 /**
- * MCP client manager(单例)。
+ * Profile-bound MCP client manager。
  *
  * 责任:
  *   - 维护 `serverName -> McpClient` 实例;
@@ -7,8 +7,8 @@
  *     并做 debounce IPC 推送;
  *   - 通过 `OperationLockRegistry` 保证同 server 上 connect / disconnect /
  *     reconnect 三种操作互斥;
- *   - 生命周期编排(初始化 → 按 in_use 起连接;profile 切换 → ghost sweep;
- *     进程退出 → 全量 cleanup 并回收挂死子进程);
+ *   - 生命周期编排(初始化 → 按 in_use 起连接；Profile 停止 → 全量 cleanup
+ *     并回收挂死子进程);
  *   - Server 增删改的对外入口;
  *   - `executeToolOnServer` 的最终派发。
  *
@@ -18,8 +18,9 @@
  */
 
 import { McpClient } from './mcpClient';
-import { mcpAuthService } from './auth';
-import { activeMcp, patchServerConfig } from './manager/configStore';
+import { McpAuthService, type McpAuthConsentDecision } from './auth';
+import { getMcpOAuthServerKey } from './auth/serverKey';
+import type { McpAuthClientIdResponse } from '@shared/types/mcpAuth';
 import { OperationLockRegistry } from './manager/operationLock';
 import { RuntimeStateStore } from './manager/runtimeStateStore';
 import {
@@ -28,8 +29,19 @@ import {
   type McpTool,
 } from './manager/types';
 import { log } from '@main/log';
-import type { McpServerConfig } from '@shared/persist/types'
+import type { McpServerConfig } from '@shared/persist/types';
 
+
+/** MCP runtime 实际依赖的 ProfileStore 窄接口，便于独立验证连接生命周期。 */
+interface McpRuntimeStore {
+  readonly id: string;
+  readonly mcp: {
+    readonly items: McpServerConfig[];
+    get(name: string): McpServerConfig | undefined;
+    upsert(server: McpServerConfig): Promise<void>;
+    remove(name: string): Promise<void>;
+  };
+}
 // 供外部导入的公共类型 —— 保持与旧文件相同的模块出口。
 export type { MCPServerRuntimeState, MCPServerStatus } from './manager/types';
 
@@ -39,7 +51,7 @@ export type { MCPServerRuntimeState, MCPServerStatus } from './manager/types';
  *   - 进程死了但 `exit` 事件丢了 —— 再等无益;
  *   - 内核 D-state —— 用户态无解;
  *   - 孙子进程被 init 收养 —— 那是 terminal 层 detached spawn 的活,不在此处兜底。
- * 所以超时**只放弃等待,不再做额外清理**,让 profile 切换/退出前进,别把上层卡死。
+ * 所以超时**只放弃等待,不再做额外清理**,让 Profile 停止 / 进程退出前进,别把上层卡死。
  */
 const CLIENT_CLEANUP_TIMEOUT_MS = 10_000;
 
@@ -54,7 +66,7 @@ interface ActiveConnection {
   done: Promise<void>;
 }
 
-/** `getAllTools` 返回的形态 —— 与 `pi/mcp.ts::McpToolDef` 字段对齐。 */
+/** `getAllTools` 返回的形态 —— 供 `pi/tool.ts` 的 catalog 直接消费。 */
 export interface McpToolWithServer extends McpTool {
   serverName: string;
 }
@@ -63,16 +75,21 @@ export class MCPClientManager {
   private readonly clients = new Map<string, McpClient>();
   private readonly activeConnections = new Map<string, ActiveConnection>();
   private readonly locks = new OperationLockRegistry();
-  private readonly store = new RuntimeStateStore();
-
+  private readonly runtimeState: RuntimeStateStore;
+  private readonly authService: McpAuthService;
   private initialized = false;
+  private readonly unsubscribeInteraction: () => void;
+  private readonly pendingBackgroundOperations = new Map<string, number>();
+  private nextBackgroundOperation = 0;
 
-  constructor() {
+  public constructor(private readonly store: McpRuntimeStore) {
+    this.runtimeState = new RuntimeStateStore(store.id);
+    this.authService = new McpAuthService(store.id);
     // Auth consent 分发期间 server 临时进 `needs-user-interaction` —— 让
     // UI 立刻能显示 pending 状态,而不是继续显示 connecting。
-    mcpAuthService.onInteraction(({ serverName, phase }) => {
+    this.unsubscribeInteraction = this.authService.onInteraction(({ serverName, phase }) => {
       if (phase === 'consent-requested') {
-        this.store.setStatus(serverName, 'needs-user-interaction');
+        this.runtimeState.setStatus(serverName, 'needs-user-interaction');
       }
     });
   }
@@ -89,28 +106,24 @@ export class MCPClientManager {
     if (this.initialized) return;
 
     await this.sweepGhostState();
+    this.initialized = true;
 
-    const items = (await activeMcp()).items;
-    for (const cfg of items) {
+    for (const cfg of this.store.mcp.items) {
       if (cfg.in_use) this.startBackgroundConnect(cfg.name);
     }
-
-    this.initialized = true;
   }
-
-  getAllMcpServerRuntimeStates(): MCPServerRuntimeState[] {
-    return this.store.getAll();
+  public getAllMcpServerRuntimeStates(): MCPServerRuntimeState[] {
+    return this.runtimeState.getAll();
   }
-
-  getMcpServerRuntimeState(serverName: string): MCPServerRuntimeState | undefined {
-    return this.store.get(serverName);
+  public getMcpServerRuntimeState(serverName: string): MCPServerRuntimeState | undefined {
+    return this.runtimeState.get(serverName);
   }
 
   /** 已连接 server 上所有工具的扁平列表(带 serverName)。 */
   async getAllTools(): Promise<McpToolWithServer[]> {
     if (!this.initialized) return [];
     const out: McpToolWithServer[] = [];
-    for (const state of this.store.getAll()) {
+    for (const state of this.runtimeState.getAll()) {
       if (state.status !== 'connected') continue;
       for (const tool of state.tools) {
         out.push({ ...tool, serverName: state.serverName });
@@ -130,6 +143,7 @@ export class MCPClientManager {
     toolArgs: Record<string, unknown>;
     signal?: AbortSignal;
   }): Promise<string> {
+    this.assertInitialized();
     const client = this.clients.get(args.serverName);
     if (!client) {
       throw new Error(`MCP server not connected: "${args.serverName}" (tool: ${args.toolName})`);
@@ -141,6 +155,18 @@ export class MCPClientManager {
     });
   }
 
+  respondAuthConsent(requestId: string, decision: McpAuthConsentDecision): boolean {
+    return this.authService.respondConsent(requestId, decision);
+  }
+
+  respondAuthClientId(requestId: string, response: McpAuthClientIdResponse): boolean {
+    return this.authService.respondClientId(requestId, response);
+  }
+
+  cancelAuthPrompts(): void {
+    this.authService.cancelPendingPrompts();
+  }
+
   async connect(serverName: string): Promise<void> {
     this.assertInitialized();
     await this.locks.run(serverName, 'connect', () => this.doConnect(serverName));
@@ -148,7 +174,9 @@ export class MCPClientManager {
 
   async disconnect(serverName: string): Promise<void> {
     this.assertInitialized();
-    await this.locks.run(serverName, 'disconnect', () => this.doDisconnect(serverName));
+    await this.cancelInFlightConnect(serverName);
+    this.assertInitialized();
+    await this.locks.runWhenIdle(serverName, 'disconnect', () => this.doDisconnect(serverName));
   }
 
   async reconnect(serverName: string): Promise<void> {
@@ -165,23 +193,12 @@ export class MCPClientManager {
     if (!serverName || !newConfig) throw new Error('Server name and configuration are required');
     if (newConfig.name !== serverName) throw new Error('Server name must match configuration name');
 
-    const mcp = await activeMcp();
+    const mcp = this.store.mcp;
     if (mcp.get(serverName)) throw new Error(`Server "${serverName}" already exists`);
-
     await mcp.upsert({ ...newConfig, in_use: true });
-    this.store.markConnecting(serverName);
+    this.runtimeState.markConnecting(serverName);
 
-    // 让当前 event loop 收尾(IPC 响应先返回给 renderer),再起后台连接。
-    setImmediate(() => {
-      this.doConnect(serverName).catch((err: unknown) => {
-        log.error({
-          msg: '[MCPClientManager] Background connect failed for add',
-          mod: 'MCPClientManager',
-          serverName,
-          err,
-        });
-      });
-    });
+    this.deferBackgroundOperation(serverName, () => this.startBackgroundConnect(serverName));
   }
 
   /** 更新 server 配置。同 `add`:写盘同步,断开+重连异步。 */
@@ -190,96 +207,84 @@ export class MCPClientManager {
     if (!serverName || !newConfig) throw new Error('Server name and configuration are required');
     if (newConfig.name !== serverName) throw new Error('Server name must match configuration name');
 
-    // 保持旧行为的两次存在性检查:先按 name 抛 "Server not found",再由 patch
-    // 侧兜底抛 "Failed to update server configuration for X"(旧代码里后者
-    // 逻辑上不会触发,但 IPC handler 的错误文案对齐这里)。
-    const mcp = await activeMcp();
-    if (!mcp.get(serverName)) throw new Error(`Server "${serverName}" not found`);
+    const mcp = this.store.mcp;
+    const existing = mcp.get(serverName);
+    if (!existing) throw new Error(`Server "${serverName}" not found`);
 
-    const currentStatus = this.store.get(serverName)?.status ?? 'disconnected';
-    const patched = await patchServerConfig(serverName, { ...newConfig, in_use: true });
-    if (!patched) throw new Error(`Failed to update server configuration for "${serverName}"`);
+    const updatedConfig = { ...existing, ...newConfig, name: serverName, in_use: true };
+    const existingOAuthKey = getMcpOAuthServerKey(serverName, existing);
+    const updatedOAuthKey = getMcpOAuthServerKey(serverName, updatedConfig);
+    if (existingOAuthKey !== updatedOAuthKey) {
+      await this.authService.clearAllOAuthForServer(serverName);
+    }
+    await mcp.upsert(updatedConfig);
 
-    this.store.markConnecting(serverName);
+    this.runtimeState.markConnecting(serverName);
 
-    setImmediate(async () => {
-      try {
-        if (currentStatus !== 'disconnected') await this.doDisconnect(serverName);
-        await this.doConnect(serverName);
-      } catch (err) {
-        log.error({
-          msg: '[MCPClientManager] Background update failed',
-          mod: 'MCPClientManager',
-          serverName,
-          err,
+    this.deferBackgroundOperation(serverName, () => {
+      void this.locks
+        .runWhenIdle(serverName, 'reconnect', () => this.doReconnect(serverName))
+        .catch((err: unknown) => {
+          log.error({
+            msg: '[MCPClientManager] Background update failed',
+            mod: 'MCPClientManager',
+            serverName,
+            err,
+          });
         });
-      }
     });
   }
 
+  async clearOAuthForServer(
+    serverName: string,
+    cfg: McpServerConfig,
+    scope: 'tokens' | 'all' = 'tokens',
+  ): Promise<void> {
+    this.assertInitialized();
+    await this.authService.clearOAuthForServer(serverName, cfg, scope);
+  }
+
   /**
-   * 删除 server。若连接中则先断开,再删配置,最后清 OAuth 凭据槽 —— 保证
-   * 后续重添同名 server 走干净 OAuth 流程。
+   * 删除 server。先清除所有历史 OAuth 槽，再删配置；这样不会让旧 refresh
+   * token 因配置身份变化而成为不可达的孤儿记录。
    */
   async delete(serverName: string): Promise<void> {
     this.assertInitialized();
     if (!serverName) throw new Error('Server name is required');
 
-    const mcp = await activeMcp();
-    // 快照配置:OAuth 槽 key 依赖 url/headers/oauth.*,配置删掉后就算不出 key。
-    const cfgSnapshot = mcp.get(serverName);
-    if (!cfgSnapshot) throw new Error(`Server "${serverName}" not found`);
+    const mcp = this.store.mcp;
+    if (!mcp.get(serverName)) throw new Error(`Server "${serverName}" not found`);
 
-    let configDeleted = false;
-    try {
-      const status = this.store.get(serverName)?.status ?? 'disconnected';
-      if (status !== 'disconnected') await this.disconnect(serverName);
+    this.pendingBackgroundOperations.delete(serverName);
+    const status = this.runtimeState.get(serverName)?.status ?? 'disconnected';
+    if (status !== 'disconnected') await this.disconnect(serverName);
 
-      await mcp.remove(serverName);
-      configDeleted = true;
-      this.store.remove(serverName);
-    } catch (error) {
-      // 对齐旧 delete 语义:非 Error 抛值统一包装成 `Failed to delete MCP
-      // server`,避免 IPC handler 拿到 primitive 反序列化出奇怪文案。
-      throw error instanceof Error ? error : new Error('Failed to delete MCP server');
-    } finally {
-      // stdio 无远程 auth,跳过。写配置失败(configDeleted=false)时不清
-      // 凭据 —— 用户重试删除时会再有机会。
-      if (configDeleted && cfgSnapshot.transport !== 'stdio') {
-        try {
-          await mcpAuthService.clearOAuthForServer(serverName, cfgSnapshot, 'all');
-        } catch (e) {
-          log.warn({
-            msg: `[MCPClientManager] Failed to clear OAuth credentials for "${serverName}" during delete`,
-            mod: 'MCPClientManager',
-            serverName,
-            err: e,
-          });
-        }
-      }
-    }
+    await this.authService.clearAllOAuthForServer(serverName);
+    await mcp.remove(serverName);
+    this.runtimeState.remove(serverName);
   }
 
-  /** 进程退出前调。挂死超时的 client 会触发孤儿子进程清理。 */
   async cleanup(): Promise<void> {
+    // 先关 lifecycle gate，后续 IPC / 延迟重连都不能在关闭过程中重建 client。
+    this.initialized = false;
+    this.pendingBackgroundOperations.clear();
+    this.authService.cancelPendingPrompts();
     await this.disposeAllClients();
-    this.store.dispose();
+    this.unsubscribeInteraction();
+    this.runtimeState.dispose();
   }
 
   /**
    * 清空所有 in-memory 连接资源(client / activeConnection / lock)并把
-   * manager 打回未初始化态。**profile 切换的 caller 侧唯一接口**:切
-   * profile 前先调它 → 旧 profile 的 client 全部 cleanup、`initialized`
-   * 复位;然后调 `initialize()` 起新 profile 的连接。也被 `cleanup`(进程
-   * 退出)复用 —— 后者额外再调 `store.dispose()`。
-   *
-   * **不动 store** —— 切 profile 时 renderer 仍要通过 store 广播观察状态,
-   * store 由 `sweepGhostState` 按新 baseline 精准剔除。
+   * manager 打回未初始化态。`cleanup` 供 Profile 停止 / 进程退出复用；它会
+   * 先取消尚未执行的后台连接与认证 prompt，再等待已启动 client cleanup。
    *
    * cleanup 超时(>10s)只 log warn 让 caller 前进;不做额外清理 —— 见
    * `CLIENT_CLEANUP_TIMEOUT_MS` 常量注释。
    */
   async disposeAllClients(): Promise<void> {
+    // `disposeAllClients` 也可被单独调用；同样必须先拒绝新工作。
+    this.initialized = false;
     // 先撬掉所有 in-flight connect,再等它们完全 settle:doConnect 的 finally
     // 会自己 cleanup transport 并 delete `activeConnections[serverName]`,
     // 走完再往下清 `this.clients`,避免"activeConnections.clear() 只删 Map
@@ -336,11 +341,11 @@ export class MCPClientManager {
   }
 
   /**
-   * Ghost sweep:清掉 profile 里不再存在但内存里还挂着的 client / state。
-   * profile 切换或首次 bootstrap 后调,防止上个 profile 的 server 残留。
+   * Ghost sweep:清掉当前 Profile 配置中已不存在、但内存里仍挂着的 client / state。
+   * 初始化时调用，防止配置删除后的运行时残留。
    */
   private async sweepGhostState(): Promise<void> {
-    const baseline = new Set((await activeMcp()).items.map((c) => c.name));
+    const baseline = new Set(this.store.mcp.items.map((c) => c.name));
 
     for (const name of [...this.clients.keys()]) {
       if (baseline.has(name)) continue;
@@ -360,9 +365,20 @@ export class MCPClientManager {
       }
     }
 
-    for (const state of this.store.getAll()) {
-      if (!baseline.has(state.serverName)) this.store.remove(state.serverName);
+    for (const state of this.runtimeState.getAll()) {
+      if (!baseline.has(state.serverName)) this.runtimeState.remove(state.serverName);
     }
+  }
+
+  private deferBackgroundOperation(serverName: string, operation: () => void): void {
+    const operationId = ++this.nextBackgroundOperation;
+    this.pendingBackgroundOperations.set(serverName, operationId);
+
+    setImmediate(() => {
+      if (!this.initialized || this.pendingBackgroundOperations.get(serverName) !== operationId) return;
+      this.pendingBackgroundOperations.delete(serverName);
+      operation();
+    });
   }
 
   /**
@@ -370,7 +386,8 @@ export class MCPClientManager {
    * 与手动 connect 撞车时靠 "is currently connecting" 错误静默去重。
    */
   private startBackgroundConnect(serverName: string): void {
-    this.locks
+    if (!this.initialized) return;
+    void this.locks
       .run(serverName, 'connect', () => this.doConnect(serverName))
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
@@ -400,6 +417,8 @@ export class MCPClientManager {
    * 二次抛出污染调用者。原始 reject 语义由 caller 拿到的返回 promise 承载。
    */
   private doConnect(serverName: string): Promise<void> {
+    if (!this.initialized) return Promise.resolve();
+
     const abort = new AbortController();
     const promise = this._runConnect(serverName, abort);
     const done = promise.catch(() => {});
@@ -408,15 +427,17 @@ export class MCPClientManager {
   }
 
   private async _runConnect(serverName: string, abort: AbortController): Promise<void> {
-    const cfg = (await activeMcp()).get(serverName);
+    const cfg = this.store.mcp.get(serverName);
     if (!cfg) {
       // cfg 检查发生在**外层 set 之后**(内层第一个 await 恢复时) ——
-      // 抛之前必须先手动 delete,否则 activeConnections 泄漏一个死条目。
-      this.activeConnections.delete(serverName);
+      // 仅删除本次 connection，不能误删随后建立的新连接。
+      if (this.activeConnections.get(serverName)?.abort === abort) {
+        this.activeConnections.delete(serverName);
+      }
       throw new Error(`Server "${serverName}" not found in configuration`);
     }
 
-    this.store.setStatus(serverName, 'connecting');
+    this.runtimeState.setStatus(serverName, 'connecting');
 
     // outer scope 引用:失败/未 set 进 this.clients 时,finally 兜底 cleanup
     // 避免 transport 泄漏(new McpClient 就抛错的极端情况下也仍为 null 安全)。
@@ -425,7 +446,7 @@ export class MCPClientManager {
     try {
       // 直接透传整个 cfg —— 旧代码手动挑字段时漏掉了 `oauth`,导致用户配的
       // clientId / callbackPort 到不了 transport。这里保留全字段。
-      client = new McpClient(cfg);
+      client = new McpClient(cfg, this.authService);
 
       // 失败 / 取消统一 throw:失败已在 McpClient 内 log.warn + enrich 根因,
       // 这里只负责把 error 映射成 runtime state。
@@ -433,27 +454,29 @@ export class MCPClientManager {
 
       const tools = transformTools(await client.getTools());
       if (tools.length === 0) {
-        this.store.markError(serverName, new Error('Connection successful but no tools available'));
+        this.runtimeState.markError(serverName, new Error('Connection successful but no tools available'));
         return;
       }
 
-      // 只有真正连上且拿到 tools 才把 client 挂进 map、把 in_use 标 true。
+      // 只有成功拿到 tools 才把 client 挂进 map、把 in_use 标 true。
       // 失败路径**不写 in_use=true** —— 否则用户手动 connect 一个 in_use=false
       // 的 server(disconnect 过或刚添加未启)失败后,下次 bootstrap 会自动
       // 重连这个已知失败的 server,与用户"试试连一下"的意图不符。
       this.clients.set(serverName, client);
-      this.store.markConnected(serverName, tools);
+      this.runtimeState.markConnected(serverName, tools);
       await this.safePatchInUse(serverName, true);
     } catch (error) {
       // abort:由 doDisconnect 后续 `setStatus('disconnecting') → markDisconnected`
       // 全权负责状态终态,这里什么都不写。
       if (abort.signal.aborted) return;
-      this.store.markError(
+      this.runtimeState.markError(
         serverName,
         error instanceof Error ? error : new Error('Connection failed'),
       );
     } finally {
-      this.activeConnections.delete(serverName);
+      if (this.activeConnections.get(serverName)?.abort === abort) {
+        this.activeConnections.delete(serverName);
+      }
       // **cleanup 归本函数独占** —— cancelInFlightConnect / disposeAllClients
       // 只 abort + await done,不再对同一 client 二次 cleanup。
       // 未 set 进 this.clients 的实例(失败/取消/tools 为空)兜底清 transport。
@@ -468,11 +491,7 @@ export class MCPClientManager {
   }
 
   private async doDisconnect(serverName: string): Promise<void> {
-    // cancelInFlightConnect 已经把 active.done 用 `.catch(()=>{})` 收敛,不
-    // 抛。它返回时 in-flight doConnect 的 finally 已经走完(client 已 cleanup、
-    // activeConnections 已 delete)—— 相当于一次同步屏障。
-    await this.cancelInFlightConnect(serverName);
-    this.store.setStatus(serverName, 'disconnecting');
+    this.runtimeState.setStatus(serverName, 'disconnecting');
 
     const client = this.clients.get(serverName);
     if (client) {
@@ -496,7 +515,7 @@ export class MCPClientManager {
     // 已 disconnected 的 server 挂个红条。
     await this.safePatchInUse(serverName, false);
 
-    this.store.markDisconnected(serverName);
+    this.runtimeState.markDisconnected(serverName);
   }
 
   /**
@@ -510,6 +529,9 @@ export class MCPClientManager {
    * 不写 `in_use=false` 中间态 —— 与 UI 上"重连"按钮的用户预期一致。
    */
   private async doReconnect(serverName: string): Promise<void> {
+    // 配置更新的后台任务可能在 Profile 停止期间才取得锁；`doConnect` 会再次
+    // 检查 lifecycle gate，确保不会在 cleanup 后重建 client。
+    if (!this.initialized) return;
     const oldClient = this.clients.get(serverName);
     if (oldClient) {
       this.clients.delete(serverName);
@@ -528,16 +550,10 @@ export class MCPClientManager {
   }
 
   /**
-   * 撬掉正在跑的 connect —— disconnect 前置。语义:释放 lock、abort connect
-   * 的 signal、等 doConnect 完全 settle(catch/finally 都走完)。
-   *
-   * **cleanup 由 doConnect 独占** —— 本函数**不**自己调 `client.cleanup()`,
-   * 那属于 doConnect 的 finally 分支。这里只负责"发信号 + 等它跑完",
-   * 保证 disconnect 返回时子进程一定已经 stop、activeConnections 已清空。
+   * 取消正在跑的 connect 并等待它完整收尾。连接锁由原 `run()` 自然释放；
+   * 此处不得提前删锁，否则旧操作的 finally 可能误删后继操作的锁。
    */
   private async cancelInFlightConnect(serverName: string): Promise<void> {
-    this.locks.forceRelease(serverName);
-
     const active = this.activeConnections.get(serverName);
     if (!active) return;
 
@@ -553,18 +569,18 @@ export class MCPClientManager {
    */
   private async safePatchInUse(serverName: string, inUse: boolean): Promise<void> {
     try {
-      await patchServerConfig(serverName, { in_use: inUse });
-    } catch (e) {
+      const existing = this.store.mcp.get(serverName);
+      if (!existing) return;
+      await this.store.mcp.upsert({ ...existing, in_use: inUse });
+    } catch (error) {
       log.warn({
         msg: `[MCPClientManager] patch in_use failed for "${serverName}"`,
         mod: 'MCPClientManager',
         serverName,
         inUse,
-        err: e,
+        err: error,
       });
     }
   }
 }
 
-/** 单例导出 —— 与旧文件保持相同符号名。 */
-export const mcpClientManager = new MCPClientManager();

@@ -15,7 +15,6 @@ function invoke(channel: string): Promise<boolean | object> {
     return Promise.resolve({
       success: true,
       data: {
-        profileId: storyProfileId,
         settings: {},
         agents: [
           {

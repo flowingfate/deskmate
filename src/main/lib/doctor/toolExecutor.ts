@@ -17,24 +17,27 @@ import { executeCreateGithubIssue } from './tools/createGithubIssue';
 import { executeAskUserQuestion } from './tools/askUserQuestion';
 import { log } from '@main/log';
 
+import type { ProfileStore } from '@main/persist';
+import type { DoctorTask } from './task';
 const logger = log;
 
 export interface ToolContext {
-  taskId: string;
+  task: DoctorTask;
+  store: ProfileStore;
 }
 
 const handlers: Record<string, (args: any, context: ToolContext) => Promise<string>> = {
-  get_app_info: (args) => executeGetAppInfo(),
-  get_app_knowledge: (args) => executeGetAppKnowledge(),
+  get_app_info: () => executeGetAppInfo(),
+  get_app_knowledge: () => executeGetAppKnowledge(),
   read_app_logs: (args) => executeReadAppLogs(args),
   get_log_schema: () => executeGetLogSchema(),
   trace_timeline: (args) => executeTraceTimeline(args),
-  read_chat_session: (args) => executeReadChatSession(args),
-  get_chat_messages: (args) => executeGetChatMessages(args),
-  get_crash_status: (args) => executeGetCrashStatus(),
+  read_chat_session: (args, context) => executeReadChatSession(context.store, args),
+  get_chat_messages: (args, context) => executeGetChatMessages(context.store, args),
+  get_crash_status: () => executeGetCrashStatus(),
   read_crash_bundle: (args) => executeReadCrashBundle(args),
-  read_schedules: (args) => executeReadSchedules(args),
-  create_github_issue: (args) => executeCreateGithubIssue(args),
+  read_schedules: (args, context) => executeReadSchedules(context.store, args),
+  create_github_issue: (args, context) => executeCreateGithubIssue(args, context.task.id, context.task.signal),
   ask_user_question: (args, context) => executeAskUserQuestion(args, context),
 };
 
