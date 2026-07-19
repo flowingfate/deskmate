@@ -144,7 +144,7 @@ ChatView (URL→会话同步)
 ### 用户消息编辑
 内联用户消息编辑通过 `editMessageAtom` 管理。`ChatContainer` 为正在编辑的消息渲染 `EditInlineInput`；底部主输入则保持为 `ComposeInput`，必要时通过 `isInputLocked` 进入只读锁定态。编辑确认对话框由 `AgentLayout` 挂载 `ModifyMsgConfimOverlay`；`EditInlineInput` 通过其导出的 **imperative confirm atom** `inlineEditConfirmAtom.request({title, description}): Promise<boolean>` 发起确认（旧的 `chatInput:confirmInlineEditRequest/Result` 两段式 window 事件已移除）；skip 逻辑在 `request` 内同步读 `confirmationSettings.inlineEditRegenerate.skipConfirmation`（持久化在 `profile.json`）。
 
-Agent avatar 的 `EmojiPicker` 采用 shadcn `Dialog`：打开时聚焦 Confirm，Radix 负责焦点陷阱、Esc 关闭与触发器焦点恢复；两个调用入口保持不变。
+Agent avatar 使用通用 [`shadcn/emoji-picker.tsx`](../../shadcn/emoji-picker.tsx) 的 `EmojiPicker`：它由 Frimousse 提供可虚拟化的完整 Unicode grid，并以 shadcn `Popover` 承载，固定 10 列填满 picker 宽度。搜索为空时显示分类 icon toolbar，点击分类立即跳转到相应 section，手动滚动同步激活态；搜索期间隐藏 toolbar。首次打开从 Emojibase 拉取并缓存数据，选中 emoji 即更新表单并关闭。两个调用入口保持一致。
 
 ### 侧边栏和编辑器
 Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `ChatView` 的子组件。Agent 编辑器（`agent-editor/`）在导航到 `/agent/:agentId/settings/*` 时出现。首次进入某个 Agent 的设置时，路由 loader 记录前一条完整 URL；同一 Agent 内的 tab 切换不会覆盖它，`AgentEditingView` 顶部返回按钮优先回到该入口。深链 / 刷新没有入口时才回退到 `/agent/:agentId`。**定时任务（jobs / runs）UI 已搬迁到 [`components/agent-side/`](../agent-side/ai.prompt.md)**：alarm 切换 + jobs CRUD + runs 列表 + AddScheduleOverlay 全部走那条主从二级视图，URL 是真相源；`SchedulesSidepane` / `AgentSchedulesTab` / `SchedulesContentView` 已物理删除。

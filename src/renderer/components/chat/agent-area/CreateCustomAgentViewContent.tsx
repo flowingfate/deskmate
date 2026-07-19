@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useToast } from '../../ui/ToastProvider'
 import { getAgents, listenAgents, useAgents } from '@/states/agents.atom'
 import { addAgentConfig } from '../../../lib/chat/agentOps'
-import EmojiPicker from '../agent-editor/EmojiPicker'
+import EmojiPicker from '@/shadcn/emoji-picker'
 import { Button } from '@/shadcn/button'
 import { AlertTriangle } from 'lucide-react'
 import { log } from '@/log';
@@ -38,7 +38,6 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
   const [isFormValid, setIsFormValid] = useState(false)
   const [nameWarning, setNameWarning] = useState<string>('')
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
 
   // 模型列表由 GroupedModelPicker 内部 hook 拉取，无需在此 effect 同步
@@ -87,10 +86,8 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
     handleInputChange('model', modelId)
   }, [handleInputChange])
 
-  // Handle Emoji selection
   const handleEmojiSelect = useCallback((emoji: string) => {
     handleInputChange('emoji', emoji)
-    setShowEmojiPicker(false)
   }, [handleInputChange])
 
   // Helper function to wait for the new agent to appear in the atom (after IPC roundtrip)
@@ -183,13 +180,18 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
       <div className="mb-6">
         <label className="mb-2 block text-sm font-semibold leading-5 text-[#272320]">Agent Avatar</label>
         <div className="flex items-center gap-4">
-          <div
-            className="flex size-16 cursor-pointer items-center justify-center rounded-xl border border-black/20 bg-white text-3xl transition-colors hover:border-[#404040] hover:bg-[#404040]/5"
-            onClick={() => setShowEmojiPicker(true)}
-            title="Click to change emoji"
-          >
-            {formData.emoji}
-          </div>
+          <EmojiPicker onEmojiSelect={handleEmojiSelect}>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-16 rounded-xl p-0 text-3xl"
+              title="Click to change emoji"
+              aria-label="Choose agent avatar"
+            >
+              {formData.emoji}
+            </Button>
+          </EmojiPicker>
           <span className="text-sm font-medium text-gray-500">Click to choose avatar</span>
         </div>
       </div>
@@ -252,13 +254,6 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
         </Button>
       </div>
 
-      {/* Emoji Picker Modal */}
-      <EmojiPicker
-        isOpen={showEmojiPicker}
-        onClose={() => setShowEmojiPicker(false)}
-        onEmojiSelect={handleEmojiSelect}
-        currentEmoji={formData.emoji}
-      />
     </div>
   )
 }

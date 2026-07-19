@@ -2,11 +2,12 @@ import React, { useState, useCallback, useMemo } from 'react'
 
 import { TabComponentProps } from './types'
 import { AlertTriangle } from 'lucide-react'
-import EmojiPicker from './EmojiPicker'
+import EmojiPicker from '@/shadcn/emoji-picker'
 import { useAgents } from '@/states/agents.atom'
 import { AgentAvatar } from '../../common/AgentAvatar'
 import { ModelSelectPopover } from '../ModelSelectPopover'
 import { useDirtyTracker } from './useDirtyTracker'
+import { Button } from '@/shadcn/button'
 
 const EMPTY_MODEL = '' // Step 9+：不再默认填一个 GHC modelId；让用户主动选
 
@@ -31,7 +32,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
   const version = agentData?.version || ''
 
   // UI state
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [nameWarning, setNameWarning] = useState<string>('')
 
@@ -126,10 +126,8 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
     // This clears errors from Save All Changes when user starts editing the name
   }, [validationErrors, checkDuplicateName])
 
-  // Handle Emoji selection
   const handleEmojiSelect = useCallback((emoji: string) => {
     handleInputChange('emoji', emoji)
-    setShowEmojiPicker(false)
   }, [handleInputChange])
 
   // Handle model selection
@@ -146,20 +144,25 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
         <div className="mb-4.5">
           <label className="block mb-1.5 text-[13px] font-medium text-content">Agent Avatar</label>
           <div className="flex items-center gap-4">
-            <div
-              className="flex items-center justify-center size-12 rounded-lg border border-black/10 bg-surface-primary text-2xl cursor-pointer transition-all hover:border-gray-400 hover:bg-black/5"
-              onClick={() => !isAvatarNameDisabled && setShowEmojiPicker(true)}
-              title={readOnly ? "Avatar cannot be modified" : isLocked ? "This agent is locked; its avatar cannot be modified" : "Click to change avatar"}
-              style={isAvatarNameDisabled ? { cursor: 'not-allowed', opacity: 0.6 } : undefined}
-            >
-              <AgentAvatar
-                emoji={formData.emoji}
-                avatar={formData.avatar}
-                name={formData.name}
-                size="lg"
-                version={version}
-              />
-            </div>
+            <EmojiPicker onEmojiSelect={handleEmojiSelect}>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-12 rounded-lg p-0"
+                disabled={isAvatarNameDisabled}
+                title={readOnly ? 'Avatar cannot be modified' : isLocked ? 'This agent is locked; its avatar cannot be modified' : 'Click to change avatar'}
+                aria-label="Choose agent avatar"
+              >
+                <AgentAvatar
+                  emoji={formData.emoji}
+                  avatar={formData.avatar}
+                  name={formData.name}
+                  size="lg"
+                  version={version}
+                />
+              </Button>
+            </EmojiPicker>
             <span className="text-content-secondary text-[13px] font-normal">
               {readOnly ? "Avatar cannot be modified" : isLocked ? "This agent is locked; its avatar cannot be modified" : "Click to choose avatar"}
             </span>
@@ -244,13 +247,6 @@ const AgentBasicTab: React.FC<TabComponentProps> = ({
 
       </div>
 
-      {/* Emoji Picker Modal */}
-      <EmojiPicker
-        isOpen={showEmojiPicker}
-        onClose={() => setShowEmojiPicker(false)}
-        onEmojiSelect={handleEmojiSelect}
-        currentEmoji={formData.emoji}
-      />
 
     </div>
   )
