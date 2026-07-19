@@ -1,6 +1,6 @@
 # DESKMATE AI Studio — 主进程架构
 
-<!-- Last verified: 2026-07-18 (explicit Profile routing and defaultProfileId) -->
+<!-- Last verified: 2026-07-19 (per-Profile main-window state) -->
 ## 1. 范围
 
 本文档覆盖**主进程**（`src/main/`）和**预加载脚本**（`src/preload/`）。渲染进程架构见 [arch-render.md](arch-render.md)。
@@ -99,9 +99,10 @@
 
 ```
 ~/.deskmate/
-├── app.json, device-id, state/, cache/             # 顶层应用数据
+├── app.json, device-id, cache/                     # 顶层应用数据
+├── state/current-run.json                          # 进程级崩溃恢复标记
 ├── profiles/                                        # 用户态数据全集 —— 完整 schema 详见 persist.md §3
-│   └── p_{ulid}/                                    #   settings/auth/index.db/agents/{sessions,schedules}/skills/mcp/models/archive
+│   └── p_{ulid}/window.json                         #   该 Profile 主窗口的 bounds / zoom / maximized
 ├── env/                                             # 运行时地盘（bun/uv/Python 装机产物，删了能整个重装）
 │   ├── bin/                                         # 真 bun/uv/uvx + python/uvx/bunx shim
 │   │   └── node-shims/                             # node/npm/npx shim（仅 MCP 前插；shell 走系统）

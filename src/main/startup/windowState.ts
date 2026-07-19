@@ -1,64 +1,148 @@
 /**
- * 主窗口几何记忆（位置 + 尺寸 + 所在屏幕）。
+ * 主窗口瞬时状态（几何、缩放、最大化）。
  *
- * 窗口几何属于"瞬时 UI 状态"而非应用配置，故独立持久化到
- * `~/.deskmate/state/window.json`，不掺入 app.json 的配置管道。
- * 整个特性自包含于此模块：`restoreBounds()` 供窗口构造时展开，
- * `trackBounds()` 在创建后挂上防抖保存。最大化状态仍由 app.json 单独管理。
+ * 每个主窗口不可变地绑定一个 Profile，因此状态持久化到
+ * `~/.deskmate/profiles/{profileId}/window.json`。`state/current-run.json` 仍是
+ * 整个应用进程的崩溃恢复标记，不属于任何 Profile。
+ *
+ * `state/windows/{profileId}.json` 与更早的 `state/window.json` 都只作为迁移
+ * 回退；下一次对应状态写入会落到 Profile 目录。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { BrowserWindow, screen, type Rectangle } from 'electron';
-import { getStateDir } from '@main/persist/lib/path';
+import { z } from 'zod';
+import { getAppDataPath, getStateDir } from '@main/persist/lib/path';
+import { PERSIST_PATH } from '@shared/persist/path';
 
-const stateFile = () => path.join(getStateDir(), 'window.json');
+const boundsSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  width: z.number().finite().positive(),
+  height: z.number().finite().positive(),
+});
+
+const windowStateSchema = z.object({
+  version: z.literal(1).optional(),
+  bounds: boundsSchema.optional(),
+  zoomLevel: z.number().finite().optional(),
+  maximized: z.boolean().optional(),
+});
+
+type PersistedWindowState = z.infer<typeof windowStateSchema>;
+
+const states = new Map<string, PersistedWindowState>();
+const writes = new Map<string, Promise<void>>();
+
+const stateFile = (profileId: string) => PERSIST_PATH.windowStateFile(getAppDataPath(), profileId);
+const transitionalStateFile = (profileId: string) =>
+  path.join(getStateDir(), 'windows', `${encodeURIComponent(profileId)}.json`);
+const legacyBoundsFile = () => path.join(getStateDir(), 'window.json');
 
 // 至少要有这么大的可见交集，才认为窗口"还在某块屏幕上"（保证标题栏可被拖动）。
 const MIN_VISIBLE_W = 120;
 const MIN_VISIBLE_H = 80;
 
-/**
- * 读取上次几何，作为 BrowserWindow 构造选项展开。
- * - 区域仍落在某块已连接显示器上 → 返回完整 {x, y, width, height}。
- * - 区域已不可见（如外接屏拔出）→ 只返回尺寸，由系统居中。
- * - 无记录 / 读取失败 → 返回 {}，沿用调用方默认值。
- */
-export function restoreBounds(): Partial<Rectangle> {
+function readStateFile(file: string): PersistedWindowState {
   try {
-    const b = JSON.parse(fs.readFileSync(stateFile(), 'utf-8')) as Rectangle;
-    if (![b.x, b.y, b.width, b.height].every(Number.isFinite) || b.width <= 0 || b.height <= 0) {
-      return {};
-    }
-    const visible = screen.getAllDisplays().some((d) => {
-      const wa = d.workArea;
-      const iw = Math.min(b.x + b.width, wa.x + wa.width) - Math.max(b.x, wa.x);
-      const ih = Math.min(b.y + b.height, wa.y + wa.height) - Math.max(b.y, wa.y);
-      return iw >= MIN_VISIBLE_W && ih >= MIN_VISIBLE_H;
-    });
-    return visible ? b : { width: b.width, height: b.height };
+    const parsed = windowStateSchema.safeParse(JSON.parse(fs.readFileSync(file, 'utf-8')));
+    return parsed.success ? parsed.data : {};
   } catch {
     return {};
   }
 }
 
+function readLegacyBounds(): Rectangle | undefined {
+  try {
+    const parsed = boundsSchema.safeParse(JSON.parse(fs.readFileSync(legacyBoundsFile(), 'utf-8')));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readState(profileId: string): PersistedWindowState {
+  const cached = states.get(profileId);
+  if (cached) return cached;
+
+  const state: PersistedWindowState = {
+    ...readStateFile(transitionalStateFile(profileId)),
+    ...readStateFile(stateFile(profileId)),
+  };
+  if (state.bounds === undefined) state.bounds = readLegacyBounds();
+  states.set(profileId, state);
+  return state;
+}
+
+function persistState(profileId: string): Promise<void> {
+  const previous = writes.get(profileId) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const state = readState(profileId);
+      state.version = 1;
+      await fs.promises.mkdir(path.dirname(stateFile(profileId)), { recursive: true });
+      await fs.promises.writeFile(stateFile(profileId), JSON.stringify(state));
+    });
+
+  writes.set(profileId, next);
+  return next.finally(() => {
+    if (writes.get(profileId) === next) writes.delete(profileId);
+  });
+}
+
+function updateState(profileId: string, update: PersistedWindowState): Promise<void> {
+  Object.assign(readState(profileId), update);
+  return persistState(profileId);
+}
+
 /**
- * 挂载 move / resize 监听，防抖（400ms）保存"还原态"几何。
- * 用 getNormalBounds：最大化/全屏时它返回还原后的位置，正是下次启动要恢复的。
+ * 读取指定 Profile 上次几何，作为 BrowserWindow 构造选项展开。
+ * - 区域仍落在某块已连接显示器上 → 返回完整 {x, y, width, height}。
+ * - 区域已不可见（如外接屏拔出）→ 只返回尺寸，由系统居中。
+ * - 无记录 / 读取失败 → 返回 {}，沿用调用方默认值。
  */
-export function trackBounds(win: BrowserWindow): void {
+export function restoreBounds(profileId: string): Partial<Rectangle> {
+  const bounds = readState(profileId).bounds;
+  if (!bounds) return {};
+
+  const visible = screen.getAllDisplays().some((display) => {
+    const workArea = display.workArea;
+    const width = Math.min(bounds.x + bounds.width, workArea.x + workArea.width) - Math.max(bounds.x, workArea.x);
+    const height = Math.min(bounds.y + bounds.height, workArea.y + workArea.height) - Math.max(bounds.y, workArea.y);
+    return width >= MIN_VISIBLE_W && height >= MIN_VISIBLE_H;
+  });
+  return visible ? bounds : { width: bounds.width, height: bounds.height };
+}
+
+/** 挂载 move / resize 监听，防抖保存指定 Profile 的还原态几何。 */
+export function trackBounds(win: BrowserWindow, profileId: string): void {
   let timer: NodeJS.Timeout | null = null;
   const save = () => {
     if (win.isDestroyed()) return;
     const bounds = win.getNormalBounds();
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
-      fs.promises
-        .mkdir(getStateDir(), { recursive: true })
-        .then(() => fs.promises.writeFile(stateFile(), JSON.stringify(bounds)))
-        .catch(() => {});
+      void updateState(profileId, { bounds }).catch(() => {});
     }, 400);
   };
   win.on('move', save);
   win.on('resize', save);
+}
+
+export function restoreZoomLevel(profileId: string, legacyZoomLevel: number): number {
+  return readState(profileId).zoomLevel ?? legacyZoomLevel;
+}
+
+export function persistZoomLevel(profileId: string, zoomLevel: number): Promise<void> {
+  return updateState(profileId, { zoomLevel });
+}
+
+export function restoreMaximized(profileId: string, legacyMaximized: boolean): boolean {
+  return readState(profileId).maximized ?? legacyMaximized;
+}
+
+export function persistMaximized(profileId: string, maximized: boolean): Promise<void> {
+  return updateState(profileId, { maximized });
 }

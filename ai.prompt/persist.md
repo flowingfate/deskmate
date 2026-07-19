@@ -1,6 +1,6 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-18 (ProfileRegistry-owned profiles index lifecycle) -->
+<!-- Last verified: 2026-07-19 (Profile-owned main-window state) -->
 
 ## 1. 范围
 
@@ -56,6 +56,7 @@
         ├── auth.json, auth.pi.json                # 未登录态不存在
         ├── index.db, index.db-wal, index.db-shm   # SQLite WAL;regular_sessions + job_runs
         ├── scheduler-state.json                   # scheduler cold-start catch-up
+        ├── window.json                            # 本 Profile 主窗口的 bounds / zoom / maximized
         ├── agents/
         │   ├── agents.json                        # items[] + primaryAgentId(替代旧 profile.json)
         │   └── a_{ulid}/

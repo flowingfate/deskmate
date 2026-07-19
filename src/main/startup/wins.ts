@@ -1,5 +1,6 @@
 import { appCacheManager } from '@main/lib/appCache';
 import { BrowserWindow } from 'electron';
+import { persistZoomLevel, restoreZoomLevel } from './windowState';
 import { mainToRender as windowMainToRender } from '@shared/ipc/window';
 
 export type WindowRole = 'main' | 'log' | 'screenshot' | 'research';
@@ -173,10 +174,17 @@ export const zoomLevel = (() => {
     return Math.min(zoomMax, Math.max(zoomMin, rounded));
   }
 
-  async function get(): Promise<number> {
+  function profileIdFor(window: BrowserWindow): string | null {
+    return getWindowMeta(window)?.profileId ?? null;
+  }
+
+  async function get(window: BrowserWindow): Promise<number> {
+    const profileId = profileIdFor(window);
+    if (!profileId) return 0;
+
     await appCacheManager.initialize();
-    const zoomLevel = appCacheManager.getConfig().zoomLevel;
-    return typeof zoomLevel === 'number' ? normalizeWindowZoomLevel(zoomLevel) : 0;
+    const legacyZoomLevel = appCacheManager.getConfig().zoomLevel ?? 0;
+    return normalizeWindowZoomLevel(restoreZoomLevel(profileId, legacyZoomLevel));
   }
 
   function apply(window: BrowserWindow, level: number): number {
@@ -188,26 +196,28 @@ export const zoomLevel = (() => {
     return next;
   }
 
-  async function persist(level: number): Promise<void> {
+  async function persist(window: BrowserWindow, level: number): Promise<void> {
+    const profileId = profileIdFor(window);
+    if (!profileId) return;
+
     try {
-      await appCacheManager.initialize();
-      await appCacheManager.updateConfig({ zoomLevel: level });
-    } catch (e) {
-      console.error('[Zoom] Failed to persist zoom level:', e);
+      await persistZoomLevel(profileId, level);
+    } catch (error) {
+      console.error('[Zoom] Failed to persist zoom level:', error);
     }
   }
 
   async function step(window: BrowserWindow, delta: number): Promise<number> {
-    const current = await get();
+    const current = await get(window);
     const next = normalizeWindowZoomLevel(current + delta);
     apply(window, next);
-    void persist(next);
+    void persist(window, next);
     return next;
   }
 
   async function reset(window: BrowserWindow): Promise<number> {
     const next = apply(window, 0);
-    void persist(next);
+    void persist(window, next);
     return next;
   }
 

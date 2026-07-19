@@ -14,6 +14,7 @@ export const PERSIST_PATH = {
   authFile:        (root: string, p: string) => `${PERSIST_PATH.profileDir(root, p)}/auth.json`,
   piAuthFile:      (root: string, p: string) => `${PERSIST_PATH.profileDir(root, p)}/auth.pi.json`,
   schedulerStateFile: (root: string, p: string) => `${PERSIST_PATH.profileDir(root, p)}/scheduler-state.json`,
+  windowStateFile: (root: string, p: string) => `${PERSIST_PATH.profileDir(root, p)}/window.json`,
 
   // agents
   agentsDir:       (root: string, p: string) => `${PERSIST_PATH.profileDir(root, p)}/agents`,

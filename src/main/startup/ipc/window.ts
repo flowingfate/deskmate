@@ -27,7 +27,7 @@ export default function() {
   const syncWindowZoomWithPersistedState = async (event: Electron.IpcMainInvokeEvent) => {
     const window = windowForSender(event);
     if (!window) return 0;
-    const zoomLevel = await winZoomLevel.get();
+    const zoomLevel = await winZoomLevel.get(window);
     return winZoomLevel.apply(window, zoomLevel);
   };
 

@@ -7,7 +7,7 @@ import { crashCaptureManager } from '@main/lib/crash/CrashCaptureManager';
 import { PRELOAD_PATH } from '@main/lib/buildPaths';
 
 import { appCacheManager } from '@main/lib/appCache';
-import { restoreBounds, trackBounds } from './windowState';
+import { persistMaximized, restoreBounds, restoreMaximized, trackBounds } from './windowState';
 import { ProfileRegistry } from '../profileRegistry'
 
 import { mainToRender as appMainToRender } from '@shared/ipc/app';
@@ -35,7 +35,7 @@ async function createMainWindowImpl(profileId: string): Promise<BrowserWindow> {
     width: 1200,
     height: 800,
     // 展开上次记忆的几何（位置 + 尺寸）；无记忆或窗口已离屏时回退上面的默认值。
-    ...restoreBounds(),
+    ...restoreBounds(profileId),
     minWidth: 1008,
     minHeight: 702,
     show: false, // Start hidden and show when ready
@@ -71,7 +71,7 @@ async function createMainWindowImpl(profileId: string): Promise<BrowserWindow> {
   });
 
   // 挂载窗口几何记忆：move / resize 后防抖保存，下次启动恢复到同一屏幕与位置。
-  trackBounds(window);
+  trackBounds(window, profileId);
 
   // Native right-click context menu for editable fields (Cut/Copy/Paste/Select All)
   window.webContents.on('context-menu', (_event, params) => {
@@ -109,33 +109,30 @@ async function createMainWindowImpl(profileId: string): Promise<BrowserWindow> {
   const applyPersistedZoomLevel = async (): Promise<void> => {
     try {
       if (window.isDestroyed()) return;
-
-      window.webContents.setZoomLevel(await zoomLevel.get());
-    } catch (e) {
-      console.error('[Zoom] Failed to restore zoom level:', e);
+      window.webContents.setZoomLevel(await zoomLevel.get(window));
+    } catch (error) {
+      console.error('[Zoom] Failed to restore zoom level:', error);
     }
   };
 
   const ensurePersistedZoomLevel = async (): Promise<void> => {
     try {
       if (window.isDestroyed()) return;
-
-      const persistedZoomLevel = await zoomLevel.get();
+      const persistedZoomLevel = await zoomLevel.get(window);
       const actualZoomLevel = window.webContents.getZoomLevel();
       if (actualZoomLevel !== persistedZoomLevel) {
         window.webContents.setZoomLevel(persistedZoomLevel);
       }
-    } catch (e) {
-      console.error('[Zoom] Failed to ensure zoom level:', e);
+    } catch (error) {
+      console.error('[Zoom] Failed to ensure zoom level:', error);
     }
   };
 
   const persistMainWindowMaximized = async (maximized: boolean) => {
     try {
-      await appCacheManager.initialize();
-      await appCacheManager.updateConfig({ mainWindowMaximized: maximized });
-    } catch (e) {
-      console.error('[WindowState] Failed to persist maximized state:', e);
+      await persistMaximized(profileId, maximized);
+    } catch (error) {
+      console.error('[WindowState] Failed to persist maximized state:', error);
     }
   };
 
@@ -193,8 +190,8 @@ async function createMainWindowImpl(profileId: string): Promise<BrowserWindow> {
     if (!window.isDestroyed()) {
       try {
         await appCacheManager.initialize();
-        const config = appCacheManager.getConfig();
-        if (config.mainWindowMaximized) {
+        const legacyMaximized = appCacheManager.getConfig().mainWindowMaximized ?? false;
+        if (restoreMaximized(profileId, legacyMaximized)) {
           window.maximize();
         }
       } catch (error) {
