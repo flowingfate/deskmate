@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ImageGalleryMenuAtom } from '../../menu/ImageGalleryContextMenu';
 import { log } from '@/log';
-import { useCurrentSession } from '@/states/currentSession.atom';
 import { toImageDisplaySrc } from '@/lib/mediaUrl';
 import { ImageViewerAtom } from '../../ui/OverlayImageViewer';
 
@@ -87,16 +86,19 @@ export const parseNewFormatMessage = (content: string, messageId: string, isStre
   return segments;
 };
 
-export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({ imageRegistry }) => {
+interface ImageGalleryNewProps {
+  agentId: string;
+  sessionId: string;
+  imageRegistry: Map<string, any>;
+}
+
+export const ImageGalleryNew: React.FC<ImageGalleryNewProps> = ({ agentId, sessionId, imageRegistry }) => {
   const [loadingStates, setLoadingStates] = useState<Map<string, boolean>>(new Map());
   const [errorStates, setErrorStates] = useState<Map<string, boolean>>(new Map());
   const [imageDimensions, setImageDimensions] = useState<Map<string, { width: number; height: number }>>(new Map());
 
   const FIXED_HEIGHT = 130;
   const imageGalleryMenuActions = ImageGalleryMenuAtom.useChange();
-
-  // media:// 直供需要的 ctx(agent + session);assistant 消息总属当前打开 session。
-  const { agentId, chatSessionId } = useCurrentSession();
   const imageViewer = ImageViewerAtom.useChange();
 
   // 同步解析展示 src —— **必须在渲染期算出,绝不延迟到 effect**。否则首帧 `cachedUrls`
@@ -108,10 +110,10 @@ export const ImageGalleryNew: React.FC<{ imageRegistry: Map<string, any> }> = ({
   const cachedUrls = useMemo(() => {
     const urls = new Map<string, string>();
     imageRegistry.forEach((imageData, id) => {
-      urls.set(id, toImageDisplaySrc(imageData.url, { agentId, sessionId: chatSessionId }));
+      urls.set(id, toImageDisplaySrc(imageData.url, { agentId, sessionId }));
     });
     return urls;
-  }, [imageRegistry, agentId, chatSessionId]);
+  }, [imageRegistry, agentId, sessionId]);
 
   const handleImageLoad = (imageId: string) => {
     setLoadingStates(prev => {

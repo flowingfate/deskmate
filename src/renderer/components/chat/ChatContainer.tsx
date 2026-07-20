@@ -11,8 +11,8 @@ import { useChatAutoScroll } from './useChatAutoScroll';
 interface ChatContainerProps {
   messages: RenderMessage[];
   streamingMessageId?: string; // ID of the message currently being streamed
-  agentId?: string;
-  chatSessionId?: string;
+  agentId: string;
+  sessionId: string;
   chatStatus?: ChatStatus;
   editingMessage?: EditingMessageState | null;
   canEditUserMessage?: boolean;
@@ -32,7 +32,7 @@ async function hasFile(p: string) {
 
 function useFileExistsCache(
   renderItems: ChatRenderItem[],
-  agentId: string | undefined
+  agentId: string,
 ) {
   // File path existence cache: key = filePath, value = exists
   const [fileExistsCache, setFileExistsCache] = useState<Record<string, boolean>>({});
@@ -246,7 +246,7 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
   messages,
   streamingMessageId,
   agentId,
-  chatSessionId,
+  sessionId,
   chatStatus,
   editingMessage,
   canEditUserMessage,
@@ -257,11 +257,11 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
     handleContainerScroll,
     isWithinLatestScrollStabilizationWindow,
     scrollToLatestPosition,
-  } = useChatAutoScroll({ chatSessionId, messages, streamingMessageId });
+  } = useChatAutoScroll({ sessionId, messages, streamingMessageId });
 
 
   // Build render items from the data-layer RenderItemsManager (pre-computed, not derived per render)
-  const renderItems = getRenderItems(chatSessionId);
+  const renderItems = getRenderItems(sessionId);
   const fileExistsCache = useFileExistsCache(renderItems, agentId);
   const {
     renderItemsWithActivity,
@@ -295,8 +295,8 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
       return null;
     }
 
-    editMessageActions.start(chatSessionId!, index, message, warning(), toast);
-  }, [chatSessionId, messages, toast]);
+    editMessageActions.start(sessionId, index, message, warning(), toast);
+  }, [messages, sessionId, toast]);
 
   // 编辑中的用户消息在 renderItemsWithActivity 里的位置(render-items 坐标系);
   // 后续 dim 比对就在这个坐标系里做,不再回头去 messages 数组拿下标。
@@ -354,7 +354,7 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
   useLayoutEffect(() => {
     if (messages.length === 0 || !isWithinLatestScrollStabilizationWindow()) return;
     scrollToLatestPosition();
-  }, [chatSessionId, isWithinLatestScrollStabilizationWindow, messages.length, renderItemsWithActivity.length, scrollToLatestPosition]);
+  }, [sessionId, isWithinLatestScrollStabilizationWindow, messages.length, renderItemsWithActivity.length, scrollToLatestPosition]);
 
   return (
     <div className="relative flex-1 flex flex-col min-h-0">
@@ -389,6 +389,8 @@ const ChatContainerInner: React.FC<ChatContainerProps> = ({
                 shouldDim={shouldDim}
                 isLive={isLive}
                 renderLoadingIndicator={renderLoadingIndicator}
+                agentId={agentId}
+                sessionId={sessionId}
                 chatStatus={chatStatus}
                 editingMessage={editingMessage}
                 onSaveEditedMessage={editMessageActions.save}

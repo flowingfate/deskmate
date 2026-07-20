@@ -1,6 +1,5 @@
 import React from 'react';
 import { ScrollArea } from '@/shadcn/scroll-area';
-import { useCurrentChatSessionId, useCurrentAgentId } from '../../../lib/chat/agentSessionCacheManager';
 import FileExplorerSection from './FileExplorerSection';
 import { WorkspaceMenuAtom } from '@renderer/components/menu/WorkspaceMenuDropdown';
 import { WorkspaceExplorerAtom } from '../chat-side.atom';
@@ -27,15 +26,17 @@ export interface WorkspaceMenuActions {
  * 本组件不再读 `useAgentDetail()?.knowledge?.knowledgeBase`,也不再调
  * `useSessionFilesDir` —— URI 抽象掉了"调用方该问谁要绝对路径"这件事。
  */
-const WorkspaceExplorerSidepane: React.FC = () => {
+interface WorkspaceExplorerSidepaneProps {
+  agentId: string;
+  sessionId: string;
+}
+
+const WorkspaceExplorerSidepane: React.FC<WorkspaceExplorerSidepaneProps> = ({ agentId, sessionId }) => {
   const [
     { visible: isVisible, reveal: revealRequest },
     { cancelReveal: onRevealHandled },
   ] = WorkspaceExplorerAtom.use();
   const { toggle: onMenuToggle } = WorkspaceMenuAtom.useChange();
-
-  const currentAgentId = useCurrentAgentId();
-  const currentChatSessionId = useCurrentChatSessionId();
 
   if (!isVisible) {
     return null;
@@ -48,8 +49,8 @@ const WorkspaceExplorerSidepane: React.FC = () => {
         <FileExplorerSection
           title="Knowledge Files"
           rootUri="knowledge://"
-          currentAgentId={currentAgentId}
-          currentChatSessionId={currentChatSessionId}
+          agentId={agentId}
+          sessionId={sessionId}
           revealRequest={revealRequest}
           onRevealHandled={onRevealHandled}
           onMenuToggle={onMenuToggle}
@@ -62,8 +63,8 @@ const WorkspaceExplorerSidepane: React.FC = () => {
           emptyMessage="Files generated during the current chat session will appear here."
           readOnly
           rootUri="local://"
-          currentAgentId={currentAgentId}
-          currentChatSessionId={currentChatSessionId}
+          agentId={agentId}
+          sessionId={sessionId}
           revealRequest={revealRequest}
           onRevealHandled={onRevealHandled}
           onMenuToggle={onMenuToggle}

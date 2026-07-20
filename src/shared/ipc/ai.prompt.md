@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-18 (Profile window manager IPC) -->
+<!-- Last verified: 2026-07-19 (persist runtime storage overview IPC; 集中 preload invoke 模块) -->
 # IPC 框架（`src/shared/ipc/`）
 
 > 基于 TypeScript 泛型 + Proxy 的框架，从单一共享定义文件出发，在 Electron 的三个层（main / preload / renderer）之间强制实现类型安全、编译期检查的 IPC。
@@ -47,7 +47,7 @@ src/shared/ipc/screenshot.ts                ← 唯一真实来源
 
 ## 标准用法（Renderer → Main）
 
-一个完整的契约跨越四个文件。以下是实际的 `screenshot` 通道端到端连接（参见 `src/shared/ipc/screenshot.ts`、`src/main/lib/screenshot/ScreenshotIPC.ts`、`src/preload/screenshot/invoke.ts`、`src/renderer/ipc/screenshot-overlay.ts` 中的真实代码）。
+一个完整的契约跨越四个文件。以下是实际的 `screenshot` 通道端到端连接（参见 `src/shared/ipc/screenshot.ts`、`src/main/lib/screenshot/ScreenshotIPC.ts`、`src/preload/invoke/screenshot.ts`、`src/renderer/ipc/screenshot-overlay.ts` 中的真实代码）。
 
 ### 1. 定义契约 — `src/shared/ipc/<name>.ts`
 
@@ -88,7 +88,7 @@ handle.saveToFile(async (_event, displayId, rect, imageData) => {
 });
 ```
 
-### 3. 在 preload 中暴露给 renderer — `src/preload/<name>/invoke.ts`
+### 3. 在 preload 中暴露给 renderer — `src/preload/invoke/<name>.ts`
 
 `provideInvokeForPreload` 构建一个通道过滤的 invoke 函数。白名单数组是类型检查的：**契约中的每个键必须出现**，否则 TS 报告 `"Missing key, you should provide all keys"`。额外/过时的键不会被捕获。
 
@@ -130,7 +130,7 @@ const result = await screenshotApi.saveToFile(displayId, rect, imageData);
 
 ## 添加新契约
 
-在 `src/shared/ipc/` 下创建新文件，使用唯一前缀字符串实例化 `connectRenderToMain`（和/或 `connectMainToRender`），然后遵循上述四步模式。每个新契约需要自己的 preload `invoke.ts` 和 main 进程 `*IPC.ts` 注册器。
+在 `src/shared/ipc/` 下创建新文件，使用唯一前缀字符串实例化 `connectRenderToMain`（和/或 `connectMainToRender`），然后遵循上述四步模式。每个新契约需要自己的 `src/preload/invoke/<name>.ts` 和 main 进程 `*IPC.ts` 注册器。
 
 `subagentRun` 是双向范例：renderer query / cancel parent 不传 `profileId`，main 从 `event.sender` 解析 owner 后再定位 parent；main 已按 owner window 推送 live `stateUpdate`，renderer 只用 parent identity 与 correlation 关联状态。messages 仅以 owner parent identity 返回 Domain `Message[]`，不暴露磁盘路径。
 
@@ -151,9 +151,9 @@ const result = await screenshotApi.saveToFile(displayId, rect, imageData);
 ## 联动变更映射
 | 当你修改 | 同时检查/更新 |
 |----------|-------------|
-| `src/shared/ipc/*.ts` 中的任何类型 | 对应的 `src/preload/*` 白名单、对应的 `src/main/startup/ipc/` 处理器 |
+| `src/shared/ipc/*.ts` 中的任何类型 | 对应的 `src/preload/invoke/<name>.ts` 白名单、对应的 `src/main/startup/ipc/` 处理器 |
 | `base.ts` 框架 | 所有从 `base.ts` 导入的文件 — 运行 `npm run check:impact -- src/shared/ipc/base.ts` |
-| 添加新的 IPC 契约文件 | 还必须创建 preload invoke 入口和 main 端处理器文件 |
+| 添加新的 IPC 契约文件 | 还必须创建 `src/preload/invoke/<name>.ts` 和 main 端处理器文件 |
 | 添加新的窗口级 IPC（如 `research`） | 同时更新 `src/preload/main.ts` 的 `ElectronAPI`、`electronAPI` 对象、renderer `ipc/<name>.ts` 绑定，以及 `electron.vite.config.ts` 中需要的新 renderer entry |
 
 ## 反模式

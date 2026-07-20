@@ -21,13 +21,12 @@
 | 模块 | 路径 | 简介 | 文档 |
 |------|------|------|------|
 | Chat 引擎（pi） | `src/main/pi/` | **生产路径**：基于 `@earendil-works/pi-ai` 的多 provider chat orchestrator + auth + 压缩 + tool 适配 | [agent-loop.md](agent-loop.md)（架构总览） + [模块 ai.prompt.md](../src/main/pi/ai.prompt.md) |
-| **持久化与 Profile runtime** | `src/main/persist/` + `src/main/profile.ts` + `src/main/profileRegistry.ts` | `ProfileStore` 管单 profile 磁盘数据；app-scoped `ProfileRegistry` 同时管 `profiles.json` index 与所有 runtime Profile 的并发 load、按 ID 查询与关闭，不提供 ambient selected accessor；`defaultProfileId` 仅是只读启动候选。每个 `Profile` 自己拥有 Pi、MCP、scheduler、Doctor 和至多一个 owner 主窗口。Doctor 每 Profile 仅允许一个 task；关闭 owner window 或 Profile 停止会 abort task，绝不把交互请求转发到其他 Profile。Doctor 的 session/schedule store 直接由 owner 注入，日志查询读取应用级 SQLite 日志；Doctor 也可读取应用级 CrashCapture 的 status 与 crash bundle。`startup/wins.ts` 是应用级窗口注册表，以 `Map<ProfileId, BrowserWindow>` 集中管理全部主窗口；主窗口按 Profile 建立、由 `additionalArguments` 注入不可变 identity；sender IPC 与 runtime event 均按 owner 精确路由。 | [persist.md](persist.md)（架构总览） + [模块 ai.prompt.md](../src/main/persist/ai.prompt.md) |
+| **持久化与 Profile runtime** | `src/main/persist/` + `src/main/profile.ts` + `src/main/profileRegistry.ts` | `ProfileStore` 管单 Profile 磁盘数据；app-scoped `ProfileRegistry` 管 `profiles.json` index 与全部 runtime Profile 的并发 load、按 ID 查询、删除和关闭。每个 `Profile` 独立拥有 Pi、MCP、scheduler、Doctor 与至多一个 owner 主窗口；窗口 identity 不可变，sender IPC 与 runtime event 均按 owner 精确路由。 | [profiles.md](profiles.md)（运行时架构） + [persist.md](persist.md)（持久化架构） + [模块 ai.prompt.md](../src/main/persist/ai.prompt.md) |
 | MCP 运行时（external-only） | `src/main/lib/mcpRuntime/` | external MCP server 连接 / OAuth / 执行入口（`executeToolOnServer`，server-scoped）。**不再有"内置 server"**——本地工具已独立到 `pi/tools/` | [ai.prompt.md](../src/main/lib/mcpRuntime/ai.prompt.md) |
 | 本地工具（pi/tools + pi/appcmd） | `src/main/pi/tools/` + `src/main/pi/appcmd/` | `LocalTool` registry + `ToolContext`（chat 主链路直接调）+ 全部本地工具实现 / 启动注册 / lazy 重依赖。**与 MCP 平级,不是 MCP**。`appcmd/` 是新引入的 **`app` 伪 shell** 基础设施(synopsis + help 双轨自描述、shell 范式调用、命令注册表) | [tool-system.md](tool-system.md)（总体设计 + 落地路径） + [模块 ai.prompt.md](../src/main/pi/tools/ai.prompt.md)（LocalTool 细节） |
 | Agent 委派运行时（pi/subagent） | `src/main/pi/subagent/` + `src/shared/persist/types/subrun.ts` + `src/main/startup/ipc/subagent-run.ts` | **唯一生产路径**：顶层 `subagent` tool 注入 manager；manager 以 Agent graph 授权、parent-scoped persisted Subrun 实现 limits/cancel/state/stale recovery，SubAgentSession 产出正式结果；`subagentRun` IPC 提供 metadata、lazy transcript、cancel 与 live state | [subagent.md](subagent.md)（架构） + [模块 ai.prompt.md](../src/main/pi/subagent/ai.prompt.md)（实现细节） |
 | 工作区 | `src/main/lib/workspace/` | 文件树、ripgrep 搜索、chokidar 监听、模糊文件索引 | — |
 | 自动更新 | `src/main/lib/autoUpdate/` | electron-updater 封装，CDN/GitHub 更新检查 | — |
-| 功能标志 | `src/main/lib/featureFlags/` | 默认值根据 isDev/brand/platform 控制；CLI `--enable/disable-features` | [ai.prompt.md](../src/main/lib/featureFlags/ai.prompt.md) |
 | 截图 | `src/main/lib/screenshot/` | 多显示器覆盖层，`screenshot://` 协议，全局快捷键 | [ai.prompt.md](../src/main/lib/screenshot/ai.prompt.md) |
 | Research window | `src/main/lib/research/` + `src/main/startup/ipc/research.ts` | `web research` 的可见研究窗口管理；Electron `BrowserWindow` + 多个 `WebContentsView` tab 展示外部网页，live DOM 抽取用户确认来源 | — |
 | 媒体协议 | `src/main/lib/media/` | `media://` 字节直供 protocol,渲染层展示 sandbox/knowledge 图片 | [ai.prompt.md](../src/main/lib/media/ai.prompt.md) |
@@ -138,7 +137,7 @@
 
 **所有权模式**：遗留应用级管理器可使用 `private static instance` + getter；`ProfileRegistry` 使用模块闭包并同时拥有 profile index 与 runtime Profile，Profile-bound 服务由 runtime `Profile` 直接持有。`DoctorManager`、`MCPClientManager`、`SchedulerManager` 均按 Profile 实例化；`SubAgentManager` 由 `Profile.getSubAgentManager()` 直接构造并缓存，不使用静态 WeakMap；新服务应按资源的实际生命周期选择所有权，而非默认单例。
 
-**非致命错误策略**：每个子系统都用 try/catch 包裹并记录日志。一个失败的组件永远不会崩溃整个应用 — 对于 feature flags、原生模块尤其重要。
+**非致命错误策略**：每个子系统都用 try/catch 包裹并记录日志。一个失败的组件永远不会崩溃整个应用 — 对于原生模块尤其重要。
 
 **启动性能**：`bootstrap.ts` 最先执行（在任何 import 之前）；`main.ts` 使用懒 getter（import 时零初始化）；重量级模块仅作为 `import type`；开发模式下 `dotenv`/`electron-reload` 通过 `setImmediate` 加载；`screenshot://` 在 `app.ready` 之前注册。
 

@@ -17,19 +17,23 @@
  *  - 单个 agent 内 `config` 子项 = agent 目录总字节 − 会话 − 定时 − 知识（余下即 AGENT.md 等）。
  */
 
+import type { Dirent } from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { nowIso } from '@shared/persist/time';
 import type {
   AgentStorageGroup,
   AgentStoragePart,
+  RuntimeStorageCategory,
+  RuntimeStorageOverview,
   StorageCategory,
   StorageOverview,
 } from '../../shared/ipc/persist';
 import type { AgentRecord, ProfileIndexEntry } from '../../shared/persist/types';
 import { PERSIST_PATH } from '../../shared/persist/path';
-import { getAppRoot } from './lib/root';
 import { dirBytes, pathExists } from './lib/atomic';
-import * as fsp from 'node:fs/promises';
+import { getRuntimeEnvDir } from './lib/path';
+import { getAppRoot } from './lib/root';
 import type { ProfileStore } from './profileStore';
 interface ProfileIndexReader {
   getEntry(id: string): ProfileIndexEntry | undefined;
@@ -111,6 +115,188 @@ async function computeAgentGroup(
   if (record.avatar !== undefined) group.avatar = record.avatar;
   if (record.locked !== undefined) group.locked = record.locked;
   return group;
+}
+
+type RuntimeStorageBucket = {
+  bytes: number;
+  fileCount: number;
+  exists: boolean;
+};
+
+type RuntimeStorageBuckets = Record<RuntimeStorageCategory['key'], RuntimeStorageBucket>;
+
+const RUNTIME_STORAGE_KEYS: RuntimeStorageCategory['key'][] = [
+  'bin',
+  'bun',
+  'python',
+  'pythonVenv',
+  'uvCache',
+  'uvTools',
+  'runtimeBin',
+  'other',
+];
+
+function createRuntimeStorageBuckets(): RuntimeStorageBuckets {
+  return {
+    bin: { bytes: 0, fileCount: 0, exists: false },
+    bun: { bytes: 0, fileCount: 0, exists: false },
+    python: { bytes: 0, fileCount: 0, exists: false },
+    pythonVenv: { bytes: 0, fileCount: 0, exists: false },
+    uvCache: { bytes: 0, fileCount: 0, exists: false },
+    uvTools: { bytes: 0, fileCount: 0, exists: false },
+    runtimeBin: { bytes: 0, fileCount: 0, exists: false },
+    other: { bytes: 0, fileCount: 0, exists: false },
+  };
+}
+
+function runtimeStorageKey(name: string): RuntimeStorageCategory['key'] {
+  switch (name) {
+    case 'bin': return 'bin';
+    case 'bun': return 'bun';
+    case 'python': return 'python';
+    case 'python-venv': return 'pythonVenv';
+    case 'uv-cache': return 'uvCache';
+    case 'uv-tools': return 'uvTools';
+    case 'runtime-bin': return 'runtimeBin';
+    default: return 'other';
+  }
+}
+
+function runtimeStorageLabel(key: RuntimeStorageCategory['key']): string {
+  switch (key) {
+    case 'bin': return 'Runtime Binaries & Shims';
+    case 'bun': return 'Bun';
+    case 'python': return 'Managed Python';
+    case 'pythonVenv': return 'Python Virtual Environment';
+    case 'uvCache': return 'uv Download Cache';
+    case 'uvTools': return 'uv Tools';
+    case 'runtimeBin': return 'Global CLI Binaries';
+    case 'other': return 'Other Runtime Files';
+  }
+}
+
+function runtimeStorageDescription(key: RuntimeStorageCategory['key']): string {
+  switch (key) {
+    case 'bin': return 'App-managed Bun and uv binaries plus command shims.';
+    case 'bun': return 'Bun global packages and cache.';
+    case 'python': return 'Python versions installed by uv.';
+    case 'pythonVenv': return 'The app-managed shared Python virtual environment.';
+    case 'uvCache': return 'Downloads cached by uv.';
+    case 'uvTools': return 'Isolated environments installed by uvx.';
+    case 'runtimeBin': return 'Executable entry points for globally installed tools.';
+    case 'other': return 'Runtime files outside the standard managed directories.';
+  }
+}
+
+function runtimeStoragePath(envRoot: string, key: RuntimeStorageCategory['key']): string {
+  switch (key) {
+    case 'bin': return path.join(envRoot, 'bin');
+    case 'bun': return path.join(envRoot, 'bun');
+    case 'python': return path.join(envRoot, 'python');
+    case 'pythonVenv': return path.join(envRoot, 'python-venv');
+    case 'uvCache': return path.join(envRoot, 'uv-cache');
+    case 'uvTools': return path.join(envRoot, 'uv-tools');
+    case 'runtimeBin': return path.join(envRoot, 'runtime-bin');
+    case 'other': return envRoot;
+  }
+}
+
+function isNotFoundError(error: Error): boolean {
+  return 'code' in error && error.code === 'ENOENT';
+}
+
+async function scanRuntimeDirectory(
+  dir: string,
+  key: RuntimeStorageCategory['key'],
+  buckets: RuntimeStorageBuckets,
+): Promise<void> {
+  let entries: Dirent[];
+  try {
+    entries = await fsp.readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    try {
+      if (entry.isDirectory()) {
+        await scanRuntimeDirectory(full, key, buckets);
+      } else if (entry.isFile()) {
+        const bucket = buckets[key];
+        bucket.bytes += (await fsp.stat(full)).size;
+        bucket.fileCount += 1;
+      }
+    } catch {
+      /* 遍历途中被删 / 权限问题：跳过该项 */
+    }
+  }
+}
+
+/**
+ * 单遍递归统计应用托管运行时目录。每个文件只 stat 一次，再按顶层目录归类，
+ * 避免总目录与分类目录重复扫描大量 Bun / Python 第三方包文件。
+ */
+export async function computeRuntimeStorageOverview(): Promise<RuntimeStorageOverview> {
+  const envRoot = getRuntimeEnvDir();
+  const buckets = createRuntimeStorageBuckets();
+  let entries: Dirent[];
+  try {
+    entries = await fsp.readdir(envRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error instanceof Error && isNotFoundError(error)) {
+      return {
+        envRoot,
+        exists: false,
+        totalBytes: 0,
+        fileCount: 0,
+        categories: [],
+        generatedAt: nowIso(),
+      };
+    }
+    throw error;
+  }
+
+  for (const entry of entries) {
+    const key = runtimeStorageKey(entry.name);
+    const bucket = buckets[key];
+    bucket.exists = true;
+    const full = path.join(envRoot, entry.name);
+    try {
+      if (entry.isDirectory()) {
+        await scanRuntimeDirectory(full, key, buckets);
+      } else if (entry.isFile()) {
+        bucket.bytes += (await fsp.stat(full)).size;
+        bucket.fileCount += 1;
+      }
+    } catch {
+      /* 遍历途中被删 / 权限问题：跳过该项 */
+    }
+  }
+
+  const categories = RUNTIME_STORAGE_KEYS
+    .filter((key) => buckets[key].exists)
+    .map<RuntimeStorageCategory>((key) => {
+      const bucket = buckets[key];
+      return {
+        key,
+        label: runtimeStorageLabel(key),
+        description: runtimeStorageDescription(key),
+        bytes: bucket.bytes,
+        fileCount: bucket.fileCount,
+        path: runtimeStoragePath(envRoot, key),
+      };
+    })
+    .sort((a, b) => b.bytes - a.bytes);
+
+  return {
+    envRoot,
+    exists: true,
+    totalBytes: categories.reduce((total, category) => total + category.bytes, 0),
+    fileCount: categories.reduce((total, category) => total + category.fileCount, 0),
+    categories,
+    generatedAt: nowIso(),
+  };
 }
 
 /**
@@ -241,7 +427,7 @@ export async function computeStorageOverview(
 
 /**
  * 校验并规范化「在文件管理器中打开」的目标路径。
- * 只允许当前 profile 根目录树内 或 应用数据根本身的路径，越界返回 null（拒绝打开）。
+ * 只允许当前 profile 根目录树、应用数据根本身或 app-managed runtime env 树内的路径。
  * 路径可以是文件（如 index.db，调用方用 showItemInFolder）或目录。
  */
 export async function resolveRevealTarget(
@@ -250,9 +436,12 @@ export async function resolveRevealTarget(
   absPath: string,
 ): Promise<{ target: string; isFile: boolean } | null> {
   const resolved = path.resolve(absPath);
-  const inProfile = resolved === profileRoot || resolved.startsWith(profileRoot + path.sep);
-  const isDataRoot = resolved === dataRoot;
-  if (!inProfile && !isDataRoot) return null;
+  const resolvedProfileRoot = path.resolve(profileRoot);
+  const resolvedDataRoot = path.resolve(dataRoot);
+  const runtimeEnvRoot = path.resolve(getRuntimeEnvDir());
+  const inProfile = resolved === resolvedProfileRoot || resolved.startsWith(resolvedProfileRoot + path.sep);
+  const inRuntimeEnv = resolved === runtimeEnvRoot || resolved.startsWith(runtimeEnvRoot + path.sep);
+  if (!inProfile && !inRuntimeEnv && resolved !== resolvedDataRoot) return null;
   if (!(await pathExists(resolved))) return null;
   let isFile = false;
   try {

@@ -4,7 +4,6 @@ import type { SubAgentRunResult, ToolCall } from '@shared/persist/types';
 import type { SubAgentRunStep, SubAgentRuntimeState } from '@shared/types/subAgentRunTypes';
 import { subagentRunApi, useSubagentRunState } from '@/ipc/subagentRun';
 import { useAgentById } from '@/states/agents.atom';
-import { useCurrentSession } from '@/states/currentSession.atom';
 import { Button } from '@/shadcn/button';
 import { AgentAvatar } from '../../../../common/AgentAvatar';
 import type { SubagentRunResultView } from './parse';
@@ -21,6 +20,8 @@ type AuditState =
   | { kind: 'error'; message: string };
 
 interface SubagentRunCardProps {
+  agentId: string;
+  sessionId: string;
   toolCall: ToolCall;
   result?: SubagentRunResultView;
 }
@@ -90,9 +91,8 @@ function cancelError(result: Awaited<ReturnType<typeof subagentRunApi.cancelRun>
   }
 }
 
-export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
-  const { agentId, chatSessionId } = useCurrentSession();
-  const liveState = useSubagentRunState(toolCall.id, agentId, chatSessionId, result?.subrunId);
+export function SubagentRunCard({ agentId, sessionId, toolCall, result }: SubagentRunCardProps) {
+  const liveState = useSubagentRunState(toolCall.id, agentId, sessionId, result?.subrunId);
   const subrunId = result?.subrunId ?? liveState?.subrunId;
   const [audit, setAudit] = useState<AuditState>({ kind: 'idle' });
   const auditState = audit.kind === 'found' ? audit.state : null;
@@ -102,7 +102,7 @@ export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!agentId || !chatSessionId || !subrunId) {
+    if (!subrunId) {
       setAudit({ kind: 'idle' });
       return;
     }
@@ -113,7 +113,7 @@ export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
       try {
         const queried = await subagentRunApi.getRunState({
           parentAgentId: agentId,
-          parentSessionId: chatSessionId,
+          parentSessionId: sessionId,
           subrunId,
         });
         if (disposed) return;
@@ -132,7 +132,7 @@ export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
     return () => {
       disposed = true;
     };
-  }, [agentId, chatSessionId, subrunId]);
+  }, [agentId, sessionId, subrunId]);
 
   const auditResult = resultFromRuntime(auditState);
   const formalResult = result ?? resultFromRuntime(liveState) ?? auditResult;
@@ -150,19 +150,19 @@ export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
   const canCancel = Boolean(
     subrunId
       && agentId
-      && chatSessionId
+      && sessionId
       && liveState
       && (status === 'pending' || status === 'running'),
   );
 
   async function cancel(): Promise<void> {
-    if (!subrunId || !agentId || !chatSessionId || isCancelling) return;
+    if (!subrunId || isCancelling) return;
     setIsCancelling(true);
     setCancelMessage(null);
     try {
       const cancelled = await subagentRunApi.cancelRun({
         parentAgentId: agentId,
-        parentSessionId: chatSessionId,
+        parentSessionId: sessionId,
         subrunId,
       });
       setCancelMessage(cancelError(cancelled));
@@ -223,12 +223,12 @@ export function SubagentRunCard({ toolCall, result }: SubagentRunCardProps) {
         </div>
       )}
 
-      <SubagentFormalResultDetails result={formalResult} />
+      <SubagentFormalResultDetails agentId={agentId} sessionId={sessionId} result={formalResult} />
 
-      {subrunId && agentId && chatSessionId ? (
+      {subrunId ? (
         <SubagentRunMessagesDialog
-          parentAgentId={agentId}
-          parentSessionId={chatSessionId}
+          agentId={agentId}
+          sessionId={sessionId}
           subrunId={subrunId}
           agentName={agent?.name ?? delegateAgentId ?? 'Delegated Agent'}
           status={status}

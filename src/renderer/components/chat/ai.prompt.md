@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-17 (direct immutable Profile identity) -->
+<!-- Last verified: 2026-07-19 (ChatView root session boundary) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -6,13 +6,14 @@
 ## 关键文件
 | 文件 | 职责 | 规模 |
 |------|------|------|
-| `ChatView.tsx` | 主聊天视图容器；仅负责 URL↔会话同步，以 `kind` 区分 regular 可交互会话与 job-run 只读回放 | ~120 LOC |
-| `JobRunChat.tsx` | job-run 的只读说明与转换入口；仅 terminal run 可经 persist IPC 创建独立 regular session，成功后导航到普通 session URL | small |
-| `ChatViewHeader.tsx` | 顶部栏：左侧组合 agent 身份与自包含的 Skills / Local tools / MCP tools 状态徽标；右侧 `ContextBadge` 点击向下展开 context window 详情及当前消息历史中 assistant usage 的累计 token 消耗：Prompt input（uncached input + cache read + cache write）、output、total | — |
-| `../ui/StatusBadges.tsx` | 聚合当前 agent 的 Skills / Local tools / MCP tools 状态；徽标直接调用 `editAgent(agentId, tab)` 进入对应设置，不经 `ChatView` / `ChatViewHeader` 回调透传 | — |
-| `ribbon/index.tsx` | 输入框上方的紧凑控制条：左侧弹性槽渲染提示或错误，job-run 不显示 regular-only Retry；保留右侧会话操作的固定宽度 | 小 |
+| `ChatView.tsx` | 主聊天视图容器；从 URL 取得可选 route params，先构造 agent 非空、session / jobId 可空的 `ChatRouteIdentity`。仅缺 agent 时渲染无效路由占位；session 或 jobId 未分配时仍保留顶层壳与 agent header，交给 `ChatViewContent` 显示会话占位 | ~140 LOC |
+| `chatIdentity.ts` | `ChatRouteIdentity`（root：session 可空）与 `ChatSessionIdentity` / regular / job `ChatIdentity`（消息树：session 非空）；身份收窄契约唯一来源 | small |
+| `JobRunChat.tsx` | job-run 的只读说明与转换入口；由 `ChatViewContent` 注入 `agentId` / `jobId` / `sessionId`；仅 terminal run 可经 persist IPC 创建独立 regular session，成功后导航到普通 session URL | small |
+| `ChatViewHeader.tsx` | 顶部栏：接收 `agentId` / `sessionId`，左侧组合 agent 身份与 Skills / Local tools / MCP tools 状态徽标；右侧 `ContextBadge` 展开当前会话 token 消耗 | — |
+| `../ui/StatusBadges.tsx` | 接收 `agentId` 聚合 Skills / Local tools / MCP tools 状态；徽标直接调用 `editAgent(agentId, tab)` 进入对应设置 | — |
+| `ribbon/index.tsx` | 接收 `agentId` / `jobId` / `sessionId` / `kind` 的紧凑控制条；左侧渲染目标会话错误，右侧保留会话操作 | 小 |
 | `ribbon/RibbonItem.tsx` | ribbon 专用紧凑按钮：由 ribbon 的交叉轴拉伸铺满高度、无圆角；统一 hover / active / disabled 状态，并通过包裹 disabled button 的 tooltip trigger 保证所有项目均可显示提示 | 小 |
-| `ribbon/DevInfoBadge.tsx` | 开发环境的版本、Agent ID、scheduler job 名称/ID、会话 ID 信息及复制菜单；自行获取 app version，路由和会话状态为标识符来源，菜单向上展开 | 小 |
+| `ribbon/DevInfoBadge.tsx` | 开发环境的版本、Agent ID、scheduler job 名称/ID、会话 ID 信息及复制菜单；身份从 ribbon props 注入，菜单向上展开 | 小 |
 | `ribbon/RibbonTip.tsx` | 左侧垂直居中的灯泡图标 + 操作提示轮播；每次仅以一次 state 更新并行挂载当前/下一项，分别播放 `ribbon-tip-exit` 与 `ribbon-tip-enter` CSS 关键帧，避免 rAF 状态切换导致的闪跳；文本省略但保留悬浮全文 | 小 |
 | `ribbon/ErrorBar.tsx` | 无背景的紧凑错误行；重试按钮紧随消息，错误文本在左侧弹性槽内单行截断并经悬浮全文暴露诊断建议 | 小 |
 | `ribbon/JumpToLatest.tsx` | 始终显示的跳转控件 `JumpToLatestItem`：不可跳转时 disabled，滚离最新消息后激活并显示 `Jump to latest` 文案；同文件定义 `JumpToLatestAtom` 状态机 | 小 |
@@ -59,7 +60,7 @@
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
 | `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（Basic 的 description、Delegation、上下文增强、知识库、MCP 服务器、技能、系统提示词） | — |
-| `agent-area/AgentEditingView.tsx` + `useAgentEditorState.ts` + `AgentEditorTabs.tsx` | 设置页外壳、跨 tab dirty/save-all 状态和 tab 分发；三者分离以保持组件文件小于 500 行 | — |
+| `agent-area/AgentEditingView.tsx` + `useAgentEditorState.ts` + `AgentEditorTabs.tsx` | 设置页外壳、跨 tab dirty/save-all 状态和 tab 分发；返回优先回到 Agent 设置 loader 记录的入口路径，深链时才走 Agent 根路由 fallback | — |
 | `agent-editor/AgentSettingsNav.tsx` | 设置页左侧导航；数据驱动的 `NAV_ITEMS`（key/label/Lucide 图标），每项带未保存改动小圆点。**新增 Tab 时在此加一项** | 小 |
 | `agent-editor/AgentPresetsTab.tsx` + `PresetEditorDialog.tsx` | 「Quick Prompts」标签页：编辑聊天空态的预设提示词（增删改）。**已接持久化** —— 读写走 `zero/presetPrompts.ts`，落 AGENT.md front-matter `zero.preset_prompts`（cold 字段，`agentDetail.atom` 后端），与 `zero/index.tsx` 空态经 `agent:updated` 事件实时同步。CRUD 即时生效，不进 Save All 管线。新建/编辑走 `PresetEditorDialog`（含图标选择器），删除走 `AlertDialog` 二次确认 | 中 |
 | `zero/index.tsx` + `zero/PresetPromptCard.tsx` | 聊天空态：渲染预设提示词卡片。点击卡片**不发送**，而是把 `prompt` 写入 `composeTextAtom`（ComposeInput 草稿真值）填入输入框；输入框已有内容时弹 `AlertDialog` 确认覆盖。插图区为占位待填 | 中 |
@@ -92,19 +93,22 @@ ChatView (URL→会话同步)
 
 `ChatView` 位于 `/agent/:agentId/:sessionId` 与 `/agent/:agentId/job/:jobId/:sessionId` 路由下。两条路由在 `entries/main.routes.tsx` 用同一个 `ChatView` 组件渲染，由路由显式注入 `kind?: 'regular' | 'job'` prop（默认 `'regular'`）；**kind 是 UI capability boundary，不只是 hydration 选项**：regular 走 `loadChatSessionSnapshot/markSessionRead`，可 compose / edit / retry；job 走 `loadJobRunSnapshot/markJobRunRead`，是只读回放，隐藏 compose、message edit、Retry 和 cancel。已结束 run 的 `JobRunChat` 可经 persist IPC 克隆为新 regular session 并导航过去；原 run 仍是只读调度历史。两条 IPC 路径在 persist 层完全物理隔离，禁止写“按 sessionId 万能取”的混查 helper。
 
-新建 regular session 不经过 `location.state` 中的隐式 intent：入口直接用 `newEntityId('s')` 生成 ID，并导航到完整 `/agent/:agentId/:sessionId` URL。ID 只在 renderer 分配；首次发送消息前不持久化，因此未发送即离开的会话不会留下空壳。`/agent/:agentId` 表示 sessions 子屏无选中，ChatView 明确将 current session 置空。
+新建 regular session 不经过 `location.state` 中的隐式 intent：入口直接用 `newEntityId('s')` 生成 ID，并导航到完整 `/agent/:agentId/:sessionId` URL。`/agent/:agentId` 也由 route loader 按相同规则分配 ID 并重定向，因而 `ChatView` 不会以缺少 sessionId 的 regular 语义挂载。ID 只在 renderer 分配；首次发送消息前不持久化，因此未发送即离开的会话不会留下空壳。
 
-### 消息渲染管线
-消息通过清晰的管线流转：
-1. `ChatView` 通过 `CurrentSessionStatus.use()` 读取会话状态
-2. `ChatViewContent` 通过 `useMessagesWithStream()` 接收消息，并可选地通过回放系统包装消息
-3. `ChatContainer` 以 props 接收最终消息列表，通过 `lib/chat/render-items-manager.ts` 中的 `RenderItemsManager` 将 `Message[]` 转换为类型化的 `ChatRenderItem[]`，并管理自动滚动
-4. `ChatRenderItemComponent` 按类型将每项分发到对应的渲染器
-5. 所有 markdown 都经过 `MarkdownView`（同步无 state） — 流式与已完成走同一渲染路径，区别仅在容器外层的 `streaming` CSS 类
+### 消息渲染与身份管线
+`ChatView` 是聊天树唯一的路由身份入口：它允许 root 在已有 `agentId` 而尚未分配 `sessionId` 或 job `jobId` 时继续挂载 header 和内容壳，形成 `ChatRouteIdentity`。只有缺 `agentId` 才渲染无效路由占位。session 与 jobId 均存在后，`getChatIdentity()` 才形成非空 `ChatIdentity` 并触发 cache 加载与已读标记。
+
+`CurrentSession.set()` 仍由 `ChatView` 执行，用于不属于聊天树的全局入口；无有效 agent 路由写入全空状态。聊天树内部不得调用 `CurrentSession.use()`。直接调用 `CurrentSession.get()` 的命令式最新值读取是例外。
+
+1. `ChatViewContent` 接收 `ChatRouteIdentity`；无法形成 `ChatIdentity` 时渲染会话占位并停止，不挂载消息、输入、ribbon、workspace 或工具子树。
+2. `ChatIdentity` 形成后，`ChatContainer` 以非空身份 props 接收消息，通过 `RenderItemsManager` 转换为类型化的 `ChatRenderItem[]`，并管理自动滚动。
+3. `ChatRenderItemComponent` 将非空身份继续下传至消息、输入、workspace 与工具 renderer；输入附件预览也接收该身份解析 `local://` 图像，不读取全局当前会话；空态 `ZeroState` 同样接收非空 `agentId`，所有 markdown 都经过 `MarkdownView`（同步无 state）。
 
 
 ### 累计 token 消耗
 `ContextBadge` 不使用 `contextState.lastTokenUsage`（它只表示最近一次调用后的 context window 占用）。会话 cache 初始化或消息被截断重写时，由 `SessionManager.aggregateTokenUsage()` 汇总当前 `RenderMessage[]` 中每条 assistant 的持久化 `usage`；流式 assistant 收到 `complete` chunk 时写入该次 provider usage 并立即重算。展示时 `Prompt input = uncached input + cache read + cache write`：Claude 等 provider 会将被缓存的首轮 prompt 或工具结果计入 cache write/read，而非 uncached input。故工具循环的每次 LLM call 都会计入，旧历史缺少 usage 时按零兼容；编辑截断掉的历史也不再计入。
+
+`useSessionCache.ts` 的 `generate()` 将 cache 生命周期通知适配为可按字段选择的 `useSyncExternalStore` hooks：`useSessionCache` 供消息与错误等完整 snapshot 消费，`useContextUsage` / `useCumulativeUsage` 供 `ContextBadge` 按引用跳过无关 cache 更新，`useHasSessionCache` 供 ribbon 判定缓存就绪。
 ### 渲染项系统
 `lib/chat/render-items-manager.ts` 把扁平的 `Message[]` 转换成类型化可辨识联合类型的渲染项 `ChatRenderItem[]`,并在 `recompute` 时通过 `reuseUnchangedItems()` 按 stable key 对齐前后两版,**复用未变化的 item 引用**,这样下游 `ChatRenderItemComponent` 的 `React.memo` 浅比较才能跳过未变项。
 
@@ -136,7 +140,7 @@ ChatView (URL→会话同步)
 流式与 ResizeObserver 驱动的滚动都会受 `userScrolledAwayRef` 阈值保护（用户上滚后不再被拉下去），只有 `force: true` 调用才会复位该标志。`agentId` 不得用来驱动重置 — 会话历史切换可以在相同的聊天标识下发生。
 
 ### 会话切换
-`ChatView` 和 `ChatViewContent` 将会话切换视为显式的瞬态 UI 状态。当路由目标 `chatSessionId` 处于活跃状态但其缓存快照尚未就绪时，消息列表被替换为中立的 "Opening chat history..." 占位符，编辑器被锁定。
+`ChatView` 和 `ChatViewContent` 将会话切换视为显式的瞬态 UI 状态。当路由 `sessionId` 的缓存尚未就绪时，消息列表被替换为中立的 "Opening chat history..." 占位符，编辑器被锁定。
 
 ### 交互式请求
 交互式请求是聊天会话原生的。待处理的请求通过 `InteractiveRequestCard` / `InteractiveSearchCard` / `InteractiveAuthCard` 在时间线中内联渲染，提交或解决后从 UI 中移除。审批请求在每个项目都有批准/拒绝决定后自动提交。选择请求和表单 select 类控件渲染为响应式的换行选项网格，带有 `Other` 回退卡片用于自定义文本输入。`interactive-search` 的网页浏览本体在独立 research window，聊天卡片只承载 focus/cancel 和状态摘要。
@@ -144,10 +148,10 @@ ChatView (URL→会话同步)
 ### 用户消息编辑
 内联用户消息编辑通过 `editMessageAtom` 管理。`ChatContainer` 为正在编辑的消息渲染 `EditInlineInput`；底部主输入则保持为 `ComposeInput`，必要时通过 `isInputLocked` 进入只读锁定态。编辑确认对话框由 `AgentLayout` 挂载 `ModifyMsgConfimOverlay`；`EditInlineInput` 通过其导出的 **imperative confirm atom** `inlineEditConfirmAtom.request({title, description}): Promise<boolean>` 发起确认（旧的 `chatInput:confirmInlineEditRequest/Result` 两段式 window 事件已移除）；skip 逻辑在 `request` 内同步读 `confirmationSettings.inlineEditRegenerate.skipConfirmation`（持久化在 `profile.json`）。
 
-Agent avatar 的 `EmojiPicker` 采用 shadcn `Dialog`：打开时聚焦 Confirm，Radix 负责焦点陷阱、Esc 关闭与触发器焦点恢复；两个调用入口保持不变。
+Agent avatar 使用通用 [`shadcn/emoji-picker.tsx`](../../shadcn/emoji-picker.tsx) 的 `EmojiPicker`：它由 Frimousse 提供可虚拟化的完整 Unicode grid，并以 shadcn `Popover` 承载，固定 10 列填满 picker 宽度。搜索为空时显示分类 icon toolbar，点击分类立即跳转到相应 section，手动滚动同步激活态；搜索期间隐藏 toolbar。首次打开从 Emojibase 拉取并缓存数据，选中 emoji 即更新表单并关闭。两个调用入口保持一致。
 
 ### 侧边栏和编辑器
-Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `ChatView` 的子组件。Agent 编辑器（`agent-editor/`）在导航到 `/agent/:agentId/settings/*` 时出现。**定时任务（jobs / runs）UI 已搬迁到 [`components/agent-side/`](../agent-side/ai.prompt.md)**：alarm 切换 + jobs CRUD + runs 列表 + AddScheduleOverlay 全部走那条主从二级视图，URL 是真相源；`SchedulesSidepane` / `AgentSchedulesTab` / `SchedulesContentView` 已物理删除。
+Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `ChatView` 的子组件。Agent 编辑器（`agent-editor/`）在导航到 `/agent/:agentId/settings/*` 时出现。首次进入某个 Agent 的设置时，路由 loader 记录前一条完整 URL；同一 Agent 内的 tab 切换不会覆盖它，`AgentEditingView` 顶部返回按钮优先回到该入口。深链 / 刷新没有入口时才回退到 `/agent/:agentId`。**定时任务（jobs / runs）UI 已搬迁到 [`components/agent-side/`](../agent-side/ai.prompt.md)**：alarm 切换 + jobs CRUD + runs 列表 + AddScheduleOverlay 全部走那条主从二级视图，URL 是真相源；`SchedulesSidepane` / `AgentSchedulesTab` / `SchedulesContentView` 已物理删除。
 
 ## 常见变更
 | 场景 | 需要修改的文件 | 备注 |
@@ -163,7 +167,7 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 修改用户消息附件展示 | `message/AttachmentList.tsx` | image / file / office / others 共用 |
 | 更改 approval / choice / form 交互 | `interactive/RequestCard.tsx`、`ChatRenderItem.tsx`、`agentSessionCacheManager.ts` | 待处理请求经 `render-items-manager` 进入渲染流水线，由 `ChatRenderItemComponent` 分发 |
 | 添加 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx`、`agent-area/useAgentEditorState.ts` 的 route/cache/save-all、`agent-area/AgentEditorTabs.tsx` 的分发、`agent-editor/AgentSettingsNav.tsx` 的 `NAV_ITEMS` | 遵循现有标签页外壳模式 |
-| 修改滚动行为 | `useChatAutoScroll.ts` hook（由 `ChatContainer.tsx` 消费） | 始终验证基于 `chatSessionId` 的重置；流式跟随由 `streamingMessageTextLength` effect 驱动 |
+| 修改滚动行为 | `useChatAutoScroll.ts` hook（由 `ChatContainer.tsx` 消费） | 始终基于 `sessionId` 重置；流式跟随由 `streamingMessageTextLength` effect 驱动 |
 | 修改 regular / job-run capability | `ChatView.tsx` + `ChatViewContent.tsx` + `ribbon/index.tsx` | job-run 的写入限制由 UI 实现；不支持取消 |
 
 ## 联动变更映射
@@ -174,14 +178,14 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 | 聊天输入中的新附件类型 | `chat-input/shared/useFileHandling.ts` + `contentUtils.ts`(`ContentPartFactory`)+ `@shared/types/chatTypes`(`UnifiedContentPart`)+ shared constants 中的 `FILE_ATTACHMENT_LIMITS` + `message/AttachmentList.tsx`(渲染分支)+ [`src/main/lib/attachment/`](../../../main/lib/attachment/ai.prompt.md)(若新来源需要新的 main 端 attach 入口) |
 | 新交互式请求控件类型 | `interactive/RequestCard.tsx` 或专用卡片 + `@shared/types/interactiveRequestTypes` + `agentSessionCacheManager.ts` + `ChatViewContent.tsx` 分发 |
 | 新 agent 编辑器标签页 | `agent-editor/Agent<Name>Tab.tsx` + `agent-area/useAgentEditorState.ts`（路由/cache/save）+ `agent-area/AgentEditorTabs.tsx`（分发）+ `agent-editor/AgentSettingsNav.tsx`（`NAV_ITEMS`） |
-| 会话滚动/布局变更 | `ChatContainer.tsx`(容器几何已 Tailwind 化) + `styles/biz/_chat.scss`(scrollbar/inset/data-mode/`:has()` 等无法 Tailwind 化的规则,原 `ChatContainer.scss` 已删,曾暂存于 `globals.css` 尾部,现归入 biz 层) — 始终验证基于 `chatSessionId` 的重置，而非基于 `agentId` |
+| 会话滚动/布局变更 | `ChatContainer.tsx`(容器几何已 Tailwind 化) + `styles/biz/_chat.scss`(scrollbar/inset/data-mode/`:has()` 等无法 Tailwind 化的规则,原 `ChatContainer.scss` 已删,曾暂存于 `globals.css` 尾部,现归入 biz 层) — 始终验证基于 `sessionId` 的重置，而非基于 `agentId` |
 | Markdown 渲染变更 | `message/MarkdownView.tsx` + `message/MarkdownView.scss`（全局生效） |
 | 发送门控逻辑 | `chat-input/ComposeInput.tsx` + `chat-input/EditInlineInput.tsx`（显式 `chatStatus === 'idle'` 守卫）+ 渲染进程发送入口点缓存状态重新检查 |
 | `.chat-container-reverse` 左右 inset 改动 | `--chat-pad-x` CSS 变量是唯一写入点(现由 `ChatContainer.tsx` 容器上的 `[--chat-pad-x:36px]` 任意值设定) — 水平 inset 由 `styles/biz/_chat.scss` 里 `.chat-message-flow-reverse > *` 选择器统一加给所有直接子项(替代旧的 `.chat-container-reverse` 自带 padding);`ToolCallsSection` 通过 className 豁免该 padding 自己控制。改值只能改 `--chat-pad-x`;**禁止**删除该变量或在其它地方 hardcode 36px |
 
 ## 反模式
 - **在 `ChatContainer` 内部读取 `useMessages()`**：会导致会话切换时的过时渲染。消息列表必须由 `ChatViewContent` 拥有并通过 props 传递。
-- **基于 `agentId` 驱动滚动重置**：历史切换可以在相同的聊天标识下交换会话。始终以 `chatSessionId` 为键进行滚动重置。
+- **基于 `agentId` 驱动滚动重置**：历史切换可以在相同的聊天标识下交换会话。始终以 `sessionId` 为键进行滚动重置。
 - **将 `null`/`undefined` chatStatus 视为 idle**：重新打开了编辑器在会话状态水合前触发的竞态条件。
 - **在会话缓存就绪前显示零状态**：在 `ChatViewContent` 中使用 "Opening chat history..." 占位符门控。
 - **在 message 组件里加 state / effect / RAF / typewriter**：`MarkdownView` 必须保持无状态；流式跟随由 `ChatContainer` 的 `streamingMessageTextLength` effect 驱动，不要绕回到“子组件回传高度”那种已删除的模式。
@@ -235,4 +239,4 @@ Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `C
 - 依赖于 [IPC](../../../shared/ipc/ai.prompt.md) 进行所有主进程通信
 - 渲染层入口：`MarkdownView`（位于 `message/MarkdownView.tsx`） — 唯一的 Markdown 出口
 - 通过 IPC 通道与 [Chat Engine](../../../main/lib/chat/ai.prompt.md) 通信
-- Agent/配置文件状态来源于渲染进程 userData providers 和 `agentSessionCacheManager`
+- 路由身份仅由 `ChatView` 写入 `states/currentSession.atom.ts`；root 可持有 agent + 空 session / job 的 `ChatRouteIdentity`，但只有 `ChatViewContent` 的 `getChatIdentity()` 门控之后的子树接收非空 `agentId` / `sessionId`（job 额外接收 `jobId`）。Agent record/detail 来自对应 renderer atoms，消息、流式状态与交互请求由 `agentSessionCacheManager` 按 `sessionId` 缓存。

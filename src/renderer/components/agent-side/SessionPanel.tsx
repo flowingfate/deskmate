@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useMatch, useParams } from 'react-router-dom';
 import { useAgentById } from '@/states/agents.atom';
-import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import SessionPanelHeader from './header/SessionPanelHeader';
 import SessionsView from './sessions/SessionsView';
 import JobsView from './jobs/JobsView';
@@ -25,26 +24,33 @@ import { BACKDROP } from './backdrop';
 const SessionPanel: React.FC = () => {
   // The runs sub-tree exposes `:sessionId` at the same param name as `/agent/:agentId/:sessionId`,
   // so a single `useParams()` covers both modes.
-  const { agentId: urlAgentId, jobId, sessionId } = useParams<{
+  const { agentId, jobId, sessionId } = useParams<{
     agentId?: string;
     jobId?: string;
     sessionId?: string;
   }>();
   const inJobsMode = useMatch('/agent/:agentId/job/*') !== null;
+  const currentAgent = useAgentById(agentId);
 
-  // While the URL is `/agent` (no agentId), keep a stable last-active agentId from cache so the
-  // header still shows the current agent's name; the body sub-screens require a real agentId.
-  const [cachedAgentId, setCachedAgentId] = useState<string | null>(
-    agentSessionCacheManager.getCurrentAgentId(),
-  );
-  useEffect(() => {
-    return agentSessionCacheManager.subscribeToCurrentChatSessionId(() => {
-      setCachedAgentId(agentSessionCacheManager.getCurrentAgentId());
-    });
-  }, []);
-
-  const displayAgentId = urlAgentId ?? cachedAgentId;
-  const currentAgent = useAgentById(displayAgentId);
+  function content() {
+    if (!agentId) return null;
+    if (inJobsMode) {
+      if (!jobId) return <JobsView agentId={agentId} />;
+      return (
+        <JobRunsView
+          agentId={agentId}
+          jobId={jobId}
+          activeSessionId={sessionId ?? null}
+        />
+      );
+    }
+    return (
+      <SessionsView
+        agentId={agentId}
+        currentChatSessionId={sessionId ?? null}
+      />
+    );
+  }
 
   return (
     <div
@@ -55,30 +61,11 @@ const SessionPanel: React.FC = () => {
         {BACKDROP}
       </div>
       <SessionPanelHeader
-        agentId={displayAgentId}
+        agentId={agentId || null}
         agent={currentAgent}
         mode={inJobsMode ? 'jobs' : 'sessions'}
       />
-      {!displayAgentId && null}
-
-      {displayAgentId && !inJobsMode && (
-        <SessionsView
-          agentId={displayAgentId}
-          currentChatSessionId={sessionId ?? null}
-        />
-      )}
-
-      {displayAgentId && inJobsMode && !jobId && (
-        <JobsView agentId={displayAgentId} />
-      )}
-
-      {displayAgentId && inJobsMode && jobId && (
-        <JobRunsView
-          agentId={displayAgentId}
-          jobId={jobId}
-          activeSessionId={sessionId ?? null}
-        />
-      )}
+      {content()}
     </div>
   );
 };

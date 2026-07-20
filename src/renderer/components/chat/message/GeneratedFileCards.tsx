@@ -10,8 +10,7 @@ import { Badge } from '@/shadcn/badge';
 import { useToast } from '../../ui/ToastProvider';
 import { addFileToKnowledgeBase, shouldShowAddToKnowledgeBaseOption } from '../../../lib/chat/addToKnowledgeBase';
 import { tryResolveUriToPath } from '@/lib/internalUrls';
-import { ChatStatus, useCurrentAgentId } from '../../../lib/chat/agentSessionCacheManager';
-import { useCurrentSession } from '@/states/currentSession.atom';
+import { ChatStatus } from '../../../lib/chat/agentSessionCacheManager';
 import { toImageDisplaySrc, type MediaUrlContext } from '@/lib/mediaUrl';
 import { isInstallableSkillArtifact } from '../../../lib/skills/installableSkillArtifacts';
 import { log } from '@/log';
@@ -37,6 +36,8 @@ export interface GeneratedFileCardItem {
 }
 
 export interface GeneratedFileCardsProps {
+  agentId: string;
+  sessionId: string;
   items: GeneratedFileCardItem[];
   chatStatus?: ChatStatus;
 }
@@ -74,7 +75,7 @@ function previewGeneratedFile(
   openFile({ name: fileName, url: filePath });
 }
 
-export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, chatStatus }) => {
+export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ agentId, sessionId, items, chatStatus }) => {
   const [fileMenuOpen, setFileMenuOpen] = useState<Record<string, boolean>>({});
   const [fileMenuPosition, setFileMenuPosition] = useState<Record<string, { top: number; left: number }>>({});
   const [fileExistsCache, setFileExistsCache] = useState<Record<string, boolean>>(() => {
@@ -91,13 +92,8 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
   const isMountedRef = useRef(true);
   useEffect(() => () => { isMountedRef.current = false; }, []);
   const { showToast } = useToast();
-  // 取当前 agentId(== agentId)用于 URI 解析的 ctx。**不再** 读
-  // `useAgentDetail(...).knowledge.knowledgeBase` —— URI 抽象掉了
-  // "调用方该问谁要 KB 路径"。
-  const currentAgentId = useCurrentAgentId();
-  // 图片预览 media:// 直供的 ctx(agent + session)。
-  const { chatSessionId } = useCurrentSession();
-  const mediaCtx: MediaUrlContext = { agentId: currentAgentId, sessionId: chatSessionId };
+  // media:// 直供需要的 ctx(agent + session)。
+  const mediaCtx: MediaUrlContext = { agentId, sessionId };
   const allFilePaths = useMemo(() => items.map(item => item.fileUri), [items]);
   const allFilePathsKey = useMemo(() => allFilePaths.join('\0'), [allFilePaths]);
   const installSkillActions = ApplySkillDialogAtom.useChange();
@@ -186,7 +182,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
     // parent render, and including fileExistsCache would re-trigger this effect
     // on every check result, causing cleanup-races that discarded async results
     // before they could write to the cache.
-  }, [allFilePathsKey, currentAgentId]);
+  }, [allFilePathsKey, agentId]);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -226,7 +222,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
   // workspaceApi.openPath / showInFolder 仍要绝对路径 —— URI 在调前展开。
   const handleOpenWithDefaultApp = async (filePath: string) => {
     try {
-      const absPath = await tryResolveUriToPath(filePath, { agentId: currentAgentId });
+      const absPath = await tryResolveUriToPath(filePath, { agentId });
       if (!absPath) {
         showToast('Unable to resolve file path', 'error');
         return;
@@ -245,7 +241,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
 
   const handleShowInFolder = async (filePath: string) => {
     try {
-      const absPath = await tryResolveUriToPath(filePath, { agentId: currentAgentId });
+      const absPath = await tryResolveUriToPath(filePath, { agentId });
       if (!absPath) {
         showToast('Unable to resolve file path', 'error');
         return;
@@ -275,7 +271,7 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
               label: 'Open Knowledge Base',
               onClick: async () => {
                 try {
-                  const kbAbs = await tryResolveUriToPath('knowledge://', { agentId: currentAgentId });
+                  const kbAbs = await tryResolveUriToPath('knowledge://', { agentId });
                   if (!kbAbs) {
                     showToast('Unable to open knowledge base', 'error');
                     return;
@@ -309,8 +305,8 @@ export const GeneratedFileCards: React.FC<GeneratedFileCardsProps> = ({ items, c
       }
 
       const result = await skillsApi.installSkillFromFilePath(filePath, {
-        agentId: currentAgentId || undefined,
-        applyToCurrentAgent: !!currentAgentId,
+        agentId,
+        applyToCurrentAgent: true,
         requestSource: 'generated-file',
       });
 

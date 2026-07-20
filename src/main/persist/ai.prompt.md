@@ -1,8 +1,8 @@
-<!-- Last verified: 2026-07-18 (new Profile default agent initialization) -->
+<!-- Last verified: 2026-07-19 (app runtime storage overview; 集中 preload invoke 模块) -->
 
 # Persist 模块（新布局 store 层）
 
-> `~/.deskmate/profiles/p_{ulid}/` 新布局的所有读写入口。高层架构 / IPC 协议 / Hot-Cold 视图 / SQLite 索引设计见 [ai.prompt/persist.md](../../../ai.prompt/persist.md)；本文件聚焦 store 层 class 关系、Common Changes 入口、完整 Gotchas。
+> `~/.deskmate/profiles/p_{ulid}/` 新布局的所有读写入口，以及 `/settings/persist` 对跨 Profile `~/.deskmate/env/` 的只读存储统计。高层架构 / IPC 协议 / Hot-Cold 视图 / SQLite 索引设计见 [ai.prompt/persist.md](../../../ai.prompt/persist.md)；本文件聚焦 store 层 class 关系、Common Changes 入口、完整 Gotchas。
 
 ## Key Files
 
@@ -19,7 +19,7 @@
 | `knowledge.ts` | agent knowledge/ 目录生命周期 | tiny |
 | `auth.ts` | `LegacyAuth` / `PiAuth`：auth.json / auth.pi.json | small |
 | `ipc.ts` | `querySession` / `queryJobRun` 沿 sender-owned Profile → agent → session / job run 统一解析，并由 persist IPC 复用；`registerPersistIpc()` 注册 handlers | small |
-| `storageOverview.ts` | 「本地数据透明」聚合器:只读递归统计。**以 agent 为组**（`AgentStorageGroup`：会话/定时/知识/config 四子项，config 用减法兜底守恒）+ profile 级共享分类（`StorageCategory`：skills/mcp/models/搜索索引/归档/profileConfig）。`computeStorageOverview` + reveal 边界校验 `resolveRevealTarget`。`/settings/persist` 页数据源 | small |
+| `storageOverview.ts` | 「本地数据透明」聚合器：Profile 视图以 agent 为组（`AgentStorageGroup`：会话/定时/知识/config 四子项，config 用减法兜底守恒）+ profile 级共享分类（`StorageCategory`）；另以**单遍**递归按 `env/` 顶层目录分组为 `RuntimeStorageOverview`，避免为 Bun/Python 包树重复扫描。`resolveRevealTarget` 只放行当前 Profile、app root 或受控 `env/` 子树。`/settings/persist` 页数据源 | medium |
 | `lib/atomic.ts` | tmp→rename 原子写 + 增量 helpers | small |
 | `lib/emit.ts` | `emit(profileId, channel, payload)` —— persist → renderer 广播入口；显式 profile identity 只用于选取 owning runtime `Profile.mainWindow`，wire payload 不重复携带它；没有 owner window 时 no-op | tiny |
 | `lib/root.ts` | `getAppRoot()` + `setRootForTesting()` | tiny |
@@ -94,7 +94,8 @@ ProfileRegistry.require(profileId).store → ProfileStore
 | 加 job_run 索引字段 | 同上但走 `JobRunRow` / `JobRun.toJobRunRow` / `JobRunIdx` 路径 | schedule_run 表与 regular 表物理分开，互不影响 |
 | 将 schedule run 继续为 regular session | `session.ts#JobRun.forkToSession` + `RegularSession` data 投影；clone messages/files 后才写 regular `data.json`，最后由 afterPersist 同步 SQL / 事件 | 只接受 terminal run；原 run 不删、不改 |
 | 加 SQLite 偏序索引 | `lib/db/schema.ts` `CREATE INDEX IF NOT EXISTS ix_xxx ON ... WHERE ...;` + 测试 `EXPLAIN QUERY PLAN` 验命中 | 候选索引清单见 [ai.prompt/persist.md §9.2](../../../ai.prompt/persist.md) |
-| 加 IPC 通道 | `src/shared/ipc/persist.ts` 加 channel + `ipc.ts` 加 handler + `preload/persist/invoke.ts` 加 allowlist | renderer 调用走 `persistApi.xxx()` 自动类型推导 |
+| 加 IPC 通道 | `src/shared/ipc/persist.ts` 加 channel + `ipc.ts` 加 handler + `preload/invoke/persist.ts` 加 allowlist | renderer 调用走 `persistApi.xxx()` 自动类型推导 |
+| 加应用级运行时存储分类 | `shared/ipc/persist.ts` 的 `RuntimeStorageCategory` + `storageOverview.ts` 的顶层目录映射 + renderer `storageMeta.ts`；保持 `StorageOverview.totalBytes` 只代表 Profile，运行时统计必须独立 IPC，不能挂进 `shared` |
 | 加 SQLite 单元测试 | `__tests__/sqlite-index.test.ts` 仿 PR-1 模板（tmp 真盘 + ProfileDb.resetForTesting） | better-sqlite3 是 native，无法在 mock fs 跑 |
 | 加 mock fs 集成测试 | 仿 `agent.test.ts` 顶部 `vi.mock('../lib/db/db', () => ({ ProfileDb: { open: () => fakeDb, ... } }))` stub | fakeDb 提供 `db.prepare/get/all/run` no-op；不直接断言 SQL 行 |
 | 修改 Profile 名称 / 删除 Profile | `profileRegistry.ts` + `shared/ipc/profiles.ts` + `startup/ipc/profiles.ts` + Profile manager UI | 删除仅走 `removeClosed(id, senderOwnerId)`；先由 main 重新检查 current/open/last，再停止 runtime 并删 index/目录 |

@@ -3,29 +3,28 @@ import type { InvokeFn, OnOff } from '@shared/ipc/base';
 import type { McpAuthClientIdRequestPayload, McpAuthClientIdResponse } from '@shared/types/mcpAuth';
 import type { LogFields, LogLevel } from '@shared/log/types';
 import { provideInPreload as provideHumanLoop } from '@shared/ipc/human-loop';
-import invokeScreenshot from './screenshot/invoke';
-import invokeScheduler from './scheduler/invoke';
-import invokeDoctor from './doctor/invoke';
-import invokeApp from './app/invoke';
-import invokeWindow from './window/invoke';
-import invokePi from './pi/invoke';
-import invokeFeatureFlags from './featureFlags/invoke';
-import invokePersist from './persist/invoke';
-import invokeAgentChat from './agentChat/invoke';
-import invokeLlm from './llm/invoke';
-import invokeChatSession from './chatSession/invoke';
-import invokeFs from './fs/invoke';
-import invokeWorkspace from './workspace/invoke';
-import { invokeMcp, invokeMcpAuth } from './mcp/invoke';
-import { invokeSkills } from './skill/invoke';
-import invokeTools from './tools/invoke';
-import invokeRuntime from './runtime/invoke';
-import invokeUpdate from './update/invoke';
-import invokeAttachment from './attachment/invoke';
-import invokeInternalUrls from './internalUrls/invoke';
-import invokeResearch from './research/invoke';
-import invokeSubagentRun from './subagentRun/invoke';
-import invokeProfiles from './profiles/invoke';
+import invokeScreenshot from './invoke/screenshot';
+import invokeScheduler from './invoke/scheduler';
+import invokeDoctor from './invoke/doctor';
+import invokeApp from './invoke/app';
+import invokeWindow from './invoke/window';
+import invokePi from './invoke/pi';
+import invokePersist from './invoke/persist';
+import invokeAgentChat from './invoke/agentChat';
+import invokeLlm from './invoke/llm';
+import invokeChatSession from './invoke/chatSession';
+import invokeFs from './invoke/fs';
+import invokeWorkspace from './invoke/workspace';
+import { invokeMcp, invokeMcpAuth } from './invoke/mcp';
+import { invokeSkills } from './invoke/skill';
+import invokeTools from './invoke/tools';
+import invokeRuntime from './invoke/runtime';
+import invokeUpdate from './invoke/update';
+import invokeAttachment from './invoke/attachment';
+import invokeInternalUrls from './invoke/internalUrls';
+import invokeResearch from './invoke/research';
+import invokeSubagentRun from './invoke/subagentRun';
+import invokeProfiles from './invoke/profiles';
 import { profile } from './windowProfile';
 
 // Define the API that will be exposed to the renderer process
@@ -57,10 +56,6 @@ export interface ElectronAPI {
     invoke: InvokeFn;
   };
 
-  // Feature Flags APIs - developer feature toggles (read-only)
-  featureFlags: {
-    invoke: InvokeFn;
-  };
 
   // MCP Client Manager APIs
   mcp: {
@@ -247,9 +242,6 @@ export const electronAPI: ElectronAPI = {
   },
   llm: {
     invoke: invokeLlm,
-  },
-  featureFlags: {
-    invoke: invokeFeatureFlags,
   },
   mcp: {
     invoke: invokeMcp,

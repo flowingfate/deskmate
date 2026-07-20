@@ -1,6 +1,6 @@
 # 数据流
 
-<!-- Last verified: 2026-07-17 (sender-bound multi-window Profile routing) -->
+<!-- Last verified: 2026-07-19 (sender-bound multi-window Profile routing; 集中 preload invoke 模块) -->
 
 参考：`src/shared/ipc/base.ts`、`src/main/pi/`、`src/main/persist/`、`src/main/lib/mcpRuntime/`
 
@@ -37,14 +37,14 @@
 ```
 src/shared/ipc/<name>.ts          ← 唯一类型真相源（R→M 方法签名 + M→R 事件 payload）
 src/main/startup/ipc/<name>.ts    ← Main handler（bindMain 注册）
-src/preload/<name>/invoke.ts      ← Preload 白名单 invoke
+src/preload/invoke/<name>.ts      ← Preload 白名单 invoke
 src/renderer/ipc/<name>.ts        ← Renderer 绑定（xxxApi / xxxEvents）
 src/renderer/components/...       ← 业务代码通过 `import { xxxApi } from '@/ipc/<name>'` 调用
 ```
 
 ### 命名空间一览
 
-共 30+ 个命名空间，覆盖所有 IPC 通道：app、window、auth、signin、featureFlags、misc（folder/debug）、profile、agentChat、chatSession、models、llm、fs、workspace、mcp/mcpAuth、navigate、skills、builtinTools、subagentRun、runtime、sync、update、logViewer（dev-only）。
+共 30+ 个命名空间，覆盖所有 IPC 通道：app、window、auth、signin、misc（folder/debug）、profile、agentChat、chatSession、models、llm、fs、workspace、mcp/mcpAuth、navigate、skills、builtinTools、subagentRun、runtime、sync、update、logViewer（dev-only）。
 
 **例外**：`log:write` 是 renderer → main 的**单向** `send`，不走类型化框架（每条日志加 invoke round-trip 太重）；见下文「日志流」。
 
@@ -58,7 +58,7 @@ src/renderer/components/...       ← 业务代码通过 `import { xxxApi } from
 
 1. 在 `src/shared/ipc/` 创建契约文件，定义 R→M 类型和/或 M→R 事件类型
 2. 在 `src/main/startup/ipc/` 创建 handler 文件，使用 `renderToMain.bindMain(ipcMain)` 注册
-3. 在 `src/preload/<name>/invoke.ts` 创建白名单 invoke
+3. 在 `src/preload/invoke/<name>.ts` 创建白名单 invoke
 4. 在 `src/preload/main.ts` 的 `ElectronAPI` 接口和 `electronAPI` 对象中注册命名空间
 5. 在 `src/renderer/ipc/<name>.ts` 创建 Renderer 绑定
 6. 业务代码通过 `import { xxxApi } from '@/ipc/<name>'` 调用，**禁止直接使用 `window.electronAPI`**

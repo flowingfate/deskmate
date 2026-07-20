@@ -79,6 +79,29 @@ export interface StorageCategory {
   count?: number;
 }
 
+/** 应用托管运行时的分类；跨 Profile 共享，不能计入单个 Profile 的总量。 */
+export interface RuntimeStorageCategory {
+  key: 'bin' | 'bun' | 'python' | 'pythonVenv' | 'uvCache' | 'uvTools' | 'runtimeBin' | 'other';
+  label: string;
+  description: string;
+  /** 文件逻辑大小（所有 regular file 的 stat.size 之和）。 */
+  bytes: number;
+  /** 仅统计 regular file；目录和软链接不计入。 */
+  fileCount: number;
+  /** 该分类对应的磁盘绝对路径（在文件管理器中打开）。 */
+  path: string;
+}
+
+/** `~/.deskmate/env` 的应用级概览，不属于任何单个 Profile。 */
+export interface RuntimeStorageOverview {
+  envRoot: string;
+  exists: boolean;
+  totalBytes: number;
+  fileCount: number;
+  categories: RuntimeStorageCategory[];
+  generatedAt: string;
+}
+
 /** 单个 agent 分组内的一个子项（会话/定时/知识/配置）。 */
 export interface AgentStoragePart {
   key: 'conversations' | 'scheduledRuns' | 'knowledge' | 'config';
@@ -199,6 +222,8 @@ type RenderToMain = {
   // ─────────── 本地数据透明（/settings/persist） ───────────
   /** 汇总 owner window profile 的本地存储占用（递归统计各分类字节 + 条目计数）。 */
   getStorageOverview: { call: []; return: PersistResult<StorageOverview> };
+  /** 汇总应用托管运行时（Bun、uv、Python、全局包与缓存）；不计入 Profile 总量。 */
+  getRuntimeStorageOverview: { call: []; return: PersistResult<RuntimeStorageOverview> };
   /** 在系统文件管理器中打开指定绝对路径（限当前 profile 目录树内）。 */
   revealStoragePath: { call: [absPath: string]; return: PersistResult };
 };

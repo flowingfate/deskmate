@@ -12,7 +12,7 @@
  * op)。`--json` 全员遵守。kernel(`kernel/*`)承载业务,本文件只把它们包成
  * `AppCommand` 装进注册表。
  *
- * 填充时机:模块加载期 eager 注册(web 无 feature flag,不需要延迟 / 条件)。
+ * 填充时机:模块加载期 eager 注册。
  * `pi/tools/web.ts` import 本模块即触发,`makeRouterCommand` 在首次被调用时
  * 读 `webCommands.list()`,此刻已注册完毕。
  *

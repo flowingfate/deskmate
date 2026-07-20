@@ -25,6 +25,7 @@ const invoke = renderToMain.provideInvokeForPreload(ipcRenderer, [
   'updateConfirmationSettings',
   'updateWebSearchSettings',
   'getStorageOverview',
+  'getRuntimeStorageOverview',
   'revealStoragePath',
 ]);
 

@@ -35,12 +35,6 @@ export interface TabComponentProps {
   readOnly?: boolean
 }
 
-export interface EmojiPickerProps {
-  isOpen: boolean
-  onClose: () => void
-  onEmojiSelect: (emoji: string) => void
-  currentEmoji?: string
-}
 
 export interface MarkdownEditorProps {
   value: string

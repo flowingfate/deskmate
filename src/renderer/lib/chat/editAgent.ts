@@ -9,7 +9,7 @@
  */
 
 import { navigateInApp } from '@/lib/navigation/appNavigation';
-import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
+import { CurrentSession } from '@renderer/states/currentSession.atom';
 
 export type AgentEditTab = 'basic' | 'mcp' | 'tools' | 'skills' | 'prompt';
 
@@ -23,7 +23,7 @@ const tabToRouteMap: Record<AgentEditTab, string> = {
 };
 
 export function editAgent(agentId?: string | null, initialTab?: AgentEditTab): void {
-  const targetAgentId = agentId || agentSessionCacheManager.getCurrentAgentId();
+  const targetAgentId = agentId || CurrentSession.get().agentId;
   if (!targetAgentId) return;
   const routeTab = initialTab ? tabToRouteMap[initialTab] : 'basic';
   navigateInApp(`/agent/${targetAgentId}/settings/${routeTab}`);

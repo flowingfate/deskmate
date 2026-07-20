@@ -4,40 +4,44 @@ import { useNavigate } from 'react-router-dom';
 
 import { useToast } from '@/components/ui/ToastProvider';
 import { persistApi } from '@/ipc/persist';
-import { useCurrentSession } from '@renderer/states/currentSession.atom';
 import { useAgentScheduleRuns } from '@renderer/states/scheduleRuns.atom';
 import { Button } from '@/shadcn/button';
 import { EMPTY_MESSAGE } from './zero/illustrarion';
 
 
-export function JobRunComposer(): ReactElement {
+interface JobRunComposerProps {
+  agentId: string;
+  jobId: string | null;
+  sessionId: string | null;
+}
+
+export function JobRunComposer({ agentId, jobId, sessionId }: JobRunComposerProps): ReactElement {
   const [isConverting, setIsConverting] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
-  const { agentId, jobId, chatSessionId } = useCurrentSession();
   const runs = useAgentScheduleRuns(agentId);
-  const run = runs.find((item) => item.id === chatSessionId && item.jobId === jobId);
+  const run = runs.find((item) => item.id === sessionId && item.jobId === jobId);
 
-  const hasJobRun = Boolean(agentId && jobId && chatSessionId);
+  const hasJobRun = Boolean(jobId && sessionId);
   const isRunning = run?.runStatus === 'running';
 
   async function handleConvertToRegularSession(): Promise<void> {
-    if (!agentId || !jobId || !chatSessionId || isConverting || isRunning) return;
+    if (!jobId || !sessionId || isConverting || isRunning) return;
 
     setIsConverting(true);
     try {
-      const result = await persistApi.forkJobRunToSession(agentId, jobId, chatSessionId);
+      const result = await persistApi.forkJobRunToSession(agentId, jobId, sessionId);
       if (!result.success) {
         toast.showError(result.error);
         return;
       }
-      const sessionId = result.data?.sessionId;
-      if (!sessionId) {
+      const newSessionId = result.data?.sessionId;
+      if (!newSessionId) {
         toast.showError('Unable to create a continuation session');
         return;
       }
       toast.showSuccess('Created a regular session from this scheduled run');
-      navigate(`/agent/${agentId}/${sessionId}`);
+      navigate(`/agent/${agentId}/${newSessionId}`);
     } catch {
       toast.showError('Unable to create a continuation session');
     } finally {

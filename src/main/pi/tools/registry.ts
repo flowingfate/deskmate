@@ -45,7 +45,6 @@ export class ToolsRegistry {
 
   /**
    * 注册一个工具。重名直接抛 —— 模块加载期发现冲突优于 runtime 静默覆盖。
-   * caller 用 feature flag 控制注册即可,registry 自身不做条件分支。
    */
   register(tool: LocalTool): void {
     const name = tool.spec.name;

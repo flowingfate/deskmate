@@ -12,6 +12,8 @@ import { TooltipProvider } from '@/shadcn/tooltip';
 import type { ToolCallExecutionStatus, ToolRenderer } from './types';
 
 export interface ToolCallsSectionProps {
+  agentId: string;
+  sessionId: string;
   toolCalls: ToolCall[];
   sectionKey: string;
   /**
@@ -35,6 +37,8 @@ const computeExecutionStatus = (
 // Root
 
 export const ToolCallsSection: React.FC<ToolCallsSectionProps> = ({
+  agentId,
+  sessionId,
   toolCalls,
   sectionKey,
   isLive,
@@ -65,12 +69,16 @@ export const ToolCallsSection: React.FC<ToolCallsSectionProps> = ({
       >
         {mode === 'expanded' ? (
           <ExpandedView
+            agentId={agentId}
+            sessionId={sessionId}
             toolCalls={validToolCalls}
             isLive={isLive}
             onCollapse={handleCollapse}
           />
         ) : (
           <CollapsedView
+            agentId={agentId}
+            sessionId={sessionId}
             toolCalls={validToolCalls}
             isLive={isLive}
             selectedId={selectedId}
@@ -85,6 +93,8 @@ export const ToolCallsSection: React.FC<ToolCallsSectionProps> = ({
 
 
 interface CollapsedViewProps {
+  agentId: string;
+  sessionId: string;
   toolCalls: ToolCall[];
   isLive: boolean;
   selectedId: string | null;
@@ -93,6 +103,8 @@ interface CollapsedViewProps {
 }
 
 const CollapsedView: React.FC<CollapsedViewProps> = ({
+  agentId,
+  sessionId,
   toolCalls,
   isLive,
   selectedId,
@@ -117,6 +129,8 @@ const CollapsedView: React.FC<CollapsedViewProps> = ({
             return (
               <ChipSlot
                 key={tc.id}
+                agentId={agentId}
+                sessionId={sessionId}
                 toolCall={tc}
                 status={status}
                 renderer={renderer}
@@ -141,6 +155,8 @@ const CollapsedView: React.FC<CollapsedViewProps> = ({
       {selected && (
         <div className="pt-1.5">
           <ToolDetailView
+            agentId={agentId}
+            sessionId={sessionId}
             toolCall={selected}
             executionStatus={computeExecutionStatus(selected, isLive)}
             renderer={resolveToolRenderer(selected.name)}
@@ -153,12 +169,14 @@ const CollapsedView: React.FC<CollapsedViewProps> = ({
 
 
 interface ExpandedViewProps {
+  agentId: string;
+  sessionId: string;
   toolCalls: ToolCall[];
   isLive: boolean;
   onCollapse: () => void;
 }
 
-const ExpandedView: React.FC<ExpandedViewProps> = ({ toolCalls, isLive, onCollapse }) => {
+const ExpandedView: React.FC<ExpandedViewProps> = ({ agentId, sessionId, toolCalls, isLive, onCollapse }) => {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-1 px-0.5">
@@ -191,6 +209,8 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({ toolCalls, isLive, onCollap
             >
               <ToolCardHeader toolCall={tc} status={status} renderer={renderer} />
               <ToolDetailView
+                agentId={agentId}
+                sessionId={sessionId}
                 toolCall={tc}
                 executionStatus={status}
                 renderer={renderer}
@@ -240,6 +260,8 @@ const StatusDot: React.FC<{ status: ToolCallExecutionStatus; failed: boolean }> 
 };
 
 interface ChipSlotProps {
+  agentId: string;
+  sessionId: string;
   toolCall: ToolCall;
   status: ToolCallExecutionStatus;
   renderer: ToolRenderer | null;
@@ -248,12 +270,14 @@ interface ChipSlotProps {
 }
 
 /** Chip dispatch:粗(Chip)优先;否则默认 ToolChip + label override。 */
-const ChipSlot: React.FC<ChipSlotProps> = ({ toolCall, status, renderer, selected, onClick }) => {
+const ChipSlot: React.FC<ChipSlotProps> = ({ agentId, sessionId, toolCall, status, renderer, selected, onClick }) => {
   const failed = toolCall.response?.status === 'fail';
   if (renderer?.Chip) {
     const Chip = renderer.Chip;
     return (
       <Chip
+        agentId={agentId}
+        sessionId={sessionId}
         toolCall={toolCall}
         executionStatus={status}
         selected={selected}

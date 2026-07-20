@@ -30,7 +30,7 @@ import { timeCommand } from './time';
 /** app 域专属注册表 —— 与 `webCommands` 同形,只装 app 的子命令。 */
 export const appCommands = new AppCommandRegistry();
 
-// 批 Capability:真实能力(无 feature flag,默认全员可用)
+// 批 Capability:真实能力，默认全员可用。
 appCommands.register(agentCommand);
 appCommands.register(mcpCommand);
 appCommands.register(skillCommand);

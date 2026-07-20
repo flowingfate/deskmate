@@ -35,19 +35,19 @@ import {
 import { Button } from '@/shadcn/button';
 
 interface Props {
-  currentAgentId: string | null;
+  agentId: string;
   shouldLockComposeUi: boolean;
 }
 
 const AUTO_LABEL = 'Auto';
 
-function Selector({ currentAgentId, shouldLockComposeUi }: Props) {
+function Selector({ agentId, shouldLockComposeUi }: Props) {
   const [isLoading, setIsLoading] = useState(false);
 
-  const agent = useAgentById(currentAgentId);
+  const agent = useAgentById(agentId);
   // thinkingLevel 是 cold 字段：detail 尚未到位时按"未设置"处理（Auto），与
   // 加载完后的"显式无值"行为对齐，避免按钮在 detail 异步到位前闪一次具体等级。
-  const detail = useAgentDetail(currentAgentId);
+  const detail = useAgentDetail(agentId);
   const modelId = agent?.model ?? null;
   const current: ThinkingLevel | undefined = detail?.thinkingLevel;
 
@@ -63,10 +63,9 @@ function Selector({ currentAgentId, shouldLockComposeUi }: Props) {
   // 选 ThinkingLevel：透传；选 null：清除字段（语义 "Auto"）。
   const handleSelect = async (next: ThinkingLevel | null) => {
     if ((next ?? undefined) === current) return;
-    if (!currentAgentId) return;
     setIsLoading(true);
     try {
-      await updateAgent(currentAgentId, { thinkingLevel: next });
+      await updateAgent(agentId, { thinkingLevel: next });
     } catch {
       /* 失败：agentDetail.atom 不会被更新，UI 自动回到旧值 */
     } finally {

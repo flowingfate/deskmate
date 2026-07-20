@@ -1,7 +1,5 @@
 import { Bug, Check, Copy } from 'lucide-react';
-import { useParams } from 'react-router-dom';
 import { appApi } from '@/ipc/app';
-import { CurrentSessionStatus } from '@/lib/chat/agentSessionCacheManager';
 import { useSchedulesByAgentId } from '@/states/schedules.atom';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -15,19 +13,17 @@ interface DevInfoRow {
 }
 
 
-export function DevInfoBadge(): ReactElement {
+interface DevInfoBadgeProps {
+  agentId: string;
+  jobId: string | null;
+  sessionId: string | null;
+}
+
+export function DevInfoBadge({ agentId, jobId, sessionId }: DevInfoBadgeProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const [appVersion, setAppVersion] = useState('1.15.6');
-  const {
-    agentId: routeAgentId,
-    jobId,
-    sessionId: routeSessionId,
-  } = useParams();
-  const { agentId: currentAgentId, chatSessionId } = CurrentSessionStatus.use();
-  const agentId = routeAgentId ?? currentAgentId;
-  const sessionId = routeSessionId ?? chatSessionId;
   const scheduleJob = useSchedulesByAgentId(agentId).find(({ id }) => id === jobId);
 
   useEffect(() => {
@@ -58,13 +54,13 @@ export function DevInfoBadge(): ReactElement {
   };
 
   const identifiers = [
-    agentId ? `agent: ${agentId}` : null,
+    `agent: ${agentId}`,
     jobId ? `job: ${jobId}` : null,
     sessionId ? `session: ${sessionId}` : null,
   ].filter((value): value is string => value !== null);
   const rows: DevInfoRow[] = [
     { key: 'version', label: 'Version', value: appVersion },
-    ...(agentId ? [{ key: 'agent', label: 'Agent ID', value: agentId }] : []),
+    { key: 'agent', label: 'Agent ID', value: agentId },
     ...(jobId
       ? [{
           key: 'job',

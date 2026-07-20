@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-18 -->
+<!-- Last verified: 2026-07-19 -->
 # 布局
 
 > 渲染进程 SPA 的外壳：采用 AppShell（Sidebar + StatusBar + Titlebar） + AgentLayout（SessionPanel + 主内容区 + 右侧面板）两层架构。
@@ -49,7 +49,7 @@ RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
 - **状态所有权**：侧边栏宽度由 `LeftNavSizeAtom`（宽度、拖拽、持久化）管理，折叠状态由 `LeftNavCollapsedAtom` 管理，位于 `src/renderer/states/left-nav.atom.ts`。右面板使用 `RightPaneCollapsedAtom`（`src/renderer/states/right-pane.atom.ts`）。
 - **Settings shell**：`SettingsPage` 仅渲染 Settings 侧栏、分隔线、内容容器与无 context 的 `<Outlet />`。MCP、Skills 等子功能各自持有菜单、确认框和最小状态；不得把操作回调、DOM anchor 或临时 `window` 字段上提到 shell。
 - **Agent 路由的下拉框/覆盖层**：全局 Agent 上下文菜单和覆盖层通过 atom 管理，在 `AgentLayout` 层级渲染，无需 props 逐层传递。
-- **Agent 编辑命令**：使用普通函数 `lib/chat/editAgent.ts#editAgent(agentId?, tab?)`（不碰 atom，通过 `lib/navigation/appNavigation.ts` 的窄 navigation bridge 导航，并读取 `agentSessionCacheManager`）。bridge 由 `entries/main.routes.tsx` 创建 router 后注册，业务组件不得反向 import 路由表，否则会形成 ESM 循环依赖。菜单/ChatView 直接调用 `editAgent`。ChatSession CRUD（删除/fork/重命名/收藏/下载）走 `states/chatSessionCommands.ts` 的 `chatSessionCommands`（`mutate` 无状态命令 dispatcher，fork 同样走 navigation bridge）。**不再有 `agent:editAgent` / `chatSession:*` 自定义 DOM 事件**。
+- **Agent 编辑命令**：使用普通函数 `lib/chat/editAgent.ts#editAgent(agentId?, tab?)`（通过 `lib/navigation/appNavigation.ts` 的窄 navigation bridge 导航；未显式传入 agentId 时同步读取 `CurrentSession.get().agentId`，不经过会话 cache manager）。bridge 由 `entries/main.routes.tsx` 创建 router 后注册，业务组件不得反向 import 路由表，否则会形成 ESM 循环依赖。菜单/ChatView 直接调用 `editAgent`。ChatSession CRUD（删除/fork/重命名/收藏/下载）走 `states/chatSessionCommands.ts` 的 `chatSessionCommands`（`mutate` 无状态命令 dispatcher，fork 同样走 navigation bridge）。**不再有 `agent:editAgent` / `chatSession:*` 自定义 DOM 事件**。
 - **全局确认框**：`components/ui/ConfirmationDialog.tsx` 挂在 RootLayout，`requestConfirmation(...)` 可由 React 组件或 atom/action 路径调用。只保留一个待决请求；新请求以 `false` 结算旧请求，Cancel/Esc/外部关闭同样结算 `false`。
 
 ## 常见变更
@@ -97,10 +97,10 @@ RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
 - macOS 标题栏缩放补偿使用直接设置在 `documentElement` 上的 CSS 自定义属性（`--mac-zoom-factor`），以避免 React 渲染延迟引起的抖动。
 - **数据路由（data router）**：路由在 `entries/main.routes.tsx` 用 config-first 对象数组 `const routes: RouteObject[]` 定义、`createBrowserRouter(routes)` 构建，`main.tsx` 用 `<RouterProvider router={router}/>` 挂载。`RouterProvider` 不接受 children，故所有依赖路由 context 的全局节点（`McpConnectionFailureToastListener`、`WindowZoomHotkeys`、MCP dialog）与全局 effect（`navigate:to` 事件、crash 面包屑）都迁进了根路由 `RootLayout`。命令式业务导航统一通过 `lib/navigation/appNavigation.ts` 的 bridge；业务模块禁止 import `entries/main.routes.tsx`。不再有 `AppRoutes` / `AppRoutesWithTitleBar` 组件。
 - **`Component:` vs `element:` 选择**：无 props 的路由用 `Component: X`（传组件类型，react-router 内部 `createElement`，官方推荐、省一层）；**需要给组件传 props 的路由必须用 `element: <X prop=.../>`**（`Component` 与 `element` 互斥且 `Component` 无法传 props）。当前需 `element:` 的两类：`<ChatView kind="job-run"/>`、重定向 `<Navigate to=.../>`。
-- **静态路由 + feature flag**：data router 的路由表是静态对象；只有确有 feature gate 的功能才使用 `element` guard。Delegation 是普通 Agent 的稳定设置 tab，不受 feature flag 控制。
+- **静态路由**：data router 的路由表是静态对象；不要按运行时条件拼接路由表。Delegation 是普通 Agent 的稳定设置 tab。
 - **TitleBar 历史导航（`HistoryNav`）**：`canGoBack/canGoForward` 直接读 react-router 写入 `window.history.state.idx` 的真实历史光标 + `useNavigationType()` 的 `PUSH/POP/REPLACE` 信号，`goBack/goForward` 用 `navigate(-1)/navigate(1)`。**不再维护手搓镜像栈**——旧实现的镜像栈无法区分 push/replace，与真实历史漂移，是“后退无反应”的根因。切勿回退到镜像栈方案。
 - **Settings 导航用 URL 承载意图，不用事件/定时器/sessionStorage**：从 agent editor 进入 Settings 管理页时，“预选某项”的意图放进 URL query（如 `/settings/skills?selected=<name>`），目标视图用 `useSearchParams()` 读取、命中后 `setSearchParams(..., { replace: true })` 清掉 query。数据首帧可能仍在加载，读取 effect 必须在列表非空后才选中并清 query，否则意图丢失。Settings 页 Back（`SettingsPage.handleBack`）依据 `window.history.state.idx`：`idx>0` → `navigate(-1)` 回真实来源，`idx===0`（深链/刷新首屏）→ `resolveSettingsBackFallbackPath()` 兜底到 agent 路由。历史包袱：旧实现曾用 `agent:closeEditor` 死事件 + `setTimeout(100)` + `skills:selectSkill` CustomEvent + `settingsCameFromApp` sessionStorage 哨兵，已全部移除——**切勿回退**。
 
 ## 相关模块
-- 依赖于：[userData providers](../userData/)、`agentSessionCacheManager`（`src/renderer/lib/chat/`）、`LeftNavSizeAtom` / `LeftNavCollapsedAtom`（`src/renderer/states/left-nav.atom.ts`）、`RightPaneCollapsedAtom`（`src/renderer/states/right-pane.atom.ts`）、`ResizableDivider` / `NavItem` UI 基础组件
+- 依赖于：[userData providers](../userData/)、`CurrentSession`（`src/renderer/states/currentSession.atom.ts`，活跃路由身份）、`agentSessionCacheManager`（`src/renderer/lib/chat/`，会话内容 cache）、`LeftNavSizeAtom` / `LeftNavCollapsedAtom`（`src/renderer/states/left-nav.atom.ts`）、`RightPaneCollapsedAtom`（`src/renderer/states/right-pane.atom.ts`）、`ResizableDivider` / `NavItem` UI 基础组件
 - 被依赖于：几乎所有渲染进程视图 — `ChatView`、`AgentEditingView`、所有 `menu/` 下拉框；[Chat](../chat/ai.prompt.md) 渲染在 `ContentContainer` 的 `<Outlet>` 内

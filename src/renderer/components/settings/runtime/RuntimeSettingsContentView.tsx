@@ -38,7 +38,6 @@ interface RuntimeSettingsContentViewProps {
   pythonVersions: PythonVersion[];
   isLoading: boolean;
   isPythonLoading: boolean;
-  showGitVersion: boolean;
   newPythonVersion: string;
   onInstall: (tool: 'bun' | 'uv') => Promise<void>;
   onVersionChange: (tool: 'bun' | 'uv', value: string) => void;
@@ -74,7 +73,6 @@ const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
   pythonVersions,
   isLoading,
   isPythonLoading,
-  showGitVersion,
   newPythonVersion,
   onInstall,
   onVersionChange,
@@ -269,7 +267,6 @@ const RuntimeSettingsContentView: React.FC<RuntimeSettingsContentViewProps> = ({
 
         <RuntimeSystemDependenciesCard
           gitVersion={gitVersion}
-          showGitVersion={showGitVersion}
         />
 
       </div>

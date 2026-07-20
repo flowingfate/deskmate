@@ -14,10 +14,12 @@ function getToolCallStatus(toolCall: ToolCall): ToolCallExecutionStatus {
 }
 
 interface AssistantToolCallsProps {
+  agentId: string;
+  sessionId: string;
   message: AssistantTranscriptMessage;
 }
 
-function AssistantToolCalls({ message }: AssistantToolCallsProps) {
+function AssistantToolCalls({ agentId, sessionId, message }: AssistantToolCallsProps) {
   const [selectedToolCallId, setSelectedToolCallId] = useState<string | null>(null);
   const selectedToolCall = message.tool_calls.find((toolCall) => toolCall.id === selectedToolCallId);
 
@@ -46,6 +48,8 @@ function AssistantToolCalls({ message }: AssistantToolCallsProps) {
       {selectedToolCall ? (
         <div className="mt-2 rounded-md border border-black/8 bg-white p-3">
           <ToolDetailView
+            agentId={agentId}
+            sessionId={sessionId}
             toolCall={selectedToolCall}
             executionStatus={getToolCallStatus(selectedToolCall)}
             renderer={null}
@@ -57,17 +61,19 @@ function AssistantToolCalls({ message }: AssistantToolCallsProps) {
 }
 
 interface AssistantMessageProps {
+  agentId: string;
+  sessionId: string;
   message: AssistantTranscriptMessage;
 }
 
-export function AssistantMessage({ message }: AssistantMessageProps) {
+export function AssistantMessage({ agentId, sessionId, message }: AssistantMessageProps) {
   const hasContent = message.content.trim().length > 0;
   const hasToolCalls = message.tool_calls.length > 0;
 
   return (
     <MessageCard label="Delegated Agent" time={message.time} tone="assistant">
       {hasContent ? <MarkdownView text={message.content} /> : null}
-      <AssistantToolCalls message={message} />
+      <AssistantToolCalls agentId={agentId} sessionId={sessionId} message={message} />
       {!hasContent && !hasToolCalls ? <EmptyMessageNotice /> : null}
     </MessageCard>
   );

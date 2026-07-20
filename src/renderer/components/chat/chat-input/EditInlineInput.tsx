@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { useSupportsImages } from '@/lib/models/useSupportsImages';
 import { ChatStatus } from '@/lib/chat/agentSessionCacheManager';
 import type { UserMessage } from '@shared/persist/types'
@@ -12,13 +11,14 @@ import { Button } from '@/shadcn/button';
 import { useChatInputState } from './shared/useChatInputState';
 import { useFileHandling } from './shared/useFileHandling';
 import { transformMentions } from './shared/transformMentions';
-import type { AttachContext } from '@/lib/attachment/copyToSandbox';
 import { useToast } from '../../ui/ToastProvider';
 import { inlineEditConfirmAtom } from '../../overlay/ModifyMsgConfimOverlay';
 
 const logger = log.child({ mod: 'EditInlineInput' });
 
 interface EditInlineInputProps {
+  agentId: string;
+  sessionId: string;
   initialMessage: UserMessage;
   onSubmitEditedMessage: (message: UserMessage) => Promise<void> | void;
   onCancelEdit: () => void;
@@ -27,6 +27,8 @@ interface EditInlineInputProps {
 }
 
 export const EditInlineInput: React.FC<EditInlineInputProps> = ({
+  agentId,
+  sessionId,
   initialMessage,
   onSubmitEditedMessage,
   onCancelEdit,
@@ -36,7 +38,7 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
   const { textareaStateAtom, attachmentsStateAtom, textareaManager, attachmentManager, hasValidInput } = useChatInputState('edit');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [isAwaitingEditConfirmation, setIsAwaitingEditConfirmation] = useState(false);
-  const supportsImages = useSupportsImages(agentSessionCacheManager.getCurrentAgentId());
+  const supportsImages = useSupportsImages(agentId);
   const { showToast } = useToast();
 
   const chatInputShortcutHint = getChatInputShortcutHint(
@@ -44,12 +46,6 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
   );
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const getAttachContext = (): AttachContext | null => {
-    const agentId = agentSessionCacheManager.getCurrentAgentId();
-    const sessionId = agentSessionCacheManager.getCurrentChatSessionId();
-    return agentId && sessionId ? { agentId, sessionId } : null;
-  };
 
   const {
     isProcessing,
@@ -79,11 +75,6 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
 
   const handleSend = async () => {
     if (isIdle && hasValidInput && !isProcessing && !isSubmittingEdit) {
-      const ctx = getAttachContext();
-      if (!ctx) {
-        showToast('No active chat session. Open a chat before sending.', 'error');
-        return;
-      }
       setIsAwaitingEditConfirmation(true);
       try {
         const confirmed = await inlineEditConfirm.request({
@@ -95,7 +86,7 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
         // 确认后才物化附件 —— 取消重新生成不会留下落盘文件。
         let messageToSend: UserMessage;
         try {
-          messageToSend = await attachmentManager.createMessage(textareaManager.get(), ctx, {
+          messageToSend = await attachmentManager.createMessage(textareaManager.get(), { agentId, sessionId }, {
             id: initialMessage.id,
             timestamp: initialMessage.time,
           });
@@ -129,7 +120,7 @@ export const EditInlineInput: React.FC<EditInlineInputProps> = ({
       onDrop={dragHandlers.handleDrop}
     >
       <div className="relative border border-black/7.5 rounded-md overflow-visible transition-all duration-200 ease min-w-95 max-md:min-w-70 max-[480px]:min-w-60 focus-within:border-[#404040] focus-within:shadow-[0_0_0_3px_rgba(0,0,0,0.1),0_2px_12px_rgba(0,0,0,0.08)] contrast-more:border-black">
-        <AttachmentList attachmentsStateAtom={attachmentsStateAtom} />
+        <AttachmentList agentId={agentId} sessionId={sessionId} attachmentsStateAtom={attachmentsStateAtom} />
         <TextArea
           handleImageSelect={handleImageSelect}
           handleSend={handleSend}

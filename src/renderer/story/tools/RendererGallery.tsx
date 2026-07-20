@@ -13,6 +13,9 @@ import {
   writeCall,
 } from './fixtures';
 
+const STORY_AGENT_ID = 'story-agent';
+const STORY_SESSION_ID = 'story-session';
+
 const entries = [
   { title: 'App command', toolCall: appCall, renderer: appRenderer },
   { title: 'Shell command', toolCall: shellCall, renderer: shellRenderer },
@@ -29,6 +32,8 @@ export default function RendererGallery() {
           <section key={entry.title} className="rounded-lg border border-sc-border bg-sc-card p-4">
             <h2 className="m-0 mb-3 text-sm font-semibold text-sc-card-foreground">{entry.title}</h2>
             <ToolDetailView
+              agentId={STORY_AGENT_ID}
+              sessionId={STORY_SESSION_ID}
               toolCall={entry.toolCall}
               executionStatus="completed"
               renderer={entry.renderer}

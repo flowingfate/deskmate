@@ -4,6 +4,8 @@ import { GeneratedFileCards } from '../../../../message/GeneratedFileCards';
 import { SubagentStatusIcon } from '../RunResultDetails';
 
 interface RunMessagesHeaderProps {
+  agentId: string;
+  sessionId: string;
   subrunId: SubrunId;
   status: string;
   task: string | null;
@@ -23,6 +25,8 @@ function formatDuration(durationMs: number | undefined): string {
 }
 
 export function RunMessagesHeader({
+  agentId,
+  sessionId,
   subrunId,
   status,
   task,
@@ -63,7 +67,7 @@ export function RunMessagesHeader({
       {deliverables.length > 0 ? (
         <div className="mt-3">
           <p className="mb-1 text-xs font-medium text-sc-muted-foreground">Deliverables</p>
-          <GeneratedFileCards items={deliverables.map((fileUri) => ({ fileUri }))} />
+          <GeneratedFileCards agentId={agentId} sessionId={sessionId} items={deliverables.map((fileUri) => ({ fileUri }))} />
         </div>
       ) : null}
     </DialogHeader>

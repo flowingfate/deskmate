@@ -5,23 +5,28 @@ import { AlertTriangle, FolderOpen, RefreshCw } from 'lucide-react'
 import { Button } from '@/shadcn/button'
 import { Badge } from '@/shadcn/badge'
 import { formatFileSize } from '../../../lib/utilities/contentUtils'
-import type { StorageOverview } from '@shared/ipc/persist'
+import type { RuntimeStorageOverview, StorageOverview } from '@shared/ipc/persist'
 import { StatCell } from './StoragePrimitives'
 import AgentGroupCard from './AgentGroupCard'
+import RuntimeStorageCard from './RuntimeStorageCard'
 import SharedDataCard from './SharedDataCard'
 
 interface PersistSettingsContentViewProps {
   overview: StorageOverview | null
+  runtimeOverview: RuntimeStorageOverview | null
   error: string | null
   loading: boolean
+  runtimeLoading: boolean
   onReveal: (absPath: string) => void
   onRefresh: () => void
 }
 
 const PersistSettingsContentView: React.FC<PersistSettingsContentViewProps> = ({
   overview,
+  runtimeOverview,
   error,
   loading,
+  runtimeLoading,
   onReveal,
   onRefresh,
 }) => {
@@ -101,8 +106,8 @@ const PersistSettingsContentView: React.FC<PersistSettingsContentViewProps> = ({
                     <FolderOpen size={14} className="mr-1.5" />
                     Open Data Folder
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={onRefresh} disabled={loading}>
-                    <RefreshCw size={14} className={'mr-1.5 ' + (loading ? 'animate-spin' : '')} />
+                  <Button size="sm" variant="ghost" onClick={onRefresh} disabled={loading || runtimeLoading}>
+                    <RefreshCw size={14} className={'mr-1.5 ' + (loading || runtimeLoading ? 'animate-spin' : '')} />
                     Refresh
                   </Button>
                 </div>
@@ -140,6 +145,12 @@ const PersistSettingsContentView: React.FC<PersistSettingsContentViewProps> = ({
 
               {/* Shared Data */}
               <SharedDataCard shared={overview.shared} onReveal={onReveal} />
+
+              <RuntimeStorageCard
+                overview={runtimeOverview}
+                loading={runtimeLoading}
+                onReveal={onReveal}
+              />
 
               <p className="text-xs text-content-secondary leading-relaxed">
                 The <span className="font-medium">Search Index</span> is a derived cache rebuilt automatically from

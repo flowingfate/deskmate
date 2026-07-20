@@ -1,10 +1,10 @@
 # 持久化层（Persist）
 
-<!-- Last verified: 2026-07-19 (Profile-owned main-window state) -->
+<!-- Last verified: 2026-07-19 (Profile-owned main-window state; app runtime storage overview; 集中 preload invoke 模块) -->
 
 ## 1. 范围
 
-本文档覆盖 DESKMATE 的本地用户态持久化层 —— `~/.deskmate/profiles/` 下所有用户产生的数据,以及读写这些数据的 main 进程 store 层与跨进程 IPC。
+本文档覆盖 DESKMATE 的本地用户态持久化层 —— `~/.deskmate/profiles/` 下所有用户产生的数据、读写这些数据的 main 进程 store 层与跨进程 IPC，以及 `/settings/persist` 对应用级 `~/.deskmate/env/` 的只读运行时存储概览。
 
 代码位置:
 
@@ -48,7 +48,7 @@
 
 ```
 ~/.deskmate/
-├── app.json, device-id, state/, cache/, logs/, env/, ...   # 不属于 persist
+├── app.json, device-id, state/, cache/, logs/, env/, ...   # env 不属于 persist；仅由本模块只读统计后展示
 └── profiles/
     ├── profiles.json                              # 索引 + activeProfileId(guest / signed_in)
     └── p_{ulid}/
@@ -146,7 +146,7 @@ Subrun 首次 execution 是 `pending → running → terminal`；terminal 后 `S
 | `createAgent / patchAgentFront / archiveAgent / unarchiveAgent / duplicateAgent / setPrimaryAgent / listArchivedAgents / getAgentDetail` | owning Profile 的 Agent CRUD 与 cold detail |
 | `renameSession / setSessionStarred / deleteSession / deleteScheduleRun / forkJobRunToSession / getUnreadSummary` | owning Profile 的 session 与 run 写路径 / 未读统计 |
 | `updateConfirmationSettings` / `updateWebSearchSettings` | owning Profile 的 settings 写入 |
-| `getStorageOverview` / `revealStoragePath(absPath)` | owning Profile 的本地数据透明视图与目录树内 reveal |
+| `getStorageOverview` / `getRuntimeStorageOverview` / `revealStoragePath(absPath)` | 前者只统计 owner Profile；后者单遍统计跨 Profile 共享的 `env/` 运行时目录；reveal 仅放行当前 Profile、app root 或 `env/` 子树 |
 
 ### 6.2 Main → Renderer(send / on,按域 150ms 防抖)
 
@@ -300,7 +300,7 @@ main 端 `agent:updated` 事件 payload 同时下推 `{ record, detail }`,避免
 | 加 job_run 索引字段 | 同上但走 `JobRunRow` / `JobRun.toJobRunRow` / `JobRunIdx` 路径 |
 | 将 schedule run 继续为 regular session | `session.ts#JobRun.forkToSession` + persist IPC / preload；clone messages/files/contextState，终态校验在 source JobRun | 原 run 不删、不改 |
 | 加 SQLite 偏序索引 | `lib/db/schema.ts` `CREATE INDEX IF NOT EXISTS ix_xxx ON ... WHERE ...;` + `EXPLAIN QUERY PLAN` 验命中(候选清单见 §9.2) |
-| 加 IPC 通道 | `src/shared/ipc/persist.ts` + `ipc.ts` handler + `preload/persist/invoke.ts` allowlist;renderer 自动类型推导 |
+| 加 IPC 通道 | `src/shared/ipc/persist.ts` + `ipc.ts` handler + `preload/invoke/persist.ts` allowlist;renderer 自动类型推导 |
 | 加新 profile 级共享资源(如 prompts/) | `path.ts` 加路径常量 + 新 store class + `ProfileStore` 字段 + `ProfileRegistry.bootstrap` 装载步骤;仿 `mcp.ts` |
 | 加 SQLite 单元测试 | `__tests__/sqlite-index.test.ts` 模板(tmp 真盘 + `ProfileDb.resetForTesting`);better-sqlite3 是 native,无法 mock fs |
 | 加 mock fs 集成测试 | 仿 `agent.test.ts` 顶部 `vi.mock('../lib/db/db', () => ({ ProfileDb: { open: () => fakeDb, ... } }))` stub;不直接断言 SQL 行 |

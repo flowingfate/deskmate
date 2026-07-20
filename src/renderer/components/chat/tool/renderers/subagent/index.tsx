@@ -58,11 +58,11 @@ const inputArgsText = (toolCall: ToolSlotProps['toolCall']): string => {
   return typeof cmd === 'string' ? cmd : '';
 };
 
-const OutputExecutingBlock: React.FC<ToolSlotProps> = ({ toolCall }) => (
-  <SubagentRunCard toolCall={toolCall} />
+const OutputExecutingBlock: React.FC<ToolSlotProps> = ({ agentId, sessionId, toolCall }) => (
+  <SubagentRunCard agentId={agentId} sessionId={sessionId} toolCall={toolCall} />
 );
 
-const OutputSuccessBlock: React.FC<ToolOutputSuccessSlotProps> = ({ toolCall, result }) => {
+const OutputSuccessBlock: React.FC<ToolOutputSuccessSlotProps> = ({ agentId, sessionId, toolCall, result }) => {
   const outcome = parseSubagentCommandOutcome(result);
   if (outcome?.kind === 'rejected') {
     return (
@@ -72,7 +72,7 @@ const OutputSuccessBlock: React.FC<ToolOutputSuccessSlotProps> = ({ toolCall, re
     );
   }
   if (outcome?.kind === 'result') {
-    return <SubagentRunCard toolCall={toolCall} result={outcome.result} />;
+    return <SubagentRunCard agentId={agentId} sessionId={sessionId} toolCall={toolCall} result={outcome.result} />;
   }
   if (isReadOnlySubagentCommandResult(result)) {
     return <pre className="m-0 rounded-[4px] border border-black/7 bg-gray-50 px-2.5 py-2 font-mono text-[11.5px] leading-[1.55] text-gray-800 whitespace-pre-wrap wrap-break-word">{result}</pre>;

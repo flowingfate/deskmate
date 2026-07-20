@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-06-30 -->
+<!-- Last verified: 2026-07-19 (集中 preload invoke 模块) -->
 # lib/research — `web research` 的 research window 子系统
 
 > human-in-the-loop 网页研究：agent 出 query，用户在可见窗口里搜索、浏览、
@@ -24,7 +24,7 @@
 | `../../pi/appcmd/builtins/web/research.ts` | AppCommand：参数解析 / 校验 / human·json 输出 | main |
 | `../../pi/appcmd/builtins/web/kernel/research.ts` | orchestration：`eventSender===null` fail-fast → `humanLoopRequest('interactive-search')` → `registerPending`（不开窗）→ 等确认/取消/abort | main |
 | `../../startup/ipc/research.ts` · `@shared/ipc/research.ts` · `src/renderer/ipc/research.ts` | research renderer ↔ main typed IPC 契约 + handler + binding | 三进程 |
-| `src/preload/research.ts` · `src/preload/research/invoke.ts` | research window **专属** preload（最小权限：只暴露 `research` + `log`，不复用 main preload） | preload |
+| `src/preload/research.ts` · `src/preload/invoke/research.ts` | research window **专属** preload（最小权限：只暴露 `research` + `log`，不复用 main preload） | preload |
 | `src/renderer/research.tsx` · `research.html` | research window UI：tab strip + sources 侧栏 + confirm/cancel | renderer |
 
 ## 架构（代码不自明的关键不变量）

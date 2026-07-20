@@ -8,9 +8,9 @@
  * 仅 renderer 使用；放在 main 也用得到的 shared 下没有意义。
  */
 
-import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { getAgents, getPrimaryAgentId } from '@/states/agents.atom';
 import { peekSettingsEntry } from './settingsEntry';
+import { CurrentSession } from '@/states/currentSession.atom';
 
 /**
  * 选出 Back 兜底要落到的 agent 路由。
@@ -28,7 +28,7 @@ export function resolveSettingsBackFallbackPath(): string {
   const prev = peekSettingsEntry();
   if (prev) return prev;
 
-  const cachedAgentId = agentSessionCacheManager.getCurrentAgentId();
+  const { agentId: cachedAgentId } = CurrentSession.get();
   if (cachedAgentId) return `/agent/${cachedAgentId}`;
 
   const primaryId = getPrimaryAgentId();

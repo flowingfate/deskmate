@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { SlidersHorizontal, Plus } from 'lucide-react';
 import { composeTextAtom } from '../chat-input/Textarea';
 import { Button } from '@/shadcn/button';
-import { useCurrentAgent } from '@/states/agents.atom';
+import { useAgentById } from '@/states/agents.atom';
 import { ZERO_CHAT } from './illustrarion';
 import {
   AlertDialog,
@@ -37,11 +37,15 @@ function focusComposeInput() {
  *
  * 数据经 `usePresetPrompts` 读 AGENT.md `zero.preset_prompts`（agentDetail 后端，未定制回退空数组）；插图为 `./illustrarion` 的 `ZERO_CHAT`。
  */
-export function ZeroState() {
-  const agent = useCurrentAgent();
+interface ZeroStateProps {
+  agentId: string;
+}
+
+export function ZeroState({ agentId }: ZeroStateProps) {
+  const agent = useAgentById(agentId);
   const navigate = useNavigate();
   const { get, set } = composeTextAtom.useChange();
-  const prompts = usePresetPrompts(agent?.id);
+  const prompts = usePresetPrompts(agentId);
   const hasPrompts = prompts.length > 0;
   // 待覆盖确认的提示词；非 null 时弹出 AlertDialog。
   const [pendingOverwrite, setPendingOverwrite] = useState<PresetPrompt | null>(null);
@@ -91,26 +95,24 @@ export function ZeroState() {
           </div>
         )}
 
-        {agent?.id && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-2 gap-1.5 text-black/45 hover:text-black/70"
-            onClick={() => navigate(`/agent/${agent.id}/settings/presets`)}
-          >
-            {hasPrompts ? (
-              <>
-                <SlidersHorizontal size={13} strokeWidth={1.75} />
-                Manage prompts
-              </>
-            ) : (
-              <>
-                <Plus size={13} strokeWidth={2} />
-                Add quick prompts
-              </>
-            )}
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-2 gap-1.5 text-black/45 hover:text-black/70"
+          onClick={() => navigate(`/agent/${agentId}/settings/presets`)}
+        >
+          {hasPrompts ? (
+            <>
+              <SlidersHorizontal size={13} strokeWidth={1.75} />
+              Manage prompts
+            </>
+          ) : (
+            <>
+              <Plus size={13} strokeWidth={2} />
+              Add quick prompts
+            </>
+          )}
+        </Button>
       </div>
 
       <AlertDialog

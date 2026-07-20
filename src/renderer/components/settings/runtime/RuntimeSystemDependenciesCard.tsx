@@ -3,16 +3,9 @@ import type { GitVersion } from './RuntimeSettingsContentView';
 
 interface RuntimeSystemDependenciesCardProps {
   gitVersion: GitVersion | null;
-  showGitVersion: boolean;
 }
 
-const RuntimeSystemDependenciesCard: React.FC<RuntimeSystemDependenciesCardProps> = ({
-  gitVersion,
-  showGitVersion,
-}) => {
-  if (!showGitVersion) {
-    return null;
-  }
+const RuntimeSystemDependenciesCard: React.FC<RuntimeSystemDependenciesCardProps> = ({ gitVersion }) => {
   return (
     <div className="bg-white rounded-md p-2 border border-(--shadow-md) flex flex-col gap-2">
       <div className="flex items-center justify-between px-1 pb-2.5 border-b border-black/6 mb-1">

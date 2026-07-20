@@ -18,6 +18,8 @@ import GeneratedScheduleCards from './GeneratedScheduleCards';
 import { hasNewImageFormat, parseNewFormatMessage, ImageGalleryNew, MessageSegment } from './ImageGallery';
 
 interface AssistantMessageProps {
+  agentId: string;
+  sessionId: string;
   message: RenderAssistantMessage;
   /** assistant.content 文本(由 render-items-manager 缓存好,组件直接渲染)。 */
   cleanedText: string;
@@ -34,6 +36,8 @@ interface AssistantMessageProps {
 }
 
 const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
+  agentId,
+  sessionId,
   message,
   cleanedText,
   scheduleIds,
@@ -59,8 +63,8 @@ const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
     <>
       {showArtifacts && (
         <>
-          <GeneratedFileCards items={generatedFileItems} chatStatus={chatStatus} />
-          <GeneratedScheduleCards scheduleIds={scheduleIds} />
+          <GeneratedFileCards agentId={agentId} sessionId={sessionId} items={generatedFileItems} chatStatus={chatStatus} />
+          <GeneratedScheduleCards agentId={agentId} scheduleIds={scheduleIds} />
         </>
       )}
       <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -81,7 +85,7 @@ const AssistantMessageInner: React.FC<AssistantMessageProps> = ({
               className={`message-content relative wrap-break-word flex flex-col markdown-body ${index > 0 ? 'mt-7 ' : ''}${streaming ? 'streaming contain-[layout_style_paint] will-change-contents' : ''}`.trim()}
             >
               {segment.type === 'image-gallery' && segment.imageRegistry ? (
-                <ImageGalleryNew imageRegistry={segment.imageRegistry} />
+                <ImageGalleryNew agentId={agentId} sessionId={sessionId} imageRegistry={segment.imageRegistry} />
               ) : segment.type === 'text' ? (
                 <MarkdownView text={segment.content} />
               ) : null}

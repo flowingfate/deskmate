@@ -1,4 +1,4 @@
-import { CircleAlert, RotateCw } from 'lucide-react';
+import { CircleAlert } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { agentChatApi } from '@/ipc/agentChat';
@@ -21,12 +21,12 @@ const CLAUDE_MODEL_PATTERNS: ReadonlyArray<string> = [
 
 interface ErrorBarProps {
   errorMessage: string;
-  chatSessionId: string;
+  sessionId: string;
 }
 
-function getCurrentModelForSession(chatSessionId: string): string | null {
-  const cache = agentSessionCacheManager.getChatSessionCache(chatSessionId);
-  const agentId = cache?.agentId ?? agentSessionCacheManager.getCurrentAgentId();
+function getCurrentModelForSession(sessionId: string): string | null {
+  const cache = agentSessionCacheManager.getChatSessionCache(sessionId);
+  const agentId = cache?.agentId;
   const agent = agentId ? getAgentById(agentId) : (getAgents()[0] ?? null);
   return agent?.model ?? null;
 }
@@ -36,9 +36,9 @@ function isClaudeModel(modelId: string): boolean {
   return CLAUDE_MODEL_PATTERNS.some((id) => lower.includes(id) || id.includes(lower));
 }
 
-function getFixSuggestion(errorMessage: string, chatSessionId: string): string | null {
+function getFixSuggestion(errorMessage: string, sessionId: string): string | null {
   const lowerMessage = errorMessage.toLowerCase();
-  const currentModel = getCurrentModelForSession(chatSessionId);
+  const currentModel = getCurrentModelForSession(sessionId);
   const isClaude = currentModel ? isClaudeModel(currentModel) : false;
 
   if (
@@ -75,30 +75,30 @@ function getFixSuggestion(errorMessage: string, chatSessionId: string): string |
   return null;
 }
 
-export function ErrorBar({ errorMessage, chatSessionId }: ErrorBarProps): ReactElement {
-  const fixSuggestion = getFixSuggestion(errorMessage, chatSessionId);
+export function ErrorBar({ errorMessage, sessionId }: ErrorBarProps): ReactElement {
+  const fixSuggestion = getFixSuggestion(errorMessage, sessionId);
   const errorDetail = fixSuggestion ? `${errorMessage} ${fixSuggestion}` : errorMessage;
 
   async function retry(): Promise<void> {
-    logger.debug({ msg: 'Retrying chat', chatSessionId });
-    agentSessionCacheManager.clearErrorMessage(chatSessionId);
+    logger.debug({ msg: 'Retrying chat', sessionId });
+    agentSessionCacheManager.clearErrorMessage(sessionId);
 
     try {
-      const cache = agentSessionCacheManager.getChatSessionCache(chatSessionId);
+      const cache = agentSessionCacheManager.getChatSessionCache(sessionId);
       if (!cache?.agentId) {
-        logger.error({ msg: 'Cannot retry: no agentId for session', chatSessionId });
+        logger.error({ msg: 'Cannot retry: no agentId for session', sessionId });
         return;
       }
 
-      const result = await agentChatApi.retryChat(cache.agentId, chatSessionId);
+      const result = await agentChatApi.retryChat(cache.agentId, sessionId);
       if (!result.success) {
         logger.error({ msg: 'Retry failed', err: result.error });
-        agentSessionCacheManager.setErrorMessage(chatSessionId, result.error || 'Retry failed');
+        agentSessionCacheManager.setErrorMessage(sessionId, result.error || 'Retry failed');
       }
     } catch (error) {
       logger.error({ msg: 'Retry failed with exception', err: error });
       const retryErrorMessage = error instanceof Error ? error.message : String(error);
-      agentSessionCacheManager.setErrorMessage(chatSessionId, retryErrorMessage);
+      agentSessionCacheManager.setErrorMessage(sessionId, retryErrorMessage);
     }
   }
 

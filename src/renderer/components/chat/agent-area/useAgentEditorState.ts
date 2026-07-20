@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { AgentPersona } from '@shared/types/profileTypes'
-import { newEntityId } from '@shared/persist/id'
+import { peekAgentSettingsEntry } from '@/lib/navigation/settingsEntry'
 import { updateAgent } from '@/lib/chat/agentOps'
 import { useAgentById, useAgents } from '@/states/agents.atom'
 import { useAgentDetail } from '@/states/agentDetail.atom'
-import { getAgentSessions } from '@/states/sessionIndex.atom'
 import { useToast } from '@/components/ui/ToastProvider'
 import { log } from '@/log'
 import type { AgentConfig, AgentEditorTabName } from '../agent-editor/types'
@@ -92,7 +91,7 @@ interface AgentEditorState {
   canSaveAll: boolean
   error: string | null
   fieldErrors: Record<string, string>
-  handleBackToChat: () => void
+  handleBack: () => void
   handleClearError: () => void
   handleSaveAll: () => Promise<void>
   handleTabDataChange: (tabName: AgentEditorTabName, data: Partial<AgentConfig>, hasChanges: boolean) => void
@@ -217,16 +216,11 @@ export function useAgentEditorState(agentId: string | undefined, tabParam: strin
     }
   }, [agentId, allChanges, canSaveAll, showSuccess])
 
-  const handleBackToChat = useCallback(() => {
-    if (!agentId) {
-      navigate('/agent')
-      return
-    }
-    if (getAgentSessions(agentId).length === 0) {
-      navigate(`/agent/${agentId}/${newEntityId('s')}`)
-      return
-    }
-    navigate(`/agent/${agentId}`)
+  const handleBack = useCallback(() => {
+    const entryPath = peekAgentSettingsEntry();
+    if (entryPath) navigate(entryPath)
+    else if (agentId) navigate(`/agent/${agentId}`);
+    else navigate('/agent');
   }, [agentId, navigate])
 
   return {
@@ -235,7 +229,7 @@ export function useAgentEditorState(agentId: string | undefined, tabParam: strin
     canSaveAll,
     error,
     fieldErrors,
-    handleBackToChat,
+    handleBack,
     handleClearError,
     handleSaveAll,
     handleTabDataChange,

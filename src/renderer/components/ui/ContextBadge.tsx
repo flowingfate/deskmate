@@ -2,9 +2,9 @@ import React from 'react';
 import { badgeVariants } from '@/shadcn/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/shadcn/popover';
 import { cn } from '@/lib/utilities/utils';
-import { useCurrentAgent } from '@/states/agents.atom';
+import { useAgentById } from '@/states/agents.atom';
 import { useModelInfo } from '../../lib/models/useModelInfo';
-import { CurrentSessionCumulativeTokenUsage, CurrentSessionTokenUsage } from '../../lib/chat/agentSessionCacheManager';
+import { useContextUsage, useCumulativeUsage } from '../chat/useSessionCache';
 
 function formatTokenCount(tokens: number): string {
   if (tokens >= 1000) {
@@ -18,12 +18,20 @@ function formatCumulativeTokenCount(tokens: number): string {
   return `${tokens.toLocaleString()}（${Math.ceil(tokens / 1000)}K）`;
 }
 
-export const ContextBadge: React.FC = () => {
-  const currentAgent = useCurrentAgent();
-  const currentModel = currentAgent?.model ?? null;
+const EMPTY_CONTEXT_USAGE = { tokenCount: 0, totalMessages: 0, contextMessages: 0, compressionRatio: 1 };
+const EMPTY_CUMULATIVE_USAGE = { in: 0, out: 0, total: 0, cache: [0, 0] };
+
+interface ContextBadgeProps {
+  agentId: string;
+  sessionId: string | null;
+}
+
+export const ContextBadge: React.FC<ContextBadgeProps> = ({ agentId, sessionId }) => {
+  const agent = useAgentById(agentId);
+  const currentModel = agent?.model ?? null;
   const { info } = useModelInfo(currentModel);
-  const usage = CurrentSessionTokenUsage.use();
-  const cumulativeUsage = CurrentSessionCumulativeTokenUsage.use();
+  const usage = useContextUsage(sessionId) ?? EMPTY_CONTEXT_USAGE;
+  const cumulativeUsage = useCumulativeUsage(sessionId) ?? EMPTY_CUMULATIVE_USAGE;
   const contextTokens = usage.tokenCount;
   const modelContextWindow = info?.contextWindow ?? 0;
   const utilizationRatio = modelContextWindow > 0 ? contextTokens / modelContextWindow : 0;

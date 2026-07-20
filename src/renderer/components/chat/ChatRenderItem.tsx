@@ -30,6 +30,8 @@ export interface ChatRenderItemProps {
    */
   isLive: boolean;
   renderLoadingIndicator: (className?: string) => React.ReactNode;
+  agentId: string;
+  sessionId: string;
   chatStatus?: ChatStatus;
   editingMessage?: EditingMessageState | null;
   onSaveEditedMessage: (updatedMessage: UserMessageType) => void;
@@ -49,6 +51,8 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
     shouldDim,
     isLive,
     renderLoadingIndicator,
+    agentId,
+    sessionId,
     chatStatus,
     editingMessage,
     onSaveEditedMessage,
@@ -77,6 +81,8 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
     return (
       <div className="px-0!" style={dimStyle}>
         <ToolCallsSection
+          agentId={agentId}
+          sessionId={sessionId}
           toolCalls={item.toolCalls}
           sectionKey={item.sectionKey}
           isLive={isLive}
@@ -91,6 +97,8 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
       return (
         <div className="relative isolate mb-5">
           <EditInlineInput
+            agentId={agentId}
+            sessionId={sessionId}
             initialMessage={item.message}
             onSubmitEditedMessage={onSaveEditedMessage}
             onCancelEdit={onCancelEdit}
@@ -105,6 +113,8 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
     return (
       <div style={dimStyle}>
         <UserMessage
+          agentId={agentId}
+          sessionId={sessionId}
           message={item.message}
           canEditUserMessage={allowEdit}
           onEditUserMessage={allowEdit ? () => onStartEdit(item.message.id) : undefined}
@@ -122,6 +132,8 @@ function ChatRenderItemInner(props: ChatRenderItemProps) {
     return (
       <div style={dimStyle}>
         <AssistantMessage
+          agentId={agentId}
+          sessionId={sessionId}
           message={item.message}
           cleanedText={item.message.content}
           scheduleIds={item.scheduleIds}
@@ -149,7 +161,7 @@ function areChatRenderItemPropsEqual(
   if (prev.isLast !== next.isLast) return false;
   if (prev.shouldDim !== next.shouldDim) return false;
   if (prev.isLive !== next.isLive) return false;
-  if (prev.chatStatus !== next.chatStatus) return false;
+  if (prev.agentId !== next.agentId || prev.sessionId !== next.sessionId) return false;
   if (prev.canEditUserMessage !== next.canEditUserMessage) return false;
   if (prev.streamingMessageId !== next.streamingMessageId) return false;
   if (prev.renderLoadingIndicator !== next.renderLoadingIndicator) return false;
@@ -157,6 +169,19 @@ function areChatRenderItemPropsEqual(
   if (prev.onSaveEditedMessage !== next.onSaveEditedMessage) return false;
   if (prev.onCancelEdit !== next.onCancelEdit) return false;
   if (prev.onStartEdit !== next.onStartEdit) return false;
+
+  // chatStatus 只影响文件卡片的写操作门控和当前编辑器；仅跨 idle 边界时重渲对应 item。
+  const didChatIdleStateChange = (
+    (!prev.chatStatus || prev.chatStatus === 'idle')
+    !== (!next.chatStatus || next.chatStatus === 'idle')
+  );
+  if (didChatIdleStateChange) {
+    const isEditingUserMessage = next.item.type === 'user'
+      && next.editingMessage?.id === next.item.message.id;
+    const hasGeneratedFiles = next.item.type === 'assistant'
+      && next.item.extractedFilePaths.length > 0;
+    if (isEditingUserMessage || hasGeneratedFiles) return false;
+  }
 
   // fileExistsCache 引用每次都变 — 只看 assistant item 关心的子集是否变化。
   if (next.item.type === 'assistant') {

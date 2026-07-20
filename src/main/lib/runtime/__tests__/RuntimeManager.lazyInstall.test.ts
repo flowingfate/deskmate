@@ -32,9 +32,6 @@ vi.mock('../../terminal', async () => ({
 
 vi.mock('node-stream-zip', async () => ({}));
 
-vi.mock('../../featureFlags', async () => ({
-  isFeatureEnabled: vi.fn().mockReturnValue(true),
-}));
 
 const { mockEnsureShims } = vi.hoisted(() => ({ mockEnsureShims: vi.fn() }));
 vi.mock('../shim', () => ({

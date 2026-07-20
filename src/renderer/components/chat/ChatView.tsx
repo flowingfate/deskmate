@@ -4,8 +4,9 @@ import { useParams } from 'react-router-dom';
 import ChatViewHeader from './ChatViewHeader';
 import ChatViewContent from './ChatViewContent';
 import { ContextMenu } from './chat-input/ContextMenu';
-import { CurrentSessionStatus, useHasChatSessionCache, agentSessionCacheManager } from '../../lib/chat/agentSessionCacheManager';
-import { currentSessionStore } from '@/states/currentSession.atom';
+import { agentSessionCacheManager } from '../../lib/chat/agentSessionCacheManager';
+import { useHasSessionCache } from './useSessionCache';
+import { CurrentSession } from '@/states/currentSession.atom';
 import { agentIpc } from '../../lib/chat/agentIpc';
 import { log } from '@/log';
 import AgentPane from '@/pages/layout/agent/agent-pane';
@@ -26,47 +27,63 @@ interface ChatViewProps {
   kind?: ChatViewKind;
 }
 
+function ChatRoutePlaceholder(): React.JSX.Element {
+  return (
+    <AgentPane className="h-full">
+      <AgentPane.Head>None Agent</AgentPane.Head>
+      <AgentPane.Body>
+        <div className="flex h-full items-center justify-center text-sm text-sc-muted-foreground">
+          Choose a agent to begin.
+        </div>
+      </AgentPane.Body>
+    </AgentPane>
+  );
+}
+
 const ChatView: React.FC<ChatViewProps> = memo(({ kind = 'regular' }) => {
-  // 🔥 Route Synchronization
-  const { agentId: rAgentId, jobId: rJobId, sessionId: rSessionId } = useParams();
-  const { agentId, chatSessionId, chatStatus } = CurrentSessionStatus.use();
+  const { agentId, jobId, sessionId } = useParams();
+  const hasSessionCache = useHasSessionCache(sessionId);
 
   // Route is the source of truth for the active chat/session. Drive the atom + cache from useParams.
   // No main-process round-trip is needed to select a session.
   useEffect(() => {
-    if (!rAgentId) {
-      currentSessionStore.set({ agentId: null, jobId: null, chatSessionId: null });
+    if (!agentId) {
+      CurrentSession.set({ agentId: null, jobId: null, sessionId: null });
     } else {
-      currentSessionStore.set({ agentId: rAgentId, jobId: rJobId ?? null, chatSessionId: rSessionId ?? null });
-      if (!rSessionId) return;
+      CurrentSession.set({ agentId, jobId: jobId ?? null, sessionId: sessionId ?? null });
+      if (!sessionId) return;
       if (kind === 'job') {
-        if (!rJobId) {
-          logger.warn({ msg: "kind=job without jobId in route", routeAgentId: rAgentId, routeSessionId: rSessionId });
+        if (!jobId) {
+          logger.warn({ msg: 'kind=job without jobId in route', agentId, sessionId });
           return;
         }
-        agentSessionCacheManager.ensureJobRunCache(rAgentId, rJobId, rSessionId);
-        agentIpc.markJobRunRead(rAgentId, rJobId, rSessionId);
+        agentSessionCacheManager.ensureJobRunCache(agentId, jobId, sessionId);
+        agentIpc.markJobRunRead(agentId, jobId, sessionId);
       } else {
-        agentSessionCacheManager.ensureCache(rAgentId, rSessionId);
-        agentIpc.markSessionRead(rAgentId, rSessionId);
+        agentSessionCacheManager.ensureCache(agentId, sessionId);
+        agentIpc.markSessionRead(agentId, sessionId);
       }
     }
-  }, [rAgentId, rJobId, rSessionId, kind]);
+  }, [agentId, jobId, sessionId, kind]);
 
-  const hasRouteSessionCache = useHasChatSessionCache(rSessionId ?? null);
-  const isSessionSwitching = Boolean(rSessionId && (chatSessionId !== rSessionId || !hasRouteSessionCache));
+  if (!agentId) {
+    return <ChatRoutePlaceholder />;
+  }
+
+  const isSessionSwitching = Boolean(sessionId && !hasSessionCache);
 
   return (
     <>
       <AgentPane className="h-full">
         <AgentPane.Head>
-          <ChatViewHeader />
+          <ChatViewHeader agentId={agentId} sessionId={sessionId ?? null} />
         </AgentPane.Head>
         <AgentPane.Body>
           <ChatViewContent
-            isSessionSwitching={isSessionSwitching}
             agentId={agentId}
-            chatStatus={chatStatus}
+            jobId={jobId ?? null}
+            sessionId={sessionId ?? null}
+            isSessionSwitching={isSessionSwitching}
             kind={kind}
           />
         </AgentPane.Body>

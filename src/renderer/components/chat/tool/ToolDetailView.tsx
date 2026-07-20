@@ -19,6 +19,8 @@ import type { ToolCall } from '@shared/persist/types'
 import type { ToolCallExecutionStatus, ToolRenderer } from './types';
 
 export interface ToolDetailViewProps {
+  agentId: string;
+  sessionId: string;
   toolCall: ToolCall;
   executionStatus: ToolCallExecutionStatus;
   /** 命中的 renderer(可空),非空时按点位接管对应 slot。 */
@@ -55,14 +57,16 @@ const EMPTY_CLS =
 
 /** Input slot 渲染。粗 → 整个 <pre> 块由 override 接管;细 → 替换 argsText。 */
 const InputSlot: React.FC<{
+  agentId: string;
+  sessionId: string;
   toolCall: ToolCall;
   executionStatus: ToolCallExecutionStatus;
   renderer: ToolRenderer | null;
   verticallyUnbounded: boolean;
-}> = ({ toolCall, executionStatus, renderer, verticallyUnbounded }) => {
+}> = ({ agentId, sessionId, toolCall, executionStatus, renderer, verticallyUnbounded }) => {
   if (renderer?.InputBlock) {
     const Block = renderer.InputBlock;
-    return <Block toolCall={toolCall} executionStatus={executionStatus} />;
+    return <Block agentId={agentId} sessionId={sessionId} toolCall={toolCall} executionStatus={executionStatus} />;
   }
 
   let argsText: string;
@@ -78,18 +82,20 @@ const InputSlot: React.FC<{
 
 /** Output slot 渲染。executing / success 路径接受 renderer 覆盖;interrupted / failed 走默认。 */
 const OutputSlot: React.FC<{
+  agentId: string;
+  sessionId: string;
   toolCall: ToolCall;
   executionStatus: ToolCallExecutionStatus;
   renderer: ToolRenderer | null;
   verticallyUnbounded: boolean;
-}> = ({ toolCall, executionStatus, renderer, verticallyUnbounded }) => {
+}> = ({ agentId, sessionId, toolCall, executionStatus, renderer, verticallyUnbounded }) => {
   const result = toolCall.response?.result;
   const failed = toolCall.response?.status === 'fail';
 
   if (executionStatus === 'executing' && !result) {
     if (renderer?.OutputExecutingBlock) {
       const Block = renderer.OutputExecutingBlock;
-      return <Block toolCall={toolCall} executionStatus={executionStatus} />;
+      return <Block agentId={agentId} sessionId={sessionId} toolCall={toolCall} executionStatus={executionStatus} />;
     }
     return (
       <div className={EMPTY_CLS}>
@@ -116,7 +122,7 @@ const OutputSlot: React.FC<{
   // success path —— 允许 renderer 覆盖
   if (renderer?.OutputSuccessBlock) {
     const Block = renderer.OutputSuccessBlock;
-    return <Block toolCall={toolCall} executionStatus={executionStatus} result={result} />;
+    return <Block agentId={agentId} sessionId={sessionId} toolCall={toolCall} executionStatus={executionStatus} result={result} />;
   }
   if (renderer?.outputResultText) {
     const text = renderer.outputResultText(toolCall);
@@ -126,6 +132,8 @@ const OutputSlot: React.FC<{
 };
 
 export const ToolDetailView: React.FC<ToolDetailViewProps> = ({
+  agentId,
+  sessionId,
   toolCall,
   executionStatus,
   renderer,
@@ -140,6 +148,8 @@ export const ToolDetailView: React.FC<ToolDetailViewProps> = ({
           <span>input</span>
         </header>
         <InputSlot
+          agentId={agentId}
+          sessionId={sessionId}
           toolCall={toolCall}
           executionStatus={executionStatus}
           renderer={renderer}
@@ -158,6 +168,8 @@ export const ToolDetailView: React.FC<ToolDetailViewProps> = ({
           <span>output</span>
         </header>
         <OutputSlot
+          agentId={agentId}
+          sessionId={sessionId}
           toolCall={toolCall}
           executionStatus={executionStatus}
           renderer={renderer}

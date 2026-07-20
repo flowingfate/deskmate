@@ -4,7 +4,7 @@
  * 在原 `fs` IPC 之上加一层 URI-aware proxy:`exists` / `stat` / `readFile` /
  * `writeFile` / `access` / `listDir` / `getFileMetadata` / `deletePaths` 接受
  * `local://` / `knowledge://` 形态;wrapper 内部走 `resolveUriToPath`(从
- * `currentSessionStore` 自动取 ctx)翻成绝对路径后再下发给老 IPC channel。
+ * `CurrentSession` 自动取 ctx)翻成绝对路径后再下发给老 IPC channel。
  *
  * 设计取舍:
  *

@@ -19,24 +19,25 @@ import { Button } from '@/shadcn/button';
 import { useChatInputState } from './shared/useChatInputState';
 import { useFileHandling } from './shared/useFileHandling';
 import { transformMentions } from './shared/transformMentions';
-import type { AttachContext } from '@/lib/attachment/copyToSandbox';
 import { useSupportsImages } from '@/lib/models/useSupportsImages';
 
 const logger = log.child({ mod: 'ComposeInput' });
 
 interface ComposeInputProps {
+  agentId: string;
+  sessionId: string;
   onSendMessage: (message: UserMessage) => void;
   chatStatus?: ChatStatus;
   enableContextMenu?: boolean;
-  chatSessionId?: string | null;
   isInputLocked?: boolean;
 }
 
 export const ComposeInput: React.FC<ComposeInputProps> = ({
+  agentId,
+  sessionId,
   onSendMessage,
   chatStatus,
   enableContextMenu,
-  chatSessionId,
   isInputLocked = false,
 }) => {
   const editAgentMenuActions = EditAgentMenuAtom.useChange();
@@ -49,18 +50,7 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
   );
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const [currentAgentId, setCurrentAgentId] = useState<string | null>(
-    agentSessionCacheManager.getCurrentAgentId()
-  );
-
-  const supportsImages = useSupportsImages(currentAgentId);
-
-  const getAttachContext = (): AttachContext | null => {
-    const agentId = agentSessionCacheManager.getCurrentAgentId();
-    const sessionId = agentSessionCacheManager.getCurrentChatSessionId();
-    return agentId && sessionId ? { agentId, sessionId } : null;
-  };
+  const supportsImages = useSupportsImages(agentId);
 
   const {
     isProcessing,
@@ -77,13 +67,6 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
     disabled: isInputLocked,
   });
 
-  useEffect(() => {
-    const unsubscribe = agentSessionCacheManager.subscribeToCurrentChatSessionId(() => {
-      setCurrentAgentId(agentSessionCacheManager.getCurrentAgentId());
-    });
-    return unsubscribe;
-  }, []);
-
   // 注册文件命令句柄（AttachMenuDropdown 触发 selectFiles/screenshot）。
   useRegisterComposeFileHandle({
     selectFiles: handleElectronFileSelect,
@@ -93,17 +76,12 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
   async function onCancelChat() {
     try {
       logger.debug({ msg: "Cancelling chat..." });
-      if (!chatSessionId || !currentAgentId) {
-        logger.warn({ msg: "No chat session id / chat id to cancel" });
-        showToast('No active chat to cancel', 'warning');
-        return;
-      }
       // 接力 in-flight chat.send tracer：把 cancel 事件挂到同一 trace 上，
       // 让 doctor / log viewer 拿一个 tid 能同时看到 send / cancel 两端。
       // 没有 in-flight tracer（如冷启动或异常路径）时传 undefined，main 端兜底新起。
-      const inflight = traceContext.peek(chatSessionId);
+      const inflight = traceContext.peek(sessionId);
       const trace = inflight?.sid ? inflight.serialize() : undefined;
-      await agentIpc.cancelChatSession(currentAgentId, chatSessionId, trace);
+      await agentIpc.cancelChatSession(agentId, sessionId, trace);
     } catch (error) {
       logger.error({ msg: "Error cancelling chat:", err: error });
     }
@@ -114,15 +92,10 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
   const handleSend = async () => {
     if (isInputLocked) return;
     if (isIdle && hasValidInput && !isProcessing) {
-      const ctx = getAttachContext();
-      if (!ctx) {
-        showToast('No active chat session. Open a chat before sending.', 'error');
-        return;
-      }
       // 附件在此刻才物化进 session files —— 发送 = 落盘。失败则保留输入与附件。
       let messageToSend: UserMessage;
       try {
-        messageToSend = await attachmentManager.createMessage(textareaManager.get(), ctx);
+        messageToSend = await attachmentManager.createMessage(textareaManager.get(), { agentId, sessionId });
       } catch (error) {
         logger.error({ msg: 'Failed to materialize attachments on send', err: error });
         showToast('Failed to attach files. Please try again.', 'error');
@@ -163,7 +136,7 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
         className="border-t border-black/7 focus-within:bg-black/2"
         style={isInputLocked ? { opacity: 0.7, pointerEvents: 'none' } : undefined}
       >
-        <AttachmentList attachmentsStateAtom={attachmentsStateAtom} />
+        <AttachmentList agentId={agentId} sessionId={sessionId} attachmentsStateAtom={attachmentsStateAtom} />
         <TextArea
           handleImageSelect={handleImageSelect}
           handleSend={handleSend}
@@ -210,12 +183,12 @@ export const ComposeInput: React.FC<ComposeInputProps> = ({
 
           <div className="order-3 ml-auto flex items-center gap-3">
             <ModelSelector
-              currentAgentId={currentAgentId}
+              agentId={agentId}
               shouldLockComposeUi={isInputLocked}
             />
 
             <ThinkingLevelSelector
-              currentAgentId={currentAgentId}
+              agentId={agentId}
               shouldLockComposeUi={isInputLocked}
             />
 

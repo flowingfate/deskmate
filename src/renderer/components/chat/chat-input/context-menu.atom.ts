@@ -1,20 +1,18 @@
 import { atom } from '@/atom';
 import { ContextOption, ContextMenuOptionType, MentionScheme, filterSkillsByQuery, getDefaultMenuOptions } from '@/lib/chat/contextMentions';
 import { searchWorkspaceFiles } from '@/lib/workspace/workspaceSearchService';
-import { agentSessionCacheManager } from '@/lib/chat/agentSessionCacheManager';
 import { ensureAgentDetail, getAgentDetailSync } from '@/states/agentDetail.atom';
 import { getSkills as getSkillsAtom } from '@/states/skills.atom';
-import { currentSessionStore } from '@/states/currentSession.atom';
+import { CurrentSession } from '@/states/currentSession.atom';
 import type { SkillConfig } from '@shared/persist/types';
 import { boundSkillNames } from '@shared/types/profileTypes';
 import { composeTextCommands } from './chatInputCommands';
 
 /**
- * 取当前 agentId（与老 `profileDataManager.getCurrentChat()` 语义一致）。
- * 返 null 表示尚无激活 agent。
+ * 读取最新 agentId；命令式菜单逻辑不参与 ChatView 的 props 渲染树。
  */
-function currentAgentId(): string | null {
-  return agentSessionCacheManager.getCurrentAgentId();
+function getAgentId(): string | null {
+  return CurrentSession.get().agentId;
 }
 
 
@@ -25,7 +23,7 @@ function currentAgentId(): string | null {
  * cold 字段走 detail；await ensure 保证首次触发也能命中。
  */
 async function currentAgentSkills(): Promise<SkillConfig[]> {
-  const id = currentAgentId();
+  const id = getAgentId();
   if (!id) return [];
   await ensureAgentDetail(id);
   const names = boundSkillNames(getAgentDetailSync(id)?.skills);
@@ -120,7 +118,7 @@ export const ContextMenuAtom = atom(zeroContextMenuState, (get, set) => {
         // to the active agent's KB sandbox (default `${agentRoot}/knowledge`
         // or user-overridden via `agent.config.knowledge.knowledgeBase`).
         try {
-          if (!currentAgentId()) {
+          if (!getAgentId()) {
             resetOptions([{
               type: ContextMenuOptionType.NoResults,
               fileName: 'No active agent',
@@ -157,8 +155,8 @@ export const ContextMenuAtom = atom(zeroContextMenuState, (get, set) => {
         // List session sandbox files via `local://` URI. Requires an active
         // session — `local://` resolution will throw without one.
         try {
-          const cur = currentSessionStore.get();
-          if (!cur.agentId || !cur.chatSessionId) {
+          const cur = CurrentSession.get();
+          if (!cur.agentId || !cur.sessionId) {
             resetOptions([{
               type: ContextMenuOptionType.NoResults,
               fileName: 'No active session',
@@ -231,10 +229,10 @@ export const ContextMenuAtom = atom(zeroContextMenuState, (get, set) => {
           return;
         }
 
-        const aid = currentAgentId();
-        const cur = currentSessionStore.get();
+        const aid = getAgentId();
+        const cur = CurrentSession.get();
         const hasAgent = !!aid;
-        const hasChatSession = !!(cur.agentId && cur.chatSessionId);
+        const hasChatSession = !!(cur.agentId && cur.sessionId);
 
         const searchPromises: Promise<{ results: { path: string }[]; source: MentionScheme }>[] = [];
 

@@ -12,8 +12,8 @@ import { RunMessagesHeader } from './RunMessagesHeader';
 import { useRunMessages } from './useRunMessages';
 
 interface SubagentRunMessagesDialogProps {
-  parentAgentId: string;
-  parentSessionId: string;
+  agentId: string;
+  sessionId: string;
   subrunId: SubrunId;
   agentName: string;
   status: string;
@@ -27,8 +27,8 @@ interface SubagentRunMessagesDialogProps {
 }
 
 function RunMessagesDialogContent({
-  parentAgentId,
-  parentSessionId,
+  agentId,
+  sessionId,
   subrunId,
   status,
   task,
@@ -40,14 +40,16 @@ function RunMessagesDialogContent({
   deliverables,
 }: SubagentRunMessagesDialogProps) {
   const { state, retry } = useRunMessages({
-    parentAgentId,
-    parentSessionId,
+    agentId,
+    sessionId,
     subrunId,
   });
 
   return (
     <>
       <RunMessagesHeader
+        agentId={agentId}
+        sessionId={sessionId}
         subrunId={subrunId}
         status={status}
         task={task}
@@ -60,7 +62,7 @@ function RunMessagesDialogContent({
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <RunMessagesContent state={state} onRetry={retry} />
+        <RunMessagesContent agentId={agentId} sessionId={sessionId} state={state} onRetry={retry} />
       </div>
 
       <DialogFooter className="shrink-0 border-t border-sc-border px-5 py-3">
