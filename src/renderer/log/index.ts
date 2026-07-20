@@ -7,7 +7,7 @@
 // 进程类型 / 窗口 ID 由 main handler 强行注入，这里传也会被覆写。
 //
 // renderer 故意不暴露 flush —— renderer 不读 sqlite，等 worker 落盘没有任何意义；
-// flush 由 main 自己在 exportDebugInfo / 菜单 / before-quit 时触发。
+// flush 由 main 自己在菜单 / Doctor reader / before-quit 时触发。
 // IPC 通道天然有序：renderer 一连串 log:write 到达 main 时排在所有后续操作前面。
 //
 // 批量策略：

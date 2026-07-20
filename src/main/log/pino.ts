@@ -6,8 +6,10 @@ import path from 'path';
 import fs from 'fs';
 import { getLogsDir } from '@main/persist/lib/path';
 import { app } from 'electron';
+import { assertLogLifeId } from './lifeId';
 
 export interface PinoInitOptions {
+  lifeId: number;
   dbPath?: string;
   isDev?: boolean;
 }
@@ -24,7 +26,8 @@ export function resolveDbPath(isDev: boolean): string {
   return path.join(getLogsDir(), isDev ? 'dev.db' : 'app.db');
 }
 
-export function createPinoLogger(opts: PinoInitOptions = {}): PinoInitResult {
+export function createPinoLogger(opts: PinoInitOptions): PinoInitResult {
+  assertLogLifeId(opts.lifeId);
   // 测试环境（vitest）：不开 worker transport（无 electron app、无 better-sqlite3 worker 兼容），
   // 直接走 pino destination 到 /dev/null，保留 API 不报错。
   if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
@@ -36,6 +39,7 @@ export function createPinoLogger(opts: PinoInitOptions = {}): PinoInitResult {
 
   const isDev = opts.isDev ?? !app.isPackaged;
   const dbPath = opts.dbPath ?? resolveDbPath(isDev);
+  const lifeId = opts.lifeId;
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
@@ -50,7 +54,7 @@ export function createPinoLogger(opts: PinoInitOptions = {}): PinoInitResult {
     {
       target: transportPath,
       level: isDev ? 'debug' : 'info',
-      options: { dbPath },
+      options: { dbPath, lifeId },
     },
   ];
 

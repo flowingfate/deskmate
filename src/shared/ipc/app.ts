@@ -11,41 +11,28 @@ export interface PlatformInfo {
   isWindowsArm: boolean;
 }
 
-export interface CrashCaptureStatus {
-  currentSessionId: string;
-  crashRootDir: string;
-  crashDumpsDir: string;
-  hasRecoveredCrash: boolean;
-  recoveredCrash: {
-    eventType: 'recovered-unclean-exit';
-    sessionId: string;
-    previousSessionId: string;
-    detectedAt: string;
-    startedAt: string;
-    pid: number;
-    appVersion: string;
-    bundlePath: string;
-  } | null;
+
+
+export interface CrashIncidentExportSummary {
+  incidentId: string;
+  kind: 'main_fatal' | 'renderer_crash' | 'child_process_crash' | 'resource_eviction' | 'abnormal_termination';
+  severity: 'warning' | 'error' | 'fatal';
+  summary: string;
+  firstEventAt: number;
+  artifactCount: number;
+  artifactBytes: number;
 }
 
-export interface RendererCrashReport {
-  kind: 'error' | 'unhandledrejection' | 'react-error-boundary';
-  message: string;
-  stack?: string;
-  source?: string;
-  lineno?: number;
-  colno?: number;
-  url?: string;
-  componentStack?: string;
-  metadata?: Record<string, unknown>;
+export interface CrashIncidentExportOptions {
+  includeMinidumps: boolean;
+  confirmedSensitiveMinidumps: boolean;
+  confirmedLargeExport: boolean;
 }
 
-export interface DebugInfoDownloadResult {
-  success: boolean;
-  filePath?: string;
-  fileName?: string;
-  error?: string;
-}
+export type CrashIncidentExportResult =
+  | { success: true; filePath: string; fileName: string }
+  | { success: false; error: string; requiresLargeExportConfirmation?: boolean };
+
 
 // ──────────────────────────────────────────────
 // Render → Main
@@ -59,12 +46,11 @@ type RenderToMain = {
   getPlatformInfo: { call: []; return: PlatformInfo };
   getUserDataPath: { call: []; return: string };
   getInstallationDeviceId: { call: []; return: string };
-  getCrashCaptureStatus: { call: []; return: CrashCaptureStatus };
-  recordCrashBreadcrumb: {
-    call: [message: string, metadata?: Record<string, unknown>];
-    return: void;
+  listCrashIncidentsForExport: { call: []; return: CrashIncidentExportSummary[] };
+  exportCrashIncident: {
+    call: [incidentId: string, options: CrashIncidentExportOptions];
+    return: CrashIncidentExportResult;
   };
-  reportRendererError: { call: [report: RendererCrashReport]; return: void };
   getAppConfig: {
     call: [];
     return: { success: true; data: AppConfig } | { success: false; error: string };
@@ -82,7 +68,6 @@ type RenderToMain = {
 export type MainToRender = {
   ready: boolean;
   configUpdated: { config: AppConfig; timestamp: number };
-  debugInfoDownloaded: DebugInfoDownloadResult;
 };
 
 // ──────────────────────────────────────────────

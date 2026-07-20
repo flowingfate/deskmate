@@ -98,6 +98,7 @@ module.exports = function (opts) {
   if (!dbPath) throw new Error('sqlite-transport: opts.dbPath required');
   const maxRows = (opts && opts.maxRows) || 200_000;
   const rotateEvery = (opts && opts.rotateEvery) || 1000;
+  const lifeId = opts.lifeId;
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
@@ -108,14 +109,6 @@ module.exports = function (opts) {
   db.exec(DDL);
 
   const insert = db.prepare(INSERT_SQL);
-  // life_id：标记一次完整的 app 生命周期（从启动到彻底退出）。worker 启动时算一次、
-  // 整轮 app 共享。值域 [1, maxRows]，保证不超过总行数上限。
-  // 取上一次启动的 life_id + 1，对 maxRows 取模再 +1：[1, maxRows]，永不为 0。
-  const lastLifeRow = db
-    .prepare('SELECT life_id AS v FROM app_logs ORDER BY id DESC LIMIT 1')
-    .get();
-  const prevLife = lastLifeRow && typeof lastLifeRow.v === 'number' ? lastLifeRow.v : 0;
-  const lifeId = (prevLife % maxRows) + 1;
   // max(id) - min(id) + 1 走 rowid 索引 O(log N)，比 COUNT(*) 全表扫便宜得多。
   // 误差仅来自 AUTOINCREMENT 不复用 id：当 rotate 删了头部 N 行，估值与真实行数完全一致；
   // 因此可放心当作精确行数使用。

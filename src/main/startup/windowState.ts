@@ -2,8 +2,8 @@
  * 主窗口瞬时状态（几何、缩放、最大化）。
  *
  * 每个主窗口不可变地绑定一个 Profile，因此状态持久化到
- * `~/.deskmate/profiles/{profileId}/window.json`。`state/current-run.json` 仍是
- * 整个应用进程的崩溃恢复标记，不属于任何 Profile。
+ * `~/.deskmate/profiles/{profileId}/window.json`。应用级崩溃状态由
+ * `diagnostics/{dev,prod}/crash-recorder.db` 管理，不属于任何 Profile。
  *
  * `state/windows/{profileId}.json` 与更早的 `state/window.json` 都只作为迁移
  * 回退；下一次对应状态写入会落到 Profile 目录。

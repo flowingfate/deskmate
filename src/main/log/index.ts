@@ -8,6 +8,8 @@ import type { Logger as PinoLogger } from 'pino';
 import type ThreadStream from 'thread-stream';
 import type { Logger, LogFields, LogLevel } from '@shared/log/types';
 import { createPinoLogger, resolveDbPath } from './pino';
+import { requireLogLifeId } from './lifeId';
+import { diagnosticLogRing } from '@main/lib/crash-recorder';
 
 let rootPino: PinoLogger | null = null;
 let rootLogger: Logger | null = null;
@@ -16,7 +18,7 @@ let closed = false;
 
 function ensureRoot(): Logger {
   if (rootLogger) return rootLogger;
-  const init = createPinoLogger();
+  const init = createPinoLogger({ lifeId: IS_TEST ? 0 : requireLogLifeId() });
   rootPino = init.logger;
   rootTransport = init.transport;
   // thread-stream 是 EventEmitter：关闭竞态下（app 退出 / Ctrl+C 杀进程组时，MCP 子进程
@@ -33,8 +35,7 @@ function ensureRoot(): Logger {
       // ignore
     }
   });
-  rootLogger = wrap(rootPino);
-  return rootLogger;
+  return rootLogger = wrap(rootPino);
 }
 
 function normalize(f: Partial<LogFields>): Record<string, unknown> {
@@ -60,22 +61,31 @@ function normalize(f: Partial<LogFields>): Record<string, unknown> {
   return { ...rest, err: { message: String(err) } };
 }
 
-function emit(child: PinoLogger, level: LogLevel, f: LogFields): void {
+function emit(
+  child: PinoLogger,
+  level: LogLevel,
+  fields: LogFields,
+  bindings: Partial<LogFields>,
+): void {
   // 退出序列里 closeLogs() 之后仍可能有迟到的日志调用（如 MCP 子进程 exit 回调）。
   // worker 已 end，再写会触发 thread-stream 'error'；直接 no-op，别喂正在关闭的 worker。
   if (closed) return;
-  child[level](normalize(f), f.msg);
+  try {
+    diagnosticLogRing.append(level, fields, bindings);
+  } catch {
+    // Ring 是辅助诊断 sink，失败不能影响主日志路径。
+  }
+  child[level](normalize(fields), fields.msg);
 }
-
-function wrap(p: PinoLogger): Logger {
+function wrap(p: PinoLogger, bindings: Partial<LogFields> = {}): Logger {
   return {
-    trace: (f) => emit(p, 'trace', f),
-    debug: (f) => emit(p, 'debug', f),
-    info: (f) => emit(p, 'info', f),
-    warn: (f) => emit(p, 'warn', f),
-    error: (f) => emit(p, 'error', f),
-    fatal: (f) => emit(p, 'fatal', f),
-    child: (b) => wrap(p.child(normalize(b))),
+    trace: (fields) => emit(p, 'trace', fields, bindings),
+    debug: (fields) => emit(p, 'debug', fields, bindings),
+    info: (fields) => emit(p, 'info', fields, bindings),
+    warn: (fields) => emit(p, 'warn', fields, bindings),
+    error: (fields) => emit(p, 'error', fields, bindings),
+    fatal: (fields) => emit(p, 'fatal', fields, bindings),
+    child: (nextBindings) => wrap(p.child(normalize(nextBindings)), { ...bindings, ...nextBindings }),
     flush: () =>
       // 真等到 worker 把缓冲落盘（pino 的 p.flush 只 fsync 到 worker pipe，不等 worker ack）。
       // thread-stream.flush(cb): "callback invoked once data has been consumed by the worker

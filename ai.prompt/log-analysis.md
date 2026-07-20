@@ -1,10 +1,12 @@
-<!-- Last verified: 2026-06-07 -->
+<!-- Last verified: 2026-07-20 (renderer global error logging) -->
 # 日志分析指南
 
 ## 概述
 
 Deskmate 的日志由 `pino` 收集，经 worker_thread transport 异步写入本地 SQLite（`app_logs` 表 + FTS5 索引）。
 所有进程（main / renderer / worker）共用同一张表，靠 `process_type / window_id / pid` 区分来源，靠 `life_id` 区分不同的 app 启动周期。
+
+Renderer 的 `window.error` / `unhandledrejection` 由 `installGlobalErrorHandlers` 写入本表，根 React ErrorBoundary 以 `fatal` 写入；这些 JavaScript 错误不会创建 Incident。Crash Recorder 只处理真正的进程退出、main fatal、native dump 与异常 lifecycle，并把有界现场日志固化到独立 `diagnostics/{dev,prod}/crash-recorder.db`。Doctor 通过 `list_crash_incidents` / `read_crash_incident` 查询语义事故，不读取目录或 dump bytes。
 查询入口有三个：
 
 | 入口 | 适用 |

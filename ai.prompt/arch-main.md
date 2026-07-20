@@ -1,6 +1,6 @@
 # DESKMATE AI Studio — 主进程架构
 
-<!-- Last verified: 2026-07-19 (per-Profile main-window state) -->
+<!-- Last verified: 2026-07-20 (renderer JavaScript errors moved to SQLite logs) -->
 ## 1. 范围
 
 本文档覆盖**主进程**（`src/main/`）和**预加载脚本**（`src/preload/`）。渲染进程架构见 [arch-render.md](arch-render.md)。
@@ -42,7 +42,7 @@
 | 取消令牌 | `src/main/lib/cancellation/` | 通过聊天 + 工具链的协作式取消 | — |
 | 共享类型/工具 | `src/main/lib/types/`，`lib/utilities/`，`lib/utils/` | 跨模块类型、错误类、Sharp 辅助函数、CDN 缓存清除 | — |
 | 评估框架 | `src/main/lib/evalHarness/` | AgenticEval HTTP 服务器；`--eval-mode` 无头 Agent 执行 | [ai.prompt.md](../src/main/lib/evalHarness/ai.prompt.md) |
-| 崩溃捕获 | `src/main/lib/crash/` | 崩溃包、运行标记、面包屑、最近日志/dump | [crash-bundle.md](../docs/crash-bundle.md) |
+| Crash Recorder | `src/main/lib/crash-recorder/` | 独立 lifecycle/Incident DB + fatal Emergency Journal + Crashpad `.dmp` artifact store；因果合并 renderer/child/native 证据，普通 JavaScript 错误仍归日志 | [ai.prompt.md](../src/main/lib/crash-recorder/ai.prompt.md) |
 | 调度器 | `src/main/lib/scheduler/` | 每个 runtime Profile 一个 `SchedulerManager`；Cron 和一次性任务独立登记，cold-start catch-up 经 `persist/schedulerState.ts` 接通；manager 统一跟踪、取消并等待 in-flight `JobRun` 后再允许 ProfileStore 关闭；完成通知与点击导航只选址 owning Profile 窗口 | [ai.prompt.md](../src/main/lib/scheduler/ai.prompt.md) |
 | Research window | `src/main/lib/research/` | `web research` 的 human-in-the-loop 网页研究：lazy-open + 串行单飞的 research `BrowserWindow` + 外部网页 `WebContentsView`（沙箱隔离）+ live DOM 抽取用户确认的来源 | [ai.prompt.md](../src/main/lib/research/ai.prompt.md) |
 | 网页内容提取 | `src/main/lib/research/extract/` | 共享「网页 → Markdown」提取链：Readability + turndown 注入产物（独立 IIFE 子构建），`web research` live view 与 `web fetch` headless 渲染共用 | [ai.prompt.md](../src/main/lib/research/extract/ai.prompt.md) |
@@ -99,7 +99,10 @@
 ```
 ~/.deskmate/
 ├── app.json, device-id, cache/                     # 顶层应用数据
-├── state/current-run.json                          # 进程级崩溃恢复标记
+├── diagnostics/{dev,prod}/                         # Crash Recorder，与日志 DB 物理隔离
+│   ├── crash-recorder.db, emergency.ndjson
+│   ├── crashpad/
+│   └── artifacts/<sha256>.dmp
 ├── profiles/                                        # 用户态数据全集 —— 完整 schema 详见 persist.md §3
 │   └── p_{ulid}/window.json                         #   该 Profile 主窗口的 bounds / zoom / maximized
 ├── env/                                             # 运行时地盘（bun/uv/Python 装机产物，删了能整个重装）
@@ -139,6 +142,6 @@
 
 **非致命错误策略**：每个子系统都用 try/catch 包裹并记录日志。一个失败的组件永远不会崩溃整个应用 — 对于原生模块尤其重要。
 
-**启动性能**：`bootstrap.ts` 最先执行（在任何 import 之前）；`main.ts` 使用懒 getter（import 时零初始化）；重量级模块仅作为 `import type`；开发模式下 `dotenv`/`electron-reload` 通过 `setImmediate` 加载；`screenshot://` 在 `app.ready` 之前注册。
+**启动性能**：`bootstrap.ts` 先设置业务根/Chromium userData，再同步完成 Crash Recorder journal open、统一 lifeId 分配与 Crashpad start，随后才动态加载 `main.js`；retention、dump hash/copy 后台执行。`main.ts` 使用懒 getter（import 时零初始化）；重量级模块仅作为 `import type`；开发模式下 `.env.local` 通过 `setImmediate` 加载；`screenshot://` 在 `app.ready` 之前注册。
 
 **多主窗口纪律**：`main.ts` 对同一 Profile 的主窗口创建实行 single-flight，`startup/wins.ts` 再作为最终防线复用该 Profile 尚未销毁的既有主窗口；单例不变量保证关闭回调可直接移除该 Profile 的主窗口注册。来自 UI 的窗口操作（缩放、菜单导航）必须按 IPC sender 或 Electron 菜单提供的 target window 选址，不得复用“最近创建的主窗口”。应用退出仅由 `ElectronApp` 的唯一 `before-quit` handler 编排 Profile 停止、persist/SQLite close 与 logger close。

@@ -5,6 +5,7 @@ import { useUpdate } from '../../autoUpdate/UpdateProvider';
 import brandIcon from '../../../assets/deskmate/app.svg';
 import { log } from '@/log';
 import { appApi } from '@/ipc/app';
+import { CrashIncidentExportCard } from './CrashIncidentExportCard';
 const logger = log.child({ mod: 'AboutAppContentView' });
 
 interface AboutAppContentViewProps {}
@@ -209,6 +210,8 @@ const AboutAppContentView: React.FC<AboutAppContentViewProps> = () => {
           </div>
 
         </div>{/* /Card 1 */}
+
+        <CrashIncidentExportCard />
 
         {/* ── Card 2: Copyright & legal info ── */}
         <div className="bg-white rounded-md p-2 border border-black/7 flex flex-col gap-2">

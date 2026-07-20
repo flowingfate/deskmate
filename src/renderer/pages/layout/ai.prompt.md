@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-19 -->
+<!-- Last verified: 2026-07-20 (route structured log + About Incident exporter) -->
 # 布局
 
 > 渲染进程 SPA 的外壳：采用 AppShell（Sidebar + StatusBar + Titlebar） + AgentLayout（SessionPanel + 主内容区 + 右侧面板）两层架构。
@@ -9,7 +9,7 @@
 | `AppShell.tsx` | App 级 layout：titlebar + Sidebar + content slot + StatusBar | ~145 LOC |
 | `Sidebar.tsx` | 常驻 icon bar：agent 头像列表、新建 agent、用户头像、设置入口 | ~174 LOC |
 | `StatusBar.tsx` | 全局底部状态栏：DoctorStatusIndicator（运行/终点指示器 + done tooltip 内 View Issue）+ DoctorInquiry（诊断表单弹窗） | ~14 LOC |
-| `AgentLayout.tsx` | Agent 页面根组件 — 包装 providers（`PasteToWorkspaceProvider` 等），拥有 KB/技能安装/debug-info toast 副作用 | ~130 LOC |
+| `AgentLayout.tsx` | Agent 页面根组件 — 包装 providers，拥有 KB/技能安装副作用；旧 debug-info toast 已删除 | ~100 LOC |
 | `AgentLayoutContent.tsx` | Agent 页面 UI 外壳 — `SessionPanel`（位于 [`components/agent-side/`](../../components/agent-side/ai.prompt.md)）+ ResizableDivider + ContentContainer + RightGlobalSidepane 布局 | ~107 LOC |
 | `ContentContainer.tsx` | `<main>` 包装器；仅渲染 `<Outlet>`（React Router） | ~20 LOC |
 | `UserMenu.tsx` | 用户菜单与 Profile 窗口切换器：列出当前/已开/未开 Profile，创建或进入管理 | ~250 LOC |
@@ -19,13 +19,14 @@
 | `RightGlobalSidepane.tsx` | 右侧面板，用于 UserTask | ~59 LOC |
 | `WindowsTitleBar.tsx` | 仅 Windows 的自定义标题栏：应用图标、侧边栏切换、缩放指示器、最小化/最大化/关闭控件 | ~155 LOC |
 | `WindowZoomHotkeys.tsx` | 缩放放大/缩小/重置的全局键盘快捷键 | ~47 LOC |
+| `components/settings/about/CrashIncidentExportCard.tsx` | 单选 Incident 导出；默认排除 minidump，敏感 dump 与 >100 MiB 各自确认 | ~170 LOC |
 
 ## 架构
 
 ### 组件层次
 ```
 RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
-  └── RootLayout (根路由 element：全局 dialog/confirmation host/热键/MCP 失败提示 + navigate:to & crash-breadcrumb effect + 非 shell 路由的独立 TitleBar)
+  └── RootLayout (根路由 element：全局 dialog/confirmation host/热键/MCP 失败提示 + navigate:to & route structured-log effect + 非 shell 路由的独立 TitleBar)
       ├── / → redirect /agent
       ├── /login → SignInPage
       └── AppShell (Sidebar + StatusBar + Titlebar，shell 路由共享)
@@ -95,7 +96,7 @@ RouterProvider (data router, entries/main.routes.tsx 的 createBrowserRouter)
 - `WindowsTitleBar` 在 macOS 上渲染 `null`。任何添加到其中的侧边栏切换逻辑在非 Windows 平台上会静默缺失。
 - `SettingsNavigation.tsx` 复用了 `LeftNavigation.css` 中的 `.left-navigation` 样式类，修改该 CSS 时需注意不要影响 Settings 页面。
 - macOS 标题栏缩放补偿使用直接设置在 `documentElement` 上的 CSS 自定义属性（`--mac-zoom-factor`），以避免 React 渲染延迟引起的抖动。
-- **数据路由（data router）**：路由在 `entries/main.routes.tsx` 用 config-first 对象数组 `const routes: RouteObject[]` 定义、`createBrowserRouter(routes)` 构建，`main.tsx` 用 `<RouterProvider router={router}/>` 挂载。`RouterProvider` 不接受 children，故所有依赖路由 context 的全局节点（`McpConnectionFailureToastListener`、`WindowZoomHotkeys`、MCP dialog）与全局 effect（`navigate:to` 事件、crash 面包屑）都迁进了根路由 `RootLayout`。命令式业务导航统一通过 `lib/navigation/appNavigation.ts` 的 bridge；业务模块禁止 import `entries/main.routes.tsx`。不再有 `AppRoutes` / `AppRoutesWithTitleBar` 组件。
+- **数据路由（data router）**：路由在 `entries/main.routes.tsx` 用 config-first 对象数组定义并由 `createBrowserRouter(routes)` 构建。依赖路由 context 的全局节点与 `navigate:to` / route structured-log effect 位于 `RootLayout`；renderer 不再发送 crash breadcrumb。命令式业务导航统一走 `lib/navigation/appNavigation.ts` bridge。
 - **`Component:` vs `element:` 选择**：无 props 的路由用 `Component: X`（传组件类型，react-router 内部 `createElement`，官方推荐、省一层）；**需要给组件传 props 的路由必须用 `element: <X prop=.../>`**（`Component` 与 `element` 互斥且 `Component` 无法传 props）。当前需 `element:` 的两类：`<ChatView kind="job-run"/>`、重定向 `<Navigate to=.../>`。
 - **静态路由**：data router 的路由表是静态对象；不要按运行时条件拼接路由表。Delegation 是普通 Agent 的稳定设置 tab。
 - **TitleBar 历史导航（`HistoryNav`）**：`canGoBack/canGoForward` 直接读 react-router 写入 `window.history.state.idx` 的真实历史光标 + `useNavigationType()` 的 `PUSH/POP/REPLACE` 信号，`goBack/goForward` 用 `navigate(-1)/navigate(1)`。**不再维护手搓镜像栈**——旧实现的镜像栈无法区分 push/replace，与真实历史漂移，是“后退无反应”的根因。切勿回退到镜像栈方案。

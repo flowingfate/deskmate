@@ -29,7 +29,6 @@ import AgentEditingView from '../components/chat/agent-area/AgentEditingView';
 import AgentCreationView from '../components/chat/agent-area/AgentCreationView';
 import CreateCustomAgentView from '../components/chat/agent-area/CreateCustomAgentView';
 import { log } from '@/log';
-import { appApi } from '@/ipc/app';
 import { newEntityId } from '@shared/persist/id';
 import { AppShell } from '@renderer/pages/layout/AppShell';
 import { TitleBar } from '../pages/layout/titlebar';
@@ -72,8 +71,9 @@ const RootLayout: React.FC = () => {
   }, [navigate]);
 
   useEffect(() => {
-    void appApi.recordCrashBreadcrumb('route-change', {
-      pathname: location.pathname,
+    logger.info({
+      msg: 'Renderer route changed',
+      route: location.pathname,
       search: location.search,
       hash: location.hash,
     });

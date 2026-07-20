@@ -11,6 +11,17 @@ import appConfig from './brands/deskmate/config.json'
 
 export default defineConfig(({ command, mode }) => {
   const isDev = command === 'serve'
+  const mainInput: Record<string, string> = {
+    bootstrap: resolve(__dirname, 'src/main/bootstrap.ts'),
+    main: resolve(__dirname, 'src/main/main.ts'),
+  }
+  if (mode === 'crash-recorder-smoke') {
+    mainInput['crash-recorder-fixture'] = resolve(
+      __dirname,
+      'src/main/lib/crash-recorder/__fixtures__/electron-main.ts',
+    )
+  }
+
 
   const shared = sharedDefines(mode)
   const rendererOnly = rendererOnlyDefines()
@@ -20,10 +31,7 @@ export default defineConfig(({ command, mode }) => {
         outDir: 'out/main',
         rolldownOptions: {
           external: ['bufferutil', 'utf-8-validate'],
-          input: {
-            bootstrap: resolve(__dirname, 'src/main/bootstrap.ts'),
-            main: resolve(__dirname, 'src/main/main.ts'),
-          },
+          input: mainInput,
           output: {
             // 让 chunk 直接落在 main.js 同目录（不进 chunks/ 子目录），
             // 这样任何 chunk 里的 __dirname === out/main/，main.ts 可以直接

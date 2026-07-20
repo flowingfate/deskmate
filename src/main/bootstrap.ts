@@ -22,6 +22,8 @@ import { createRequire } from 'node:module';
 import { USER_DATA_DIRNAME } from '@shared/constants/userDataDir';
 import { APP_NAME, APP_ID } from '@shared/constants/branding';
 import { IS_DEV } from './startup/context';
+import { crashRecorder } from './lib/crash-recorder';
+import { configureLogLifeId } from './log/lifeId';
 
 if (IS_DEV) {
   setImmediate(async () => {
@@ -76,6 +78,10 @@ if (process.platform === 'win32' && APP_ID) {
   console.log(`[Bootstrap] Setting App User Model ID to: ${APP_ID}`);
   app.setAppUserModelId(APP_ID);
 }
+
+// Crash Recorder 必须在 main bundle 和任何 logger 求值前完成 lifecycle 分配。
+crashRecorder.bootstrap(IS_DEV);
+configureLogLifeId(crashRecorder.status().lifeId);
 
 // rolldown 仅静态追踪 require('字面量')；createRequire 返回的 require 调用不会被
 // 当成静态依赖，从而保持 bootstrap / main 两个 bundle 物理隔离。

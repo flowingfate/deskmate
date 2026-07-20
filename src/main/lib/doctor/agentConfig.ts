@@ -10,8 +10,8 @@ import { getLogSchemaToolDef } from './tools/getLogSchema';
 import { traceTimelineToolDef } from './tools/traceTimeline';
 import { readChatSessionToolDef } from './tools/readChatSession';
 import { getChatMessagesToolDef } from './tools/getChatMessages';
-import { getCrashStatusToolDef } from './tools/getCrashStatus';
-import { readCrashBundleToolDef } from './tools/readCrashBundle';
+import { listCrashIncidentsToolDef } from './tools/listCrashIncidents';
+import { readCrashIncidentToolDef } from './tools/readCrashIncident';
 import { readSchedulesToolDef } from './tools/readSchedules';
 import { createGithubIssueToolDef } from './tools/createGithubIssue';
 import { askUserQuestionToolDef } from './tools/askUserQuestion';
@@ -30,8 +30,8 @@ export const TOOL_DEFINITIONS: Tool[] = [
   traceTimelineToolDef,
   readChatSessionToolDef,
   getChatMessagesToolDef,
-  getCrashStatusToolDef,
-  readCrashBundleToolDef,
+  listCrashIncidentsToolDef,
+  readCrashIncidentToolDef,
   readSchedulesToolDef,
   createGithubIssueToolDef,
   askUserQuestionToolDef,
@@ -50,15 +50,14 @@ The evidence available to you includes: screenshots attached by the user (sent t
 
 Call the following tools in sequence to gather diagnostic data:
 1. Call \`get_app_info\` to obtain runtime environment information.
-2. **Always** call \`get_crash_status\` (no arguments, extremely low cost). This is the only channel for determining "did the last launch crash / is there any recent crash evidence on this machine?"
-   After receiving the result, **first assess the relevance between the crash information and the user's report**, then decide whether to read further:
-   - **Relevance assessment**: do the symptoms the user describes (crash/freeze/data loss/startup anomaly) have a plausible relationship — in **timeline** or **causal chain** — with the crash event? Pure UI/style/logic issues (e.g. "button color is wrong", "translation missing", "sort order incorrect") are typically unrelated to crashes — even if a recent crash record happens to exist.
-   - If judged **relevant**: call \`read_crash_bundle\` to read the most relevant bundle in detail. Priority: bundles with \`hasRecoveredCrash\` > entries in \`recentBundles\` whose time window aligns.
-   - If judged **not relevant or uncertain**: **do not** call \`read_crash_bundle\`. In the \`From Crash Reports\` section of the Issue, briefly note crash status (whether recent crashes exist, eventType, capturedAt) and state "no apparent connection to this report — not analyzed in depth."
-   - If \`minidumps\` is non-empty and the bug description involves a crash/freeze, the Analysis section must explicitly state "native minidump detected — developer must analyze locally with a minidump tool" — the Doctor itself **cannot** read binary dump contents, only record their existence.
-   - If all three are empty (no recoveredCrash, no recentBundles, no minidumps), note "no crash evidence found."
-   - **⚠️ Anti-misleading**: the presence of crash data does not mean it caused this bug. When referencing crash information in the Analysis section, you must explicitly state the causal chain ("because X crash corrupted Y state, causing user to see Z symptom") — do not write vague unsubstantiated links like "may be related to a recent crash."
-3. **On demand**, call \`get_app_knowledge\`: call it when the user's description involves a subsystem you need to understand more holistically (MCP, Memory, Chat Engine, context compression…) or when you are uncertain which module the symptom belongs to — you'll receive a product/architecture-level "concept map." If the bug description is very specific and you can already directly localize it (e.g. "clicking Save has no effect"), you may skip this. The tool takes no parameters, returns a fixed document, and must not be called repeatedly.
+2. Call \`list_crash_incidents\` exactly once. It returns semantic incidents, not raw directories or arbitrary Crashpad files.
+   - First assess relevance by time and causal symptoms. Ordinary UI/style/logic issues are normally unrelated even when an incident exists.
+   - Only when one incident is relevant, call \`read_crash_incident\` with its incidentId.
+   - Do not infer that \`abnormal_termination\` is a native crash. It only proves the prior lifecycle disappeared while running.
+   - Minidump metadata is native/process crash evidence, but Doctor cannot read or symbolize the binary dump.
+   - If the list is empty, note "no crash incidents found."
+   - Never claim causality without a concrete chain from the incident timeline to the reported symptom.
+3. **On demand**, call \`get_app_knowledge\`: call it when the user's description involves a subsystem you need to understand more holistically (MCP, Memory, Chat Engine, context compression…) or when you are uncertain which module the symptom belongs to — you'll receive a product/architecture-level "concept map." If the bug description is very specific and you can already directly localize it (e.g. "clicking Save has no effect"), you may skip this. The tool takes no parameters, returns a fixed document and must not be called repeatedly.
 4. Call \`read_app_logs\` to investigate logs. **This is an iterative process, not a one-time call:**
    1. **First call \`get_log_schema\` once** (zero-cost, no parameters) to align on field names — \`source\` in tool args maps to sqlite column \`component\`; \`grep\` is a SQLite FTS5 MATCH expression (AND/OR/NOT/NEAR/phrase, not the legacy \`a+b\` syntax).
    2. Then use \`mode: 'stats'\` to get an overview: total count, error/warning ratio, top components. Extremely cheap and recommended as the first read_app_logs call.
@@ -69,7 +68,7 @@ Call the following tools in sequence to gather diagnostic data:
    7. **Keep querying until you have evidence that explains the Bug, or are confident there are no relevant clues in the logs** — don't be afraid to call multiple times, narrowing one dimension per call (source → level → grep → time window).
    8. Default \`scope: 'current'\`; when the bug described may have occurred earlier (e.g. "yesterday" or "last week"), use \`scope: 'all'\`. Note in dev the db is truncated at every launch, so historical events from prior dev runs are not available; in prod the db accumulates.
    9. Single entries response hard limit is 200; if you see a truncation notice, narrow the filters and query again — don't try to pull everything at once.
-   10. Note: \`read_app_logs\` returns rows from the live sqlite db. If you need context from the session just before a crash, use \`read_crash_bundle\` (which contains breadcrumbs and other crash-site information).
+   10. Note: \`read_app_logs\` reads the live log database. For a finalized crash-site snapshot, use \`read_crash_incident\` only after a relevant result from \`list_crash_incidents\`.
 5. If both an Affected Agent ID and Affected Chat Session ID are provided, retrieve the conversation context in two steps:
    1. First call \`read_chat_session\` (pass both IDs) to get the **session skeleton** — a compact markdown containing tables for messages, plus contextState summary; long content (text / thinking / image base64 / tool_call arguments) is represented only as a length number. The skeleton itself **contains no original text**.
    2. Based on the skeleton, locate suspicious messages (erroneous tool calls, abnormal lengths, key timestamps), then call \`get_chat_messages\` to read them in detail — up to 10 at a time; \`view\` defaults to \`'ui'\` (messages as displayed); when suspecting "AI amnesia / off-topic answers" or other LLM context-related bugs, switch to \`'llm'\` (messages as sent to the LLM — may report \`dropped\` meaning that message was compressed away, which is itself a diagnostic signal).
@@ -155,12 +154,13 @@ The body **must** strictly follow the structure below. A section may only be omi
 
 ### From Crash Reports
 <!--
-Only present if \`get_crash_status\` returned non-empty results; omit this section entirely if all three are empty.
-- Always record crash summary: hasRecoveredCrash / number of recentBundles / number of minidumps.
-- If \`read_crash_bundle\` was called (i.e. crash was judged relevant to this report), cover: bundle name / eventType / capturedAt / last sessionId (if recovered-unclean-exit); select 5–10 breadcrumbs relevant to the bug timeline (do not paste all of them).
-- If \`read_crash_bundle\` was **not** called (judged irrelevant), write: "Crash records exist but appear unrelated to this report — not analyzed in detail."
-- If native minidumps are present, list filenames and sizes, and note "Doctor cannot read binary dump contents — please analyze locally."
-- **Must include relevance assessment**: end this section with a line \`**Relevance:** High / Low / None — <one-sentence rationale>\` stating the degree of relevance between the crash and this report.
+Only present if \`list_crash_incidents\` returned relevant or recent results; omit this section when the list is empty.
+- Always record incidentId / kind / severity / firstEventAt / lifeId for referenced incidents.
+- If \`read_crash_incident\` was called, summarize the event timeline and 5–10 relevant structured log entries; do not paste the full snapshot.
+- If no incident was relevant, write: "Crash incidents exist but appear unrelated to this report — not analyzed in detail."
+- If artifact metadata exists, state that Doctor cannot read or symbolize minidump contents.
+- Never describe \`abnormal_termination\` alone as a native crash.
+- End with **Relevance:** High / Low / None — <one-sentence rationale>.
 -->
 
 ### From Schedules

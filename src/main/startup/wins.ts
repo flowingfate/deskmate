@@ -2,6 +2,8 @@ import { appCacheManager } from '@main/lib/appCache';
 import { BrowserWindow } from 'electron';
 import { persistZoomLevel, restoreZoomLevel } from './windowState';
 import { mainToRender as windowMainToRender } from '@shared/ipc/window';
+import { crashRecorder } from '@main/lib/crash-recorder';
+import { log } from '@main/log';
 
 export type WindowRole = 'main' | 'log' | 'screenshot' | 'research';
 type CallBackWin = (win: BrowserWindow) => void;
@@ -42,6 +44,28 @@ export function createWindow(
 
   const win = new BrowserWindow(options);
   metas.set(win, meta);
+  crashRecorder.registerWindow(win, meta);
+  log.info({
+    mod: 'window.lifecycle',
+    msg: 'BrowserWindow created',
+    windowId: win.webContents.id,
+    role: meta.role,
+    profileId: meta.profileId,
+  });
+  win.on('unresponsive', () => {
+    log.warn({ mod: 'window.lifecycle', msg: 'BrowserWindow became unresponsive', windowId: win.webContents.id, role: meta.role });
+  });
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedUrl, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    log.error({
+      mod: 'window.lifecycle',
+      msg: 'BrowserWindow failed to load',
+      windowId: win.webContents.id,
+      role: meta.role,
+      errorCode,
+      errorDescription,
+    });
+  });
 
   if (meta.role === 'main') {
     const profileId = requireMainProfileId(meta.profileId);

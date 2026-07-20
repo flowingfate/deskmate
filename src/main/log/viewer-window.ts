@@ -187,12 +187,10 @@ export function registerLogViewerIPC(): void {
     const limit = Math.min(Math.max(opts?.limit ?? 20, 1), 200);
     const rows = conn
       .prepare<unknown[], { life_id: number; rows: number; first_ts: number; last_ts: number }>(
-        // 注意 ORDER BY life_id DESC：拿"最近"的 life；max(life_id) = 当前 life。
-        // life_id 不严格单调（mod maxRows），但实际 dev 远远撞不到回环，按 id DESC 排序等同于"按启动倒序"。
         `SELECT life_id, COUNT(id) AS rows, MIN(ts) AS first_ts, MAX(ts) AS last_ts
            FROM app_logs
           GROUP BY life_id
-          ORDER BY life_id DESC
+          ORDER BY last_ts DESC, life_id DESC
           LIMIT ?`,
       )
       .all(limit);
