@@ -1,5 +1,5 @@
 import React from 'react'
-import { useParams } from 'react-router-dom'
+import { Navigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/shadcn/button'
 import AgentPane from '@/pages/layout/agent/agent-pane'
@@ -9,8 +9,12 @@ import AgentSettingsNav from '../agent-editor/AgentSettingsNav'
 import AgentEditorTabs from './AgentEditorTabs'
 import { useAgentEditorState } from './useAgentEditorState'
 
-const AgentEditingView: React.FC = () => {
-  const { agentId, '*': tabParam } = useParams<{ agentId: string; '*': string }>()
+interface AgentEditingViewContentProps {
+  agentId: string
+  tabParam: string | undefined
+}
+
+const AgentEditingViewContent: React.FC<AgentEditingViewContentProps> = ({ agentId, tabParam }) => {
   const {
     activeTab,
     agentData,
@@ -27,15 +31,6 @@ const AgentEditingView: React.FC = () => {
     pendingCount,
     tabChangesCache,
   } = useAgentEditorState(agentId, tabParam)
-
-  if (!agentId) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
-        <p>No agent selected. Please select an agent from the left navigation.</p>
-        <Button onClick={handleBack}>Go to Chat</Button>
-      </div>
-    )
-  }
 
   return (
     <AgentPane className="flex h-full w-full flex-col bg-surface-primary">
@@ -97,7 +92,13 @@ const AgentEditingView: React.FC = () => {
         </div>
       </AgentPane.Body>
     </AgentPane>
-  )
+  );
+}
+
+const AgentEditingView: React.FC = () => {
+  const { agentId, '*': tabParam } = useParams<{ agentId: string; '*': string }>()
+  if (!agentId) return <Navigate to="/agent" replace />
+  return <AgentEditingViewContent agentId={agentId} tabParam={tabParam} />
 }
 
 export default AgentEditingView

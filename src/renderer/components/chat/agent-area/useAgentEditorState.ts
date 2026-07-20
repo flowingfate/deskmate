@@ -102,13 +102,13 @@ interface AgentEditorState {
   tabChangesCache: Record<AgentEditorTabName, Partial<AgentConfig> | null>
 }
 
-export function useAgentEditorState(agentId: string | undefined, tabParam: string | undefined): AgentEditorState {
+export function useAgentEditorState(agentId: string, tabParam: string | undefined): AgentEditorState {
   const navigate = useNavigate()
   const currentAgent = useAgentById(agentId)
   const detail = useAgentDetail(agentId)
   const allAgents = useAgents()
   const { showSuccess } = useToast()
-  const [activeTab, setActiveTab] = useState<AgentEditorTabName>(ROUTE_TO_TAB[tabParam ?? ''] ?? 'basic')
+  const activeTab = ROUTE_TO_TAB[tabParam ?? ''] ?? 'basic'
   const [agentData, setAgentData] = useState<AgentConfig | undefined>()
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -117,7 +117,6 @@ export function useAgentEditorState(agentId: string | undefined, tabParam: strin
   const [tabChangesCache, setTabChangesCache] = useState<Record<AgentEditorTabName, Partial<AgentConfig> | null>>(createChangesCache)
 
   useEffect(() => {
-    if (!agentId) return
     if (tabParam === 'schedules') {
       navigate(`/agent/${agentId}/job`, { replace: true })
       return
@@ -127,11 +126,9 @@ export function useAgentEditorState(agentId: string | undefined, tabParam: strin
       navigate(`/agent/${agentId}/settings/basic`, { replace: true })
       return
     }
-    setActiveTab(tab)
   }, [agentId, navigate, tabParam])
 
   useEffect(() => {
-    if (!agentId) return
     if (!currentAgent) {
       logger.error({ msg: 'Agent not found', agentId })
       setError('Agent not found')
@@ -174,6 +171,7 @@ export function useAgentEditorState(agentId: string | undefined, tabParam: strin
   }, [pendingChanges, tabChangesCache])
   const pendingCount = useMemo(() => EDITOR_TABS.filter((tab) => pendingChanges[tab]).length, [pendingChanges])
   const validationError = useMemo(() => {
+    if (!agentData) return null
     const name = allChanges.name ?? agentData?.name
     if (!name?.trim()) return 'Agent name is required.'
     if (allAgents.some((agent) => agent.id !== agentId && agent.name === name.trim())) {
@@ -186,19 +184,21 @@ export function useAgentEditorState(agentId: string | undefined, tabParam: strin
   useEffect(() => {
     if (validationError) {
       setFieldErrors((previous) => previous.name === validationError ? previous : { name: validationError })
-      if (activeTab !== 'basic') setActiveTab('basic')
+      if (activeTab !== 'basic') {
+        navigate(`/agent/${agentId}/settings/basic`, { replace: true })
+      }
       return
     }
     setFieldErrors((previous) => previous.name === undefined ? previous : {})
-  }, [activeTab, validationError])
+  }, [activeTab, agentId, navigate, validationError])
 
   const handleTabSwitch = useCallback((tab: AgentEditorTabName) => {
-    if (agentId) navigate(`/agent/${agentId}/settings/${TAB_TO_ROUTE[tab]}`)
+    navigate(`/agent/${agentId}/settings/${TAB_TO_ROUTE[tab]}`)
   }, [agentId, navigate])
   const handleClearError = useCallback(() => setError(null), [])
 
   const handleSaveAll = useCallback(async () => {
-    if (!canSaveAll || !agentId) return
+    if (!canSaveAll) return
     setError(null)
     setIsLoading(true)
     try {
@@ -218,9 +218,7 @@ export function useAgentEditorState(agentId: string | undefined, tabParam: strin
 
   const handleBack = useCallback(() => {
     const entryPath = peekAgentSettingsEntry();
-    if (entryPath) navigate(entryPath)
-    else if (agentId) navigate(`/agent/${agentId}`);
-    else navigate('/agent');
+    navigate(entryPath ?? `/agent/${agentId}`);
   }, [agentId, navigate])
 
   return {
