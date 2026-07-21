@@ -231,6 +231,7 @@ flowchart TB
 - `IncidentCorrelator` 创建 open Incident 时必须先成功落库；同 life 内仅合并同 fingerprint、同 renderer 或 child supporting signal，root priority 单调提升；10 秒 timer 只补 post-crash logs/dump 并 finalize。
 - `MinidumpCollector` process-gone 后在 10 秒内重复扫描；单次 growing stat 不是失败。只有存在唯一 Incident relation 才复制 dump；无法关联的 raw 保留，DB relation 提交前禁止 unlink。
 - lifeId 会回环；所有“最近”查询按时间排序。复用前必须先删 Recorder 与日志 DB 中目标 ID。
+- `DiagnosticsStore` 在 pragma / DDL 初始化失败后必须关闭已打开的 SQLite 句柄；否则 Windows 会锁住 diagnostics 目录，阻断 degraded-startup 测试和后续清理。
 - 旧 `~/.deskmate/crashes/` 和 `state/current-run.json` 不读、不迁移、不删除。
 
 ## 验证

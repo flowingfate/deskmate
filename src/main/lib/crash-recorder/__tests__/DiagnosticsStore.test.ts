@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -108,6 +108,20 @@ describe('DiagnosticsStore lifecycle and retention', () => {
     database.close();
 
     expect(store.listIncidents({ limit: 10 })).toMatchObject([{ incidentId: 'summary-only' }]);
+  });
+
+  it('closes its database handle when initialization fails', () => {
+    const diagnostics = path.join(root, 'corrupt');
+    fs.mkdirSync(diagnostics, { recursive: true });
+    fs.writeFileSync(path.join(diagnostics, 'crash-recorder.db'), 'not a sqlite database');
+    const close = vi.spyOn(Database.prototype, 'close');
+
+    try {
+      expect(() => new DiagnosticsStore(diagnostics)).toThrow();
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      close.mockRestore();
+    }
   });
 
   it('retains at most 100 newest incidents', () => {

@@ -211,13 +211,19 @@ export class DiagnosticsStore {
     fs.mkdirSync(diagnosticsDir, { recursive: true, mode: 0o700 });
     fs.chmodSync(diagnosticsDir, 0o700);
     this.databasePath = path.join(diagnosticsDir, 'crash-recorder.db');
-    this.db = new Database(this.databasePath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('synchronous = FULL');
-    this.db.pragma('foreign_keys = ON');
-    this.db.pragma('busy_timeout = 1000');
-    this.db.exec(DDL);
-    fs.chmodSync(this.databasePath, 0o600);
+    const database = new Database(this.databasePath);
+    try {
+      database.pragma('journal_mode = WAL');
+      database.pragma('synchronous = FULL');
+      database.pragma('foreign_keys = ON');
+      database.pragma('busy_timeout = 1000');
+      database.exec(DDL);
+      fs.chmodSync(this.databasePath, 0o600);
+    } catch (error) {
+      database.close();
+      throw error;
+    }
+    this.db = database;
   }
 
   public latestLifecycle(): LifecycleRecord | null {
