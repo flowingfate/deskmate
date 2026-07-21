@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { ProfileRegistry } from '../profileRegistry';
 import { getPiAuthManager } from '@main/pi';
+import { crashRecorder } from '@main/lib/crash-recorder';
 
 /**
  * Load .env.local synchronously for eval mode.
@@ -49,6 +50,7 @@ export async function startEvalMode(): Promise<void> {
     const profileId = ProfileRegistry.defaultProfileId;
     if (!profileId) {
       console.error('[EvalMode] FATAL: No default profile after bootstrap.');
+      crashRecorder.beginShutdown('eval-complete');
       app.quit();
       return;
     }
@@ -60,6 +62,7 @@ export async function startEvalMode(): Promise<void> {
       token = await getPiAuthManager(profileId).getApiKey('github-copilot');
     } catch (err) {
       console.error(`[EvalMode] FATAL: pi auth lookup failed: ${err instanceof Error ? err.message : String(err)}`);
+      crashRecorder.beginShutdown('eval-complete');
       app.quit();
       return;
     }
@@ -67,6 +70,7 @@ export async function startEvalMode(): Promise<void> {
     if (!token) {
       console.error(`[EvalMode] FATAL: No github-copilot credentials in default profile auth.pi.json (profileId=${profileId}).`);
       console.error('[EvalMode] Please launch DESKMATE normally and sign in via Settings → Providers first.');
+      crashRecorder.beginShutdown('eval-complete');
       app.quit();
       return;
     }
@@ -88,6 +92,7 @@ export async function startEvalMode(): Promise<void> {
 
   } catch (error) {
     console.error('[EvalMode] FATAL: Failed to start eval mode:', error);
+    crashRecorder.beginShutdown('eval-complete');
     app.quit();
     return;
   }

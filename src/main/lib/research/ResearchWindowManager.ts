@@ -11,6 +11,7 @@ import type {
 import { PRELOAD_PATH } from '@main/lib/buildPaths';
 import { createWindow, mainWebContents } from '@main/startup/wins';
 import { log } from '@main/log';
+import { crashRecorder } from '@main/lib/crash-recorder';
 import { extractLivePage } from './extractLivePage';
 
 const DEV_SERVER_PORT = process.env.DEV_SERVER_PORT || '39017';
@@ -155,6 +156,11 @@ class ResearchWindowManager {
     };
 
     win.on('resize', updateBounds);
+    win.on('close', () => {
+      for (const tab of active.tabs) {
+        crashRecorder.markWebContentsExpectedTermination(tab.view.webContents);
+      }
+    });
     win.on('closed', () => {
       if (this.active?.window === win && this.active.status === 'active') {
         this.completeRequest(request.callId, 'cancel');
@@ -241,6 +247,7 @@ class ResearchWindowManager {
 
     const [removed] = active.tabs.splice(tabIndex, 1);
     active.window.contentView.removeChildView(removed.view);
+    crashRecorder.markWebContentsExpectedTermination(removed.view.webContents);
     removed.view.webContents.close({ waitForBeforeUnload: false });
 
     if (active.activeTabId === tabId) {
@@ -383,6 +390,10 @@ class ResearchWindowManager {
     };
 
     active.window.contentView.addChildView(tab.view);
+    crashRecorder.registerWebContents(tab.view.webContents, {
+      windowId: active.window.id,
+      role: 'research',
+    });
     tab.view.webContents.setWindowOpenHandler(({ url }) => {
       void this.openUrlInNewTab(active.request.callId, url);
       return { action: 'deny' };

@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-19 (persist runtime storage overview IPC; 集中 preload invoke 模块) -->
+<!-- Last verified: 2026-07-20 (renderer errors use one-way log IPC instead of app invoke) -->
 # IPC 框架（`src/shared/ipc/`）
 
 > 基于 TypeScript 泛型 + Proxy 的框架，从单一共享定义文件出发，在 Electron 的三个层（main / preload / renderer）之间强制实现类型安全、编译期检查的 IPC。
@@ -145,7 +145,7 @@ const result = await screenshotApi.saveToFile(displayId, rect, imageData);
 - ⚠️ `connectMainToRender` 中的 `WeakMap<WebContents>` 缓存意味着已销毁的 `WebContents`（关闭的窗口）会被自动垃圾回收 — 无需手动清理。
 - ⚠️ `provideInvokeForPreload` 中的编译期白名单检查仅捕获**缺失**的键，不捕获**多余**的。白名单中的过时条目不会导致错误，但允许 preload 调用未定义的方法。
 - ⚠️ 所有**业务** IPC 通道必须使用此框架，禁止使用原始 `ipcMain.handle()` 字符串通道。
-- ⚠️ **例外：`log:write`** 是 renderer → main 的高频单向 `ipcRenderer.send`（每条 renderer 日志一次），故意不走 invoke/handle 框架避免 await round-trip 开销。handler 注册在 `setUpAllIPCHandlers` 最早一句，main 端强行覆写 `processType='renderer'` 与 `windowId=sender.id`，防止 renderer 伪造进程来源。日志读取侧（dev-only Log Viewer）走标准 `logViewer` 命名空间。
+- ⚠️ **例外：`log:write`** 是 renderer → main 的高频单向 `ipcRenderer.send`。renderer JavaScript errors 与 ErrorBoundary 只走日志，禁止另建 crash invoke。真正进程崩溃由 main Crash Recorder 的 Electron 事件捕获。`app:listCrashIncidentsForExport/exportCrashIncident` 只服务 About 页的单 Incident 显式导出：返回语义摘要/结果，不暴露 DB、Crashpad 或 artifact 绝对路径；minidump consent 在 renderer + exporter 两层门控。
 - ⚠️ **主链路 trace 透传**：`agentChat` 命名空间的 `streamMessage / retryChat / editUserMessage / cancelChatSession` 末尾追加可选 `trace?: TraceContext`（来自 `@shared/log/trace`，shape `{ tid, sid, psid?, startAt }`）。renderer `Tracer.startWithSpan().bind({mod:'chat.send',...})` 起 chat.send tracer 后 `tracer.serialize()` 透传；main 端 IPC handler `Tracer.deserialize(trace).derive().bind({mod:'chat.ipc',...})` 重建上游 sid 链，下游 chat.turn / chat.llm / chat.tool 的 derive 自动接上 psid。缺省时 main 端 `Tracer.start().derive()` 兜底新起。tail-optional 形参向后兼容老 renderer。
 
 ## 联动变更映射

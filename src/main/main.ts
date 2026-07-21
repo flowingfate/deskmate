@@ -1,6 +1,6 @@
 import { app, Menu, protocol } from 'electron';
 import { log, closeLogs } from '@main/log';
-import { crashCaptureManager } from './lib/crash/CrashCaptureManager';
+import { crashRecorder } from './lib/crash-recorder';
 
 import { appCacheManager } from './lib/appCache';
 import { ProfileRegistry } from './profileRegistry'
@@ -59,7 +59,6 @@ function bootstrap() {
   }
 
   async function showAndFocusMainWindow(): Promise<void> {
-    crashCaptureManager.recordBreadcrumb('lifecycle', 'app-activate');
     let window = ProfileRegistry.require(ProfileRegistry.defaultProfileId).getMainWindow();
     if (!window) window = await createMainWindow();
     if (!window.isVisible()) {
@@ -91,9 +90,6 @@ function bootstrap() {
     process.env.PATH = additionalPaths.join(':') + ':' + (process.env.PATH || '');
   }
 
-  // Respect NODE_ENV from environment, fallback to --dev flag for backwards compatibility
-  crashCaptureManager.initialize({ isDev: IS_DEV });
-  crashCaptureManager.recordBreadcrumb('lifecycle', 'electron-app-constructor', { isDev: IS_DEV });
 
 
   app.on('ready', async () => {
@@ -112,9 +108,13 @@ function bootstrap() {
       handleMediaProtocol();
       listenPowerEvents();
 
-      crashCaptureManager.recordBreadcrumb('lifecycle', 'app-ready');
-      const crashStatus = crashCaptureManager.getStatus();
-      logger.info({ msg: 'scheduler.lifecycle.startup-recovery-context', mod: 'main:onReady', previousSessionId: crashStatus.recoveredCrash?.previousSessionId ?? null, currentSessionId: crashStatus.currentSessionId, recoveredCrashDetected: crashStatus.hasRecoveredCrash, alias: ProfileRegistry.defaultProfileId || null });
+      const recoveryNotice = crashRecorder.takeRecoveryNotice();
+      logger.info({
+        msg: 'crash-recorder.lifecycle.ready',
+        status: crashRecorder.status(),
+        recoveryNotice,
+        profileId: ProfileRegistry.defaultProfileId || null,
+      });
       appCacheManager.initialize().catch((e) => {
         console.warn('[Startup] AppCacheManager pre-warm failed:', e);
       });
@@ -151,7 +151,10 @@ function bootstrap() {
 
   app.on('window-all-closed', () => {
     console.log('[APP-EXIT] All windows closed');
-    if (process.platform !== 'darwin') app.quit();
+    if (process.platform !== 'darwin') {
+      crashRecorder.beginShutdown('window-all-closed');
+      app.quit();
+    }
     // On macOS, do not call app.quit(), keep app running in Dock
   });
 
@@ -169,6 +172,7 @@ function bootstrap() {
   });
 
   app.on('before-quit', () => {
+    crashRecorder.beginShutdown('before-quit');
     logger.info({ msg: 'scheduler.lifecycle.before-quit', schedulerStates: ProfileRegistry.getSchedulerDiagnostics(), appUptimeSeconds: Math.round(process.uptime()) });
   });
 
@@ -189,7 +193,6 @@ function bootstrap() {
 
     try {
       console.log('App before quit event triggered');
-      crashCaptureManager.recordBreadcrumb('lifecycle', 'before-quit');
 
       // Add final exit log before cleanup
       logger.info({ msg: `[${exitId}] Application exiting - starting cleanup sequence...` });
@@ -217,7 +220,8 @@ function bootstrap() {
 
       const exitDuration = Date.now() - exitStart;
       console.log(`Cleanup sequence completed in ${exitDuration}ms, now exiting`);
-      crashCaptureManager.markCleanExit(0);
+      crashRecorder.finishShutdown(0);
+      crashRecorder.close();
 
       // Now allow the app to quit
       app.exit(0);
@@ -225,9 +229,14 @@ function bootstrap() {
       const exitDuration = Date.now() - exitStart;
       console.error(`Error during app exit (${exitDuration}ms):`, error);
       console.log('Force quitting due to cleanup errors');
-      crashCaptureManager.markCleanExit(1);
+      crashRecorder.finishShutdown(1);
+      crashRecorder.close();
       app.exit(1);
     }
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ msg: 'Unhandled promise rejection', err: reason });
   });
 
   setUpAllIPCHandlers();
@@ -245,5 +254,8 @@ if (IS_EVAL || app.requestSingleInstanceLock()) {
   bootstrap();
 } else {
   console.warn('[Startup] Another instance is already running, quitting this process');
+  crashRecorder.beginShutdown('second-instance');
+  crashRecorder.finishShutdown(0);
+  crashRecorder.close();
   app.quit();
 }

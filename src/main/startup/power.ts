@@ -1,6 +1,7 @@
 import { powerMonitor } from 'electron';
 import { log } from '@main/log';
 import { ProfileRegistry } from '../profileRegistry'
+import { crashRecorder } from '@main/lib/crash-recorder';
 
 
 let powerMonitorLoggingRegistered = false;
@@ -76,6 +77,11 @@ export function listenPowerEvents(): void {
   powerMonitor.on('unlock-screen', () => {
     log.info({ msg: 'scheduler.lifecycle.power-unlock-screen', schedulerStates: ProfileRegistry.getSchedulerDiagnostics() });
     logPowerEvent('Screen unlocked');
+  });
+
+  powerMonitor.on('shutdown', () => {
+    crashRecorder.beginShutdown('os-session-end');
+    logPowerEvent('System shutdown detected');
   });
 
   logPowerEvent('Power monitor diagnostics registered');

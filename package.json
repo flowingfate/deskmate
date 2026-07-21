@@ -12,6 +12,8 @@
     "check:impact": "node scripts/check-impact.js",
     "test": "cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run --silent",
     "test:coverage": "cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run --coverage --silent",
+    "build:crash-recorder-fixture": "electron-vite build --mode crash-recorder-smoke",
+    "test:crash-recorder-smoke": "npm run build:crash-recorder-fixture && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/crash-recorder-smoke.mjs",
     "typecheck": "tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json && tsc -p tsconfig.renderer.json && node scripts/check-mixed-imports.js --quiet",
     "dev": "cross-env ELECTRON_ENTRY=out/main/bootstrap.js electron-vite dev -w",
     "build": "electron-vite build",

@@ -126,9 +126,6 @@ export function getRuntimeBinDir(): string {
   return path.join(getRuntimeEnvDir(), 'runtime-bin');
 }
 
-export function getCrashesDir(): string {
-  return path.join(getAppDataPath(), 'crashes');
-}
 
 export function getStateDir(): string {
   return path.join(getAppDataPath(), 'state');

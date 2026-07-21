@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-19 (集中 preload invoke 模块) -->
+<!-- Last verified: 2026-07-21 (WebContentsView Crash Recorder identity) -->
 # lib/research — `web research` 的 research window 子系统
 
 > human-in-the-loop 网页研究：agent 出 query，用户在可见窗口里搜索、浏览、
@@ -47,6 +47,8 @@ main 端 `WebContentsView` 按 bounds **叠放**在 `BrowserWindow` 上的（`CH
 外部网页 `WebContentsView` 配 `nodeIntegration:false` / `contextIsolation:true` /
 `sandbox:true` / `partition:'persist:agent-search'`，**不注入 Deskmate preload**。
 控制 UI 的 research IPC 只暴露给 research renderer，不暴露给外部网页。
+
+每个外部 `WebContentsView` 创建后都必须登记到 Crash Recorder，identity 由宿主 research `BrowserWindow` id、view `webContentsId` 与导航 route 组成；关闭 tab 或 research window 前先标记 expected termination，避免正常销毁伪报 renderer crash。
 
 ### 选区门控 = 单向 console 标记桥（隐私关键）
 `SELECTION_PROBE_SCRIPT` 注入外部页面，监听 `selectionchange`，仅在「有/无选区」**布尔翻转**

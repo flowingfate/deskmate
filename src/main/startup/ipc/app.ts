@@ -1,8 +1,8 @@
 import { app, ipcMain, BrowserWindow } from 'electron';
 
-import { crashCaptureManager } from '../../lib/crash/CrashCaptureManager';
 import { appCacheManager } from '../../lib/appCache';
 import { renderToMain } from '@shared/ipc/app';
+import { crashRecorder } from '@main/lib/crash-recorder';
 import { APP_VERSION } from '@shared/constants/branding';
 
 import { getOrCreateInstallationDeviceId } from "../../lib/utilities/idFactory";
@@ -35,15 +35,19 @@ export default function() {
 
   handle.getInstallationDeviceId(async () => getOrCreateInstallationDeviceId());
 
-  handle.getCrashCaptureStatus(() => crashCaptureManager.getStatus());
 
-  handle.recordCrashBreadcrumb((_event, message, metadata) => {
-    crashCaptureManager.recordRendererBreadcrumb(message, metadata);
-  });
 
-  handle.reportRendererError((_event, report) => {
-    crashCaptureManager.reportRendererError(report);
-  });
+  handle.listCrashIncidentsForExport(() => crashRecorder.listIncidents({ limit: 20 }).map((incident) => ({
+    incidentId: incident.incidentId,
+    kind: incident.kind,
+    severity: incident.severity,
+    summary: incident.summary,
+    firstEventAt: incident.firstEventAt,
+    artifactCount: incident.artifactCount,
+    artifactBytes: incident.artifactBytes,
+  })));
+
+  handle.exportCrashIncident((_event, incidentId, options) => crashRecorder.exportIncident(incidentId, options));
 
   handle.getAppConfig(async () => {
     try {

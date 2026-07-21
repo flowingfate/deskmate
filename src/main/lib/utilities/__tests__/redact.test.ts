@@ -262,7 +262,7 @@ describe('redactFileContent', () => {
   it('uses generic redactor for non-schedule JSON files', () => {
     const input = JSON.stringify({ path: '/Users/johndoe/data' });
     const redact = createRedactor();
-    const result = redactFileContent(input, 'state/current-run.json', redact);
+    const result = redactFileContent(input, 'logs/dev.log', redact);
     expect(result).toContain('/Users/<USER>');
     expect(result).not.toContain('johndoe');
   });

@@ -3,7 +3,7 @@
 //   ipcRenderer.send('log:writeBatch', [{ level, fields }, ...])
 //
 // renderer 不需要 flush —— 它不读 sqlite，等 worker 落盘没有意义。
-// main 自己在 exportDebugInfo / 菜单 / before-quit 触发 flushLogs / closeLogs。
+// main 自己在菜单 / Doctor reader / before-quit 触发 flushLogs / closeLogs。
 //
 // processType / windowId 在此覆写：main 是这两个字段的唯一权威 writer，
 // renderer 即便传了同名字段也以此为准（数据一致性，非 trust boundary）。

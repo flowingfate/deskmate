@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, memo } from 'react';
+import React, { useCallback, memo } from 'react';
 import { CurrentSession } from '@/states/currentSession.atom';
 import { useToast } from '@/components/ui/ToastProvider';
 import { PasteToWorkspaceProvider } from '@/components/chat/workspace/PasteToWorkspaceProvider';
@@ -10,8 +10,6 @@ import { addFileToKnowledgeBase } from '@/lib/chat/addToKnowledgeBase';
 import { ApplySkillDialogAtom } from '@/components/skills/ApplySkillToAgentsDialog';
 import { SkillFolderRefreshAtom } from '@/components/skills/skillCommands.atom';
 import ModifyMessageConfim from '@/components/overlay/ModifyMsgConfimOverlay';
-import { appEvents } from '@/ipc/app';
-import { workspaceApi } from '@/ipc/workspace';
 import { skillsApi } from '@/ipc/skill';
 const logger = log.child({ mod: 'AgentLayout' });
 
@@ -87,33 +85,6 @@ const AgentLayout: React.FC = () => {
     }
   }, [reactiveAgentId, showSuccess, showError, showToast, installSkillActions, refreshFolder]);
 
-  useEffect(() => {
-    const cleanup = appEvents.debugInfoDownloaded((_event, result) => {
-      if (result?.success && result.filePath) {
-        showToast(
-          `Debug info saved as "${result.fileName || 'debug info zip'}"`,
-          'success',
-          undefined,
-          {
-            persistent: true,
-            actions: [
-              {
-                label: 'Open Folder',
-                onClick: () => {
-                  workspaceApi.showInFolder(result.filePath!);
-                }
-              }
-            ]
-          }
-        );
-        return;
-      }
-
-      showError(result?.error || 'Failed to export debug info');
-    });
-
-    return cleanup;
-  }, [showToast, showError]);
 
   return (
     <PasteToWorkspaceProvider>

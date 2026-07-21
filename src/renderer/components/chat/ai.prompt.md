@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-19 (ChatView root session boundary) -->
+<!-- Last verified: 2026-07-20 (agent editor tab routing) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -60,7 +60,7 @@
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
 | `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（Basic 的 description、Delegation、上下文增强、知识库、MCP 服务器、技能、系统提示词） | — |
-| `agent-area/AgentEditingView.tsx` + `useAgentEditorState.ts` + `AgentEditorTabs.tsx` | 设置页外壳、跨 tab dirty/save-all 状态和 tab 分发；返回优先回到 Agent 设置 loader 记录的入口路径，深链时才走 Agent 根路由 fallback | — |
+| `agent-area/AgentEditingView.tsx` + `useAgentEditorState.ts` + `AgentEditorTabs.tsx` | 设置页路由外壳先校验 `useParams()` 的可选 `agentId`，缺失时 redirect；内容组件与 `useAgentEditorState` 仅接收非空 `string`。跨 tab dirty/save-all 状态和 tab 分发位于 hook；active tab 直接由路由段派生，URL 是唯一真值，校验失败也通过 replace 导航回 Basic，禁止只改本地 state 造成 URL/内容漂移；返回优先回到 Agent 设置 loader 记录的入口路径，深链时才走 Agent 根路由 fallback | — |
 | `agent-editor/AgentSettingsNav.tsx` | 设置页左侧导航；数据驱动的 `NAV_ITEMS`（key/label/Lucide 图标），每项带未保存改动小圆点。**新增 Tab 时在此加一项** | 小 |
 | `agent-editor/AgentPresetsTab.tsx` + `PresetEditorDialog.tsx` | 「Quick Prompts」标签页：编辑聊天空态的预设提示词（增删改）。**已接持久化** —— 读写走 `zero/presetPrompts.ts`，落 AGENT.md front-matter `zero.preset_prompts`（cold 字段，`agentDetail.atom` 后端），与 `zero/index.tsx` 空态经 `agent:updated` 事件实时同步。CRUD 即时生效，不进 Save All 管线。新建/编辑走 `PresetEditorDialog`（含图标选择器），删除走 `AlertDialog` 二次确认 | 中 |
 | `zero/index.tsx` + `zero/PresetPromptCard.tsx` | 聊天空态：渲染预设提示词卡片。点击卡片**不发送**，而是把 `prompt` 写入 `composeTextAtom`（ComposeInput 草稿真值）填入输入框；输入框已有内容时弹 `AlertDialog` 确认覆盖。插图区为占位待填 | 中 |
@@ -151,7 +151,7 @@ ChatView (URL→会话同步)
 Agent avatar 使用通用 [`shadcn/emoji-picker.tsx`](../../shadcn/emoji-picker.tsx) 的 `EmojiPicker`：它由 Frimousse 提供可虚拟化的完整 Unicode grid，并以 shadcn `Popover` 承载，固定 10 列填满 picker 宽度。搜索为空时显示分类 icon toolbar，点击分类立即跳转到相应 section，手动滚动同步激活态；搜索期间隐藏 toolbar。首次打开从 Emojibase 拉取并缓存数据，选中 emoji 即更新表单并关闭。两个调用入口保持一致。
 
 ### 侧边栏和编辑器
-Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `ChatView` 的子组件。Agent 编辑器（`agent-editor/`）在导航到 `/agent/:agentId/settings/*` 时出现。首次进入某个 Agent 的设置时，路由 loader 记录前一条完整 URL；同一 Agent 内的 tab 切换不会覆盖它，`AgentEditingView` 顶部返回按钮优先回到该入口。深链 / 刷新没有入口时才回退到 `/agent/:agentId`。**定时任务（jobs / runs）UI 已搬迁到 [`components/agent-side/`](../agent-side/ai.prompt.md)**：alarm 切换 + jobs CRUD + runs 列表 + AddScheduleOverlay 全部走那条主从二级视图，URL 是真相源；`SchedulesSidepane` / `AgentSchedulesTab` / `SchedulesContentView` 已物理删除。
+Agent 侧边栏（`agent-area/`）是 `AgentPage` 中的兄弟面板，而非 `ChatView` 的子组件。Agent 编辑器（`agent-editor/`）在导航到 `/agent/:agentId/settings/*` 时出现；`AgentEditingView` 在路由边界收窄 React Router 返回的可选参数，后续内容组件与 `useAgentEditorState` 的 `agentId` 必为 `string`。active tab 直接从 `*` 路由段派生；导航和字段校验都必须改 URL，不维护可与路由漂移的本地 tab state。首次进入某个 Agent 的设置时，路由 loader 记录前一条完整 URL；同一 Agent 内的 tab 切换不会覆盖它，顶部返回按钮优先回到该入口。深链 / 刷新没有入口时才回退到 `/agent/:agentId`。**定时任务（jobs / runs）UI 已搬迁到 [`components/agent-side/`](../agent-side/ai.prompt.md)**：alarm 切换 + jobs CRUD + runs 列表 + AddScheduleOverlay 全部走那条主从二级视图，URL 是真相源；`SchedulesSidepane` / `AgentSchedulesTab` / `SchedulesContentView` 已物理删除。
 
 ## 常见变更
 | 场景 | 需要修改的文件 | 备注 |

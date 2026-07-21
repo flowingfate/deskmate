@@ -12,6 +12,7 @@
 import { BrowserWindow, session } from 'electron';
 import type { ExtractedContent } from '@shared/types/extractedContent';
 import { extractFromWebContents } from './extractFromWebContents';
+import { crashRecorder } from '@main/lib/crash-recorder';
 
 const PARTITION = 'agent-fetch';
 const USER_AGENT =
@@ -102,6 +103,7 @@ class HeadlessRenderer {
         spellcheck: false,
       },
     });
+    crashRecorder.registerWindow(win, { role: 'research', tag: 'headless-renderer' });
     const wc = win.webContents;
     wc.setWindowOpenHandler(() => ({ action: 'deny' }));
     const blockMedia = opts.blockMedia !== false;
@@ -114,6 +116,7 @@ class HeadlessRenderer {
       clearTimeout(settleTimer);
       opts.signal?.removeEventListener('abort', onAbort);
       this.blockingWcIds.delete(wc.id);
+      crashRecorder.markWindowExpectedTermination(win);
       if (!win.isDestroyed()) win.destroy();
     };
     const fail = (message: string): void => {

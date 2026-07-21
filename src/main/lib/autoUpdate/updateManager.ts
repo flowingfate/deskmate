@@ -12,6 +12,7 @@ import { UpdaterFetcher } from './updaterFetcher';
 import { BRAND_CONFIG, BRAND_NAME, APP_VERSION } from '../../../shared/constants/branding';
 import { BASE_CDN_URL } from '@shared/constants/endpoints';
 import { getUpdatesCacheDir as resolveUpdatesCacheDir, getUpdaterDir as resolveUpdaterDir, getUpdatePreferencesPath } from '@main/persist/lib/path';
+import { crashRecorder } from '@main/lib/crash-recorder';
 
 export interface UpdateInfo {
   version: string;
@@ -992,6 +993,7 @@ export class UpdateManager {
       // Wait briefly to ensure the updater started successfully, then quit
       setTimeout(() => {
         this.logger.info({ msg: 'Exiting main app, handing over to updater', mod: 'UpdateManager' });
+        crashRecorder.beginShutdown('updater-restart');
         app.quit();
       }, 1000);
     } catch (error) {
@@ -1071,6 +1073,7 @@ export class UpdateManager {
 
         openProcess.on('spawn', () => {
           setTimeout(() => {
+            crashRecorder.beginShutdown('updater-restart');
             app.quit();
           }, 1000);
         });
@@ -1092,6 +1095,7 @@ export class UpdateManager {
 
         installProcess.on('spawn', () => {
           setTimeout(() => {
+            crashRecorder.beginShutdown('updater-restart');
             app.quit();
           }, 1000);
         });

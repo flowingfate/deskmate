@@ -9,9 +9,8 @@ const invoke = renderToMain.provideInvokeForPreload(ipcRenderer, [
   'getPlatformInfo',
   'getUserDataPath',
   'getInstallationDeviceId',
-  'getCrashCaptureStatus',
-  'recordCrashBreadcrumb',
-  'reportRendererError',
+  'listCrashIncidentsForExport',
+  'exportCrashIncident',
   'getAppConfig',
   'updateAppConfig',
 ]);

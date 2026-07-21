@@ -3,7 +3,6 @@ import { createWindow, getWindowMeta, zoomLevel } from './wins';
 import * as path from 'path';
 import * as fs from 'fs';
 import { log } from '@main/log';
-import { crashCaptureManager } from '@main/lib/crash/CrashCaptureManager';
 import { PRELOAD_PATH } from '@main/lib/buildPaths';
 
 import { appCacheManager } from '@main/lib/appCache';
@@ -65,10 +64,6 @@ async function createMainWindowImpl(profileId: string): Promise<BrowserWindow> {
   }, { role: 'main', profileId });
 
   profile.attachMainWindow(window);
-  crashCaptureManager.attachToMainWindow(window);
-  crashCaptureManager.recordBreadcrumb('window', 'main-window-created', {
-    windowId: window.id,
-  });
 
   // 挂载窗口几何记忆：move / resize 后防抖保存，下次启动恢复到同一屏幕与位置。
   trackBounds(window, profileId);
@@ -183,9 +178,6 @@ async function createMainWindowImpl(profileId: string): Promise<BrowserWindow> {
   window.once('ready-to-show', async () => {
     console.timeEnd('[Startup] Total main.ts load');
     console.log('[Startup] 🎉 Window ready-to-show event fired!');
-    crashCaptureManager.recordBreadcrumb('window', 'main-window-ready-to-show', {
-      windowId: window.id,
-    });
 
     if (!window.isDestroyed()) {
       try {

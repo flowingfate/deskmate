@@ -1,6 +1,6 @@
 # 数据流
 
-<!-- Last verified: 2026-07-19 (sender-bound multi-window Profile routing; 集中 preload invoke 模块) -->
+<!-- Last verified: 2026-07-20 (renderer JavaScript errors use log flow) -->
 
 参考：`src/shared/ipc/base.ts`、`src/main/pi/`、`src/main/persist/`、`src/main/lib/mcpRuntime/`
 
@@ -46,7 +46,7 @@ src/renderer/components/...       ← 业务代码通过 `import { xxxApi } from
 
 共 30+ 个命名空间，覆盖所有 IPC 通道：app、window、auth、signin、misc（folder/debug）、profile、agentChat、chatSession、models、llm、fs、workspace、mcp/mcpAuth、navigate、skills、builtinTools、subagentRun、runtime、sync、update、logViewer（dev-only）。
 
-**例外**：`log:write` 是 renderer → main 的**单向** `send`，不走类型化框架（每条日志加 invoke round-trip 太重）；见下文「日志流」。
+**例外**：`log:write` 是 renderer → main 的**单向** `send`，不走类型化框架（每条日志加 invoke round-trip 太重）；renderer 的 `window.error` / `unhandledrejection` 与根 React ErrorBoundary 都走这条日志流。真正的进程崩溃由 main 的 Crash Recorder 从 Electron 进程事件捕获并聚合成 Incident。见下文「日志流」。
 
 ### 特殊情况
 
@@ -193,9 +193,10 @@ scheduleRuns.atom 独立缓存 `ScheduleRunSessionDataFile[]` —— 与 session
 
 所有进程写入同一张 sqlite 表 `app_logs`（`~/.deskmate/logs/{dev,app}.db`），靠 `process_type / window_id / pid` 区分来源。
 
-1. **Main / Worker** — `import { log } from '@main/log'` → pino 实例 → worker_thread transport（`src/main/log/sqlite-transport.cjs`） → better-sqlite3 异步落盘（WAL）。`log.flush()` 走 `thread-stream.flush(cb)`，等 worker ack 后 resolve。
-2. **Renderer** — `import { log } from '@/log'` 按 level 早过滤（dev: trace+，prod: info+），通过 `ipcRenderer.send('log:write', { level, fields })` **单向** 跨进程。主进程 handler（`src/main/startup/ipc/`）强行覆写 `processType='renderer'` 和 `windowId = sender.id` 防伪造，再调用 main 的 `log.<level>(fields)` 走同一条 pino → worker 链路。`log:write` 是热路径，故意不走 `invoke` 框架避免 round-trip。
-3. **退出** — `onBeforeQuit` 调 `closeLogs(5000)`：flush + transport.end + once('close')，带超时不阻塞退出。
+1. **Main / Worker** — `import { log } from '@main/log'` → 先同步投递规范化白名单字段到 `DiagnosticLogRing`，再进入 pino worker_thread transport（`src/main/log/sqlite-transport.cjs`）→ better-sqlite3 异步落盘（WAL）。`log.flush()` 等 worker ack。
+2. **Renderer** — `import { log } from '@/log'` 按 level 早过滤（dev: trace+，prod: info+），通过 `ipcRenderer.send('log:write', { level, fields })` 单向跨进程；main 覆写 `processType='renderer'` 与 `windowId=sender.id`，再进入同一 Ring + Pino 双 sink。
+3. **lifeId** — `bootstrap.ts` 中的 Crash Recorder 从日志 DB + Recorder DB 按时间统一分配，再经 `configureLogLifeId()` 显式配置给 main logger；`createPinoLogger({ lifeId })` 将其传给 worker，worker 不再独立计算。
+4. **退出** — `before-quit` 先 `beginShutdown()`，业务/persist 清理后 `closeLogs(5000)`，最后 Recorder 提交 lifecycle=`clean` 并关闭 DB/journal。
 
 读取侧（dev-only Log Viewer 与 doctor agent）通过 `logViewer` 命名空间走类型化 IPC：
 

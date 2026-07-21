@@ -1,15 +1,37 @@
 import { describe, expect, it, vi } from 'vitest';
 
 const harness = vi.hoisted(() => {
-  const closedListeners = new WeakMap<object, () => void>();
+  const listeners = new WeakMap<object, Map<string, Array<() => void>>>();
+  const windows: object[] = [];
   let createdCount = 0;
 
   class MockBrowserWindow {
+    public readonly webContents = {
+      id: 1,
+      on: vi.fn(),
+      getURL: vi.fn(() => ''),
+      getOSProcessId: vi.fn(() => 123),
+    };
+
     public constructor() {
       createdCount += 1;
+      windows.push(this);
+      listeners.set(this, new Map());
     }
-    public once(_event: string, listener: () => void): void {
-      closedListeners.set(this, listener);
+
+    public static getAllWindows(): object[] {
+      return [...windows];
+    }
+
+    public on(event: string, listener: () => void): void {
+      const byEvent = listeners.get(this);
+      const eventListeners = byEvent?.get(event) ?? [];
+      eventListeners.push(listener);
+      byEvent?.set(event, eventListeners);
+    }
+
+    public once(event: string, listener: () => void): void {
+      this.on(event, listener);
     }
 
     public isDestroyed(): boolean {
@@ -23,7 +45,7 @@ const harness = vi.hoisted(() => {
       return createdCount;
     },
     close(window: object): void {
-      closedListeners.get(window)?.();
+      for (const listener of listeners.get(window)?.get('closed') ?? []) listener();
     },
   };
 });

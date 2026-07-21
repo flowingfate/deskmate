@@ -6,7 +6,7 @@ import { flushLogs } from '@main/log';
 import { openLogViewerWindow } from '@main/log/viewer-window';
 import { getLogsDir, getProfileDirectoryPath } from "@main/persist/lib/path";
 
-import { exportDebugInfo, notifyDebugInfoDownload } from './debug';
+import { crashRecorder } from '@main/lib/crash-recorder';
 
 export function getMenuTemplate(): Electron.MenuItemConstructorOptions[] {
   const mainWindowFromMenu = (window: Electron.BaseWindow | undefined): BrowserWindow | null => {
@@ -58,15 +58,6 @@ export function getMenuTemplate(): Electron.MenuItemConstructorOptions[] {
             } catch (error) { }
           },
         },
-        {
-          label: 'Download Debug Info',
-          click: async (_menuItem, browserWindow) => {
-            const targetWindow = browserWindow instanceof BrowserWindow ? browserWindow : undefined;
-            const profileId = targetWindow ? getWindowMeta(targetWindow)?.profileId ?? null : null;
-            const result = await exportDebugInfo(profileId);
-            notifyDebugInfoDownload(targetWindow, result);
-          },
-        },
         ...(process.platform !== 'darwin'
           ? [
             { type: 'separator' as const },
@@ -74,6 +65,7 @@ export function getMenuTemplate(): Electron.MenuItemConstructorOptions[] {
               label: 'Exit',
               accelerator: 'Ctrl+Q',
               click: () => {
+                crashRecorder.beginShutdown('menu');
                 app.quit();
               },
             },

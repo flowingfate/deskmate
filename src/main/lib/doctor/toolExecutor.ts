@@ -10,8 +10,8 @@ import { executeGetLogSchema } from './tools/getLogSchema';
 import { executeTraceTimeline } from './tools/traceTimeline';
 import { executeReadChatSession } from './tools/readChatSession';
 import { executeGetChatMessages } from './tools/getChatMessages';
-import { executeGetCrashStatus } from './tools/getCrashStatus';
-import { executeReadCrashBundle } from './tools/readCrashBundle';
+import { executeListCrashIncidents } from './tools/listCrashIncidents';
+import { executeReadCrashIncident } from './tools/readCrashIncident';
 import { executeReadSchedules } from './tools/readSchedules';
 import { executeCreateGithubIssue } from './tools/createGithubIssue';
 import { executeAskUserQuestion } from './tools/askUserQuestion';
@@ -34,8 +34,8 @@ const handlers: Record<string, (args: any, context: ToolContext) => Promise<stri
   trace_timeline: (args) => executeTraceTimeline(args),
   read_chat_session: (args, context) => executeReadChatSession(context.store, args),
   get_chat_messages: (args, context) => executeGetChatMessages(context.store, args),
-  get_crash_status: () => executeGetCrashStatus(),
-  read_crash_bundle: (args) => executeReadCrashBundle(args),
+  list_crash_incidents: (args) => executeListCrashIncidents(args),
+  read_crash_incident: (args) => executeReadCrashIncident(args),
   read_schedules: (args, context) => executeReadSchedules(context.store, args),
   create_github_issue: (args, context) => executeCreateGithubIssue(args, context.task.id, context.task.signal),
   ask_user_question: (args, context) => executeAskUserQuestion(args, context),
