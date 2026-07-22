@@ -128,7 +128,7 @@ async function download(use: UseAtom, agentId: string, sessionId: string, title:
   try {
     const result = await chatSessionApi.downloadChatSession(agentId, sessionId, title);
     if (result.success) {
-      toast.showToast(`Chat session saved as "${result.fileName}"`, 'success', undefined, {
+      toast.showToast(`Chat session archive saved as "${result.fileName}"`, 'success', undefined, {
         persistent: true,
         actions: [
           {
@@ -158,7 +158,7 @@ async function downloadScheduleRun(
   try {
     const result = await chatSessionApi.downloadScheduleRun(agentId, jobId, runId, title);
     if (result.success) {
-      toast.showToast(`Schedule run saved as "${result.fileName}"`, 'success', undefined, {
+      toast.showToast(`Schedule run archive saved as "${result.fileName}"`, 'success', undefined, {
         persistent: true,
         actions: [{ label: 'Open Folder', onClick: () => workspaceApi.showInFolder(result.filePath) }],
       });

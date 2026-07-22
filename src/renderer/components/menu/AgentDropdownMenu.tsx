@@ -125,7 +125,7 @@ const AgentDropdownMenu: React.FC<InnerProps> = ({
     }
   };
 
-  // Import a single ChatSession JSON file into the current agent.
+  // Import a complete chat-session ZIP into the current agent.
   const handleImportChatSessions = async () => {
     if (!agentId) {
       showError('Chat ID not found');
@@ -191,7 +191,7 @@ const AgentDropdownMenu: React.FC<InnerProps> = ({
         )}
         <DropdownMenuItem onClick={handleImportChatSessions} disabled={isImporting}>
           <Upload size={16} strokeWidth={1.5} />
-          <span>{isImporting ? 'Importing...' : 'Import Chat Session JSON'}</span>
+          <span>{isImporting ? 'Importing...' : 'Import Chat Session ZIP'}</span>
         </DropdownMenuItem>
         {currentAgent?.name && (
           <DropdownMenuItem onClick={handleDuplicateAgent}>

@@ -213,11 +213,11 @@ function Menu({ children }: UserMenuProps) {
             onCreate={() => setCreateDialogOpen(true)}
             onManage={() => setProfileManagerOpen(true)}
           />
-          <DropdownMenuItem onClick={onSignIn}>
+          {/* <DropdownMenuItem onClick={onSignIn}>
             <LogIn size={14} strokeWidth={1.5} />
             <span>Sign in</span>
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator /> */}
           <DropdownMenuItem onClick={onOpenSettings}>
             <Settings size={14} strokeWidth={1.5} />
             <span>Settings</span>

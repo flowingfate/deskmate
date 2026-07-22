@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-20 (agent editor tab routing) -->
+<!-- Last verified: 2026-07-22 (custom agent creation flow) -->
 # 聊天界面
 
 > 最大的 UI 模块，提供完整的聊天界面：消息渲染、富文本输入、Agent 选择、Agent 编辑、工具调用可视化和工作区文件浏览。
@@ -59,6 +59,7 @@
 | `chat-side.atom.ts` | `WorkspaceExplorerAtom`（右侧工作区侧栏可见性 + reveal）的 atom；`effectiveToggle` 打开侧栏时顺带 `ChatFilePreviewAtom.cancel()`。文件预览状态已迁到 `filePreview/filePreview.atom.ts` | — |
 | `edit-message.atom.ts` | 内联用户消息编辑状态的 atom | — |
 | `agent-area/AgentList.tsx` | 左侧边栏 agent 列表，支持搜索、置顶和创建入口 | ~2.3K LOC |
+| `agent-area/CreateCustomAgentViewContent.tsx` | 自定义 Agent 创建表单；仅名称必填，描述与模型均可留空；创建后按用户动作进入 Basic 设置或以新 session 打开聊天 | ~280 LOC |
 | `agent-editor/AgentBasicTab.tsx` … `AgentSystemPromptTab.tsx` | 单个 agent 的设置标签页（Basic 的 description、Delegation、上下文增强、知识库、MCP 服务器、技能、系统提示词） | — |
 | `agent-area/AgentEditingView.tsx` + `useAgentEditorState.ts` + `AgentEditorTabs.tsx` | 设置页路由外壳先校验 `useParams()` 的可选 `agentId`，缺失时 redirect；内容组件与 `useAgentEditorState` 仅接收非空 `string`。跨 tab dirty/save-all 状态和 tab 分发位于 hook；active tab 直接由路由段派生，URL 是唯一真值，校验失败也通过 replace 导航回 Basic，禁止只改本地 state 造成 URL/内容漂移；返回优先回到 Agent 设置 loader 记录的入口路径，深链时才走 Agent 根路由 fallback | — |
 | `agent-editor/AgentSettingsNav.tsx` | 设置页左侧导航；数据驱动的 `NAV_ITEMS`（key/label/Lucide 图标），每项带未保存改动小圆点。**新增 Tab 时在此加一项** | 小 |

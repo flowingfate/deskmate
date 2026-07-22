@@ -28,7 +28,7 @@ const AgentCreationView: React.FC = () => {
       </AgentPane.Head>
 
       <AgentPane.Body className="flex items-center justify-center overflow-y-auto p-12">
-        <div className="w-full max-w-[560px] text-center" key={`content-${refreshKey}`}>
+        <div className="w-full max-w-140 text-center" key={`content-${refreshKey}`}>
           <h2 className="mb-2 text-[28px] font-bold leading-tight text-gray-800">Create a New Agent</h2>
           <p className="mb-10 text-base text-gray-500">Build a personalized agent</p>
 
@@ -58,7 +58,7 @@ function OptionCard({ icon, title, description, onClick }: {
       onClick={onClick}
       className="group flex w-full items-center gap-4 rounded-2xl border border-black/10 bg-white p-6 text-left transition-all hover:-translate-y-0.5 hover:border-black/15 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:translate-y-0 active:shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
     >
-      <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 text-gray-700 transition-colors group-hover:from-gray-100 group-hover:to-gray-200 group-hover:text-[#272320]">
+      <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-gray-50 to-gray-100 text-gray-700 transition-colors group-hover:from-gray-100 group-hover:to-gray-200 group-hover:text-[#272320]">
         {icon}
       </div>
       <div className="min-w-0 flex-1">

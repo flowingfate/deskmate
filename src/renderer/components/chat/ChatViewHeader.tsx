@@ -4,6 +4,7 @@ import StatusBadges from '../ui/StatusBadges';
 import ContextBadge from '../ui/ContextBadge';
 import { useAgentById } from '@/states/agents.atom';
 import { AgentAvatar } from '../common/AgentAvatar';
+import { editAgent } from '@renderer/lib/chat/editAgent';
 
 
 interface ChatViewHeaderProps {
@@ -17,18 +18,23 @@ const ChatViewHeader: React.FC<ChatViewHeaderProps> = ({ agentId, sessionId }) =
   return (
     <>
       <div className="flex items-center gap-2">
-        {agent && (
-          <span className="inline-flex items-center">
-            <AgentAvatar
-              emoji={agent.emoji}
-              avatar={agent.avatar}
-              name={agent.name}
-              size="md"
-              version={agent.version}
-            />
-          </span>
-        )}
-        <span>{agent ? agent.name : 'Chat'}</span>
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={() => editAgent(agentId, 'basic')}
+        >
+          {agent && (
+            <span className="inline-flex items-center">
+              <AgentAvatar
+                emoji={agent.emoji}
+                avatar={agent.avatar}
+                name={agent.name}
+                size="md"
+                version={agent.version}
+              />
+            </span>
+          )}
+          <span>{agent ? agent.name : 'Chat'}</span>
+        </div>
         <StatusBadges agentId={agentId} />
       </div>
       <div className="flex shrink-0 items-center">

@@ -8,20 +8,18 @@ import { Button } from '@/shadcn/button'
 import { AlertTriangle } from 'lucide-react'
 import { log } from '@/log';
 import { ModelSelectPopover } from '../ModelSelectPopover'
+import { newEntityId } from '@shared/persist/id'
 const logger = log.child({ mod: 'CreateCustomAgentViewContent' });
 
-interface CreateCustomAgentViewContentProps {
-  // Add needed props here
-}
 
-// Simplified Agent data type
 interface AgentFormData {
   name: string
+  description: string
   emoji: string
   model: string
 }
 
-const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> = () => {
+const CreateCustomAgentViewContent: React.FC = () => {
   const navigate = useNavigate()
   const agents = useAgents()
   const { showToast } = useToast()
@@ -29,13 +27,11 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
   // Form data
   const [formData, setFormData] = useState<AgentFormData>({
     name: '',
+    description: '',
     emoji: '🤖',
-    model: '' // Step 9+：让用户主动选 provider::modelId
+    model: '',
   })
   const [isCreating, setIsCreating] = useState(false)
-
-  // UI state
-  const [isFormValid, setIsFormValid] = useState(false)
   const [nameWarning, setNameWarning] = useState<string>('')
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
@@ -52,11 +48,7 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
     return !agents.some(a => a.name === name.trim())
   }, [agents])
 
-  // Validate form data
-  React.useEffect(() => {
-    const isValid = formData.name.trim() && validateAgentName(formData.name) && formData.model
-    setIsFormValid(Boolean(isValid))
-  }, [formData, validateAgentName])
+  const isFormValid = Boolean(formData.name.trim() && validateAgentName(formData.name))
 
   // Handle input changes
   const handleInputChange = useCallback((field: keyof AgentFormData, value: string) => {
@@ -90,17 +82,17 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
     handleInputChange('emoji', emoji)
   }, [handleInputChange])
 
-  // Helper function to wait for the new agent to appear in the atom (after IPC roundtrip)
-  const waitForChatInCache = useCallback((agentId: string, timeout = 5000): Promise<boolean> => {
+  // Wait for the new agent to appear in the atom after the IPC round trip.
+  const waitForAgentInCache = useCallback((agentId: string, timeout = 5000): Promise<boolean> => {
     return new Promise((resolve) => {
-      if (getAgents().some(a => a.id === agentId)) {
+      if (getAgents().some((agent) => agent.id === agentId)) {
         resolve(true)
         return
       }
 
       let timeoutId: NodeJS.Timeout
-      const unsubscribe = listenAgents((agents) => {
-        if (agents.some(a => a.id === agentId)) {
+      const unsubscribe = listenAgents((cachedAgents) => {
+        if (cachedAgents.some((agent) => agent.id === agentId)) {
           clearTimeout(timeoutId)
           unsubscribe()
           resolve(true)
@@ -114,14 +106,13 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
     })
   }, [])
 
-  // Create and continue to configure
-  const handleCreateAndContinue = useCallback(async () => {
-    if (!isFormValid || !formData.name.trim()) {
+  const handleCreate = useCallback(async (destination: 'settings' | 'chat') => {
+    if (!isFormValid) {
       showToast('Please enter a valid agent name', 'error')
       return
     }
 
-    // Re-validate the name for duplicates (guard against concurrent creation)
+    // Re-validate the name for duplicates (guard against concurrent creation).
     if (!validateAgentName(formData.name)) {
       showToast('Agent name already exists. Please choose a different name.', 'error')
       return
@@ -130,10 +121,10 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
     setIsCreating(true)
 
     try {
-      // Create the new Chat configuration
       const result = await addAgentConfig({
         agent: {
           name: formData.name.trim(),
+          description: formData.description.trim(),
           emoji: formData.emoji,
           role: '',
           model: formData.model,
@@ -147,32 +138,30 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
         }
       })
 
-      if (result.success && result.data) {
-        const agentId = result.data.agent_id
-
-        // Wait for ProfileDataManager to receive the new Chat configuration
-        logger.debug({ msg: "Waiting for chat to appear in cache:", data: agentId })
-        const chatAvailable = await waitForChatInCache(agentId)
-
-        if (chatAvailable) {
-          showToast(`Agent "${formData.name}" created successfully!`, 'success')
-          // Navigate to the agent/chat/{agent_id}/settings/workspace page
-          navigate(`/agent/${agentId}/settings/workspace`)
-        } else {
-          logger.warn({ msg: "Chat not found in cache after timeout, navigating anyway" })
-          showToast(`Agent "${formData.name}" created successfully!`, 'success')
-          navigate(`/agent/${agentId}/settings/workspace`)
-        }
-      } else {
+      if (!result.success || !result.data) {
         showToast(result.error || 'Failed to create agent', 'error')
+        return
+      }
+
+      const agentId = result.data.agent_id
+      const agentAvailable = await waitForAgentInCache(agentId)
+      if (!agentAvailable) {
+        logger.warn({ msg: 'Agent not found in cache after timeout, navigating anyway', agentId })
+      }
+
+      showToast(`Agent "${formData.name}" created successfully!`, 'success')
+      if (destination === 'settings') {
+        navigate(`/agent/${agentId}/settings/basic`)
+      } else {
+        navigate(`/agent/${agentId}/${newEntityId('s')}`)
       }
     } catch (error) {
-      logger.error({ msg: "Failed to create agent:", err: error })
+      logger.error({ msg: 'Failed to create agent:', err: error })
       showToast('Failed to create agent', 'error')
     } finally {
       setIsCreating(false)
     }
-  }, [formData, navigate, showToast, waitForChatInCache, validateAgentName])
+  }, [formData, isFormValid, navigate, showToast, validateAgentName, waitForAgentInCache])
 
   return (
     <div className="flex-1 overflow-y-auto bg-white p-6">
@@ -225,6 +214,24 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
         )}
       </div>
 
+      {/* Agent Description section */}
+      <div className="mb-6">
+        <label htmlFor="agent-description" className="mb-2 block text-sm font-semibold leading-5 text-[#272320]">
+          Agent Description <span className="font-normal text-gray-500">(optional)</span>
+        </label>
+        <p id="agent-description-helper" className="mb-2 text-sm text-gray-500">
+          Describe this agent&apos;s expertise to help other agents select it as a delegation target.
+        </p>
+        <textarea
+          id="agent-description"
+          className="min-h-24 w-full resize-y rounded-lg border border-black/20 bg-white px-4 py-3 text-sm leading-5 text-[#272320] outline-none transition-colors focus:border-[#404040] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.1)]"
+          value={formData.description}
+          onChange={(event) => handleInputChange('description', event.target.value)}
+          placeholder="Describe this agent&apos;s expertise..."
+          aria-describedby="agent-description-helper"
+        />
+      </div>
+
       {/* Agent Model section */}
       <div className="mb-6">
         <label className="mb-2 block text-sm font-semibold leading-5 text-[#272320]">Agent Model</label>
@@ -241,16 +248,26 @@ const CreateCustomAgentViewContent: React.FC<CreateCustomAgentViewContentProps> 
         <Button
           variant="secondary"
           onClick={() => navigate('/agent/creation')}
+          disabled={isCreating}
         >
           Cancel
         </Button>
 
         <Button
-          onClick={handleCreateAndContinue}
+          variant="secondary"
+          onClick={() => handleCreate('settings')}
           disabled={isCreating || !isFormValid}
           type="button"
         >
-          {isCreating ? 'Creating...' : 'Create and Continue Configuration'}
+          {isCreating ? 'Creating...' : 'Create and Configure Advanced Options'}
+        </Button>
+
+        <Button
+          onClick={() => handleCreate('chat')}
+          disabled={isCreating || !isFormValid}
+          type="button"
+        >
+          {isCreating ? 'Creating...' : 'Create and Start Chatting'}
         </Button>
       </div>
 

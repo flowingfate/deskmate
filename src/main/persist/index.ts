@@ -18,6 +18,7 @@ export { ProfileStore } from './profileStore';
 export type { ResolvedAgentDelegates } from './profileStore';
 export { Agent } from './agent';
 export { Session, RegularSession, JobRun } from './session';
+export { exportSessionArchive, importSessionArchive } from './sessionArchive';
 export { Subrun } from './subrun';
 export type {
   CreateSubrunResult,
