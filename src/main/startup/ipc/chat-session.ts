@@ -1,17 +1,9 @@
 import { app, ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import type { ProfileStore } from '@main/persist';
-import type { ChatSessionFile } from '@shared/persist/types'
+import { exportSessionArchive, type ProfileStore, type Session } from '@main/persist';
 import { renderToMain } from '@shared/ipc/chatSession';
 import { requireProfileForSender } from './profileContext';
-
-type DownloadableSession = {
-  id: string;
-  title: string;
-  config: { updatedAt: string; contextState: ChatSessionFile['contextState'] };
-  loadMessagesAll(): Promise<ChatSessionFile['messages']>;
-};
 
 async function querySessionForProfile(store: ProfileStore, agentId: string, sessionId: string) {
   const agent = await store.getAgent(agentId);
@@ -32,35 +24,28 @@ async function queryJobRunForProfile(store: ProfileStore, agentId: string, jobId
 }
 
 async function writeSessionDownload(
-  session: DownloadableSession,
+  session: Session,
   title: string,
 ): Promise<{ filePath: string; fileName: string }> {
-  const file: ChatSessionFile = {
-    chatSession_id: session.id,
-    title: session.title,
-    last_updated: session.config.updatedAt,
-    messages: await session.loadMessagesAll(),
-    contextState: session.config.contextState,
-  };
   const downloadsDir = app.getPath('downloads');
   const safeTitle = title.replace(/[<>:"/\\|?*]/g, '_').trim() || session.id;
-  let fileName = `${safeTitle}.json`;
+  let fileName = `${safeTitle}.zip`;
   let filePath = path.join(downloadsDir, fileName);
 
   if (fs.existsSync(filePath)) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    fileName = `${safeTitle}_${timestamp}.json`;
+    fileName = `${safeTitle}_${timestamp}.zip`;
     filePath = path.join(downloadsDir, fileName);
   }
 
-  await fs.promises.writeFile(filePath, JSON.stringify(file, null, 2), 'utf-8');
+  await exportSessionArchive(session, filePath);
   return { filePath, fileName };
 }
 
 export default function handleChatSessionIPC(): void {
   const handle = renderToMain.bindMain(ipcMain);
 
-  // Download ChatSession to Downloads directory
+  // Download the complete session directory as a ZIP archive
   handle.downloadChatSession(async (
     event,
     agentId,

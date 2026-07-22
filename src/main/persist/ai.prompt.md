@@ -1,4 +1,4 @@
-<!-- Last verified: 2026-07-19 (app runtime storage overview; 集中 preload invoke 模块) -->
+<!-- Last verified: 2026-07-22 (session directory ZIP import/export) -->
 
 # Persist 模块（新布局 store 层）
 
@@ -12,6 +12,7 @@
 | `profileStore.ts` | 单 profile 持久化聚合：内嵌 `ProfileSettings`（settings.json）+ `AgentRegistry`（agents.json：items + primaryAgentId）两个 PersistBase inner class；外层 `ProfileStore` 负责 agent 实体集合（Map<id, Agent>）、CRUD、archive/restore、reconcile、跨 agent 聚合，以及 `resolveDelegates(parentId)` 按父配置 join active hot registry | large |
 | `agent.ts` | `Agent` class：AGENT.md 读写 + sessions/jobs 子域入口；description/delegates 由既有 config/patch 往返，不建立独立 normalizer | large |
 | `session.ts` | `Session`(抽象基类:`messages.jsonl` I/O + files sandbox + 节流 persist + 元数据 mutate)及 `RegularSession` / `JobRun`；还拥有 `createSubrun/getSubrun/listSubruns`，只以当前 parent session 限定三位 subrun ID | large |
+| `sessionArchive.ts` | 会话目录 ZIP：将完整 regular/job-run 目录连同 `info.json` 打包；导入时安全解压 regular archive、校验 metadata，并只重写 `data.json` 的新 owner / ID 后直接迁移完整目录、同步索引与事件 | medium |
 | `subrun.ts` | `Subrun`：parent `subruns/001..999/` 的 data/message store；per-parent allocation lock、directory reservation、v1 execution history、明确运行 getter 与 `PersistSessionLike` 最小实现；不创建旧 data-file snapshot，不进 SQLite、普通 Session emit 或 files sandbox | large |
 | `schedule.ts` | `ScheduleJob` + `ScheduleRegistry`:once/cron job + run 状态机;Step 9 起 run 路径走 `jobRunIdx` | medium |
 | `archive.ts` | agent 软删/恢复/purge/gc | small |
@@ -63,6 +64,11 @@ ProfileRegistry.require(profileId).store → ProfileStore
 
 两类 session 永不混走同一容器：`Agent.sessions: Map<id, RegularSession>`，`ScheduleJob.runs: Map<id, JobRun>`。子类间没有共同的 placement getter；要分支判断，用 `instanceof`。
 
+### Session ZIP 导入导出
+`sessionArchive.ts` 是唯一的归档格式实现。ZIP 的单一根目录名等于源 session ID，内部保留原始 `data.json` / `messages.jsonl` / `files/` / `subruns/`，另注入 `info.json`（version、源 session identity 与月份）。导出前强制 flush 当前 session，避免漏掉内存尾部消息；不重建 JSON 或重新编码消息。输出通过 JSZip Node stream 直接写盘，绝不聚合完整 archive buffer；最大压缩包为 1 GiB，超限会删除部分输出。
+
+导入只接受 `info.json#session.kind === 'regular'` 的 ZIP，`importSessionArchive` 是唯一入口：它用 `node-stream-zip` 流式解压到临时目录，只改写 `data.json` 的新 session ID 与目标 agent ID，通过一次 `rename` 迁移完整目录，再直接 upsert SQLite / emit renderer 事件。导入上限：压缩包 / 单条目各 1 GiB、最多 1,000 条目、总解压 2 GiB；`info.json` 与 `data.json` 各限 1 MiB，防止不可信 ZIP 耗尽主进程内存或临时盘。`info.json` 只用于归档校验，不写入持久化 session 目录；schedule run 仍可导出，但因缺少目标 job 归属不可从 Agent 菜单导入。
+
 `JobRun.forkToSession(sessionIdx)` 是 schedule run 唯一的继续对话入口：只接受 completed / failed run，clone `messages.jsonl` 与 `files/`（`COPYFILE_FICLONE`），保留 `contextState` / overrides，生成新的 regular id、重置 `turn` / star / read 状态，并让 `RegularSession.afterPersist` 负责 `regular_sessions` + renderer 事件。IPC `forkJobRunToSession` 仅沿 ownership chain 解析目标 run 并委派给该方法。原 run 永远保留在 `job_runs` 作为调度历史；不得原地改 `kind` 或复用 run id。
 
 取 session 走 PK 查 SQLite index（Step 9）：
@@ -93,6 +99,7 @@ ProfileRegistry.require(profileId).store → ProfileStore
 | 加 regular session 索引字段 | `types/session.ts` 的 `RegularSessionRow`（经 `types/index.ts` 导出）+ `lib/db/schema.ts` DDL 加列 + `lib/db/sessionIdx.ts` marshal/unmarshal + `RegularSession.toRegularRow` 同步 + `SessionIdx.rebuildFromDisk` 投影 | source of truth 是 data.json 中对应字段，先保证那边有 |
 | 加 job_run 索引字段 | 同上但走 `JobRunRow` / `JobRun.toJobRunRow` / `JobRunIdx` 路径 | schedule_run 表与 regular 表物理分开，互不影响 |
 | 将 schedule run 继续为 regular session | `session.ts#JobRun.forkToSession` + `RegularSession` data 投影；clone messages/files 后才写 regular `data.json`，最后由 afterPersist 同步 SQL / 事件 | 只接受 terminal run；原 run 不删、不改 |
+| 改会话 ZIP 格式或导入规则 | `sessionArchive.ts` + `__tests__/sessionArchive.test.ts`；UI/IPC 入口还包括 `startup/ipc/{chat-session,agent-chat}.ts` | ZIP 必须保留完整目录；只能修改跨 agent 导入必需的 `data.json#id/agentId`，其余内容原样迁移 |
 | 加 SQLite 偏序索引 | `lib/db/schema.ts` `CREATE INDEX IF NOT EXISTS ix_xxx ON ... WHERE ...;` + 测试 `EXPLAIN QUERY PLAN` 验命中 | 候选索引清单见 [ai.prompt/persist.md §9.2](../../../ai.prompt/persist.md) |
 | 加 IPC 通道 | `src/shared/ipc/persist.ts` 加 channel + `ipc.ts` 加 handler + `preload/invoke/persist.ts` 加 allowlist | renderer 调用走 `persistApi.xxx()` 自动类型推导 |
 | 加应用级运行时存储分类 | `shared/ipc/persist.ts` 的 `RuntimeStorageCategory` + `storageOverview.ts` 的顶层目录映射 + renderer `storageMeta.ts`；保持 `StorageOverview.totalBytes` 只代表 Profile，运行时统计必须独立 IPC，不能挂进 `shared` |

@@ -1,15 +1,13 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
-import * as fs from 'fs';
 import { renderToMain, mainToRender } from '@shared/ipc/agentChat';
 
 import { StreamingChunk } from '@shared/types/streamingTypes';
 import Stream from '@shared/stream-iterator';
 
+import { importSessionArchive } from '@main/persist';
 import type { RegularSession } from '@main/pi';
-import type { Message } from '@shared/persist/types'
-import type { ChatSessionFile } from '@shared/persist/types'
+import type { Message } from '@shared/persist/types';
 import { ChatStatus } from '@shared/types/agentChatTypes';
-import { rehydrate } from '@main/persist/messageWire';
 import { log } from '@main/log';
 import { Tracer, type TraceContext } from '@shared/log/trace';
 import { requireProfileForSender } from './profileContext';
@@ -181,103 +179,46 @@ export default function() {
     }
   });
 
-  // Import a single ChatSession JSON file into the current agent.
+  // Import a complete regular-session ZIP into the current agent.
   handle.importChatSession(async (event, agentId) => {
     try {
       const win = BrowserWindow.fromWebContents(event.sender);
-      if (!win) {
-        return { success: false, error: 'No main window available' };
-      }
+      if (!win) return { success: false, error: 'No main window available' };
 
-      // 1. Show file selection dialog, select chat session JSON file
-      const result = await dialog.showOpenDialog(win, {
-        title: 'Select Chat Session JSON',
+      const selection = await dialog.showOpenDialog(win, {
+        title: 'Select Chat Session ZIP',
         properties: ['openFile'],
         filters: [
-          { name: 'Chat Session JSON', extensions: ['json'] },
-          { name: 'All Files', extensions: ['*'] }
-        ]
+          { name: 'Chat Session ZIP', extensions: ['zip'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
       });
-
-      // Handle dialog result (compatible with both old and new API)
-      let jsonPath: string | undefined;
-
-      if (Array.isArray(result)) {
-        // Old API format (just file paths array)
-        if (result.length === 0) {
-          return { success: false, error: 'File selection canceled' };
-        }
-        jsonPath = result[0];
-      } else {
-        // New API format (object with canceled and filePaths)
-        const dialogResult = result as { canceled: boolean; filePaths: string[] };
-        if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length === 0) {
-          return { success: false, error: 'File selection canceled' };
-        }
-        jsonPath = dialogResult.filePaths[0];
+      if (selection.canceled || selection.filePaths.length === 0) {
+        return { success: false, error: 'File selection canceled' };
       }
 
-      if (!jsonPath) {
-        return { success: false, error: 'No file selected' };
-      }
-
-      // 2. 读 JSON + 简单校验
-      const fileContent = await fs.promises.readFile(jsonPath, 'utf-8');
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(fileContent);
-      } catch {
-        return { success: false, error: 'Invalid JSON file' };
-      }
-      if (!parsed || typeof parsed !== 'object') {
-        return { success: false, error: 'Invalid chat session JSON structure' };
-      }
-      const file = parsed as Partial<ChatSessionFile>;
-      if (
-        typeof file.title !== 'string' ||
-        !Array.isArray(file.messages)
-      ) {
-        return { success: false, error: 'Invalid chat session JSON structure' };
-      }
-
-      // 3. 走 persist:新建 session(生成新 id) + 灌 messages + 持久化 title/contextState。
-      // file.messages 是 PersistedJsonLine[];rehydrate 折回 Domain Message[] 后,
-      // rewriteMessages 一次性按 dehydrate 的同形态重写 jsonl(orphan tool_res 默认丢弃)。
       const store = requireProfileForSender(event).store;
-      const persistAgent = await store.getAgent(agentId);
-      if (!persistAgent) return { success: false, error: `agent not found: ${agentId}` };
+      const agent = await store.getAgent(agentId);
+      if (!agent) return { success: false, error: `agent not found: ${agentId}` };
 
-      const newSession = await persistAgent.createSession({
-        title: file.title,
-        contextState: file.contextState,
+      const imported = await importSessionArchive(selection.filePaths[0], {
+        profileId: store.id,
+        agentId,
       });
-      const { messages: domainMsgs, orphanResponses } = rehydrate(file.messages);
-      if (orphanResponses.length > 0) {
-        log.warn?.({
-          msg: '[ipc/agent-chat] importChatSession dropped orphan tool responses',
-          mod: 'importChatSession',
-          agentId,
-          sessionId: newSession.id,
-          orphanCount: orphanResponses.length,
-        });
-      }
-      await newSession.rewriteMessages(domainMsgs);
-      await newSession.persist();
 
-      log.info?.({
-        msg: '[ipc/agent-chat] Imported chat session from JSON file',
+      log.info({
+        msg: '[ipc/agent-chat] Imported chat session from ZIP archive',
         mod: 'importChatSession',
         agentId,
-        sourceSessionId: file.chatSession_id,
-        importedSessionId: newSession.id,
-        jsonPath,
+        sourceSessionId: imported.sourceSessionId,
+        importedSessionId: imported.sessionId,
+        archivePath: selection.filePaths[0],
       });
 
       return {
         success: true,
         importedSessions: 1,
-        importedSessionId: newSession.id,
-        importedWorkspaceFiles: 0,
+        importedSessionId: imported.sessionId,
       };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
